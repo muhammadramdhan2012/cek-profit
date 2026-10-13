@@ -39,7 +39,8 @@
       return;
     }
     const daftar = view === 'daftar';
-    card.innerHTML = `<div><h1>${daftar ? 'Buat akun' : 'Masuk'}</h1><p class="muted" style="margin-top:6px">${daftar ? 'Simpan modal produk dan riwayat laporan, lalu buka dari perangkat mana pun.' : 'Selamat datang kembali.'}</p></div>
+    card.innerHTML = `<div class="auth-tabs" role="tablist"><button type="button" role="tab" data-view="masuk" aria-selected="${!daftar}">Masuk</button><button type="button" role="tab" data-view="daftar" aria-selected="${daftar}">Daftar</button></div>
+      <div><h1>${daftar ? 'Buat akun gratis' : 'Masuk'}</h1><p class="muted" style="margin-top:6px">${daftar ? 'Simpan modal produk dan riwayat laporan, lalu buka dari perangkat mana pun.' : 'Selamat datang kembali.'}</p></div>
       ${msgHtml()}${C.googleLogin ? google : ''}
       <form id="f-auth">
         ${daftar ? '<div class="field"><label for="nm">Nama</label><input class="plain" id="nm" autocomplete="name" required></div>' : ''}

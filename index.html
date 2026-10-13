@@ -12,7 +12,7 @@
 <link rel="icon" href="icon.svg" type="image/svg+xml">
 <script src="assets/theme.js?v=f5317dffb6"></script>
 <link rel="stylesheet" href="assets/base.css?v=c249f1b4b9">
-<link rel="stylesheet" href="assets/site.css?v=44b26f4e4f">
+<link rel="stylesheet" href="assets/site.css?v=c0755c9663">
 <script src="assets/config.js?v=b3a7356caa"></script>
 <script src="assets/analytics.js?v=26db3465aa" defer></script>
 </head>
@@ -22,9 +22,10 @@
     <a class="brand" href="./"><svg width="28" height="28" viewBox="0 0 30 30" aria-hidden="true"><rect width="30" height="30" rx="8" fill="var(--accent)"/><path d="M7 20.5l5-5 3.5 3 7.5-8" fill="none" stroke="var(--accent-ink)" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/><circle cx="23" cy="10.5" r="2.4" fill="var(--mark)"/></svg>Cek Profit</a>
     <div class="nav-links">
       <a class="lnk" href="#fitur">Fitur</a><a class="lnk" href="#laporan">Laporan</a><a class="lnk" href="#harga">Harga</a><a class="lnk" href="#faq">FAQ</a>
-      <span data-theme-toggle></span>
-      <a class="btn quiet" href="akun.html?next=dashboard.html" data-cloud hidden>Masuk</a>
-      <a class="btn primary" href="dashboard.html" data-track="nav-coba">Coba gratis</a>
+      <span class="nav-theme" data-theme-toggle></span>
+      <a class="btn quiet" href="akun.html?next=dashboard.html" data-guest>Masuk</a>
+      <a class="btn primary" href="akun.html?mode=daftar&amp;next=dashboard.html" data-guest data-track="nav-daftar">Daftar gratis</a>
+      <a class="btn primary" href="dashboard.html" data-member hidden>Buka dashboard</a>
     </div>
   </nav>
 </div>
@@ -35,10 +36,11 @@
       <h1>Tahu laba bersih toko online Anda, bukan cuma omzetnya.</h1>
       <p class="lead">Unggah laporan penghasilan Shopee dan TikTok Shop. Cek Profit mengurangkan potongan marketplace, modal barang, dan biaya operasional, lalu menunjukkan berapa yang benar-benar tersisa, per bulan dan per produk.</p>
       <div class="cta-row">
-        <a class="btn primary big" href="dashboard.html" data-track="cta-hero">Coba gratis</a>
+        <a class="btn primary big" href="akun.html?mode=daftar&amp;next=dashboard.html" data-guest data-track="cta-daftar">Daftar gratis</a>
+        <a class="btn primary big" href="dashboard.html" data-member hidden>Buka dashboard</a>
         <a class="btn big" href="dashboard.html?demo" data-track="cta-demo">Lihat dengan data contoh</a>
       </div>
-      <p class="reassure">Gratis dicoba tanpa daftar. File laporan diproses di browser Anda dan tidak diunggah ke server.</p>
+      <p class="reassure">Daftar gratis untuk menyimpan modal dan riwayat, atau <a href="dashboard.html" data-track="cta-tanpa-daftar">coba dulu tanpa daftar</a>. File laporan diproses di browser Anda dan tidak diunggah ke server.</p>
     </div>
     <div class="hero-nota">
       <section class="nota" aria-label="Contoh nota laba">
@@ -132,7 +134,7 @@
       <div class="prices">
         <div class="price"><h3>Gratis</h3><div><span class="amount">Rp0</span></div><p class="small muted">Melihat kondisi toko dengan cepat.</p>
           <ul class="ticks"><li>Nota laba dan grafik per bulan</li><li>Modal per produk dan template</li><li>Biaya dan potongan per platform</li><li>5 produk teratas, 2 temuan</li><li>3 riwayat tersimpan (dengan akun)</li><li class="no">Laporan PDF dan Excel</li></ul>
-          <a class="btn" href="dashboard.html" data-track="harga-gratis">Mulai gratis</a></div>
+          <a class="btn" href="akun.html?mode=daftar&amp;next=dashboard.html" data-track="harga-gratis">Daftar gratis</a></div>
         <div class="price featured"><h3>Pro</h3><div><span class="amount" data-price="pro">Rp49.000</span> <span class="muted" data-price="proUnit">/ bulan</span><div class="small faint" data-price="proNote">atau Rp399.000 / tahun</div></div>
           <p class="small muted">Keputusan harga dan produk berbasis angka.</p>
           <ul class="ticks"><li>Semua fitur Gratis</li><li>Laporan PDF dengan nama dan logo toko</li><li>Semua produk dan saran harga</li><li>Semua temuan dan saran</li><li>Ekspor Excel, riwayat tanpa batas</li></ul>
@@ -161,15 +163,15 @@
 
   <section class="blk">
     <div class="wrap">
-      <div class="final"><h2>Cari tahu laba bersih toko Anda hari ini.</h2><p>Gratis dicoba, tanpa daftar. File tetap di komputer Anda.</p>
-        <div class="cta-row"><a class="btn primary big" href="dashboard.html" data-track="cta-bawah">Buka Cek Profit</a></div></div>
+      <div class="final"><h2>Cari tahu laba bersih toko Anda hari ini.</h2><p>Daftar gratis, atau coba dulu tanpa daftar. File tetap di komputer Anda.</p>
+        <div class="cta-row"><a class="btn primary big" href="akun.html?mode=daftar&amp;next=dashboard.html" data-guest data-track="cta-bawah">Daftar gratis</a><a class="btn primary big" href="dashboard.html" data-member hidden>Buka dashboard</a><a class="btn big" href="dashboard.html" data-guest style="background:transparent;color:inherit;border-color:currentColor">Coba tanpa daftar</a></div></div>
     </div>
   </section>
 </main>
 
 <div class="wrap">
   <footer class="site"><span>© <span id="yr">2026</span> Cek Profit. Estimasi untuk keputusan usaha, bukan nasihat keuangan atau pajak.</span>
-    <nav><a href="dashboard.html">Dashboard</a><a href="akun.html">Akun</a><a href="privasi.html">Privasi &amp; ketentuan</a><a href="contoh-laporan.pdf">Contoh laporan</a></nav></footer>
+    <span class="foot-theme" data-theme-toggle></span><nav><a href="dashboard.html">Dashboard</a><a href="akun.html">Akun</a><a href="privasi.html">Privasi &amp; ketentuan</a><a href="contoh-laporan.pdf">Contoh laporan</a></nav></footer>
 </div>
 
 <script>
@@ -177,7 +179,12 @@
   const C = window.CEK_CONFIG || {};
   const p = C.prices || {};
   document.querySelectorAll('[data-price]').forEach((el) => { const v = p[el.dataset.price]; if (v !== undefined) el.textContent = v; });
-  if (C.supabaseUrl) document.querySelectorAll('[data-cloud]').forEach((el) => { el.hidden = false; });
+  // Tombol Masuk/Daftar untuk tamu; "Buka dashboard" untuk yang sudah masuk. Tanpa layanan akun: semua menuju dashboard.
+  let member = false;
+  try { const sess = JSON.parse(localStorage.getItem('cekprofit.session') || 'null'); member = !!(sess && sess.refresh_token); } catch (e) { /* abaikan */ }
+  if (!C.supabaseUrl) { member = true; }
+  document.querySelectorAll('[data-guest]').forEach((el) => { el.hidden = member; });
+  document.querySelectorAll('[data-member]').forEach((el) => { el.hidden = !member; });
   document.querySelectorAll('[data-wa]').forEach((el) => {
     if (C.whatsapp) { el.href = `https://wa.me/${C.whatsapp}?text=${encodeURIComponent(C.waMessageJasa || '')}`; el.target = '_blank'; el.rel = 'noopener'; }
     else { el.removeAttribute('href'); el.setAttribute('aria-disabled', 'true'); el.textContent = 'Kontak segera tersedia'; el.style.opacity = '.55'; el.style.cursor = 'default'; }
