@@ -40,6 +40,7 @@
 
 * { box-sizing: border-box; }
 html { scroll-behavior: smooth; -webkit-text-size-adjust: 100%; }
+html, body { overflow-x: clip; }
 body { margin: 0; background: var(--bg); color: var(--ink); font: 15px/1.55 var(--font); -webkit-font-smoothing: antialiased; font-feature-settings: "ss01"; }
 [hidden] { display: none !important; }
 h1, h2, h3, h4 { margin: 0; font-weight: 750; letter-spacing: -0.025em; line-height: 1.12; text-wrap: balance; }
