@@ -8,7 +8,7 @@ window.CEK_CONFIG = {
   // Nomor WhatsApp untuk membeli kode akses, format internasional TANPA "+" dan spasi.
   // Contoh: '6281234567890'. Selama kosong, tombol beli menampilkan pesan "nomor belum diatur".
   whatsapp: '',
-  waMessage: 'Halo, saya ingin membeli kode akses Cek Profit Pro.',
+  waMessage: 'Halo, saya ingin berlangganan Cek Profit Pro.',
   waMessageJasa: 'Halo, saya ingin memakai jasa laporan profit toko dari Cek Profit.',
 
   // Harga yang tampil di halaman depan (teks bebas). GANTI sebelum dipromosikan.
@@ -30,4 +30,10 @@ window.CEK_CONFIG = {
   publicKey: 'BCqCk7193jIfz9woFYfWb4IvZMUUkPF9VeYARLW8gpaFPqyFvIAXWr9j3orDgpUf3K6PSyfRtDnbfan7rpjJl5Q',
 
   email: '',   // opsional, tampil di halaman privasi
+
+  // ---------- Akun (Supabase) ----------
+  // Ikuti supabase/PANDUAN.md. Selama kosong, situs berjalan tanpa login (semua tersimpan di browser).
+  supabaseUrl: '',        // contoh: 'https://abcdefgh.supabase.co'
+  supabaseAnonKey: '',    // "anon public" / "publishable" key — aman untuk publik, dilindungi aturan RLS
+  googleLogin: false,     // true setelah login Google diaktifkan di Supabase (Authentication → Providers)
 };

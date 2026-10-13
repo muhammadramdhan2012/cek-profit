@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>Admin — Cek Profit</title>
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="assets/base.css">
+<link rel="stylesheet" href="assets/account.css">
+<script src="assets/config.js"></script>
+</head>
+<body class="admin">
+<div class="wrap">
+  <header class="admin-top">
+    <a class="brand" href="./"><svg width="28" height="28" viewBox="0 0 30 30" aria-hidden="true"><rect width="30" height="30" rx="8" fill="var(--accent)"/><path d="M7 20.5l5-5 3.5 3 7.5-8" fill="none" stroke="var(--accent-ink)" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/><circle cx="23" cy="10.5" r="2.4" fill="var(--mark)"/></svg>Admin</a>
+    <div class="row-gap"><button class="btn sm" type="button" id="reload">Muat ulang</button><a class="btn sm quiet" href="app.html">Aplikasi</a></div>
+  </header>
+  <main class="admin-grid" id="main" aria-live="polite"><p class="muted">Memuat…</p></main>
+</div>
+<div id="toast" class="toast" role="status" hidden></div>
+<script src="assets/cloud.js"></script>
+<script>
+(() => {
+  const C = window.CEK_CONFIG || {};
+  const cloud = CekCloud.init({ url: C.supabaseUrl, key: C.supabaseAnonKey });
+  const $ = (s) => document.querySelector(s);
+  const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  const toast = (m) => { const t = $('#toast'); t.textContent = m; t.hidden = false; clearTimeout(toast.t); toast.t = setTimeout(() => { t.hidden = true; }, 3200); };
+  const today = () => new Date().toLocaleDateString('sv-SE');
+  const plus = (months, from) => { const d = from && from > today() ? new Date(`${from}T00:00:00`) : new Date(); d.setMonth(d.getMonth() + months); return d.toLocaleDateString('sv-SE'); };
+  const tgl = (d) => (d ? new Date(d.length > 10 ? d : `${d}T00:00:00`).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' }) : '—');
+  const PLAN = { pro_bulanan: 'Pro bulanan', pro_tahunan: 'Pro tahunan', jasa: 'Jasa laporan' };
+  let profiles = [], requests = [], q = '';
+
+  async function load() {
+    const main = $('#main');
+    if (!cloud.enabled) { main.innerHTML = '<p class="panel">Akun belum diaktifkan. Isi <code>supabaseUrl</code> dan <code>supabaseAnonKey</code> di <code>assets/config.js</code>.</p>'; return; }
+    if (!cloud.auth.user()) { main.innerHTML = '<div class="panel" style="display:grid;gap:12px;justify-items:start"><h2>Masuk sebagai admin</h2><p class="muted">Halaman ini hanya untuk pemilik situs.</p><a class="btn primary" href="akun.html?next=admin.html">Masuk</a></div>'; return; }
+    try {
+      const me = await cloud.db.profile();
+      if (!me || !me.is_admin) { main.innerHTML = '<div class="panel"><h2>Bukan admin</h2><p class="muted" style="margin-top:8px">Akun ini belum ditandai admin. Di Supabase: Table Editor → profiles → baris akun Anda → ubah <code>is_admin</code> menjadi <code>true</code>.</p></div>'; return; }
+      [profiles, requests] = await Promise.all([cloud.db.adminProfiles(), cloud.db.adminRequests()]);
+      render();
+    } catch (e) { main.innerHTML = `<p class="panel bad">${esc(e.message)}</p>`; }
+  }
+  function render() {
+    const byId = new Map(profiles.map((p) => [p.id, p]));
+    const week = new Date(Date.now() - 7 * 864e5).toISOString();
+    const open = requests.filter((r) => r.status === 'baru' || r.status === 'diproses');
+    const pros = profiles.filter((p) => cloud.isPro(p));
+    const list = profiles.filter((p) => !q || `${p.email} ${p.full_name} ${p.store_name} ${p.whatsapp}`.toLowerCase().includes(q));
+    $('#main').innerHTML = `
+      <section class="stats">
+        <div class="stat"><span class="small muted">Pengguna</span><b>${profiles.length}</b></div>
+        <div class="stat"><span class="small muted">Pro aktif</span><b>${pros.length}</b></div>
+        <div class="stat"><span class="small muted">Permintaan menunggu</span><b>${open.length}</b></div>
+        <div class="stat"><span class="small muted">Daftar 7 hari terakhir</span><b>${profiles.filter((p) => p.created_at > week).length}</b></div>
+      </section>
+      <section class="panel"><h3 style="margin-bottom:12px">Permintaan upgrade</h3>
+        ${requests.length ? `<div class="tablewrap"><table class="tbl"><thead><tr><th>Tanggal</th><th>Pengguna</th><th>Paket</th><th>Catatan</th><th>Status</th><th></th></tr></thead><tbody>
+          ${requests.map((r) => { const p = byId.get(r.user_id) || {}; return `<tr><td>${tgl(r.created_at)}</td><td><b>${esc(p.email || r.user_id)}</b><br><span class="tiny faint">${esc(p.store_name || '')} ${esc(p.whatsapp || '')}</span></td>
+            <td>${PLAN[r.plan] || esc(r.plan)}</td><td class="small">${esc(r.note)}</td><td><span class="badge ${r.status === 'selesai' ? 'ok' : r.status === 'ditolak' ? 'bad' : 'todo'}">${esc(r.status)}</span></td>
+            <td>${r.status === 'baru' || r.status === 'diproses' ? `<div class="row-gap"><button class="btn sm primary" data-pro="${esc(r.user_id)}" data-months="${r.plan === 'pro_tahunan' ? 12 : 1}">Aktifkan ${r.plan === 'pro_tahunan' ? '1 tahun' : '1 bulan'}</button><button class="btn sm quiet" data-reject="${r.id}">Tolak</button></div>` : ''}</td></tr>`; }).join('')}
+          </tbody></table></div>` : '<p class="muted small">Belum ada permintaan.</p>'}
+      </section>
+      <section class="panel"><div style="display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:12px"><h3>Pengguna</h3><input class="plain" id="q" type="search" placeholder="Cari email, nama, toko…" value="${esc(q)}" style="max-width:280px"></div>
+        <div class="tablewrap"><table class="tbl"><thead><tr><th>Pengguna</th><th>Daftar</th><th>Pro sampai</th><th>Atur Pro</th></tr></thead><tbody>
+        ${list.map((p) => `<tr><td><b>${esc(p.email)}</b>${p.is_admin ? ' <span class="badge">admin</span>' : ''}<br><span class="tiny faint">${esc(p.full_name)} ${p.store_name ? `· ${esc(p.store_name)}` : ''} ${esc(p.whatsapp)}</span></td>
+          <td class="small">${tgl(p.created_at)}</td><td>${cloud.isPro(p) ? `<span class="badge pro">${tgl(p.pro_until)}</span>` : p.pro_until ? `<span class="small faint">berakhir ${tgl(p.pro_until)}</span>` : '<span class="faint">—</span>'}</td>
+          <td><div class="row-gap"><button class="btn sm" data-pro="${esc(p.id)}" data-months="1">+1 bln</button><button class="btn sm" data-pro="${esc(p.id)}" data-months="12">+1 thn</button>${p.pro_until ? `<button class="btn sm quiet danger" data-off="${esc(p.id)}">Matikan</button>` : ''}</div></td></tr>`).join('') || '<tr><td colspan="4" class="muted">Tidak ada pengguna yang cocok.</td></tr>'}
+        </tbody></table></div></section>`;
+  }
+  document.addEventListener('click', async (e) => {
+    const t = e.target.closest('button');
+    if (!t) return;
+    try {
+      if (t.id === 'reload') return load();
+      if (t.dataset.pro) {
+        const p = profiles.find((x) => x.id === t.dataset.pro) || {};
+        const until = plus(+t.dataset.months, p.pro_until);
+        if (!confirm(`Aktifkan Pro untuk ${p.email || 'pengguna'} sampai ${tgl(until)}?`)) return;
+        await cloud.db.adminSetPro(t.dataset.pro, until); toast(`Pro aktif sampai ${tgl(until)}.`); return load();
+      }
+      if (t.dataset.off) { if (!confirm('Matikan Pro pengguna ini?')) return; await cloud.db.adminSetPro(t.dataset.off, null); toast('Pro dimatikan.'); return load(); }
+      if (t.dataset.reject) { await cloud.db.adminSetRequestStatus(+t.dataset.reject, 'ditolak'); toast('Permintaan ditolak.'); return load(); }
+    } catch (err) { toast(err.message); }
+  });
+  document.addEventListener('input', (e) => { if (e.target.id === 'q') { q = e.target.value.toLowerCase(); const pos = e.target.selectionStart; render(); const i = $('#q'); i.focus(); i.setSelectionRange(pos, pos); } });
+  load();
+})();
+</script>
+</body>
+</html>

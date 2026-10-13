@@ -1,0 +1,166 @@
+/* Cek Profit — klien akun & database (Supabase) tanpa dependensi.
+ *
+ * Memakai REST API Supabase langsung (Auth/GoTrue + PostgREST) dengan fetch, sehingga:
+ *  - tidak perlu memuat pustaka besar dari CDN;
+ *  - bisa diuji di Node dengan server tiruan (tests/cloud.test.js).
+ *
+ * Yang dikirim ke server HANYA: email/sandi saat login, profil, modal & pengaturan, ringkasan riwayat,
+ * dan permintaan upgrade. File laporan dan data pembeli tidak pernah dikirim.
+ *
+ * Jika CEK_CONFIG.supabaseUrl kosong, CekCloud.enabled = false dan seluruh aplikasi tetap jalan lokal.
+ */
+const CekCloud = (() => {
+  const SESSION_KEY = 'cekprofit.session';
+  let cfg = { url: '', key: '' };
+  let session = null;               // {access_token, refresh_token, expires_at, user}
+  let storage = null;
+  const listeners = new Set();
+  let refreshing = null;
+
+  const nowSec = () => Math.floor(Date.now() / 1000);
+  const read = () => { try { return JSON.parse(storage.getItem(SESSION_KEY) || 'null'); } catch (e) { return null; } };
+  const write = (s) => { try { if (s) storage.setItem(SESSION_KEY, JSON.stringify(s)); else storage.removeItem(SESSION_KEY); } catch (e) { /* abaikan */ } };
+  const emit = () => listeners.forEach((fn) => { try { fn(session); } catch (e) { /* abaikan */ } });
+
+  /** Pesan error Supabase → kalimat yang dimengerti pengguna. */
+  function friendly(status, body) {
+    const raw = (body && (body.error_description || body.msg || body.message || body.error)) || '';
+    const m = String(raw).toLowerCase();
+    if (m.includes('invalid login credentials')) return 'Email atau kata sandi salah.';
+    if (m.includes('email not confirmed')) return 'Email belum dikonfirmasi. Buka tautan konfirmasi di kotak masuk email Anda.';
+    if (m.includes('already registered') || m.includes('already been registered')) return 'Email ini sudah terdaftar. Silakan masuk.';
+    if (m.includes('password should be at least') || m.includes('weak')) return 'Kata sandi minimal 8 karakter dan sulit ditebak.';
+    if (m.includes('rate limit') || status === 429) return 'Terlalu banyak percobaan. Coba lagi beberapa menit lagi.';
+    if (m.includes('invalid email') || m.includes('unable to validate email')) return 'Format email tidak valid.';
+    if (m.includes('jwt expired')) return 'Sesi berakhir. Silakan masuk lagi.';
+    if (status === 0) return 'Tidak bisa terhubung ke server. Periksa koneksi internet.';
+    return raw || `Permintaan gagal (${status}).`;
+  }
+  class CloudError extends Error { constructor(status, body) { super(friendly(status, body)); this.status = status; this.body = body; } }
+
+  async function http(path, { method = 'GET', body, headers = {}, auth = true } = {}) {
+    if (!cfg.url) throw new CloudError(0, { message: 'Akun belum diaktifkan di situs ini.' });
+    if (auth) await ensureFresh();
+    const h = { apikey: cfg.key, 'Content-Type': 'application/json', ...headers };
+    if (auth && session) h.Authorization = `Bearer ${session.access_token}`;
+    let res;
+    try { res = await fetch(cfg.url + path, { method, headers: h, body: body === undefined ? undefined : JSON.stringify(body) }); }
+    catch (e) { throw new CloudError(0, {}); }
+    const text = await res.text();
+    let data = null;
+    try { data = text ? JSON.parse(text) : null; } catch (e) { data = text; }
+    if (!res.ok) {
+      if (res.status === 401 && auth && session) { setSession(null); }
+      throw new CloudError(res.status, data);
+    }
+    return data;
+  }
+
+  function setSession(s) {
+    if (s && s.access_token) {
+      session = { access_token: s.access_token, refresh_token: s.refresh_token,
+        expires_at: s.expires_at || nowSec() + (Number(s.expires_in) || 3600), user: s.user || (session && session.user) || null };
+    } else session = null;
+    write(session);
+    emit();
+  }
+  async function ensureFresh() {
+    if (!session || !session.refresh_token) return;
+    if (session.expires_at - nowSec() > 60) return;
+    if (!refreshing) {
+      refreshing = (async () => {
+        try {
+          const s = await http('/auth/v1/token?grant_type=refresh_token', { method: 'POST', body: { refresh_token: session.refresh_token }, auth: false });
+          setSession(s);
+        } catch (e) { setSession(null); }
+        finally { refreshing = null; }
+      })();
+    }
+    await refreshing;
+  }
+
+  /* ---------- auth ---------- */
+  const auth = {
+    async signUp({ email, password, fullName, redirectTo }) {
+      const q = redirectTo ? `?redirect_to=${encodeURIComponent(redirectTo)}` : '';
+      const res = await http(`/auth/v1/signup${q}`, { method: 'POST', auth: false, body: { email, password, data: { full_name: fullName || '' } } });
+      if (res && res.access_token) { setSession(res); return { session: true }; }
+      return { session: false, confirm: true };      // perlu konfirmasi email
+    },
+    async signIn({ email, password }) {
+      setSession(await http('/auth/v1/token?grant_type=password', { method: 'POST', auth: false, body: { email, password } }));
+      return session;
+    },
+    oauthUrl(provider, redirectTo) {
+      return `${cfg.url}/auth/v1/authorize?provider=${encodeURIComponent(provider)}&redirect_to=${encodeURIComponent(redirectTo)}`;
+    },
+    async recover(email, redirectTo) {
+      await http(`/auth/v1/recover?redirect_to=${encodeURIComponent(redirectTo)}`, { method: 'POST', auth: false, body: { email } });
+    },
+    async updatePassword(password) { await http('/auth/v1/user', { method: 'PUT', body: { password } }); },
+    async signOut() {
+      try { if (session) await http('/auth/v1/logout', { method: 'POST' }); } catch (e) { /* tetap keluar lokal */ }
+      setSession(null);
+    },
+    /** Membaca token dari hash URL setelah login Google / konfirmasi email / reset sandi. */
+    async fromUrlHash(hash) {
+      const p = new URLSearchParams(String(hash || '').replace(/^#/, ''));
+      if (p.get('error_description')) throw new CloudError(400, { message: p.get('error_description') });
+      if (!p.get('access_token')) return null;
+      setSession({ access_token: p.get('access_token'), refresh_token: p.get('refresh_token'), expires_in: p.get('expires_in'), expires_at: Number(p.get('expires_at')) || undefined });
+      try { session.user = await http('/auth/v1/user'); write(session); emit(); } catch (e) { /* biarkan */ }
+      return { type: p.get('type') || 'login' };
+    },
+    user: () => (session && session.user) || null,
+    session: () => session,
+    onChange(fn) { listeners.add(fn); return () => listeners.delete(fn); },
+  };
+
+  /* ---------- database (PostgREST) ---------- */
+  const enc = encodeURIComponent;
+  const db = {
+    async profile() {
+      const u = auth.user(); if (!u) return null;
+      const rows = await http(`/rest/v1/profiles?select=*&id=eq.${enc(u.id)}`);
+      return rows && rows[0] || null;
+    },
+    async updateProfile(patch) {
+      const u = auth.user();
+      const rows = await http(`/rest/v1/profiles?id=eq.${enc(u.id)}`, { method: 'PATCH', body: patch, headers: { Prefer: 'return=representation' } });
+      return rows && rows[0];
+    },
+    async loadData() {
+      const u = auth.user(); if (!u) return null;
+      const rows = await http(`/rest/v1/user_data?select=settings,profile,updated_at&user_id=eq.${enc(u.id)}`);
+      return rows && rows[0] || null;
+    },
+    async saveData({ settings, profile }) {
+      const u = auth.user();
+      return http('/rest/v1/user_data?on_conflict=user_id', { method: 'POST', body: { user_id: u.id, settings, profile, updated_at: new Date().toISOString() },
+        headers: { Prefer: 'resolution=merge-duplicates,return=minimal' } });
+    },
+    listReports: () => http('/rest/v1/reports?select=id,created_at,title,period_from,period_to,summary&order=created_at.desc&limit=50'),
+    addReport: (row) => http('/rest/v1/reports', { method: 'POST', body: row, headers: { Prefer: 'return=representation' } }).then((r) => r && r[0]),
+    deleteReport: (id) => http(`/rest/v1/reports?id=eq.${enc(id)}`, { method: 'DELETE' }),
+    requestUpgrade: (plan, note) => http('/rest/v1/upgrade_requests', { method: 'POST', body: { plan, note: note || '' }, headers: { Prefer: 'return=representation' } }).then((r) => r && r[0]),
+    myRequests: () => http('/rest/v1/upgrade_requests?select=*&order=created_at.desc&limit=5'),
+    /* admin */
+    adminProfiles: () => http('/rest/v1/profiles?select=*&order=created_at.desc&limit=500'),
+    adminRequests: () => http('/rest/v1/upgrade_requests?select=*&order=created_at.desc&limit=200'),
+    adminSetPro: (target, until) => http('/rest/v1/rpc/admin_set_pro', { method: 'POST', body: { target, until } }),
+    adminSetRequestStatus: (id, status) => http(`/rest/v1/upgrade_requests?id=eq.${enc(id)}`, { method: 'PATCH', body: { status } }),
+  };
+
+  /** Pro aktif bila pro_until >= hari ini (zona waktu pengguna). */
+  const isPro = (profile, today = new Date().toLocaleDateString('sv-SE')) => !!(profile && profile.pro_until && profile.pro_until >= today);
+
+  function init({ url, key, store } = {}) {
+    cfg = { url: String(url || '').replace(/\/+$/, ''), key: key || '' };
+    storage = store || (typeof localStorage !== 'undefined' ? localStorage : { getItem: () => null, setItem() {}, removeItem() {} });
+    session = cfg.url ? read() : null;
+    return api;
+  }
+  const api = { init, auth, db, isPro, CloudError, get enabled() { return !!cfg.url; } };
+  return api;
+})();
+if (typeof module !== 'undefined') module.exports = CekCloud;

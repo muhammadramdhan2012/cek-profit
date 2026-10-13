@@ -3,12 +3,12 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Cek Profit — Laba sebenarnya toko Shopee &amp; TikTok Shop</title>
-<meta name="description" content="Unggah laporan Seller Centre, lihat potongan platform, modal, dan laba bersih per bulan dan per produk. Laporan PDF siap kirim. File diproses di browser Anda.">
-<meta name="theme-color" content="#0e7a5a">
-<meta property="og:title" content="Cek Profit — Laba sebenarnya toko online Anda">
-<meta property="og:description" content="Potongan platform, modal, laba bersih per produk & per bulan. Laporan PDF siap kirim. File tidak diunggah ke server.">
-<meta property="og:image" content="img/dashboard.webp">
+<title>Cek Profit — Laba bersih toko Shopee &amp; TikTok Shop</title>
+<meta name="description" content="Unggah laporan Seller Centre, lihat laba bersih setelah potongan marketplace, modal, dan biaya operasional. Per bulan, per produk, dan laporan PDF siap kirim.">
+<meta name="theme-color" content="#0f6e56">
+<meta property="og:title" content="Cek Profit — Laba bersih toko online Anda">
+<meta property="og:description" content="Potongan marketplace, modal, dan laba bersih per bulan dan per produk. File diproses di browser Anda.">
+<meta property="og:image" content="img/ringkasan.webp">
 <link rel="icon" href="icon.svg" type="image/svg+xml">
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="stylesheet" href="assets/base.css">
@@ -17,179 +17,158 @@
 <script src="assets/analytics.js" defer></script>
 </head>
 <body>
-<div class="wrap">
-  <nav class="topbar" aria-label="Utama">
-    <a class="brand" href="./">
-      <svg width="30" height="30" viewBox="0 0 30 30" aria-hidden="true"><rect width="30" height="30" rx="8" fill="var(--accent)"/><path d="M7 20.5l5-5 3.5 3 7.5-8" fill="none" stroke="var(--accent-ink)" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/><circle cx="23" cy="10.5" r="2.4" fill="var(--mark)"/></svg>
-      Cek Profit
-    </a>
+<div class="site-nav" id="nav">
+  <nav class="wrap topbar" aria-label="Utama">
+    <a class="brand" href="./"><svg width="28" height="28" viewBox="0 0 30 30" aria-hidden="true"><rect width="30" height="30" rx="8" fill="var(--accent)"/><path d="M7 20.5l5-5 3.5 3 7.5-8" fill="none" stroke="var(--accent-ink)" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/><circle cx="23" cy="10.5" r="2.4" fill="var(--mark)"/></svg>Cek Profit</a>
     <div class="nav-links">
-      <a class="lnk" href="#fitur">Fitur</a>
-      <a class="lnk" href="#laporan">Contoh laporan</a>
-      <a class="lnk" href="#harga">Harga</a>
-      <a class="lnk" href="#faq">FAQ</a>
-      <a class="btn primary" href="app.html">Buka aplikasi</a>
+      <a class="lnk" href="#fitur">Fitur</a><a class="lnk" href="#laporan">Laporan</a><a class="lnk" href="#harga">Harga</a><a class="lnk" href="#faq">FAQ</a>
+      <a class="btn quiet" href="akun.html?next=app.html" data-cloud hidden>Masuk</a>
+      <a class="btn primary" href="app.html" data-track="nav-coba">Coba gratis</a>
     </div>
   </nav>
-
-  <header class="hero">
-    <div class="hero-copy">
-      <span class="eyebrow">Untuk penjual Shopee, TikTok Shop &amp; Tokopedia</span>
-      <h1>Omzet besar belum tentu untung. Lihat <span class="hl">laba sebenarnya</span> toko Anda.</h1>
-      <p class="lead">Unggah laporan dari Seller Centre. Cek Profit menghitung potongan platform, modal, dan laba bersih per bulan, per produk, dan per pesanan, lalu menyusunnya menjadi laporan PDF siap kirim.</p>
-      <div class="cta-row">
-        <a class="btn primary big" href="app.html" data-track="cta-hero">Cek toko saya, gratis</a>
-        <a class="btn big" href="app.html?demo" data-track="cta-demo">Lihat dengan data contoh</a>
-      </div>
-      <ul class="trust">
-        <li><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M5 12l5 5 9-10"/></svg>File tidak diunggah ke server</li>
-        <li><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M5 12l5 5 9-10"/></svg>Tanpa daftar akun</li>
-        <li><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M5 12l5 5 9-10"/></svg>Total dicocokkan dengan ringkasan resmi</li>
-      </ul>
-    </div>
-    <div class="hero-visual">
-      <div class="frame"><div class="bar"><i></i><i></i><i></i></div><img src="img/dashboard.webp" width="1400" height="607" alt="Dashboard Cek Profit: laba bersih, margin kotor, potongan platform, dan temuan otomatis"></div>
-    </div>
-  </header>
 </div>
 
-<section class="blk band" aria-labelledby="h-masalah">
-  <div class="wrap">
-    <div class="sec-head"><span class="eyebrow">Masalahnya</span><h2 id="h-masalah">Seller Centre menunjukkan uang masuk, bukan untung.</h2>
-      <p>Banyak penjual baru sadar tokonya rugi setelah berbulan-bulan, karena angka penting tersebar di puluhan kolom laporan.</p></div>
-    <div class="cards3">
-      <div class="card problem"><span class="big">15–20%</span><h3>Potongan platform tersebar</h3><p>Biaya admin, komisi dinamis, program ongkir, afiliasi, biaya proses. Masing-masing kecil, totalnya bisa seperlima penjualan dan terus naik.</p></div>
-      <div class="card problem"><span class="big">0</span><h3>Modal tidak tercatat</h3><p>Laporan marketplace tidak tahu harga beli Anda. Tanpa modal, “penghasilan” terlihat besar padahal sebagian besarnya uang Anda sendiri yang kembali.</p></div>
-      <div class="card problem"><span class="big">−Rp</span><h3>Produk laris bisa merugi</h3><p>Produk murah dengan diskon dan biaya tetap per pesanan sering terjual paling banyak, tetapi justru menggerus laba.</p></div>
+<main>
+  <div class="wrap hero">
+    <div class="hero-copy">
+      <h1>Tahu laba bersih toko online Anda, bukan cuma omzetnya.</h1>
+      <p class="lead">Unggah laporan penghasilan Shopee dan TikTok Shop. Cek Profit mengurangkan potongan marketplace, modal barang, dan biaya operasional, lalu menunjukkan berapa yang benar-benar tersisa, per bulan dan per produk.</p>
+      <div class="cta-row">
+        <a class="btn primary big" href="app.html" data-track="cta-hero">Coba gratis</a>
+        <a class="btn big" href="app.html?demo" data-track="cta-demo">Lihat dengan data contoh</a>
+      </div>
+      <p class="reassure">Gratis dicoba tanpa daftar. File laporan diproses di browser Anda dan tidak diunggah ke server.</p>
+    </div>
+    <div class="hero-nota">
+      <section class="nota" aria-label="Contoh nota laba">
+        <div class="nota-head"><b>Nota laba</b><span>Toko Contoh Sejahtera<br>Januari sampai September 2026</span></div>
+        <dl>
+          <div class="ln"><dt>Penjualan<small>925 pesanan, Shopee dan TikTok Shop</small></dt><dd>Rp67.970.700</dd></div>
+          <div class="ln minus"><dt>Potongan marketplace<small>16,2% dari penjualan</small></dt><dd>−Rp10.996.394</dd></div>
+          <div class="ln minus"><dt>Modal barang</dt><dd>−Rp37.837.500</dd></div>
+          <div class="ln minus"><dt>Packing</dt><dd>−Rp1.387.500</dd></div>
+          <div class="ln sub"><dt>Margin kotor</dt><dd>Rp17.749.306</dd></div>
+          <div class="ln minus"><dt>Biaya operasional<small>gaji admin, sewa gudang</small></dt><dd>−Rp12.296.053</dd></div>
+        </dl>
+        <div class="nota-total"><span class="lbl">Laba bersih</span><span class="big">Rp5.453.253</span><span class="note">8,0% dari penjualan. Omzetnya Rp68 juta.</span></div>
+      </section>
+      <p class="caption">Contoh dari data fiktif. Toko Anda akan punya nota yang sama, dihitung dari laporan resminya.</p>
     </div>
   </div>
-</section>
 
-<section class="blk" aria-labelledby="h-cara">
-  <div class="wrap">
-    <div class="sec-head center"><span class="eyebrow">Cara kerja</span><h2 id="h-cara">Tiga langkah, beberapa menit.</h2></div>
-    <ol class="steps3">
-      <li><h3>Unggah laporan</h3><p>Laporan Penghasilan Shopee &amp; TikTok Shop (pesanan Tokopedia ikut di dalamnya). Opsional: export pesanan dan file retur.</p></li>
-      <li><h3>Isi modal</h3><p>Unduh template berisi produk Anda, isi modal per unit, unggah lagi. Atau pakai modal rata-rata dulu. Tersimpan di browser Anda.</p></li>
-      <li><h3>Baca hasil &amp; kirim laporan</h3><p>Laba bersih, produk yang merugi, saran harga, tren bulanan. Unduh laporan PDF untuk pemilik, mitra, atau investor.</p></li>
-    </ol>
-  </div>
-</section>
-
-<section class="blk band" id="fitur" aria-labelledby="h-fitur">
-  <div class="wrap">
-    <div class="sec-head"><span class="eyebrow">Fitur</span><h2 id="h-fitur">Semua yang perlu Anda tahu tentang untung toko.</h2></div>
-    <div class="features">
-      <div class="card feature"><span class="ic"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 19V5M4 19h16M8 15l3-4 3 2 5-6"/></svg></span><h3>Laba rugi otomatis</h3><p>Penjualan → potongan platform → modal → packing → biaya operasional → laba bersih, per platform.</p></div>
-      <div class="card feature"><span class="ic"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="4" width="16" height="16" rx="3"/><path d="M8 9h8M8 13h8M8 17h5"/></svg></span><h3>Modal per produk</h3><p>Template Excel terisi daftar produk Anda. Cocokkan otomatis lewat SKU atau nama produk.</p></div>
-      <div class="card feature"><span class="ic"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3l2.5 5.5L20 9l-4 4 1 6-5-3-5 3 1-6-4-4 5.5-.5z"/></svg></span><h3>Temuan &amp; saran</h3><p>Produk merugi, potongan yang naik, pesanan kecil yang tidak untung, ketergantungan pada sedikit produk.</p><span class="pill pro tag">PRO</span></div>
-      <div class="card feature"><span class="ic"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 12l-8 8-9-9V4h7z"/><circle cx="7.5" cy="7.5" r="1.5"/></svg></span><h3>Saran harga</h3><p>Harga impas dan harga untuk target margin per produk, memakai potongan platform produk itu sendiri.</p><span class="pill pro tag">PRO</span></div>
-      <div class="card feature"><span class="ic"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 3h9l4 4v14H6z"/><path d="M14 3v5h5M9 13h7M9 17h7"/></svg></span><h3>Laporan PDF profesional</h3><p>Sampul, ringkasan eksekutif, laba rugi, tren, produk, retur, dan metode. Siap dikirim.</p><span class="pill pro tag">PRO</span></div>
-      <div class="card feature"><span class="ic"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/></svg></span><h3>Retur yang tidak kembali</h3><p>Tandai barang retur yang hilang atau rusak; modalnya dikurangkan dari laba.</p></div>
-      <div class="card feature"><span class="ic"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg></span><h3>Simulator harga &amp; diskon</h3><p>Uji harga dan diskon sebelum dipasang. Lihat batas diskon aman sebelum rugi.</p></div>
-      <div class="card feature"><span class="ic"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="10" width="16" height="11" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg></span><h3>Privat &amp; bisa offline</h3><p>Semua dihitung di browser Anda. Setelah halaman terbuka, perhitungan tetap jalan tanpa internet.</p></div>
-    </div>
-  </div>
-</section>
-
-<section class="blk" id="laporan" aria-labelledby="h-laporan">
-  <div class="wrap show">
-    <div class="papers"><img src="img/laporan-1.webp" width="760" height="1076" alt="Halaman sampul laporan PDF" loading="lazy"><img src="img/laporan-2.webp" width="760" height="1076" alt="Halaman laba rugi laporan PDF" loading="lazy"></div>
-    <div class="sec-head" style="margin:0">
-      <span class="eyebrow">Laporan PDF</span>
-      <h2 id="h-laporan">Laporan yang bisa langsung Anda kirim.</h2>
-      <p>Untuk pemilik toko, mitra usaha, investor, atau arsip pribadi. Dengan nama dan logo toko Anda.</p>
-      <ul>
-        <li>Ringkasan eksekutif dan hal terpenting yang perlu ditindaklanjuti</li>
-        <li>Laporan laba rugi per platform dan rincian potongan</li>
-        <li>Tren bulanan penjualan, margin, dan laba bersih</li>
-        <li>Produk teratas dan produk yang perlu dinaikkan harganya</li>
-        <li>Retur, metode hitung, dan batasan, supaya pembaca tahu seberapa yakin angkanya</li>
-      </ul>
-      <div class="cta-row"><a class="btn" href="contoh-laporan.pdf" target="_blank" rel="noopener" data-track="lihat-contoh-pdf">Lihat contoh laporan (PDF)</a></div>
-    </div>
-  </div>
-  <div class="wrap show rev" style="margin-top:56px">
-    <div class="frame"><div class="bar"><i></i><i></i><i></i></div><img src="img/produk.webp" width="1400" height="682" alt="Tabel produk dengan harga impas, harga target, dan status rugi/tipis/sehat" loading="lazy"></div>
-    <div class="sec-head" style="margin:0">
-      <span class="eyebrow">Per produk</span>
-      <h2>Tahu produk mana yang harus dinaikkan harganya.</h2>
-      <p>Setiap produk diberi status <b>rugi</b>, <b>tipis</b>, atau <b>sehat</b>, lengkap dengan harga impas dan harga untuk mencapai target margin Anda.</p>
-    </div>
-  </div>
-</section>
-
-<section class="blk tight" aria-labelledby="h-privasi">
-  <div class="wrap">
-    <div class="privacy-blk">
-      <div class="shield"><svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z"/><path d="M8.5 12l2.5 2.5 4.5-5"/></svg></div>
-      <div style="display:grid;gap:10px">
-        <h2 id="h-privasi">Data penjualan Anda tidak pernah meninggalkan komputer Anda.</h2>
-        <p>Cek Profit adalah halaman web yang berjalan sepenuhnya di browser. File laporan dibaca dan dihitung di perangkat Anda sendiri; tidak ada server yang menerima isi file, data pembeli, atau angka penjualan. Modal produk dan pengaturan disimpan di browser Anda dan bisa dihapus kapan saja.</p>
+  <section class="blk alt" aria-labelledby="h-masalah">
+    <div class="wrap">
+      <div class="sec-head"><h2 id="h-masalah">Seller Centre menunjukkan uang masuk. Bukan untung.</h2>
+        <p>Banyak penjual baru sadar tokonya tidak untung setelah berbulan-bulan, karena angka yang penting tersebar di puluhan kolom laporan.</p></div>
+      <div class="truths">
+        <div class="truth"><span class="fig">15–20%</span><h3>Potongan marketplace tersebar</h3><p>Biaya admin, komisi dinamis, program ongkir, afiliasi, biaya proses. Masing-masing kecil, tetapi totalnya bisa seperlima penjualan, dan terus naik.</p></div>
+        <div class="truth"><span class="fig">Rp0</span><h3>Modal tidak tercatat</h3><p>Laporan marketplace tidak tahu harga beli Anda. Tanpa modal, penghasilan terlihat besar padahal sebagian besarnya uang Anda sendiri yang kembali.</p></div>
+        <div class="truth"><span class="fig">−Rp</span><h3>Produk laris bisa merugi</h3><p>Produk murah dengan diskon dan biaya tetap per pesanan sering paling banyak terjual, tetapi justru menggerus laba.</p></div>
       </div>
     </div>
-  </div>
-</section>
+  </section>
 
-<section class="blk" id="harga" aria-labelledby="h-harga">
-  <div class="wrap">
-    <div class="sec-head center"><span class="eyebrow">Harga</span><h2 id="h-harga">Mulai gratis. Bayar saat perlu laporan lengkap.</h2></div>
-    <div class="prices">
-      <div class="card price-card">
-        <h3>Gratis</h3><div><span class="amount">Rp0</span></div>
-        <p class="small muted">Untuk melihat kondisi toko secara cepat.</p>
-        <ul><li>Laba &amp; potongan platform</li><li>Grafik per bulan &amp; per platform</li><li>Modal per produk &amp; template</li><li>5 produk teratas</li><li>2 temuan otomatis</li><li>Simulator harga</li><li class="no">Laporan PDF</li><li class="no">Ekspor Excel</li></ul>
-        <a class="btn" href="app.html" data-track="harga-gratis">Mulai gratis</a>
-      </div>
-      <div class="card price-card featured">
-        <span class="pill pro ribbon">PALING DIPILIH</span>
-        <h3>Pro</h3><div><span class="amount" data-price="pro">Rp49.000</span> <span class="muted" data-price="proUnit">/ bulan</span><div class="small faint" data-price="proNote">atau Rp399.000 / tahun</div></div>
-        <p class="small muted">Untuk pemilik toko yang ingin keputusan berbasis angka.</p>
-        <ul><li>Semua fitur Gratis</li><li><b>Laporan PDF profesional</b> dengan nama &amp; logo toko</li><li>Analisis semua produk + status rugi/tipis/sehat</li><li>Harga impas &amp; harga target per produk</li><li>Semua temuan &amp; saran</li><li>Ekspor lengkap ke Excel</li></ul>
-        <a class="btn primary" data-wa="pro" href="app.html?pro" data-track="harga-pro">Beli kode akses</a>
-        <span class="tiny faint">Sudah punya kode? Masukkan di aplikasi (tombol PRO).</span>
-      </div>
-      <div class="card price-card">
-        <h3>Jasa laporan</h3><div><span class="amount" data-price="jasa">Rp199.000</span> <span class="muted" data-price="jasaUnit">/ toko / bulan</span></div>
-        <p class="small muted">Tidak sempat? Kami yang kerjakan.</p>
-        <ul><li>Anda kirim file laporan, kami olah</li><li>Bantu menyusun modal per produk</li><li>Laporan PDF bulanan</li><li>Rekomendasi harga &amp; produk</li><li>Sesi tanya jawab</li></ul>
-        <a class="btn" data-wa="jasa" href="#faq" data-track="harga-jasa">Hubungi lewat WhatsApp</a>
+  <section class="blk" aria-labelledby="h-cara">
+    <div class="wrap">
+      <div class="sec-head"><h2 id="h-cara">Tiga langkah, beberapa menit.</h2></div>
+      <ol class="steps3">
+        <li><h3>Unggah laporan</h3><p>Laporan Penghasilan dari Shopee dan TikTok Shop; pesanan Tokopedia ikut di laporan TikTok. Tambahkan export pesanan dan file retur bila ada.</p></li>
+        <li><h3>Isi modal</h3><p>Unduh template yang sudah berisi daftar produk Anda, isi modal per unit, lalu unggah lagi. Atau mulai dengan modal rata-rata.</p></li>
+        <li><h3>Baca nota laba</h3><p>Laba bersih, produk yang merugi, harga yang disarankan, dan tren bulanan. Unduh laporan PDF atau simpan ke riwayat.</p></li>
+      </ol>
+    </div>
+  </section>
+
+  <section class="blk alt" id="fitur" aria-labelledby="h-fitur">
+    <div class="wrap">
+      <div class="sec-head"><h2 id="h-fitur">Yang Anda dapat</h2></div>
+      <div class="feat">
+        <div><span class="ic"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M6 3h12v18l-3-2-3 2-3-2-3 2z"/><path d="M9 8h6M9 12h6"/></svg></span><div><h3>Nota laba otomatis</h3><p>Penjualan, potongan marketplace, modal, packing, retur yang hilang, dan biaya operasional sampai laba bersih, per platform.</p></div></div>
+        <div><span class="ic"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M21 8l-9-5-9 5 9 5 9-5z"/><path d="M3 8v8l9 5 9-5V8"/></svg></span><div><h3>Modal per produk</h3><p>Template Excel berisi produk Anda. Dicocokkan otomatis lewat SKU atau nama produk, dan tersimpan di akun.</p></div></div>
+        <div><span class="ic"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M20 12l-8 8-9-9V4h7z"/><circle cx="7.5" cy="7.5" r="1.5"/></svg></span><div><h3>Saran harga per produk <span class="badge pro">PRO</span></h3><p>Harga impas dan harga untuk target margin, memakai potongan marketplace produk itu sendiri. Status rugi, tipis, atau sehat.</p></div></div>
+        <div><span class="ic"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 3v3M12 18v3M3 12h3M18 12h3"/><circle cx="12" cy="12" r="5"/></svg></span><div><h3>Temuan dan saran <span class="badge pro">PRO</span></h3><p>Produk yang merugi, potongan yang naik, pesanan kecil yang tidak untung, dan ketergantungan pada sedikit produk.</p></div></div>
+        <div><span class="ic"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg></span><div><h3>Riwayat dan perbandingan</h3><p>Simpan hasil setiap bulan dan bandingkan dengan periode sebelumnya. Bulan ini dibanding bulan lalu tampil di ringkasan.</p></div></div>
+        <div><span class="ic"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M6 3h9l4 4v14H6z"/><path d="M14 3v5h5"/></svg></span><div><h3>Laporan PDF profesional <span class="badge pro">PRO</span></h3><p>Sampul dengan nama dan logo toko, laba rugi, tren, produk, retur, dan metode hitung. Siap dikirim ke mitra atau investor.</p></div></div>
+        <div><span class="ic"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M9 14l-5-5 5-5"/><path d="M4 9h11a5 5 0 0 1 0 10h-4"/></svg></span><div><h3>Retur yang tidak kembali</h3><p>Tandai barang retur yang hilang atau rusak; modalnya dikurangkan dari laba.</p></div></div>
+        <div><span class="ic"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3M1 14h6M9 8h6M17 16h6"/></svg></span><div><h3>Simulator harga dan target</h3><p>Uji harga dan diskon sebelum dipasang. Pasang target laba bulanan dan lihat berapa bulan yang mencapainya.</p></div></div>
       </div>
     </div>
-  </div>
-</section>
+  </section>
 
-<section class="blk band" id="faq" aria-labelledby="h-faq">
-  <div class="wrap">
-    <div class="sec-head center"><span class="eyebrow">FAQ</span><h2 id="h-faq">Pertanyaan yang sering muncul</h2></div>
-    <div class="faq">
-      <details><summary>Apakah data toko saya aman?</summary><p>File tidak dikirim ke mana pun. Cek Profit berjalan di browser Anda: file dibaca dan dihitung di perangkat Anda sendiri. Yang tersimpan (di browser Anda saja) hanya pengaturan modal, profil laporan, dan kode akses. Anda bisa menghapusnya lewat tombol “Hapus data tersimpan”.</p></details>
-      <details><summary>Laporan apa yang perlu saya unduh?</summary><p>Wajib: Laporan Penghasilan dari Shopee dan/atau TikTok Shop. Disarankan: export pesanan (untuk jumlah barang dan SKU). Opsional: file retur. Panduan langkah demi langkah ada di aplikasi, bagian “Cara unduh laporan”.</p></details>
-      <details><summary>Apakah Tokopedia didukung?</summary><p>Ya. Sejak Tokopedia bergabung dengan TikTok Shop, pesanan Tokopedia tercatat di laporan penghasilan TikTok Shop, dan Cek Profit memisahkan hasilnya per sumber pesanan. Lazada belum didukung.</p></details>
-      <details><summary>Seberapa akurat hasilnya?</summary><p>Penjualan dan potongan platform diambil langsung dari laporan resmi, dan total setiap file dicocokkan dengan ringkasan resmi platform. Ketepatan margin bergantung pada modal yang Anda isi. Pesanan yang modalnya belum diketahui tidak dihitung (bukan dianggap nol), dan porsinya ditampilkan dengan jelas.</p></details>
-      <details><summary>Saya tidak tahu modal setiap produk. Bisa tetap dipakai?</summary><p>Bisa. Isi “modal rata-rata” dalam persen dari harga jual sebagai perkiraan awal, lalu lengkapi modal produk terlaris lebih dulu lewat template. Hasil akan makin tepat seiring modal dilengkapi.</p></details>
-      <details><summary>Bagaimana cara membeli dan mengaktifkan Pro?</summary><p>Hubungi kami lewat WhatsApp, lakukan pembayaran, dan Anda akan menerima kode akses. Di aplikasi, klik tombol PRO di kanan atas, tempel kode, lalu “Aktifkan”. Kode berlaku di browser tempat Anda memasukkannya.</p></details>
-      <details><summary>Bisa dipakai di HP?</summary><p>Bisa dibuka di HP, tetapi paling nyaman di laptop atau komputer karena file laporan biasanya diunduh di sana dan tabelnya lebar.</p></details>
-      <details><summary>Apakah ini menggantikan akuntan atau laporan pajak?</summary><p>Tidak. Cek Profit memberi estimasi untuk keputusan usaha sehari-hari (harga, produk, promosi). Untuk laporan keuangan resmi atau pajak, tetap gunakan akuntan.</p></details>
+  <section class="blk" id="laporan" aria-labelledby="h-laporan">
+    <div class="wrap show">
+      <div class="papers"><img src="img/laporan-1.webp" width="760" height="1076" alt="Sampul laporan PDF Cek Profit" loading="lazy"><img src="img/laporan-2.webp" width="760" height="1076" alt="Halaman laba rugi di laporan PDF" loading="lazy"></div>
+      <div class="sec-head" style="margin:0">
+        <h2 id="h-laporan">Laporan yang bisa langsung dikirim.</h2>
+        <p>Untuk pemilik toko, mitra usaha, investor, atau arsip. Dengan nama dan logo toko Anda.</p>
+        <ul class="ticks"><li>Ringkasan dan hal yang perlu ditindaklanjuti</li><li>Laba rugi per platform dan rincian potongan</li><li>Tren bulanan penjualan, margin, dan laba bersih</li><li>Produk teratas dan produk yang perlu dinaikkan harganya</li><li>Metode hitung dan batasannya, supaya pembaca tahu seberapa yakin angkanya</li></ul>
+        <div class="cta-row"><a class="btn" href="contoh-laporan.pdf" target="_blank" rel="noopener" data-track="lihat-contoh-pdf">Buka contoh laporan (PDF)</a></div>
+      </div>
     </div>
-  </div>
-</section>
+    <div class="wrap show" style="margin-top:72px">
+      <div class="sec-head" style="margin:0">
+        <h2>Tahu produk mana yang perlu dinaikkan harganya.</h2>
+        <p>Setiap produk diberi status rugi, tipis, atau sehat, lengkap dengan harga impas dan harga untuk mencapai target margin Anda.</p>
+      </div>
+      <div class="shot"><img src="img/produk.webp" width="1400" height="839" alt="Tabel produk dengan harga impas, harga target, dan status" loading="lazy"></div>
+    </div>
+  </section>
 
-<section class="blk">
-  <div class="wrap">
-    <div class="final">
-      <h2>Cari tahu untung toko Anda hari ini.</h2>
-      <p class="muted">Gratis untuk dicoba. Tanpa daftar akun. File tetap di komputer Anda.</p>
-      <div class="cta-row" style="justify-content:center"><a class="btn primary big" href="app.html" data-track="cta-bawah">Buka Cek Profit</a><a class="btn big" href="app.html?demo">Lihat data contoh</a></div>
+  <section class="blk alt" aria-labelledby="h-privasi">
+    <div class="wrap">
+      <div class="sec-head"><h2 id="h-privasi">Data penjualan Anda tetap di komputer Anda.</h2>
+        <p>Cek Profit membaca file laporan langsung di browser. Akun hanya dipakai untuk hal yang memang perlu disimpan.</p></div>
+      <div class="split">
+        <div class="here"><h3>Tidak pernah dikirim ke server</h3><ul class="ticks"><li>File laporan penghasilan, pesanan, dan retur</li><li>Nama, alamat, dan nomor telepon pembeli</li><li>Daftar pesanan satu per satu</li></ul></div>
+        <div class="cloud"><h3>Disimpan di akun, bila Anda daftar</h3><ul class="ticks"><li>Modal per produk dan pengaturan biaya</li><li>Nama toko dan logo untuk laporan</li><li>Ringkasan angka per periode untuk riwayat</li></ul><p class="small muted">Bisa dihapus kapan saja. Tanpa akun pun aplikasi tetap bisa dipakai; semuanya tersimpan di browser Anda.</p></div>
+      </div>
     </div>
-  </div>
-</section>
+  </section>
+
+  <section class="blk" id="harga" aria-labelledby="h-harga">
+    <div class="wrap">
+      <div class="sec-head"><h2 id="h-harga">Mulai gratis. Bayar saat perlu laporan lengkap.</h2></div>
+      <div class="prices">
+        <div class="price"><h3>Gratis</h3><div><span class="amount">Rp0</span></div><p class="small muted">Melihat kondisi toko dengan cepat.</p>
+          <ul class="ticks"><li>Nota laba dan grafik per bulan</li><li>Modal per produk dan template</li><li>Biaya dan potongan per platform</li><li>5 produk teratas, 2 temuan</li><li>3 riwayat tersimpan (dengan akun)</li><li class="no">Laporan PDF dan Excel</li></ul>
+          <a class="btn" href="app.html" data-track="harga-gratis">Mulai gratis</a></div>
+        <div class="price featured"><h3>Pro</h3><div><span class="amount" data-price="pro">Rp49.000</span> <span class="muted" data-price="proUnit">/ bulan</span><div class="small faint" data-price="proNote">atau Rp399.000 / tahun</div></div>
+          <p class="small muted">Keputusan harga dan produk berbasis angka.</p>
+          <ul class="ticks"><li>Semua fitur Gratis</li><li>Laporan PDF dengan nama dan logo toko</li><li>Semua produk dan saran harga</li><li>Semua temuan dan saran</li><li>Ekspor Excel, riwayat tanpa batas</li></ul>
+          <a class="btn primary" href="app.html#upgrade" data-track="harga-pro">Berlangganan Pro</a></div>
+        <div class="price"><h3>Jasa laporan</h3><div><span class="amount" data-price="jasa">Rp199.000</span> <span class="muted" data-price="jasaUnit">/ toko / bulan</span></div><p class="small muted">Tidak sempat? Kami yang kerjakan.</p>
+          <ul class="ticks"><li>Anda kirim file, kami olah</li><li>Bantu menyusun modal per produk</li><li>Laporan PDF bulanan</li><li>Rekomendasi harga dan produk</li><li>Sesi tanya jawab</li></ul>
+          <a class="btn" data-wa="jasa" href="#faq" data-track="harga-jasa">Hubungi lewat WhatsApp</a></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="blk alt" id="faq" aria-labelledby="h-faq">
+    <div class="wrap">
+      <div class="sec-head"><h2 id="h-faq">Pertanyaan yang sering muncul</h2></div>
+      <div class="faq">
+        <details><summary>Apakah data toko saya aman?</summary><p>File laporan dibaca dan dihitung di browser Anda, tidak dikirim ke server. Bila Anda membuat akun, yang disimpan hanya modal produk, pengaturan, profil toko, dan ringkasan angka untuk riwayat. Data pembeli tidak pernah disimpan.</p></details>
+        <details><summary>Harus daftar akun?</summary><p>Tidak. Anda bisa langsung memakai aplikasi; modal dan pengaturan tersimpan di browser. Akun berguna agar modal produk dan riwayat bisa dibuka dari laptop atau HP lain, dan untuk berlangganan Pro.</p></details>
+        <details><summary>Laporan apa yang perlu diunduh?</summary><p>Wajib: Laporan Penghasilan Shopee dan/atau TikTok Shop. Disarankan: export pesanan, untuk jumlah barang dan SKU. Opsional: file retur. Panduannya ada di halaman Data &amp; modal di aplikasi.</p></details>
+        <details><summary>Apakah Tokopedia didukung?</summary><p>Ya. Pesanan Tokopedia tercatat di laporan penghasilan TikTok Shop, dan hasilnya dipisahkan per sumber pesanan. Lazada belum didukung.</p></details>
+        <details><summary>Seberapa akurat hasilnya?</summary><p>Penjualan dan potongan diambil dari laporan resmi, dan total setiap file dicocokkan dengan ringkasan resmi platform. Ketepatan laba bergantung pada modal yang Anda isi. Pesanan tanpa modal tidak dihitung, bukan dianggap nol, dan porsinya selalu ditampilkan.</p></details>
+        <details><summary>Bagaimana cara berlangganan Pro?</summary><p>Masuk ke akun, klik Berlangganan Pro, pilih paket, lalu lanjutkan pembayaran lewat transfer atau QRIS melalui WhatsApp. Pro aktif di akun Anda setelah pembayaran dikonfirmasi.</p></details>
+        <details><summary>Apakah ini menggantikan akuntan atau laporan pajak?</summary><p>Tidak. Cek Profit memberi estimasi untuk keputusan usaha sehari-hari seperti harga, produk, dan promosi. Untuk laporan keuangan resmi dan pajak, tetap gunakan akuntan.</p></details>
+      </div>
+    </div>
+  </section>
+
+  <section class="blk">
+    <div class="wrap">
+      <div class="final"><h2>Cari tahu laba bersih toko Anda hari ini.</h2><p>Gratis dicoba, tanpa daftar. File tetap di komputer Anda.</p>
+        <div class="cta-row"><a class="btn primary big" href="app.html" data-track="cta-bawah">Buka Cek Profit</a></div></div>
+    </div>
+  </section>
+</main>
 
 <div class="wrap">
-  <footer class="site">
-    <span>© <span id="yr">2026</span> Cek Profit. Estimasi untuk keputusan usaha, bukan nasihat keuangan atau pajak.</span>
-    <nav><a href="app.html">Aplikasi</a><a href="privasi.html">Privasi &amp; ketentuan</a><a href="contoh-laporan.pdf">Contoh laporan</a></nav>
-  </footer>
+  <footer class="site"><span>© <span id="yr">2026</span> Cek Profit. Estimasi untuk keputusan usaha, bukan nasihat keuangan atau pajak.</span>
+    <nav><a href="app.html">Aplikasi</a><a href="akun.html">Akun</a><a href="privasi.html">Privasi &amp; ketentuan</a><a href="contoh-laporan.pdf">Contoh laporan</a></nav></footer>
 </div>
 
 <script>
@@ -197,12 +176,14 @@
   const C = window.CEK_CONFIG || {};
   const p = C.prices || {};
   document.querySelectorAll('[data-price]').forEach((el) => { const v = p[el.dataset.price]; if (v !== undefined) el.textContent = v; });
-  const wa = (msg) => `https://wa.me/${C.whatsapp}?text=${encodeURIComponent(msg)}`;
+  if (C.supabaseUrl) document.querySelectorAll('[data-cloud]').forEach((el) => { el.hidden = false; });
   document.querySelectorAll('[data-wa]').forEach((el) => {
-    if (C.whatsapp) { el.href = wa(el.dataset.wa === 'jasa' ? C.waMessageJasa : C.waMessage); el.target = '_blank'; el.rel = 'noopener'; }
-    else if (el.dataset.wa === 'jasa') { el.removeAttribute('href'); el.setAttribute('aria-disabled', 'true'); el.classList.add('disabled'); el.textContent = 'Kontak segera tersedia'; el.style.opacity = '.55'; el.style.cursor = 'default'; }
+    if (C.whatsapp) { el.href = `https://wa.me/${C.whatsapp}?text=${encodeURIComponent(C.waMessageJasa || '')}`; el.target = '_blank'; el.rel = 'noopener'; }
+    else { el.removeAttribute('href'); el.setAttribute('aria-disabled', 'true'); el.textContent = 'Kontak segera tersedia'; el.style.opacity = '.55'; el.style.cursor = 'default'; }
   });
   document.getElementById('yr').textContent = new Date().getFullYear();
+  const nav = document.getElementById('nav');
+  addEventListener('scroll', () => nav.classList.toggle('scrolled', scrollY > 8), { passive: true });
   document.addEventListener('click', (e) => { const t = e.target.closest('[data-track]'); if (t && window.cekTrack) window.cekTrack(t.dataset.track); });
   if ('serviceWorker' in navigator && location.protocol === 'https:') navigator.serviceWorker.register('sw.js').catch(() => {});
 })();

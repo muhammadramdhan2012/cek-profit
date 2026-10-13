@@ -1,0 +1,33 @@
+/* Halaman akun & admin. */
+body.acct { min-height: 100vh; display: grid; place-items: start center; padding: 40px 16px; background: var(--bg); }
+.acct-wrap { width: min(420px, 100%); display: grid; gap: 20px; justify-items: center; }
+.acct-card { width: 100%; background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-lg); padding: 28px; display: grid; gap: 18px; }
+.acct-card h1 { font-size: 26px; letter-spacing: -0.03em; }
+.acct-card form { display: grid; gap: 14px; }
+.acct-card .btn.primary { width: 100%; }
+.acct-note { text-align: center; max-width: 40ch; }
+.or { display: flex; align-items: center; gap: 10px; color: var(--ink-3); font-size: 12.5px; }
+.or::before, .or::after { content: ""; flex: 1; height: 1px; background: var(--line); }
+.msg { font-size: 13.5px; border-radius: 10px; padding: 10px 12px; }
+.msg.err { background: var(--cost-soft); color: var(--cost); }
+.msg.ok { background: var(--good-soft); color: var(--good); }
+.switch { text-align: center; font-size: 14px; color: var(--ink-2); }
+.pw { position: relative; }
+.pw button { position: absolute; right: 6px; top: 50%; transform: translateY(-50%); }
+.plan { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 14px 16px; border-radius: var(--r); background: var(--surface-2); }
+.plan b { display: block; }
+.row-gap { display: flex; gap: 10px; flex-wrap: wrap; }
+
+/* admin */
+body.admin { background: var(--bg); }
+.admin-top { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding-block: 18px; }
+.admin-grid { display: grid; gap: 22px; padding-bottom: 48px; }
+.stats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
+@media (max-width: 760px) { .stats { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+.stat { padding: 16px 18px; border: 1px solid var(--line); border-radius: var(--r); background: var(--surface); }
+.stat b { display: block; font-size: 26px; letter-spacing: -0.03em; font-variant-numeric: tabular-nums; }
+.tbl { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+.tbl th, .tbl td { padding: 10px 10px; border-bottom: 1px solid var(--line); text-align: left; vertical-align: middle; }
+.tbl th { font-size: 12.5px; color: var(--ink-3); font-weight: 650; }
+.tbl tr:last-child td { border-bottom: 0; }
+.tablewrap { overflow-x: auto; }

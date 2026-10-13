@@ -8,14 +8,17 @@ Alat web untuk menghitung **laba sebenarnya toko Shopee, TikTok Shop, dan Tokope
 
 ## Fitur
 
-| Gratis | Pro (kode akses) |
+| Gratis | Pro |
 |---|---|
-| Penjualan, potongan platform, margin, dan laba bersih | Laporan PDF dengan nama dan logo toko |
-| Grafik per bulan, per platform, dan per nilai pesanan | Analisis semua produk dengan status rugi/tipis/sehat |
+| Nota laba: penjualan, potongan, modal, biaya operasional, laba bersih | Laporan PDF dengan nama dan logo toko |
+| Grafik per bulan, bulan ini vs bulan lalu, target laba bulanan | Analisis semua produk dengan status rugi/tipis/sehat |
 | Modal per produk (template Excel) atau modal rata-rata | Harga impas dan harga target per produk |
 | Mode reseller (diskon dari harga acuan) | Semua temuan otomatis |
 | 5 produk teratas dan 2 temuan otomatis | Ekspor Excel lengkap |
-| Retur yang tidak kembali, simulator harga | |
+| Retur yang tidak kembali, simulator harga | Riwayat tanpa batas |
+| Akun: sinkron modal antarperangkat, 3 riwayat | |
+
+Akun (daftar, masuk, lupa sandi, Google opsional) memakai **Supabase**; ikuti [supabase/PANDUAN.md](supabase/PANDUAN.md). Selama belum diatur, situs tetap jalan tanpa login. Pembayaran Pro manual: pengguna mengirim permintaan dari aplikasi, Anda mengaktifkan di `admin.html`.
 
 Hal lain yang sudah disiapkan:
 - Semua file diolah di browser pengguna dan tidak dikirim ke server.
@@ -43,8 +46,9 @@ Buka `assets/config.js` di GitHub, klik ikon pensil, ubah isinya, lalu **Commit 
 - `prices`: harga yang tampil di halaman depan.
 - `goatcounter`: kode situs dari goatcounter.com (statistik tanpa cookie). Kosong berarti statistik mati.
 - `publicKey`: kunci publik untuk memeriksa kode akses.
+- `supabaseUrl`, `supabaseAnonKey`, `googleLogin`: pengaturan akun (lihat panduan Supabase).
 
-## Kode akses Pro
+## Kode akses Pro (alternatif tanpa akun)
 
 - Kode ditandatangani dengan **ECDSA P-256**. Halaman hanya memegang kunci publik, jadi kode tidak bisa dipalsukan, dan masa berlaku tidak bisa diubah sendiri oleh pembeli.
 - Kode dibuat dengan alat pembuat kode dan file kunci privat yang **tidak disimpan di repo ini**.
@@ -53,19 +57,24 @@ Buka `assets/config.js` di GitHub, klik ikon pensil, ubah isinya, lalu **Commit 
 ## Struktur
 
 ```
-index.html          halaman depan
-app.html            aplikasi
-privasi.html        privasi & ketentuan
-assets/engine.js    mesin hitung murni (tanpa DOM), diuji di Node
-assets/app.js       tampilan & interaksi
-assets/report.js    laporan PDF (dicetak lewat browser)
-assets/license.js   pemeriksaan kode akses
-assets/demo.js      data contoh fiktif
-assets/config.js    pengaturan situs
-vendor/             SheetJS 0.18.5 (Apache-2.0)
-fonts/              Bricolage Grotesque & Plus Jakarta Sans (OFL), subset Latin
-sw.js               service worker (offline)
-tests/              uji Node
+index.html            halaman depan
+app.html              aplikasi (menu: Ringkasan, Produk, Biaya, Retur, Simulator, Riwayat, Data & modal)
+akun.html             masuk, daftar, lupa sandi, profil
+admin.html            admin: pengguna, permintaan upgrade, aktifkan Pro
+privasi.html          privasi & ketentuan
+assets/engine.js      mesin hitung murni (tanpa DOM), diuji di Node
+assets/app.js         tampilan & interaksi aplikasi
+assets/cloud.js       klien akun & database Supabase tanpa dependensi (fetch)
+assets/report.js      laporan PDF (dicetak lewat browser)
+assets/license.js     pemeriksaan kode akses
+assets/demo.js        data contoh fiktif
+assets/config.js      pengaturan situs
+supabase/schema.sql   tabel, aturan keamanan (RLS), fungsi admin
+supabase/tests/       uji aturan keamanan di PostgreSQL
+vendor/               SheetJS 0.18.5 (Apache-2.0)
+fonts/                Plus Jakarta Sans (OFL), subset Latin
+sw.js                 service worker (offline)
+tests/                uji Node + server tiruan Supabase
 ```
 
 ## Menjalankan uji
@@ -73,6 +82,7 @@ tests/              uji Node
 ```bash
 node tests/engine.test.js     # mesin hitung dengan data contoh
 node tests/license.test.js    # kode akses
+node tests/cloud.test.js      # akun & database terhadap server tiruan
 python3 -m http.server 8000   # lalu buka http://localhost:8000/app.html
 ```
 

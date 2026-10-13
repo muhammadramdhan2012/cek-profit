@@ -3,9 +3,9 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Cek Profit — Analisis toko</title>
-<meta name="description" content="Unggah laporan Shopee & TikTok Shop, lihat margin per bulan, per produk, dan laporan PDF siap kirim. Diproses di browser Anda.">
-<meta name="theme-color" content="#0e7a5a">
+<title>Cek Profit — Aplikasi</title>
+<meta name="description" content="Unggah laporan Shopee & TikTok Shop, lihat laba bersih per bulan dan per produk, lalu unduh laporan PDF. Diproses di browser Anda.">
+<meta name="theme-color" content="#0f6e56">
 <link rel="icon" href="icon.svg" type="image/svg+xml">
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="stylesheet" href="assets/base.css">
@@ -14,95 +14,30 @@
 <script src="assets/config.js"></script>
 <script src="assets/analytics.js" defer></script>
 </head>
-<body>
-<div class="wrap screen-only">
-  <nav class="topbar" aria-label="Utama">
-    <a class="brand" href="./">
-      <svg width="30" height="30" viewBox="0 0 30 30" aria-hidden="true"><rect width="30" height="30" rx="8" fill="var(--accent)"/><path d="M7 20.5l5-5 3.5 3 7.5-8" fill="none" stroke="var(--accent-ink)" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/><circle cx="23" cy="10.5" r="2.4" fill="var(--mark)"/></svg>
-      Cek Profit
-    </a>
-    <div class="toplinks">
-      <a class="btn ghost hide-sm" href="#panduan">Cara unduh laporan</a>
-      <button class="btn" type="button" id="pro-btn" data-open-pro><span class="pill pro" id="pro-pill">PRO</span><span id="pro-label">Masukkan kode</span></button>
+<body class="app">
+<div class="shell screen-only">
+  <aside class="side" aria-label="Navigasi">
+    <div class="side-head">
+      <a class="brand" href="./"><svg width="28" height="28" viewBox="0 0 30 30" aria-hidden="true"><rect width="30" height="30" rx="8" fill="var(--accent)"/><path d="M7 20.5l5-5 3.5 3 7.5-8" fill="none" stroke="var(--accent-ink)" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/><circle cx="23" cy="10.5" r="2.4" fill="var(--mark)"/></svg>Cek Profit</a>
+      <div class="side-account-sm" id="account-sm"></div>
     </div>
-  </nav>
-
-  <header class="app-head">
-    <div>
-      <span class="eyebrow">Shopee · TikTok Shop · Tokopedia</span>
-      <h1 class="app-title">Analisis profit toko</h1>
+    <nav class="nav" id="nav"></nav>
+    <div class="side-foot">
+      <div id="plan-box"></div>
+      <div id="account-box"></div>
     </div>
-    <ol class="steps" id="steps">
-      <li id="step1"><b>1</b>Unggah laporan</li>
-      <li id="step2"><b>2</b>Atur modal</li>
-      <li id="step3"><b>3</b>Baca hasil &amp; laporan</li>
-    </ol>
-  </header>
-
-  <div class="setup">
-    <section class="card upload" aria-labelledby="h-upload">
-      <div class="card-top"><h3 id="h-upload">1 · Unggah laporan</h3><span class="tiny faint">.xlsx · .xls · .csv</span></div>
-      <div class="drop" id="drop">
-        <svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M12 16V4M7 9l5-5 5 5"/><path d="M4 16v3a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3"/></svg>
-        <strong>Tarik file ke sini</strong>
-        <label class="btn primary" for="file-input">Pilih file</label>
-        <input id="file-input" type="file" multiple accept=".xlsx,.xls,.csv" hidden>
-        <span class="tiny faint">Boleh banyak file sekaligus. File yang sama tidak dihitung dua kali.</span>
-      </div>
-      <details class="which">
-        <summary class="small">File apa saja yang dibaca?</summary>
-        <ul class="small muted">
-          <li><b>Wajib:</b> Laporan Penghasilan Shopee dan/atau TikTok Shop.</li>
-          <li><b>Disarankan:</b> Export pesanan (memberi jumlah barang & SKU untuk modal per produk).</li>
-          <li><b>Opsional:</b> File retur/pengembalian, template modal yang sudah diisi.</li>
-        </ul>
-      </details>
-      <ul class="files" id="file-list"></ul>
-      <div class="upload-foot">
-        <button class="btn ghost" type="button" id="demo-btn">Coba dengan data contoh</button>
-        <button class="btn ghost" type="button" id="clear-btn" hidden>Hapus semua file</button>
-      </div>
-      <p class="privacy small"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="4" y="10" width="16" height="11" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg>
-        <span>File diolah di browser ini dan tidak pernah dikirim ke server. Setelah halaman terbuka, perhitungan tetap jalan tanpa internet.</span></p>
-    </section>
-
-    <section class="card settings" id="modal" aria-labelledby="h-modal"></section>
+  </aside>
+  <div class="main">
+    <header class="main-top" id="main-top"></header>
+    <div class="view" id="view" aria-live="polite"></div>
+    <footer class="app-foot">
+      <span>Estimasi dari laporan marketplace dan data modal Anda; bukan nasihat keuangan atau pajak.</span>
+      <nav><a href="privasi.html">Privasi &amp; ketentuan</a><button class="btn link" type="button" id="wipe-btn">Hapus data di browser ini</button></nav>
+    </footer>
   </div>
-
-  <main class="results" id="results" aria-live="polite"></main>
-
-  <section class="guide" id="panduan" aria-labelledby="h-guide">
-    <h2 id="h-guide">Cara unduh laporan</h2>
-    <p class="muted small">Nama menu di Seller Centre bisa sedikit berubah. Unduh untuk periode yang sama di semua laporan.</p>
-    <div class="guide-grid">
-      <div class="card"><h3><i class="sw" style="background:var(--shopee)"></i> Shopee · Laporan Penghasilan <span class="pill ready">wajib</span></h3>
-        <ol><li>Seller Centre → <b>Keuangan</b> → <b>Penghasilan Saya</b>.</li><li>Tab <b>Sudah Dilepas</b>, pilih periode.</li><li><b>Unduh/Export</b>, lalu unduh dari daftar laporan.</li></ol>
-        <p class="tiny faint">Berisi sheet <i>Summary</i> dan <i>Penghasilan</i>.</p></div>
-      <div class="card"><h3><i class="sw" style="background:var(--tiktok)"></i> TikTok Shop · Laporan Penghasilan <span class="pill ready">wajib</span></h3>
-        <ol><li>Seller Center → <b>Keuangan</b> → <b>Transaksi</b>.</li><li>Pilih rentang tanggal (sekitar 3 bulan per file), lalu <b>Unduh</b>.</li><li>Unggah semua file sekaligus. Pesanan Tokopedia ikut di sini.</li></ol>
-        <p class="tiny faint">Nama file biasanya <i>income_…</i>, berisi sheet <i>Detail pesanan</i>.</p></div>
-      <div class="card"><h3><i class="sw" style="background:var(--shopee)"></i> Shopee · Export pesanan <span class="pill todo">disarankan</span></h3>
-        <ol><li>Seller Centre → <b>Pesanan Saya</b> → <b>Export</b>.</li><li>Pilih periode yang sama dengan laporan penghasilan.</li></ol>
-        <p class="tiny faint">Memberi jumlah barang dan SKU per pesanan. Tanpa file ini, jumlah tiap produk Shopee dianggap 1.</p></div>
-      <div class="card"><h3><i class="sw" style="background:var(--tiktok)"></i> TikTok Shop · Export pesanan <span class="pill todo">disarankan</span></h3>
-        <ol><li>Seller Center → <b>Pesanan</b> → <b>Kelola pesanan</b>.</li><li><b>Ekspor</b> → CSV untuk periode yang sama.</li></ol>
-        <p class="tiny faint">Laporan penghasilan TikTok sering tidak mencantumkan produk. File ini melengkapinya.</p></div>
-      <div class="card"><h3>Retur &amp; pengembalian <span class="pill">opsional</span></h3>
-        <ol><li>Shopee: <b>Pesanan</b> → <b>Pengembalian/Pembatalan</b> → <b>Export</b>.</li><li>TikTok: <b>Pesanan</b> → <b>Pengembalian</b> → ekspor CSV.</li></ol>
-        <p class="tiny faint">Dipakai untuk menandai barang retur yang tidak kembali.</p></div>
-      <div class="card"><h3>Template modal per produk <span class="pill">opsional</span></h3>
-        <ol><li>Setelah laporan diunggah, klik <b>Unduh template modal</b> di langkah 2.</li><li>Isi kolom <b>Modal per unit (Rp)</b>, simpan, lalu unggah lagi di sini.</li></ol>
-        <p class="tiny faint">Modal tersimpan di browser ini untuk kunjungan berikutnya.</p></div>
-    </div>
-  </section>
-
-  <footer class="site">
-    <span>Hasil adalah estimasi dari laporan dan pengaturan Anda, bukan nasihat keuangan atau pajak.</span>
-    <nav><a href="./">Beranda</a><a href="privasi.html">Privasi &amp; ketentuan</a><button class="btn ghost small" type="button" id="wipe-btn">Hapus data tersimpan</button></nav>
-  </footer>
 </div>
 
-<dialog id="pro-dialog" class="dialog" aria-labelledby="h-pro"></dialog>
+<dialog id="dlg" class="dialog"></dialog>
 <div id="toast" class="toast" role="status" hidden></div>
 <div id="report" class="report" aria-hidden="true"></div>
 
@@ -110,6 +45,7 @@
 <script src="assets/engine.js"></script>
 <script src="assets/demo.js"></script>
 <script src="assets/license.js"></script>
+<script src="assets/cloud.js"></script>
 <script src="assets/report.js"></script>
 <script src="assets/app.js"></script>
 <script>
