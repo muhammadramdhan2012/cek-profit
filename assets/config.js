@@ -33,7 +33,7 @@ window.CEK_CONFIG = {
 
   // ---------- Akun (Supabase) ----------
   // Ikuti supabase/PANDUAN.md. Selama kosong, situs berjalan tanpa login (semua tersimpan di browser).
-  supabaseUrl: '',        // contoh: 'https://abcdefgh.supabase.co'
-  supabaseAnonKey: '',    // "anon public" / "publishable" key — aman untuk publik, dilindungi aturan RLS
+  supabaseUrl: 'https://ikjcbgfexhpksbewkpym.supabase.co',
+  supabaseAnonKey: 'sb_publishable_KC8qxwwQKwnYe2k-fjeEYw_HNxiscEt',    // "anon public" / "publishable" key — aman untuk publik, dilindungi aturan RLS
   googleLogin: false,     // true setelah login Google diaktifkan di Supabase (Authentication → Providers)
 };
