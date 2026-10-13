@@ -1,0 +1,897 @@
+<!doctype html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="description" content="Hitung profit toko Shopee dan TikTok Shop dari laporan penghasilan dan retur. File diolah di browser, tidak dikirim ke server.">
+<style>:root{color-scheme:light} body{margin:0} img{max-width:100%} [hidden]{display:none!important}</style>
+<title>Cek Profit Marketplace</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&family=Schibsted+Grotesk:wght@600;700&display=swap">
+<style>
+/* Layout: alat kerja dua kolom (unggah + pengaturan), lalu hasil dibaca dari ringkasan ke rincian. */
+:root {
+  --bg: #f4f6f5;
+  --surface: #ffffff;
+  --surface-2: #eaefed;
+  --line: #d3dcd8;
+  --fg: #142420;
+  --fg-2: #4a5c57;
+  --fg-3: #6f807b;
+  --accent: #0f6b5c;
+  --accent-ink: #ffffff;
+  --accent-soft: #dcefe9;
+  --good: #1d7a3e;
+  --warn: #9a6200;
+  --bad: #b3261e;
+  --warn-soft: #fbefd9;
+  --bad-soft: #fbe3e1;
+  --shopee: #eb6834;
+  --tiktok: #2a78d6;
+  --font-display: "Schibsted Grotesk", "Helvetica Neue", Arial, sans-serif;
+  --font-body: "IBM Plex Sans", "Segoe UI", Roboto, Arial, sans-serif;
+  --font-num: "IBM Plex Mono", ui-monospace, Menlo, Consolas, monospace;
+  --radius: 10px;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #101816; --surface: #17211e; --surface-2: #1f2b28; --line: #2e3d39;
+    --fg: #e7efec; --fg-2: #b4c4bf; --fg-3: #8a9d97;
+    --accent: #4cc2a8; --accent-ink: #06231d; --accent-soft: #1b3a33;
+    --good: #5ccf85; --warn: #e6b04d; --bad: #f08a83; --warn-soft: #3a2e15; --bad-soft: #3d1f1d;
+    --shopee: #d95926; --tiktok: #3987e5;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #101816; --surface: #17211e; --surface-2: #1f2b28; --line: #2e3d39;
+  --fg: #e7efec; --fg-2: #b4c4bf; --fg-3: #8a9d97;
+  --accent: #4cc2a8; --accent-ink: #06231d; --accent-soft: #1b3a33;
+  --good: #5ccf85; --warn: #e6b04d; --bad: #f08a83; --warn-soft: #3a2e15; --bad-soft: #3d1f1d;
+  --shopee: #d95926; --tiktok: #3987e5;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--fg); font-family: var(--font-body); font-size: 15px; line-height: 1.5; }
+.wrap { max-width: 1120px; margin: 0 auto; padding-inline: 16px; padding-block: 28px 64px; display: grid; gap: 28px; }
+h1, h2, h3 { font-family: var(--font-display); margin: 0; text-wrap: balance; letter-spacing: -0.01em; }
+h1 { font-size: clamp(26px, 4vw, 34px); }
+h2 { font-size: 20px; }
+h3 { font-size: 15px; font-family: var(--font-body); font-weight: 600; }
+p { margin: 0; }
+.muted { color: var(--fg-2); }
+.small { font-size: 13px; }
+.num { font-family: var(--font-num); font-variant-numeric: tabular-nums; }
+.eyebrow { font-size: 12px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--fg-3); font-weight: 600; }
+header.top { display: grid; gap: 8px; }
+header.top p { max-width: 68ch; }
+.privacy { display: inline-flex; gap: 8px; align-items: center; font-size: 13px; color: var(--accent); background: var(--accent-soft); padding: 4px 10px; border-radius: 999px; width: fit-content; }
+.panel { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 20px; display: grid; gap: 14px; min-width: 0; }
+.setup { display: grid; grid-template-columns: 1.1fr 1fr; gap: 20px; align-items: start; }
+@media (max-width: 820px) { .setup { grid-template-columns: 1fr; } }
+.drop { border: 1.5px dashed var(--line); border-radius: var(--radius); padding: 22px 16px; text-align: center; display: grid; gap: 8px; justify-items: center; background: var(--surface-2); transition: border-color .15s, background .15s; }
+.drop.over { border-color: var(--accent); background: var(--accent-soft); }
+.btn { font: inherit; font-weight: 600; border-radius: 8px; padding: 8px 14px; border: 1px solid var(--line); background: var(--surface); color: var(--fg); cursor: pointer; }
+.btn.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+.btn.link { border: 0; background: none; color: var(--accent); padding: 4px 0; }
+.btn:focus-visible, input:focus-visible, select:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.files { display: grid; gap: 8px; margin: 0; padding: 0; list-style: none; }
+.file { display: grid; grid-template-columns: auto 1fr auto; gap: 10px; align-items: start; padding: 10px 12px; border: 1px solid var(--line); border-radius: 8px; font-size: 13px; }
+.file .name { font-weight: 600; word-break: break-all; }
+.tag { font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 999px; white-space: nowrap; }
+.tag.shopee { background: color-mix(in srgb, var(--shopee) 18%, transparent); color: var(--fg); }
+.tag.tiktok { background: color-mix(in srgb, var(--tiktok) 18%, transparent); color: var(--fg); }
+.tag.unknown { background: var(--bad-soft); color: var(--bad); }
+.status-ok { color: var(--good); }
+.status-warn { color: var(--warn); }
+.status-bad { color: var(--bad); }
+.field { display: grid; gap: 4px; }
+.field label { font-size: 13px; font-weight: 500; color: var(--fg-2); }
+.field .hint { font-size: 12px; color: var(--fg-3); }
+input[type=number], input[type=date], select { font: inherit; font-family: var(--font-num); padding: 6px 8px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); color: var(--fg); width: 100%; min-width: 0; }
+.grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.periods { width: 100%; border-collapse: collapse; font-size: 13px; }
+.periods th { text-align: left; font-weight: 500; color: var(--fg-3); padding: 4px 6px 4px 0; }
+.periods td { padding: 3px 6px 3px 0; }
+.banner { border-radius: var(--radius); padding: 12px 16px; display: flex; gap: 12px; align-items: center; flex-wrap: wrap; justify-content: space-between; }
+.banner.demo { background: var(--warn-soft); border: 1px solid color-mix(in srgb, var(--warn) 40%, transparent); }
+.banner.err { background: var(--bad-soft); color: var(--bad); }
+.kpis { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
+@media (max-width: 820px) { .kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+.kpi { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 14px 16px; display: grid; gap: 4px; min-width: 0; }
+.kpi .v { font-family: var(--font-num); font-size: clamp(18px, 2.4vw, 24px); font-weight: 500; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.kpi.hero { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+.kpi.hero .eyebrow, .kpi.hero .muted { color: inherit; opacity: .85; }
+.section { display: grid; gap: 14px; }
+.tablewrap { overflow-x: auto; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); }
+table.data { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+table.data th, table.data td { padding: 8px 12px; border-bottom: 1px solid var(--line); text-align: right; white-space: nowrap; }
+table.data th:first-child, table.data td:first-child { text-align: left; white-space: normal; }
+table.data thead th { font-weight: 600; color: var(--fg-2); background: var(--surface-2); font-size: 12.5px; }
+table.data tbody tr:last-child td { border-bottom: 0; }
+table.data td { font-family: var(--font-num); font-variant-numeric: tabular-nums; }
+table.data td:first-child { font-family: var(--font-body); }
+table.data tr.total td { font-weight: 600; background: var(--surface-2); }
+.neg { color: var(--bad); }
+.chart { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 16px; position: relative; min-width: 0; }
+.legend { display: flex; gap: 16px; flex-wrap: wrap; font-size: 13px; color: var(--fg-2); }
+.legend span { display: inline-flex; align-items: center; gap: 6px; }
+.sw { width: 12px; height: 12px; border-radius: 3px; display: inline-block; }
+.chart svg { width: 100%; height: auto; display: block; }
+.chart svg text { fill: var(--fg-3); font-family: var(--font-num); font-size: 11px; }
+.tip { position: absolute; pointer-events: none; background: var(--fg); color: var(--bg); padding: 6px 10px; border-radius: 6px; font-size: 12px; font-family: var(--font-num); white-space: nowrap; transform: translate(-50%, -110%); }
+.cols2 { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+@media (max-width: 820px) { .cols2 { grid-template-columns: 1fr; } }
+.cols2 > * { min-width: 0; }
+.notes { margin: 0; padding-left: 18px; display: grid; gap: 6px; color: var(--fg-2); font-size: 13.5px; max-width: 80ch; }
+.chip { display: inline-block; font-size: 11.5px; font-weight: 600; padding: 2px 8px; border-radius: 999px; font-family: var(--font-body); }
+.chip.ok { background: color-mix(in srgb, var(--good) 15%, transparent); color: var(--good); }
+.chip.warn { background: var(--warn-soft); color: var(--warn); }
+.chip.bad { background: var(--bad-soft); color: var(--bad); }
+.case select { width: auto; font-family: var(--font-body); font-size: 13px; }
+.range { font-size: 13px; color: var(--fg-2); }
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+</head>
+<body>
+
+
+<div class="wrap">
+  <header class="top">
+    <span class="eyebrow">Shopee · TikTok Shop</span>
+    <h1>Cek Profit Marketplace</h1>
+    <p class="muted">Unggah laporan penghasilan dan retur dari Seller Centre. Halaman ini menghitung potongan platform, modal, dan margin per bulan dan per produk.</p>
+    <span class="privacy">● File diolah di browser ini saja. Tidak ada data yang dikirim atau disimpan.</span>
+  </header>
+
+  <div class="setup">
+    <section class="panel" aria-labelledby="h-upload">
+      <h2 id="h-upload">1. Unggah laporan</h2>
+      <div class="drop" id="drop">
+        <p><strong>Tarik file ke sini</strong> atau</p>
+        <label class="btn primary" for="file-input">Pilih file</label>
+        <input id="file-input" type="file" multiple accept=".xlsx,.xls,.csv" hidden>
+        <p class="small muted">Boleh banyak file sekaligus. File yang sama tidak dihitung dua kali.</p>
+      </div>
+      <details>
+        <summary class="small">File apa saja yang bisa dibaca?</summary>
+        <ul class="notes" style="margin-top:8px">
+          <li><b>Shopee – Laporan Penghasilan</b> (Keuangan → Penghasilan Saya → Sudah Dilepas → unduh). Berisi sheet <i>Summary</i> dan <i>Penghasilan</i>.</li>
+          <li><b>Shopee – Pengembalian Barang/Dana</b> (file <i>Order.return_refund…</i>).</li>
+          <li><b>TikTok Shop – Laporan Penghasilan</b> (file <i>income_…</i>, sheet <i>Detail pesanan</i>).</li>
+          <li><b>TikTok Shop – Retur</b> (CSV <i>Pesanan yang Barang/Dananya Dikembalikan</i>).</li>
+        </ul>
+      </details>
+      <ul class="files" id="file-list"></ul>
+    </section>
+
+    <section class="panel" aria-labelledby="h-settings">
+      <h2 id="h-settings">2. Atur modal</h2>
+      <p class="small muted">File marketplace tidak berisi harga beli. Modal dihitung dari harga acuan pemasok (misalnya harga sampul) dikurangi diskon pemasok Anda.</p>
+      <div class="grid2">
+        <div class="field">
+          <label for="s-mitra">Diskon pemasok (%)</label>
+          <input id="s-mitra" type="number" min="0" max="100" step="0.5">
+          <span class="hint">Ganti sesuai diskon dari pemasok Anda</span>
+        </div>
+        <div class="field">
+          <label for="s-packing">Biaya packing per pesanan (Rp)</label>
+          <input id="s-packing" type="number" min="0" step="100">
+          <span class="hint">Kosong/0 = belum dihitung</span>
+        </div>
+      </div>
+      <div class="field">
+        <label>Shopee: harga jual dibanding harga acuan</label>
+        <span class="hint">Shopee tidak mencatat harga sebelum diskon, jadi isi pola harga Anda. Periode dipilih menurut tanggal pesanan.</span>
+        <table class="periods">
+          <thead><tr><th>Mulai tanggal</th><th>Kenaikan harga %</th><th>Diskon toko %</th><th></th></tr></thead>
+          <tbody id="periods"></tbody>
+        </table>
+        <button class="btn link" type="button" id="add-period">+ Tambah periode harga</button>
+      </div>
+      <div class="field">
+        <label for="s-coret">TikTok: harga coret dibanding harga acuan (%)</label>
+        <input id="s-coret" type="number" min="1" step="1">
+        <span class="hint">TikTok mencatat harga sebelum diskon. 100 = harga coret sama dengan harga sampul.</span>
+      </div>
+    </section>
+  </div>
+
+  <div id="banner"></div>
+  <div id="results" class="section"></div>
+  <footer class="small muted" style="border-top:1px solid var(--line);padding-top:16px;display:grid;gap:4px">
+    <p>Hasil adalah estimasi dari laporan yang Anda unggah dan pengaturan modal Anda, bukan nasihat keuangan atau pajak.</p>
+    <p>Format laporan marketplace bisa berubah sewaktu-waktu. Jika file gagal dibaca, periksa daftar file yang didukung.</p>
+  </footer>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+
+<script id="engine">
+/* Mesin hitung murni: input = array-of-arrays per sheet, output = angka. Tidak menyentuh DOM. */
+const Engine = (() => {
+  const num = (v) => {
+    if (v === null || v === undefined || v === '') return 0;
+    if (typeof v === 'number') return isFinite(v) ? v : 0;
+    let s = String(v).replace(/[\r\n\t]/g, '').trim();
+    if (!s || s === '-' || s === '/') return 0;
+    s = s.replace(/^(rp|idr)\s*/i, '').replace(/^-\s*(rp|idr)\s*/i, '-').trim();
+    if (/^-?\d{1,3}(\.\d{3})+(,\d+)?$/.test(s)) s = s.replace(/\./g, '').replace(',', '.');
+    else s = s.replace(/,/g, '');
+    const n = Number(s);
+    return isFinite(n) ? n : 0;
+  };
+  const str = (v) => (v === null || v === undefined ? '' : String(v)).replace(/[\r\t]/g, '').trim();
+  const pad = (n) => String(n).padStart(2, '0');
+  const date = (v) => {
+    if (v === null || v === undefined || v === '') return '';
+    if (typeof v === 'number' && v > 20000 && v < 80000) {
+      const d = new Date(Math.round((v - 25569) * 86400000));
+      return `${d.getUTCFullYear()}-${pad(d.getUTCMonth() + 1)}-${pad(d.getUTCDate())}`;
+    }
+    const s = str(v);
+    let m = s.match(/^(\d{4})[-/](\d{1,2})[-/](\d{1,2})/);
+    if (m) return `${m[1]}-${pad(m[2])}-${pad(m[3])}`;
+    m = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+    if (m) return `${m[3]}-${pad(m[2])}-${pad(m[1])}`;
+    return '';
+  };
+  const findHeader = (aoa, names) => aoa.findIndex((row) => names.every((n) => row.some((c) => str(c) === n)));
+  const colMap = (row) => { const m = {}; row.forEach((c, i) => { const k = str(c); if (k && !(k in m)) m[k] = i; }); return m; };
+  const getter = (row, map) => (name) => (name in map ? row[map[name]] : '');
+  const firstSheetHeader = (wb, names) => {
+    for (const [sheet, aoa] of Object.entries(wb.sheets)) {
+      const h = findHeader(aoa.slice(0, 30), names);
+      if (h >= 0) return { sheet, aoa, h };
+    }
+    return null;
+  };
+
+  /* ---------- deteksi ---------- */
+  function detect(wb) {
+    const names = Object.keys(wb.sheets);
+    if (names.includes('Penghasilan') && names.includes('Summary')) return 'shopee_income';
+    if (names.includes('Detail pesanan')) return 'tiktok_income';
+    if (names.includes('Transaction Report')) return 'shopee_balance';
+    if (firstSheetHeader(wb, ['No. Pengembalian', 'Solusi Pengembalian Barang/Dana'])) return 'shopee_return';
+    if (firstSheetHeader(wb, ['Return Order ID', 'Order ID'])) return 'tiktok_return';
+    return 'unknown';
+  }
+
+  /* ---------- Shopee: laporan penghasilan ---------- */
+  const SH_SHIP = ['Ongkir Dibayar Pembeli', 'Ongkos Kirim yang Dibayarkan ke Jasa Kirim', 'Potongan Ongkos Kirim dari Jasa Kirim',
+    'Gratis Ongkir dari Shopee', 'Ongkos Kirim Pengembalian Barang', 'Return to Seller Fee', 'Pengembalian Biaya Kirim'];
+  const SH_VOUCHER = ['Voucher disponsor oleh Penjual', 'Cashback Koin disponsori Penjual', 'Diskon Produk dari Shopee',
+    'Voucher co-fund disponsor oleh Penjual', 'Cashback Koin Co-fund disponsori Penjual'];
+  const SH_XTRA = ['Biaya Layanan Gratis Ongkir XTRA (Kategori D)', 'Biaya Layanan Gratis Ongkir XTRA (Kategori E)',
+    'Biaya Gratis Ongkir XTRA - Ukuran Biasa (Kategori D)', 'Biaya Gratis Ongkir XTRA - Ukuran Biasa (Kategori E)'];
+
+  function parseShopeeIncome(wb) {
+    const aoa = wb.sheets['Penghasilan'];
+    const h = findHeader(aoa, ['No. Pesanan', 'Lihat berdasarkan']);
+    if (h < 0) throw new Error('Kolom "No. Pesanan" tidak ditemukan di sheet Penghasilan.');
+    const map = colMap(aoa[h]);
+    const orders = [], items = [];
+    for (const row of aoa.slice(h + 1)) {
+      const g = getter(row, map);
+      const type = str(g('Lihat berdasarkan'));
+      const id = str(g('No. Pesanan'));
+      if (!id || (type !== 'Order' && type !== 'Sku')) continue;
+      const harga = num(g('Harga Produk')), refund = num(g('Jumlah Pengembalian Dana ke Pembeli')), total = num(g('Total Penghasilan'));
+      const orderDate = date(g('Waktu Pesanan Dibuat')), payDate = date(g('Tanggal Dana Dilepaskan'));
+      if (type === 'Sku') {
+        items.push({ orderId: id, productId: str(g('ID Produk')), name: str(g('Nama Produk')), harga, refund, total, orderDate });
+        continue;
+      }
+      const ship = SH_SHIP.reduce((a, c) => a + num(g(c)), 0);
+      const voucher = SH_VOUCHER.reduce((a, c) => a + num(g(c)), 0);
+      const admin = num(g('Biaya Administrasi')), proses = num(g('Biaya Proses Pesanan'));
+      const xtra = SH_XTRA.reduce((a, c) => a + num(g(c)), 0);
+      const known = harga + refund + ship + voucher + admin + proses + xtra;
+      const lain = total - known;           // biaya lain/baru apa pun masuk ke sini
+      orders.push({ id, orderDate, payDate, harga, refund, voucher, ship, admin, proses, xtra, lain, total });
+    }
+    // Ringkasan Shopee untuk pemeriksaan
+    let summaryTotal = null, from = '', to = '';
+    for (const row of wb.sheets['Summary'] || []) {
+      const label = str(row[0]);
+      if (/Total yang Dilepas/i.test(label)) summaryTotal = num(row.filter((c) => str(c) !== '').slice(-1)[0]);
+      if (label === 'Dari') from = date(row[1]);
+      if (/^ke$/i.test(label)) to = date(row[1]);
+    }
+    // Penyesuaian (kompensasi, dll.)
+    const adjustments = [];
+    const adj = wb.sheets['Adjustment'];
+    if (adj) {
+      const ah = findHeader(adj, ['Tipe Penyesuaian | Deskripsi']);
+      if (ah >= 0) {
+        const am = colMap(adj[ah]);
+        for (const row of adj.slice(ah + 1)) {
+          const g = getter(row, am);
+          const tipe = str(g('Tipe Penyesuaian | Deskripsi'));
+          if (!tipe) break;
+          adjustments.push({ key: `${date(g('Tanggal Penyesuaian Dibuat'))}|${tipe}|${num(g('Biaya Penyesuaian'))}|${str(g('No. Pesanan Terhubung'))}`,
+            date: date(g('Tanggal Penyesuaian Dibuat')), type: tipe, amount: num(g('Biaya Penyesuaian')), orderId: str(g('No. Pesanan Terhubung')) });
+        }
+      }
+    }
+    const sum = orders.reduce((a, o) => a + o.total, 0);
+    return { kind: 'shopee_income', orders, items, adjustments, check: { summaryTotal, sum, from, to } };
+  }
+
+  /* ---------- TikTok: laporan penghasilan ---------- */
+  const TT_FEES = { platform: 'Biaya komisi platform', dinamis: 'Komisi dinamis', proses: 'Biaya pemrosesan pesanan', ongkir: 'Ongkir' };
+  function parseTiktokIncome(wb) {
+    const aoa = wb.sheets['Detail pesanan'];
+    const h = findHeader(aoa, ['ID Pesanan/Penyesuaian', 'Jenis transaksi']);
+    if (h < 0) throw new Error('Kolom "ID Pesanan/Penyesuaian" tidak ditemukan.');
+    const map = colMap(aoa[h]);
+    const rows = [];
+    for (const row of aoa.slice(h + 1)) {
+      const g = getter(row, map);
+      const id = str(g('ID Pesanan/Penyesuaian'));
+      if (!id) continue;
+      const jenis = str(g('Jenis transaksi'));
+      const settle = num(g('Jumlah penyelesaian pembayaran'));
+      const totalBiaya = num(g('Total Biaya'));
+      const fees = {};
+      let knownFees = 0;
+      for (const [k, c] of Object.entries(TT_FEES)) { fees[k] = num(g(c)); knownFees += fees[k]; }
+      fees.lain = totalBiaya - knownFees;
+      rows.push({
+        key: `${id}|${jenis}|${date(g('Waktu pembayaran pesanan'))}|${settle}|${num(g('Total Pendapatan'))}`,
+        id, jenis, isOrder: jenis === 'Pesanan', source: str(g('Sumber pesanan')),
+        orderDate: date(g('Waktu pemesanan')), payDate: date(g('Waktu pembayaran pesanan')),
+        pre: num(g('Subtotal sebelum diskon')) + num(g('Total pengembalian dana sebelum diskon')),
+        preGross: num(g('Subtotal sebelum diskon')),
+        sales: num(g('Total Pendapatan')), fees, totalBiaya, settle,
+      });
+    }
+    let reportSettle = null;
+    const lap = wb.sheets['Laporan'];
+    if (lap) for (const row of lap) if (row.some((c) => str(c) === 'Jumlah penyelesaian pembayaran')) { reportSettle = num(row.filter((c) => str(c) !== '').slice(-1)[0]); break; }
+    return { kind: 'tiktok_income', rows, check: { reportSettle, sum: rows.reduce((a, r) => a + r.settle, 0) } };
+  }
+
+  /* ---------- Retur ---------- */
+  function parseShopeeReturn(wb) {
+    const f = firstSheetHeader(wb, ['No. Pengembalian', 'Solusi Pengembalian Barang/Dana']);
+    const map = colMap(f.aoa[f.h]);
+    const cases = [];
+    for (const row of f.aoa.slice(f.h + 1)) {
+      const g = getter(row, map);
+      const rid = str(g('No. Pengembalian'));
+      if (!rid) continue;
+      const status = str(g('Status Pembatalan/ Pengembalian')), solusi = str(g('Solusi Pengembalian Barang/Dana'));
+      const alasan = str(g('Alasan Pengembalian'));
+      let cat;
+      if (/dibatalkan/i.test(status)) cat = 'batal';
+      else if (/barang dan dana/i.test(solusi)) cat = 'retur_barang';
+      else if (/tidak lengkap/i.test(alasan)) cat = 'tidak_dikirim';
+      else if (/tidak menerima/i.test(alasan)) cat = 'paket_bermasalah';
+      else cat = 'refund_tanpa_retur';
+      cases.push({ key: `S|${rid}|${str(g('Nama Produk'))}|${str(g('Variasi'))}`, platform: 'shopee', orderId: str(g('No. Pesanan')),
+        product: str(g('Nama Produk')), variant: str(g('Variasi')), reason: alasan, note: str(g('Catatan Pengembalian Barang')),
+        resi: str(g('No. Resi Pengembalian Barang')), returnStatus: str(g('Status Pengembalian Barang')),
+        amount: num(g('Total Pengembalian Dana')), date: date(g('Waktu Pengembalian Diajukan')), cat });
+    }
+    return { kind: 'shopee_return', cases };
+  }
+  function parseTiktokReturn(wb) {
+    const f = firstSheetHeader(wb, ['Return Order ID', 'Order ID']);
+    const map = colMap(f.aoa[f.h]);
+    const cases = [];
+    for (const row of f.aoa.slice(f.h + 1)) {
+      const g = getter(row, map);
+      const rid = str(g('Return Order ID'));
+      if (!rid) continue;
+      const amount = num(g('Return unit price')) * (num(g('Return Quantity')) || 1);
+      const refunded = !!date(g('Refund Time')) && amount > 0;
+      const type = str(g('Return Type')), reason = str(g('Return Reason')), resi = str(g('Return Logistics Tracking ID'));
+      let cat;
+      if (!refunded) cat = 'batal';
+      else if (resi || /return and refund/i.test(type)) cat = 'retur_barang';
+      else if (/arrive on time|did not receive/i.test(reason)) cat = 'paket_bermasalah';
+      else if (/missing/i.test(reason)) cat = 'tidak_dikirim';
+      else cat = 'refund_tanpa_retur';
+      cases.push({ key: `T|${rid}|${str(g('SKU ID'))}`, platform: 'tiktok', orderId: str(g('Order ID')),
+        product: str(g('Product Name')), variant: str(g('SKU Name')), reason, note: str(g('Buyer Note')),
+        resi, returnStatus: str(g('Return Status')), amount, date: date(g('Time Requested')), cat });
+    }
+    return { kind: 'tiktok_return', cases };
+  }
+
+  function parseWorkbook(wb) {
+    const kind = detect(wb);
+    if (kind === 'shopee_income') return parseShopeeIncome(wb);
+    if (kind === 'tiktok_income') return parseTiktokIncome(wb);
+    if (kind === 'shopee_return') return parseShopeeReturn(wb);
+    if (kind === 'tiktok_return') return parseTiktokReturn(wb);
+    return { kind };
+  }
+
+  /* ---------- gabung & hitung ---------- */
+  const CAT_LABEL = {
+    tidak_dikirim: 'Barang kurang / stok kosong (tidak dikirim)',
+    retur_barang: 'Retur barang ke penjual',
+    paket_bermasalah: 'Refund karena paket terlambat/tidak sampai',
+    refund_tanpa_retur: 'Refund tanpa pengembalian barang',
+    batal: 'Pengajuan dibatalkan/ditolak',
+  };
+  const CHECK_CATS = new Set(['retur_barang', 'paket_bermasalah', 'refund_tanpa_retur']);
+
+  function merge(parsed) {
+    const out = { shopeeOrders: new Map(), shopeeItems: [], shopeeAdj: new Map(), tiktok: new Map(), cases: new Map(), dupes: 0 };
+    for (const p of parsed) {
+      if (p.kind === 'shopee_income') {
+        const fresh = new Set();
+        for (const o of p.orders) { if (out.shopeeOrders.has(o.id)) { out.dupes++; continue; } out.shopeeOrders.set(o.id, o); fresh.add(o.id); }
+        out.shopeeItems.push(...p.items.filter((it) => fresh.has(it.orderId)));
+        for (const a of p.adjustments) out.shopeeAdj.set(a.key, a);
+      } else if (p.kind === 'tiktok_income') {
+        for (const r of p.rows) { if (out.tiktok.has(r.key)) { out.dupes++; continue; } out.tiktok.set(r.key, r); }
+      } else if (p.kind === 'shopee_return' || p.kind === 'tiktok_return') {
+        for (const c of p.cases) out.cases.set(c.key, c);
+      }
+    }
+    return out;
+  }
+
+  function shopeeRatio(settings, d) {
+    const mitra = settings.mitra / 100;
+    const periods = [...settings.periods].sort((a, b) => (a.start || '').localeCompare(b.start || ''));
+    let p = periods[0];
+    for (const q of periods) if (!q.start || q.start <= d) p = q;
+    const sell = (1 + p.markup / 100) * (1 - p.disc / 100);
+    return sell > 0 ? (1 - mitra) / sell : NaN;
+  }
+  const monthOf = (d) => (d ? d.slice(0, 7) : 'tanpa tanggal');
+  const daysBetween = (a, b) => (!a || !b ? 0 : Math.round((Date.parse(b) - Date.parse(a)) / 86400000) + 1);
+
+  function compute(parsed, settings, caseState = {}) {
+    const m = merge(parsed);
+    const packing = settings.packing || 0;
+    const months = new Map();
+    const mon = (k) => { if (!months.has(k)) months.set(k, { month: k, shopee: { sales: 0, margin: 0, orders: 0 }, tiktok: { sales: 0, margin: 0, orders: 0 } }); return months.get(k); };
+
+    // Shopee
+    const S = { orders: 0, sales: 0, fees: { admin: 0, proses: 0, xtra: 0, ship: 0, lain: 0 }, received: 0, modal: 0, packing: 0, adj: 0, first: '', last: '' };
+    for (const o of m.shopeeOrders.values()) {
+      const r = shopeeRatio(settings, o.orderDate);
+      const net = o.harga + o.refund + o.voucher;
+      const modal = (o.harga + o.refund) * r;
+      const counted = o.harga + o.refund > 0;     // pesanan yang benar-benar terjual
+      const pack = counted ? packing : 0;
+      S.orders += counted ? 1 : 0; S.sales += net; S.received += o.total; S.modal += modal; S.packing += pack;
+      S.fees.admin += o.admin; S.fees.proses += o.proses; S.fees.xtra += o.xtra; S.fees.ship += o.ship; S.fees.lain += o.lain;
+      if (o.payDate && (!S.first || o.payDate < S.first)) S.first = o.payDate;
+      if (o.payDate && o.payDate > S.last) S.last = o.payDate;
+      const mm = mon(monthOf(o.orderDate)).shopee;
+      mm.sales += net; mm.margin += o.total - modal - pack; mm.orders += counted ? 1 : 0;
+    }
+    S.adj = [...m.shopeeAdj.values()].reduce((a, x) => a + x.amount, 0);
+    S.feeTotal = Object.values(S.fees).reduce((a, b) => a + b, 0);
+    S.margin = S.received - S.modal - S.packing;
+
+    // TikTok
+    const coret = (settings.coret || 100) / 100;
+    const ttRatio = (1 - settings.mitra / 100) / coret;
+    const T = { orders: 0, sales: 0, fees: { platform: 0, dinamis: 0, proses: 0, ongkir: 0, lain: 0 }, received: 0, modal: 0, packing: 0, adj: 0, pre: 0, first: '', last: '', bySource: {} };
+    const ttOrderPrice = new Map();
+    for (const r of m.tiktok.values()) {
+      if (r.payDate && (!T.first || r.payDate < T.first)) T.first = r.payDate;
+      if (r.payDate && r.payDate > T.last) T.last = r.payDate;
+      if (!r.isOrder) { T.adj += r.settle; continue; }
+      const modal = r.pre * ttRatio;
+      const counted = r.preGross > 0;
+      const pack = counted && r.pre > 0 ? packing : 0;
+      T.orders += counted ? 1 : 0; T.sales += r.sales; T.received += r.settle; T.modal += modal; T.pre += r.pre; T.packing += pack;
+      for (const k of Object.keys(T.fees)) T.fees[k] += r.fees[k];
+      const src = r.source || 'lainnya';
+      T.bySource[src] = T.bySource[src] || { sales: 0, margin: 0 };
+      T.bySource[src].sales += r.sales; T.bySource[src].margin += r.settle - modal - pack;
+      if (r.preGross > 0) ttOrderPrice.set(r.id, { pre: r.preGross, paid: r.sales > 0 ? r.sales : 0 });
+      const mm = mon(monthOf(r.orderDate)).tiktok;
+      mm.sales += r.sales; mm.margin += r.settle - modal - pack; mm.orders += counted ? 1 : 0;
+    }
+    T.feeTotal = Object.values(T.fees).reduce((a, b) => a + b, 0);
+    T.margin = T.received - T.modal - T.packing;
+    T.discount = T.pre > 0 ? 1 - T.sales / T.pre : 0;
+    const ttPaidRatio = T.sales > 0 ? T.pre / T.sales : 1;
+
+    // Produk Shopee
+    const prod = new Map();
+    const shopeeOrderDate = new Map([...m.shopeeOrders.values()].map((o) => [o.id, o.orderDate]));
+    for (const it of m.shopeeItems) {
+      const p = prod.get(it.productId) || { id: it.productId, name: it.name, rows: 0, sales: 0, received: 0, modal: 0 };
+      p.name = it.name || p.name; p.rows += 1; p.sales += it.harga + it.refund; p.received += it.total;
+      p.modal += (it.harga + it.refund) * shopeeRatio(settings, it.orderDate || shopeeOrderDate.get(it.orderId));
+      prod.set(it.productId, p);
+    }
+    const products = [...prod.values()].map((p) => ({ ...p, margin: p.received - p.modal, pct: p.sales ? (p.received - p.modal) / p.sales : 0 }));
+
+    // Retur
+    const cases = [...m.cases.values()].map((c) => {
+      let estModal = 0;
+      if (c.platform === 'shopee') estModal = c.amount * shopeeRatio(settings, shopeeOrderDate.get(c.orderId) || c.date);
+      else {
+        const op = ttOrderPrice.get(c.orderId);
+        const preOverPaid = op && op.paid > 0 ? op.pre / op.paid : ttPaidRatio;
+        estModal = c.amount * preOverPaid * ttRatio;
+      }
+      const needsCheck = CHECK_CATS.has(c.cat);
+      const state = needsCheck ? (caseState[c.key] || 'belum') : 'na';
+      return { ...c, estModal, needsCheck, state };
+    });
+    const lostCertain = cases.filter((c) => c.state === 'hilang').reduce((a, c) => a + c.estModal, 0);
+    const unknownRisk = cases.filter((c) => c.state === 'belum').reduce((a, c) => a + c.estModal, 0);
+    const catSummary = {};
+    for (const c of cases) {
+      const k = `${c.platform}|${c.cat}`;
+      catSummary[k] = catSummary[k] || { platform: c.platform, cat: c.cat, label: CAT_LABEL[c.cat], count: 0, amount: 0 };
+      catSummary[k].count += 1; catSummary[k].amount += c.amount;
+    }
+
+    const has = { shopee: m.shopeeOrders.size > 0, tiktok: [...m.tiktok.values()].some((r) => r.isOrder) };
+    const totalMargin = (has.shopee ? S.margin : 0) + (has.tiktok ? T.margin : 0) - lostCertain;
+    const first = [S.first, T.first].filter(Boolean).sort()[0] || '';
+    const last = [S.last, T.last].filter(Boolean).sort().slice(-1)[0] || '';
+    const days = daysBetween(first, last);
+    const orders = (has.shopee ? S.orders : 0) + (has.tiktok ? T.orders : 0);
+    return {
+      has, shopee: S, tiktok: T, lostCertain, unknownRisk, totalMargin,
+      totalSales: (has.shopee ? S.sales : 0) + (has.tiktok ? T.sales : 0),
+      totalFees: (has.shopee ? S.feeTotal : 0) + (has.tiktok ? T.feeTotal : 0),
+      totalModal: (has.shopee ? S.modal : 0) + (has.tiktok ? T.modal : 0) + lostCertain,
+      totalReceived: (has.shopee ? S.received : 0) + (has.tiktok ? T.received : 0),
+      adjustments: (has.shopee ? S.adj : 0) + (has.tiktok ? T.adj : 0),
+      orders, first, last, days, perMonth: days > 0 ? totalMargin / (days / 30.4) : 0,
+      perOrder: orders ? totalMargin / orders : 0,
+      months: [...months.values()].filter((x) => x.month !== 'tanpa tanggal').sort((a, b) => a.month.localeCompare(b.month)),
+      products, cases, catSummary: Object.values(catSummary), dupes: m.dupes,
+    };
+  }
+
+  return { num, date, detect, parseWorkbook, compute, shopeeRatio, CAT_LABEL };
+})();
+if (typeof module !== 'undefined') module.exports = Engine;
+</script>
+
+<script id="demo">
+/* Data CONTOH (fiktif) agar halaman langsung memperlihatkan cara kerjanya. */
+function makeDemo() {
+  let seed = 7;
+  const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+  const titles = ['Komik Seri Contoh Vol. 1', 'Komik Seri Contoh Vol. 2', 'Novel Contoh: Laut Biru', 'Ensiklopedia Anak Contoh',
+    'Buku Bisnis Contoh', 'Komik Detektif Contoh', 'Buku Resep Contoh', 'Novel Fantasi Contoh'];
+  const covers = [35000, 35000, 98000, 165000, 120000, 40000, 88000, 110000];
+  const H = ['No.', 'Lihat berdasarkan', 'No. Pesanan', 'No. Pengajuan', 'ID Produk', 'Nama Produk', 'Waktu Pesanan Dibuat', 'Tanggal Dana Dilepaskan',
+    'Metode Pelepasan Dana', 'Tipe Pesanan', 'Total Penghasilan', 'Harga Produk', 'Jumlah Pengembalian Dana ke Pembeli', 'Ongkir Dibayar Pembeli',
+    'Ongkos Kirim yang Dibayarkan ke Jasa Kirim', 'Gratis Ongkir dari Shopee', 'Biaya Administrasi', 'Biaya Proses Pesanan',
+    'Biaya Gratis Ongkir XTRA - Ukuran Biasa (Kategori D)'];
+  const rows = [[], [], H];
+  let total = 0;
+  for (let i = 0; i < 140; i++) {
+    const mth = 1 + Math.floor(rnd() * 9), day = 1 + Math.floor(rnd() * 27);
+    const d = `2026-${String(mth).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+    const pay = `2026-${String(mth).padStart(2, '0')}-${String(Math.min(day + 3, 28)).padStart(2, '0')}`;
+    const k = Math.floor(rnd() * titles.length);
+    const price = covers[k];
+    const admin = -Math.round(price * 0.09), proses = -1250, xtra = -Math.round(price * 0.045);
+    const ship = rnd() < 0.05 ? -5000 : 0;
+    const tot = price + admin + proses + xtra + ship;
+    total += tot;
+    const id = `CONTOH${String(i).padStart(5, '0')}`;
+    rows.push([i, 'Order', id, '', '-', '-', d, pay, 'Saldo Penjual', 'Normal Order', tot, price, 0, 0, -15000 + ship, 15000, admin, proses, xtra]);
+    rows.push([i, 'Sku', id, '-', `P${k}`, titles[k], d, pay, 'Saldo Penjual', 'Normal Order', tot, price, 0, 0, -15000 + ship, 15000, admin, proses, xtra]);
+  }
+  const shopee = { name: 'contoh_shopee.xlsx', sheets: { Summary: [['3. Total yang Dilepas', '', '', total], ['Dari', '2026-01-01'], ['ke', '2026-10-12']], Penghasilan: rows } };
+  const TH = ['ID Pesanan/Penyesuaian', 'Jenis transaksi', 'Waktu pemesanan', 'Waktu pembayaran pesanan', 'Jumlah penyelesaian pembayaran', 'Total Pendapatan',
+    'Subtotal sebelum diskon', 'Total pengembalian dana sebelum diskon', 'Total Biaya', 'Biaya komisi platform', 'Komisi dinamis', 'Biaya pemrosesan pesanan', 'Ongkir', 'Sumber pesanan'];
+  const tt = [TH];
+  for (let i = 0; i < 220; i++) {
+    const mth = 1 + Math.floor(rnd() * 9), day = 1 + Math.floor(rnd() * 27);
+    const d = `2026/${String(mth).padStart(2, '0')}/${String(day).padStart(2, '0')}`;
+    const k = Math.floor(rnd() * titles.length);
+    const disc = mth >= 7 ? 0.08 : mth >= 4 ? 0.1 : 0.12;
+    const pre = covers[k], paid = Math.round(pre * (1 - disc));
+    const plat = -Math.round(paid * 0.1), din = -Math.round(paid * (mth >= 5 ? 0.075 : 0.05)), proc = -1250, ong = -Math.round(rnd() * 1500);
+    const biaya = plat + din + proc + ong;
+    tt.push([`9900${String(i).padStart(8, '0')}`, 'Pesanan', d, d, paid + biaya, paid, pre, 0, biaya, plat, din, proc, ong, rnd() < 0.6 ? 'Tokopedia' : 'TikTok Shop']);
+  }
+  const tiktok = { name: 'contoh_tiktok.xlsx', sheets: { 'Detail pesanan': tt } };
+  return [shopee, tiktok];
+}
+</script>
+
+<script id="app">
+(() => {
+  const $ = (s) => document.querySelector(s);
+  const fmt = (v) => { const r = Math.round(v); return (r < 0 ? '−Rp' : 'Rp') + Math.abs(r).toLocaleString('id-ID'); };
+  const fmtShort = (v) => { const a = Math.abs(v), s = v < 0 ? '−' : ''; if (a >= 1e9) return `${s}${(a / 1e9).toLocaleString('id-ID', { maximumFractionDigits: 1 })} M`; if (a >= 1e6) return `${s}${(a / 1e6).toLocaleString('id-ID', { maximumFractionDigits: 1 })} jt`; if (a >= 1e3) return `${s}${Math.round(a / 1e3)} rb`; return `${s}${Math.round(a)}`; };
+  const pct = (v) => `${(Math.abs(v) < 0.0005 ? 0 : v * 100).toLocaleString('id-ID', { minimumFractionDigits: 1, maximumFractionDigits: 1 })}%`;
+  const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des'];
+  const monthLabel = (k) => { const [y, mm] = k.split('-'); return `${MONTHS[+mm - 1]} ${y.slice(2)}`; };
+  const KIND = {
+    shopee_income: ['shopee', 'Shopee · Penghasilan'], shopee_return: ['shopee', 'Shopee · Retur'],
+    tiktok_income: ['tiktok', 'TikTok · Penghasilan'], tiktok_return: ['tiktok', 'TikTok · Retur'],
+    shopee_balance: ['unknown', 'Shopee · Saldo (tidak dipakai)'], unknown: ['unknown', 'Tidak dikenali'],
+  };
+
+  const DEFAULTS = { mitra: 30, packing: 0, coret: 100, confirmed: false, periods: [{ start: '', markup: 0, disc: 0 }] };
+  let settings = structuredClone(DEFAULTS);
+  try { const saved = JSON.parse(localStorage.getItem('cekprofit.settings') || 'null'); if (saved && saved.periods) settings = { ...settings, ...saved, confirmed: saved.confirmed ?? true }; } catch (e) { /* tanpa penyimpanan */ }
+  const save = () => { try { localStorage.setItem('cekprofit.settings', JSON.stringify(settings)); } catch (e) { /* abaikan */ } };
+
+  let files = [];         // {name, kind, parsed, error}
+  let demo = true;
+  let caseState = {};
+
+  /* ---------- pengaturan ---------- */
+  function renderSettings() {
+    $('#s-mitra').value = settings.mitra; $('#s-packing').value = settings.packing || ''; $('#s-coret').value = settings.coret;
+    $('#periods').innerHTML = settings.periods.map((p, i) => `<tr>
+      <td><input type="date" id="p-start-${i}" value="${esc(p.start)}" aria-label="Mulai tanggal periode ${i + 1}" ${i === 0 ? 'title="Kosong = sejak awal data"' : ''}></td>
+      <td><input type="number" id="p-markup-${i}" step="0.5" value="${p.markup}" aria-label="Kenaikan harga periode ${i + 1}"></td>
+      <td><input type="number" id="p-disc-${i}" step="0.5" min="0" max="99" value="${p.disc}" aria-label="Diskon toko periode ${i + 1}"></td>
+      <td>${settings.periods.length > 1 ? `<button class="btn link" type="button" data-del="${i}" aria-label="Hapus periode ${i + 1}">Hapus</button>` : ''}</td></tr>`).join('');
+  }
+  document.addEventListener('input', (e) => {
+    const id = e.target.id || '';
+    const v = e.target.value;
+    if (id === 's-mitra') settings.mitra = Math.min(100, Math.max(0, +v || 0));
+    else if (id === 's-packing') settings.packing = Math.max(0, +v || 0);
+    else if (id === 's-coret') settings.coret = Math.max(1, +v || 100);
+    else if (id.startsWith('p-')) {
+      const [, f, i] = id.split('-');
+      const p = settings.periods[+i];
+      if (f === 'start') p.start = v; else p[f] = +v || 0;
+    } else return;
+    settings.confirmed = true; save(); render();
+  });
+  document.addEventListener('click', (e) => {
+    const del = e.target.closest('[data-del]');
+    if (del) { settings.periods.splice(+del.dataset.del, 1); save(); renderSettings(); render(); }
+    if (e.target.id === 'add-period') { const last = settings.periods[settings.periods.length - 1]; settings.periods.push({ start: '', markup: last.markup, disc: last.disc }); save(); renderSettings(); render(); }
+    if (e.target.id === 'clear-files') { files = []; demo = true; caseState = {}; renderFiles(); render(); }
+  });
+  document.addEventListener('change', (e) => {
+    if (e.target.dataset && e.target.dataset.case) { caseState[e.target.dataset.case] = e.target.value; render(); }
+  });
+
+  /* ---------- unggah ---------- */
+  const readFile = (file) => new Promise((resolve) => {
+    const reader = new FileReader();
+    const isCsv = /\.csv$/i.test(file.name);
+    reader.onload = () => {
+      try {
+        if (!window.XLSX) throw new Error('Pustaka pembaca Excel gagal dimuat. Periksa koneksi internet lalu muat ulang halaman.');
+        const wbx = isCsv ? XLSX.read(reader.result, { type: 'string', raw: true }) : XLSX.read(new Uint8Array(reader.result), { type: 'array' });
+        const sheets = {};
+        for (const n of wbx.SheetNames) sheets[n] = XLSX.utils.sheet_to_json(wbx.Sheets[n], { header: 1, raw: true, defval: '' });
+        const wb = { name: file.name, sheets };
+        const parsed = Engine.parseWorkbook(wb);
+        resolve({ name: file.name, kind: parsed.kind, parsed });
+      } catch (err) { resolve({ name: file.name, kind: 'unknown', error: err.message }); }
+    };
+    reader.onerror = () => resolve({ name: file.name, kind: 'unknown', error: 'File tidak bisa dibaca.' });
+    if (isCsv) reader.readAsText(file, 'utf-8'); else reader.readAsArrayBuffer(file);
+  });
+  async function addFiles(list) {
+    const results = await Promise.all([...list].map(readFile));
+    if (demo) { files = []; demo = false; }
+    files.push(...results);
+    renderFiles(); render();
+  }
+  $('#file-input').addEventListener('change', (e) => { addFiles(e.target.files); e.target.value = ''; });
+  const drop = $('#drop');
+  ['dragenter', 'dragover'].forEach((t) => drop.addEventListener(t, (e) => { e.preventDefault(); drop.classList.add('over'); }));
+  ['dragleave', 'drop'].forEach((t) => drop.addEventListener(t, (e) => { e.preventDefault(); drop.classList.remove('over'); }));
+  drop.addEventListener('drop', (e) => addFiles(e.dataTransfer.files));
+
+  function fileStatus(f) {
+    if (f.error) return `<span class="status-bad">${esc(f.error)}</span>`;
+    const p = f.parsed;
+    if (p.kind === 'shopee_income') {
+      const ok = p.check.summaryTotal !== null && Math.abs(p.check.summaryTotal - p.check.sum) <= 1;
+      return `${p.orders.length.toLocaleString('id-ID')} pesanan${p.check.from ? ` · ${p.check.from} s.d. ${p.check.to}` : ''}<br>` +
+        (p.check.summaryTotal === null ? '<span class="status-warn">Ringkasan Shopee tidak ditemukan</span>'
+          : ok ? `<span class="status-ok">Cocok dengan ringkasan Shopee (${fmt(p.check.sum)})</span>`
+            : `<span class="status-warn">Selisih ${fmt(p.check.sum - p.check.summaryTotal)} dengan ringkasan Shopee</span>`);
+    }
+    if (p.kind === 'tiktok_income') {
+      const ok = p.check.reportSettle !== null && Math.abs(p.check.reportSettle - p.check.sum) <= 1;
+      const dates = p.rows.map((r) => r.payDate).filter(Boolean).sort();
+      return `${p.rows.length.toLocaleString('id-ID')} transaksi · ${dates[0] || '?'} s.d. ${dates[dates.length - 1] || '?'}<br>` +
+        (p.check.reportSettle === null ? '<span class="status-warn">Ringkasan TikTok tidak ditemukan</span>'
+          : ok ? `<span class="status-ok">Cocok dengan ringkasan TikTok (${fmt(p.check.sum)})</span>`
+            : `<span class="status-warn">Selisih ${fmt(p.check.sum - p.check.reportSettle)} dengan ringkasan TikTok</span>`);
+    }
+    if (p.kind === 'shopee_return' || p.kind === 'tiktok_return') return `${p.cases.length} pengajuan retur/refund`;
+    if (p.kind === 'shopee_balance') return '<span class="muted">Laporan saldo tidak diperlukan; pakai laporan penghasilan.</span>';
+    return '<span class="status-bad">Format belum dikenali. Lihat daftar file yang bisa dibaca.</span>';
+  }
+  function renderFiles() {
+    const list = demo ? [] : files;
+    $('#file-list').innerHTML = list.map((f) => {
+      const [cls, label] = KIND[f.kind] || KIND.unknown;
+      return `<li class="file"><span class="tag ${cls}">${label}</span><div><div class="name">${esc(f.name)}</div><div class="muted">${fileStatus(f)}</div></div><span></span></li>`;
+    }).join('') + (list.length ? '<li><button class="btn link" type="button" id="clear-files">Hapus semua file</button></li>' : '');
+  }
+
+  /* ---------- hasil ---------- */
+  function kpi(label, value, sub, hero) {
+    return `<div class="kpi${hero ? ' hero' : ''}"><span class="eyebrow">${label}</span><span class="v">${value}</span>${sub ? `<span class="small muted">${sub}</span>` : ''}</div>`;
+  }
+  function chart(months) {
+    if (!months.length) return '';
+    const W = 860, H = 280, L = 64, R = 12, T = 16, B = 34;
+    const vals = months.flatMap((m) => [m.shopee.margin, m.tiktok.margin]);
+    let lo = Math.min(0, ...vals), hi = Math.max(0, ...vals);
+    const step = niceStep((hi - lo) / 4 || 1);
+    lo = Math.floor(lo / step) * step; hi = Math.ceil(hi / step) * step || step;
+    const y = (v) => T + (H - T - B) * (1 - (v - lo) / (hi - lo));
+    const band = (W - L - R) / months.length;
+    const bw = Math.max(4, Math.min(22, band * 0.32));
+    let g = '';
+    for (let v = lo; v <= hi + 1e-9; v += step) {
+      g += `<line x1="${L}" x2="${W - R}" y1="${y(v)}" y2="${y(v)}" stroke="var(--line)" stroke-width="${v === 0 ? 1.5 : 1}" ${v === 0 ? '' : 'stroke-dasharray="2 4"'}/>`;
+      g += `<text x="${L - 8}" y="${y(v) + 4}" text-anchor="end">${fmtShort(v)}</text>`;
+    }
+    months.forEach((m, i) => {
+      const cx = L + band * i + band / 2;
+      g += `<text x="${cx}" y="${H - 12}" text-anchor="middle">${monthLabel(m.month)}</text>`;
+      [['shopee', -1], ['tiktok', 1]].forEach(([k, side]) => {
+        const v = m[k].margin;
+        if (!m[k].orders && !v) return;
+        const x = cx + side * (bw / 2 + 1) - bw / 2;
+        const y0 = y(0), y1 = y(v), top = Math.min(y0, y1), h = Math.max(1, Math.abs(y1 - y0));
+        const r = Math.min(4, h / 2, bw / 2);
+        const path = v >= 0
+          ? `M${x},${y0} V${top + r} Q${x},${top} ${x + r},${top} H${x + bw - r} Q${x + bw},${top} ${x + bw},${top + r} V${y0} Z`
+          : `M${x},${y0} V${top + h - r} Q${x},${top + h} ${x + r},${top + h} H${x + bw - r} Q${x + bw},${top + h} ${x + bw},${top + h - r} V${y0} Z`;
+        const tip = `${k === 'shopee' ? 'Shopee' : 'TikTok'} · ${monthLabel(m.month)}: ${fmt(v)} (${m[k].orders} pesanan)`;
+        g += `<path d="${path}" fill="var(--${k})"/><rect x="${x - 3}" y="${T}" width="${bw + 6}" height="${H - T - B}" fill="transparent" data-tip="${esc(tip)}"/>`;
+      });
+    });
+    return `<div class="chart" id="chart"><div class="legend"><span><i class="sw" style="background:var(--shopee)"></i>Shopee</span><span><i class="sw" style="background:var(--tiktok)"></i>TikTok Shop</span><span class="muted">Margin setelah biaya tercatat, menurut bulan pesanan dibuat</span></div>
+      <svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Grafik margin per bulan">${g}</svg><div class="tip" id="tip" hidden></div></div>`;
+  }
+  function niceStep(x) { const p = 10 ** Math.floor(Math.log10(x)); const n = x / p; return (n <= 1 ? 1 : n <= 2 ? 2 : n <= 5 ? 5 : 10) * p; }
+  const td = (v, neg = true) => `<td class="${neg && v < 0 ? 'neg' : ''}">${fmt(v)}</td>`;
+
+  function render() {
+    const parsed = (demo ? makeDemo().map((wb) => Engine.parseWorkbook(wb)) : files.filter((f) => f.parsed).map((f) => f.parsed));
+    const banner = $('#banner');
+    banner.innerHTML = demo
+      ? `<div class="banner demo"><span><b>Ini data contoh (fiktif).</b> Unggah laporan toko Anda untuk melihat angka Anda sendiri.</span></div>`
+      : files.some((f) => f.error) ? `<div class="banner err">Ada file yang gagal dibaca. Lihat keterangan di daftar file.</div>` : '';
+    const hasIncome = parsed.some((p) => p.kind === 'shopee_income' || p.kind === 'tiktok_income');
+    if (!hasIncome) { $('#results').innerHTML = `<div class="panel"><h2>3. Hasil</h2><p class="muted">Unggah minimal satu laporan penghasilan Shopee atau TikTok Shop. File retur saja belum cukup untuk menghitung profit.</p></div>`; return; }
+    if (settings.periods.some((p) => (1 + p.markup / 100) * (1 - p.disc / 100) <= 0)) { $('#results').innerHTML = `<div class="banner err">Diskon toko 100% atau lebih membuat harga jual nol. Periksa pengaturan periode Shopee.</div>`; return; }
+    const r = Engine.compute(parsed, settings, caseState);
+    const unconfirmed = !demo && !settings.confirmed;
+    const S = r.shopee, T = r.tiktok;
+    const plat = [r.has.shopee && ['Shopee', S], r.has.tiktok && ['TikTok Shop', T]].filter(Boolean);
+
+    const cols = plat.length > 1 ? [...plat, ['Total', null]] : plat;
+    const row = (label, f, cls = '') => `<tr class="${cls}"><td>${label}</td>${cols.map(([, p]) => td(p ? f(p) : plat.reduce((a, [, q]) => a + f(q), 0))).join('')}</tr>`;
+    const rowPct = (label, f) => `<tr><td>${label}</td>${cols.map(([, p]) => {
+      const pp = p || { sales: plat.reduce((a, [, q]) => a + q.sales, 0), feeTotal: plat.reduce((a, [, q]) => a + q.feeTotal, 0), margin: plat.reduce((a, [, q]) => a + q.margin, 0) };
+      return `<td>${pp.sales ? pct(f(pp)) : '–'}</td>`; }).join('')}</tr>`;
+
+    const months = r.months;
+    const topProducts = [...r.products].sort((a, b) => b.margin - a.margin).slice(0, 10);
+    const thin = r.products.filter((p) => p.rows >= 5).sort((a, b) => a.pct - b.pct).slice(0, 8);
+    const checkCases = r.cases.filter((c) => c.needsCheck).sort((a, b) => b.estModal - a.estModal);
+    const best = r.totalMargin, worst = r.totalMargin - r.unknownRisk;
+
+    $('#results').innerHTML = `
+      <h2>3. Hasil</h2>
+      ${unconfirmed ? `<div class="banner demo"><span><b>Pengaturan modal masih nilai awal.</b> Isi diskon pemasok dan pola harga toko Anda di bagian 2 agar modal dan margin sesuai kenyataan.</span></div>` : ''}
+      <div class="kpis">
+        ${kpi('Margin setelah biaya tercatat', fmt(r.totalMargin), r.unknownRisk > 0 ? `Bisa turun ke ${fmt(worst)} jika retur yang belum dicek tidak kembali` : `${r.first} s.d. ${r.last}`, true)}
+        ${kpi('Rata-rata per bulan', fmt(r.perMonth), `${r.days} hari data`)}
+        ${kpi('Per pesanan', fmt(r.perOrder), `${r.orders.toLocaleString('id-ID')} pesanan`)}
+        ${kpi('Potongan platform', pct(-r.totalFees / r.totalSales), `${fmt(-r.totalFees)} dari penjualan ${fmt(r.totalSales)}`)}
+      </div>
+      <p class="small muted">Margin = dana diterima dari platform − modal${settings.packing ? ' − biaya packing' : ''}. Ini <b>belum laba bersih</b>: ${settings.packing ? '' : 'biaya packing, '}transport, dan waktu kerja Anda belum dihitung.</p>
+
+      <div class="section">
+        <h3>Rincian per platform</h3>
+        <div class="tablewrap"><table class="data">
+          <thead><tr><th>Komponen</th>${cols.map(([n]) => `<th>${n}</th>`).join('')}</tr></thead>
+          <tbody>
+            <tr><td>Jumlah pesanan</td>${cols.map(([, p]) => `<td>${(p ? p.orders : plat.reduce((a, [, q]) => a + q.orders, 0)).toLocaleString('id-ID')}</td>`).join('')}</tr>
+            ${row('Penjualan setelah diskon toko', (p) => p.sales)}
+            ${row('Potongan platform (biaya + ongkir)', (p) => p.feeTotal)}
+            ${rowPct('Potongan platform %', (p) => -p.feeTotal / p.sales)}
+            ${row('Dana diterima', (p) => p.received)}
+            ${row('Modal (estimasi)', (p) => -p.modal)}
+            ${settings.packing ? row('Biaya packing', (p) => -p.packing) : ''}
+            ${row('Margin setelah biaya tercatat', (p) => p.margin, 'total')}
+            ${rowPct('Margin %', (p) => p.margin / p.sales)}
+            ${row('Penyesuaian/kompensasi platform (tidak dihitung sebagai profit)', (p) => p.adj)}
+          </tbody></table></div>
+        ${r.lostCertain ? `<p class="small">Dikurangi modal barang retur yang tidak kembali: <b class="neg">${fmt(-r.lostCertain)}</b> (sudah termasuk di margin total).</p>` : ''}
+        ${r.has.tiktok ? `<p class="small muted">Diskon toko TikTok rata-rata ${pct(T.discount)} dari harga coret (tercatat di data). ${Object.entries(T.bySource).map(([k, v]) => `${esc(k)}: margin ${fmt(v.margin)}`).join(' · ')}.</p>` : ''}
+      </div>
+
+      <div class="section">
+        <h3>Margin per bulan</h3>
+        ${chart(months)}
+        <details><summary class="small">Tabel per bulan</summary>
+        <div class="tablewrap" style="margin-top:8px"><table class="data"><thead><tr><th>Bulan pesanan</th>${plat.map(([n]) => `<th>Penjualan ${n}</th><th>Margin ${n}</th>`).join('')}</tr></thead>
+          <tbody>${months.map((m) => `<tr><td>${monthLabel(m.month)}</td>${plat.map(([n]) => { const k = n === 'Shopee' ? 'shopee' : 'tiktok'; return td(m[k].sales) + td(m[k].margin); }).join('')}</tr>`).join('')}</tbody></table></div></details>
+      </div>
+
+      <div class="section">
+        <h3>Potongan platform</h3>
+        <div class="cols2">
+          ${r.has.shopee ? `<div class="tablewrap"><table class="data"><thead><tr><th>Shopee</th><th>Rp</th><th>% penjualan</th></tr></thead><tbody>
+            ${[['Biaya administrasi', S.fees.admin], ['Biaya proses pesanan', S.fees.proses], ['Gratis Ongkir XTRA', S.fees.xtra], ['Biaya lain', S.fees.lain], ['Ongkir ditanggung penjual', S.fees.ship]]
+              .map(([l, v]) => `<tr><td>${l}</td>${td(v)}<td>${pct(-v / S.sales)}</td></tr>`).join('')}</tbody></table></div>` : ''}
+          ${r.has.tiktok ? `<div class="tablewrap"><table class="data"><thead><tr><th>TikTok Shop</th><th>Rp</th><th>% penjualan</th></tr></thead><tbody>
+            ${[['Komisi platform', T.fees.platform], ['Komisi dinamis', T.fees.dinamis], ['Biaya pemrosesan', T.fees.proses], ['Ongkir', T.fees.ongkir], ['Biaya lain (pre-order, afiliasi, dll.)', T.fees.lain]]
+              .map(([l, v]) => `<tr><td>${l}</td>${td(v)}<td>${pct(-v / T.sales)}</td></tr>`).join('')}</tbody></table></div>` : ''}
+        </div>
+      </div>
+
+      ${r.products.length ? `<div class="section">
+        <h3>Produk Shopee</h3>
+        <p class="small muted">Laporan TikTok tidak memuat nama produk, jadi rincian produk hanya untuk Shopee. Jumlah = baris di laporan (Shopee tidak mencantumkan kuantitas).</p>
+        <div class="cols2">
+          <div class="tablewrap"><table class="data"><thead><tr><th>Margin terbesar</th><th>Baris</th><th>Margin</th><th>%</th></tr></thead>
+            <tbody>${topProducts.map((p) => `<tr><td>${esc(p.name)}</td><td>${p.rows}</td>${td(p.margin)}<td>${pct(p.pct)}</td></tr>`).join('')}</tbody></table></div>
+          <div class="tablewrap"><table class="data"><thead><tr><th>Margin paling tipis (≥5 baris)</th><th>Baris</th><th>Margin</th><th>%</th></tr></thead>
+            <tbody>${thin.map((p) => `<tr><td>${esc(p.name)}</td><td>${p.rows}</td>${td(p.margin)}<td class="${p.pct < 0 ? 'neg' : ''}">${pct(p.pct)}</td></tr>`).join('') || '<tr><td colspan="4" class="muted">Belum cukup data</td></tr>'}</tbody></table></div>
+        </div></div>` : ''}
+
+      <div class="section">
+        <h3>Retur dan refund</h3>
+        ${r.cases.length ? `
+          <div class="tablewrap"><table class="data"><thead><tr><th>Jenis</th><th>Platform</th><th>Jumlah</th><th>Nilai refund</th></tr></thead>
+            <tbody>${r.catSummary.sort((a, b) => b.amount - a.amount).map((c) => `<tr><td>${c.label}</td><td>${c.platform === 'shopee' ? 'Shopee' : 'TikTok'}</td><td>${c.count}</td>${td(c.amount, false)}</tr>`).join('')}</tbody></table></div>
+          ${checkCases.length ? `<p class="small">Cek ${checkCases.length} kasus di bawah. Pilih <b>Tidak kembali/rusak</b> jika bukunya tidak Anda terima lagi; modalnya akan dikurangkan dari margin.
+            <span class="range">Kasus yang belum dicek berisiko ${fmt(r.unknownRisk)}.</span></p>
+            <div class="tablewrap"><table class="data"><thead><tr><th>Produk / alasan</th><th>Platform</th><th>Resi retur</th><th>Est. modal</th><th>Status barang</th></tr></thead><tbody>
+            ${checkCases.map((c) => `<tr class="case"><td><b>${esc(c.product || '-')}</b>${c.variant && c.variant !== 'Default' ? ` · ${esc(c.variant)}` : ''}<br><span class="small muted">${esc(Engine.CAT_LABEL[c.cat])}. ${esc(c.reason)}${c.note ? ` · “${esc(c.note.slice(0, 80))}”` : ''}</span></td>
+              <td>${c.platform === 'shopee' ? 'Shopee' : 'TikTok'}</td><td>${esc(c.resi || '–')}</td>${td(c.estModal, false)}
+              <td><select data-case="${esc(c.key)}" aria-label="Status barang ${esc(c.product)}">
+                ${[['belum', 'Belum dicek'], ['kembali', 'Sudah kembali'], ['hilang', 'Tidak kembali/rusak']].map(([v, l]) => `<option value="${v}" ${c.state === v ? 'selected' : ''}>${l}</option>`).join('')}
+              </select></td></tr>`).join('')}
+            </tbody></table></div>` : '<p class="small muted">Tidak ada retur yang perlu dicek.</p>'}`
+          : `<p class="small muted">Belum ada file retur. Unggah file retur Shopee/TikTok untuk mengecek barang yang tidak kembali. Tanpa file ini, refund dianggap tidak memakan modal (barang tidak dikirim atau kembali).</p>`}
+      </div>
+
+      <div class="section">
+        <h3>Cara hitung dan batasan</h3>
+        <ul class="notes">
+          <li>Modal Shopee = (harga produk + refund) × (1 − diskon pemasok) ÷ [(1 + kenaikan harga) × (1 − diskon toko)], menurut periode tanggal pesanan. Ini <b>perkiraan</b> dari pola harga yang Anda isi, karena Shopee tidak mencatat harga sebelum diskon.</li>
+          <li>Modal TikTok = harga sebelum diskon (setelah refund) × (1 − diskon pemasok) ÷ harga coret vs acuan. Diskon toko diambil dari data.</li>
+          <li>Refund dianggap tidak memakan modal sampai Anda menandai barangnya tidak kembali di bagian retur.</li>
+          <li>Penyesuaian/kompensasi dari platform (paket hilang, barang rusak) ditampilkan terpisah dan tidak ditambahkan ke margin, karena biasanya mengganti kerugian.</li>
+          <li>Grafik dan tabel bulanan memakai bulan pesanan dibuat. Rata-rata per bulan memakai rentang tanggal dana diterima.</li>
+          ${r.dupes ? `<li>${r.dupes.toLocaleString('id-ID')} baris duplikat dari file yang tumpang tindih tidak dihitung dua kali.</li>` : ''}
+        </ul>
+      </div>`;
+    bindTips();
+  }
+  function bindTips() {
+    const box = document.getElementById('chart'), tip = document.getElementById('tip');
+    if (!box) return;
+    box.querySelectorAll('[data-tip]').forEach((el) => {
+      el.addEventListener('mouseenter', () => { tip.textContent = el.dataset.tip; tip.hidden = false; });
+      el.addEventListener('mousemove', (e) => { const b = box.getBoundingClientRect(); tip.style.left = `${e.clientX - b.left}px`; tip.style.top = `${e.clientY - b.top}px`; });
+      el.addEventListener('mouseleave', () => { tip.hidden = true; });
+    });
+  }
+
+  renderSettings(); renderFiles(); render();
+})();
+</script>
+
+</body>
+</html>
