@@ -853,7 +853,13 @@ function makeDemo() {
         if (!window.XLSX) throw new Error('Pembaca Excel gagal dimuat. Periksa koneksi internet lalu muat ulang halaman.');
         const wbx = isCsv ? XLSX.read(reader.result, { type: 'string', raw: true }) : XLSX.read(new Uint8Array(reader.result), { type: 'array' });
         const sheets = {};
-        for (const n of wbx.SheetNames) sheets[n] = XLSX.utils.sheet_to_json(wbx.Sheets[n], { header: 1, raw: true, defval: '' });
+        for (const n of wbx.SheetNames) {
+          // Sebagian file TikTok menulis ukuran tabel (<dimension>) yang salah; hitung ulang agar tidak ada baris terpotong.
+          const ws = wbx.Sheets[n]; let mr = -1, mc = -1;
+          for (const k of Object.keys(ws)) { if (k[0] === '!') continue; const a = XLSX.utils.decode_cell(k); if (a.r > mr) mr = a.r; if (a.c > mc) mc = a.c; }
+          if (mr >= 0) ws['!ref'] = XLSX.utils.encode_range({ s: { r: 0, c: 0 }, e: { r: mr, c: mc } });
+          sheets[n] = XLSX.utils.sheet_to_json(ws, { header: 1, raw: true, defval: '' });
+        }
         const parsed = Engine.parseWorkbook({ name: file.name, sheets });
         resolve({ name: file.name, kind: parsed.kind, parsed });
       } catch (err) { resolve({ name: file.name, kind: 'unknown', error: err.message || 'File tidak bisa dibaca.' }); }
