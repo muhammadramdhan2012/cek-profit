@@ -2,10 +2,10 @@
  * Strategi: jaringan dulu untuk HTML/JS/CSS (agar pembaruan langsung terlihat), cache sebagai cadangan offline.
  * Naikkan VERSION setiap rilis agar cache lama dibersihkan.
  */
-const VERSION = 'cekprofit-0678377c9c';
+const VERSION = 'cekprofit-057595d95f';
 const CORE = ['./', 'index.html', 'app.html', 'akun.html', 'privasi.html', 'icon.svg', 'manifest.webmanifest',
   'assets/base.css', 'assets/app.css', 'assets/site.css', 'assets/report.css', 'assets/account.css',
-  'assets/config.js', 'assets/analytics.js', 'assets/engine.js', 'assets/demo.js', 'assets/license.js', 'assets/cloud.js', 'assets/report.js', 'assets/app.js', 'assets/akun.js',
+  'assets/config.js', 'assets/theme.js', 'assets/analytics.js', 'assets/engine.js', 'assets/demo.js', 'assets/license.js', 'assets/cloud.js', 'assets/report.js', 'assets/app.js', 'assets/akun.js',
   'vendor/xlsx.full.min.js', 'fonts/jakarta.woff'];
 
 self.addEventListener('install', (e) => {

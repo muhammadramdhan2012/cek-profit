@@ -16,6 +16,7 @@ Alat web untuk menghitung **laba sebenarnya toko Shopee, TikTok Shop, dan Tokope
 | Mode reseller (diskon dari harga acuan) | Semua temuan otomatis |
 | 5 produk teratas dan 2 temuan otomatis | Ekspor Excel lengkap |
 | Retur yang tidak kembali, simulator harga | Riwayat tanpa batas |
+| Tema terang, gelap, atau ikuti perangkat | |
 | Akun: sinkron modal antarperangkat, 3 riwayat | |
 
 Akun (daftar, masuk, lupa sandi, Google opsional) memakai **Supabase**; ikuti [supabase/PANDUAN.md](supabase/PANDUAN.md). Selama belum diatur, situs tetap jalan tanpa login. Pembayaran Pro manual: pengguna mengirim permintaan dari aplikasi, Anda mengaktifkan di `admin.html`.
@@ -69,6 +70,7 @@ assets/report.js      laporan PDF (dicetak lewat browser)
 assets/license.js     pemeriksaan kode akses
 assets/demo.js        data contoh fiktif
 assets/config.js      pengaturan situs
+assets/theme.js       pilihan tema terang/gelap/ikuti perangkat
 supabase/schema.sql   tabel, aturan keamanan (RLS), fungsi admin
 supabase/tests/       uji aturan keamanan di PostgreSQL
 vendor/               SheetJS 0.18.5 (Apache-2.0)

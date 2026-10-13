@@ -118,3 +118,9 @@ footer.site { border-top: 1px solid var(--line); padding-block: 26px 40px; color
 footer.site nav { display: flex; gap: 18px; flex-wrap: wrap; }
 footer.site a { color: var(--ink-2); }
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; scroll-behavior: auto !important; } }
+
+/* pemilih tema */
+.theme-seg { display: inline-flex; background: var(--surface-2); border-radius: 10px; padding: 3px; gap: 2px; }
+.theme-seg button { width: 30px; height: 28px; display: grid; place-items: center; border: 0; border-radius: 7px; background: transparent; color: var(--ink-3); cursor: pointer; }
+.theme-seg button:hover { color: var(--ink); }
+.theme-seg button[aria-checked="true"] { background: var(--surface); color: var(--ink); box-shadow: 0 1px 2px rgb(0 0 0 / 12%); }

@@ -213,3 +213,6 @@ table.data tr.total td { font-weight: 750; border-top: 1.5px solid var(--ink); }
 textarea.code { font-family: ui-monospace, Menlo, monospace; font-size: 12.5px; min-height: 70px; resize: vertical; }
 .acct-box .who { text-align: left; justify-items: start; }
 @media (max-width: 600px) { .tools .divider { display: none; } .tools { gap: 6px; } }
+.side-theme { display: flex; justify-content: space-between; align-items: center; padding: 4px 8px; font-size: 13px; color: var(--ink-3); }
+.theme-sm { display: none; }
+@media (max-width: 900px) { .theme-sm { display: block; } .side-head { gap: 8px; } .side-head .brand { margin-right: auto; } }
