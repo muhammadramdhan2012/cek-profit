@@ -3,1220 +3,209 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="description" content="Hitung profit bersih toko Shopee & TikTok Shop dari laporan penghasilan. Diproses di browser, file tidak diunggah ke server.">
-<style>:root{color-scheme:light} body{margin:0} [hidden]{display:none!important}</style>
-<title>Cek Profit Marketplace</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,800&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap">
-<style>
-/* Layout: hero dua kolom (cerita + unggah), kartu modal selebar halaman, lalu hasil dibaca dari ringkasan ke rincian. */
-:root {
-  --bg: #f3f4ef; --surface: #ffffff; --surface-2: #eef0ea; --line: #dde1d6;
-  --ink: #13211b; --ink-2: #4b5a52; --ink-3: #6f7d75;
-  --accent: #0e7a5a; --accent-ink: #ffffff; --accent-soft: #dff1e8;
-  --mark: #f4c542; --cost: #c2412d; --cost-soft: #f8e1dc; --warn: #8a5a00; --warn-soft: #fbefcf; --good: #18794a;
-  --shopee: #eb6834; --tiktok: #2a78d6;
-  --display: "Bricolage Grotesque", "Avenir Next", "Segoe UI", sans-serif;
-  --body: "Plus Jakarta Sans", "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-  --r: 16px; --r-sm: 10px;
-  --shadow: 0 1px 2px rgb(19 33 27 / 6%), 0 8px 24px -12px rgb(19 33 27 / 18%);
-}
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) {
-    --bg: #0e1512; --surface: #151e1a; --surface-2: #1c2722; --line: #2a3832;
-    --ink: #e9efe9; --ink-2: #b5c2ba; --ink-3: #8a9a91;
-    --accent: #43c495; --accent-ink: #04231a; --accent-soft: #163a2d;
-    --mark: #e7b93a; --cost: #ef7f6c; --cost-soft: #3b201c; --warn: #e9b450; --warn-soft: #382c12; --good: #5fd39b;
-    --shopee: #d95926; --tiktok: #3987e5; --shadow: 0 1px 2px rgb(0 0 0 / 40%);
-    color-scheme: dark;
-  }
-}
-:root[data-theme="dark"] {
-  --bg: #0e1512; --surface: #151e1a; --surface-2: #1c2722; --line: #2a3832;
-  --ink: #e9efe9; --ink-2: #b5c2ba; --ink-3: #8a9a91;
-  --accent: #43c495; --accent-ink: #04231a; --accent-soft: #163a2d;
-  --mark: #e7b93a; --cost: #ef7f6c; --cost-soft: #3b201c; --warn: #e9b450; --warn-soft: #382c12; --good: #5fd39b;
-  --shopee: #d95926; --tiktok: #3987e5; --shadow: 0 1px 2px rgb(0 0 0 / 40%);
-  color-scheme: dark;
-}
-* { box-sizing: border-box; }
-body { background: var(--bg); color: var(--ink); font-family: var(--body); font-size: 15px; line-height: 1.55; -webkit-font-smoothing: antialiased; }
-.wrap { max-width: 1160px; margin: 0 auto; padding-inline: 16px; }
-h1, h2, h3 { margin: 0; font-family: var(--display); letter-spacing: -0.02em; text-wrap: balance; }
-h1 { font-size: clamp(32px, 5.2vw, 56px); line-height: 1.02; font-weight: 800; }
-h2 { font-size: clamp(22px, 2.6vw, 28px); font-weight: 800; }
-h3 { font-size: 17px; font-weight: 600; }
-p { margin: 0; }
-a { color: var(--accent); }
-.muted { color: var(--ink-2); } .faint { color: var(--ink-3); }
-.small { font-size: 13px; } .tiny { font-size: 12px; }
-.num { font-variant-numeric: tabular-nums; }
-.eyebrow { font-size: 12px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: var(--ink-3); }
-.btn { font: inherit; font-weight: 600; font-size: 14px; border-radius: 999px; padding: 9px 16px; border: 1px solid var(--line); background: var(--surface); color: var(--ink); cursor: pointer; display: inline-flex; gap: 8px; align-items: center; text-decoration: none; }
-.btn:hover { border-color: var(--ink-3); }
-.btn.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
-.btn.ghost { border-color: transparent; background: transparent; color: var(--accent); padding-inline: 6px; }
-.btn[disabled] { opacity: .45; cursor: not-allowed; }
-:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-.card { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); padding: 22px; box-shadow: var(--shadow); min-width: 0; }
-
-/* topbar */
-.topbar { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding-block: 18px; }
-.brand { display: flex; align-items: center; gap: 10px; font-family: var(--display); font-weight: 800; font-size: 19px; color: var(--ink); text-decoration: none; }
-.brand svg { flex: none; }
-.brand, .topbar a { white-space: nowrap; }
-@media (max-width: 480px) { .toplinks a[href*="github"] { display: none; } }
-.toplinks { display: flex; gap: 6px; flex-wrap: wrap; }
-
-/* hero */
-.page-hero { display: grid; grid-template-columns: 1.05fr 1fr; gap: 28px; align-items: start; padding-block: 18px 34px; }
-@media (max-width: 900px) { .page-hero { grid-template-columns: 1fr; } }
-.hero-copy { display: grid; gap: 18px; padding-top: 8px; }
-.hero-copy h1 .hl { background: linear-gradient(transparent 62%, color-mix(in srgb, var(--mark) 75%, transparent) 62%); padding-inline: 2px; }
-.lead { font-size: 17px; color: var(--ink-2); max-width: 52ch; }
-.steps { display: flex; flex-wrap: wrap; gap: 8px; margin: 0; padding: 0; list-style: none; }
-.steps li { display: flex; gap: 8px; align-items: center; font-size: 13.5px; font-weight: 600; padding: 6px 12px 6px 6px; border-radius: 999px; background: var(--surface); border: 1px solid var(--line); color: var(--ink-2); }
-.steps li b { width: 24px; height: 24px; border-radius: 50%; display: grid; place-items: center; background: var(--surface-2); color: var(--ink-2); font-size: 12px; }
-.steps li.done b { background: var(--accent); color: var(--accent-ink); }
-.steps li.active { border-color: var(--accent); color: var(--ink); }
-.privacy { display: flex; gap: 10px; align-items: flex-start; font-size: 13.5px; color: var(--ink-2); max-width: 54ch; }
-.privacy svg { flex: none; margin-top: 2px; color: var(--accent); }
-
-/* upload */
-.upload { display: grid; gap: 14px; }
-.drop { border: 2px dashed var(--line); border-radius: var(--r-sm); padding: 26px 16px; display: grid; gap: 10px; justify-items: center; text-align: center; background: var(--surface-2); transition: border-color .15s, background .15s; }
-.drop.over { border-color: var(--accent); background: var(--accent-soft); }
-.drop svg { color: var(--accent); }
-.drop strong { font-size: 16px; }
-.files { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; max-height: 360px; overflow-y: auto; overscroll-behavior: contain; }
-.file { display: grid; grid-template-columns: auto 1fr auto; gap: 10px; align-items: start; padding: 10px 10px 10px 12px; border: 1px solid var(--line); border-radius: var(--r-sm); font-size: 13px; }
-.file .name { font-weight: 600; overflow-wrap: anywhere; }
-.dot { width: 10px; height: 10px; border-radius: 50%; margin-top: 5px; background: var(--ink-3); }
-.dot.shopee { background: var(--shopee); } .dot.tiktok { background: var(--tiktok); } .dot.bad { background: var(--cost); }
-.x { border: 0; background: none; color: var(--ink-3); cursor: pointer; font-size: 18px; line-height: 1; padding: 2px 6px; border-radius: 6px; }
-.x:hover { color: var(--cost); background: var(--cost-soft); }
-.ok { color: var(--good); } .warn { color: var(--warn); } .bad { color: var(--cost); }
-.upload-foot { display: flex; justify-content: space-between; gap: 8px; flex-wrap: wrap; align-items: center; }
-
-/* settings */
-.settings { display: grid; gap: 18px; margin-bottom: 34px; }
-.settings-head { display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; align-items: center; }
-.pill { font-size: 12px; font-weight: 700; padding: 4px 10px; border-radius: 999px; }
-.pill.ready { background: var(--accent-soft); color: var(--accent); }
-.pill.todo { background: var(--warn-soft); color: var(--warn); }
-.fields { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
-@media (max-width: 760px) { .fields { grid-template-columns: 1fr; } }
-.field { display: grid; gap: 6px; align-content: start; }
-.field label, .field .label { font-size: 13.5px; font-weight: 600; }
-.field .hint { font-size: 12.5px; color: var(--ink-3); }
-.input { display: flex; align-items: center; border: 1px solid var(--line); border-radius: var(--r-sm); background: var(--surface); overflow: hidden; }
-.input:focus-within { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
-.input span { padding-inline: 10px; color: var(--ink-3); font-size: 13px; white-space: nowrap; }
-.input input { border: 0; outline: 0; background: transparent; font: inherit; font-variant-numeric: tabular-nums; padding: 9px 10px; width: 100%; min-width: 0; color: var(--ink); }
-.input.need { border-color: var(--warn); }
-.periods { display: grid; gap: 8px; }
-.period { display: grid; grid-template-columns: 1.3fr 1fr 1fr auto; gap: 8px; align-items: center; }
-.period-head { font-size: 12px; color: var(--ink-3); font-weight: 600; }
-@media (max-width: 560px) { .period { grid-template-columns: 1fr 1fr; } .period-head { display: none; } }
-.formula { font-size: 12.5px; color: var(--ink-2); background: var(--surface-2); border-radius: var(--r-sm); padding: 8px 12px; }
-
-/* results */
-.results { display: grid; gap: 22px; padding-bottom: 40px; }
-.toolbar { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; justify-content: space-between; position: sticky; top: env(safe-area-inset-top, 0px); z-index: 5; background: color-mix(in srgb, var(--bg) 88%, transparent); backdrop-filter: blur(8px); padding-block: 10px; }
-.toolbar .group { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
-.seg { display: inline-flex; background: var(--surface-2); border: 1px solid var(--line); border-radius: 999px; padding: 3px; gap: 2px; }
-.seg button { border: 0; background: transparent; font: inherit; font-size: 13.5px; font-weight: 600; padding: 6px 12px; border-radius: 999px; color: var(--ink-2); cursor: pointer; }
-.seg button[aria-pressed="true"] { background: var(--surface); color: var(--ink); box-shadow: var(--shadow); }
-select { font: inherit; font-size: 13.5px; border: 1px solid var(--line); border-radius: 999px; padding: 6px 10px; background: var(--surface); color: var(--ink); }
-.banner { border-radius: var(--r-sm); padding: 12px 16px; display: flex; gap: 12px; align-items: center; justify-content: space-between; flex-wrap: wrap; font-size: 14px; }
-.banner.info { background: var(--warn-soft); }
-.banner.err { background: var(--cost-soft); color: var(--cost); }
-.kpis { display: grid; grid-template-columns: 1.4fr repeat(3, minmax(0, 1fr)); gap: 14px; }
-@media (max-width: 900px) { .kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); } .kpi.hero { grid-column: 1 / -1; } }
-.kpi { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); padding: 18px; display: grid; gap: 6px; align-content: start; min-width: 0; box-shadow: var(--shadow); }
-.kpi .v { font-family: var(--display); font-weight: 800; font-size: clamp(22px, 2.6vw, 30px); letter-spacing: -0.02em; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; line-height: 1.1; }
-.kpi.hero { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
-.kpi.hero .v { font-size: clamp(30px, 4vw, 44px); }
-.kpi.hero .eyebrow, .kpi.hero .sub { color: inherit; opacity: .85; }
-.kpi .sub { font-size: 12.5px; color: var(--ink-3); }
-.kpi.hero .btn { justify-self: start; background: var(--accent-ink); color: var(--accent); border-color: transparent; }
-.grid2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 22px; }
-@media (max-width: 900px) { .grid2 { grid-template-columns: 1fr; } }
-.card-head { display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; align-items: baseline; margin-bottom: 14px; }
-.card-head p { font-size: 13px; color: var(--ink-3); }
-.chart svg { width: 100%; height: auto; display: block; overflow: visible; }
-.chart svg text { fill: var(--ink-3); font-family: var(--body); font-size: 12px; }
-.chart svg text.val { fill: var(--ink); font-weight: 600; font-size: 12.5px; }
-.chart { position: relative; }
-.legend { display: flex; gap: 16px; flex-wrap: wrap; font-size: 13px; color: var(--ink-2); margin-bottom: 8px; }
-.legend span { display: inline-flex; align-items: center; gap: 6px; }
-.sw { width: 12px; height: 12px; border-radius: 3px; display: inline-block; }
-.tip { position: absolute; pointer-events: none; background: var(--ink); color: var(--bg); padding: 7px 10px; border-radius: 8px; font-size: 12.5px; white-space: nowrap; transform: translate(-50%, -115%); z-index: 3; }
-.tablewrap { overflow-x: auto; }
-table.data { width: 100%; border-collapse: collapse; font-size: 13.5px; font-variant-numeric: tabular-nums; }
-table.data th, table.data td { padding: 9px 10px; border-bottom: 1px solid var(--line); text-align: right; white-space: nowrap; }
-table.data th:first-child, table.data td:first-child { text-align: left; white-space: normal; padding-left: 0; }
-table.data th:last-child, table.data td:last-child { padding-right: 0; }
-table.data thead th { font-size: 12px; font-weight: 700; color: var(--ink-3); text-transform: uppercase; letter-spacing: .04em; }
-table.data tbody tr:last-child td { border-bottom: 0; }
-table.data tr.total td { font-weight: 700; border-top: 2px solid var(--ink); }
-.neg { color: var(--cost); }
-.barrow { display: grid; grid-template-columns: minmax(110px, 1.2fr) minmax(60px, 2fr) 168px; gap: 12px; align-items: center; padding-block: 7px; font-size: 13.5px; border-bottom: 1px solid var(--line); }
-.barrow:last-child { border-bottom: 0; }
-.barrow > .num { text-align: right; white-space: nowrap; }
-@media (max-width: 600px) { .barrow { grid-template-columns: 1fr auto; row-gap: 6px; } .barrow > .bar-track { grid-column: 1 / -1; grid-row: 2; } }
-.bar { height: 10px; border-radius: 0 4px 4px 0; background: var(--cost); min-width: 2px; }
-.bar.alt { background: var(--accent); }
-.bar-track { background: var(--surface-2); border-radius: 4px; overflow: hidden; }
-.chips { display: flex; gap: 8px; flex-wrap: wrap; }
-.chip { font-size: 12.5px; font-weight: 600; padding: 5px 10px; border-radius: 999px; background: var(--surface-2); color: var(--ink-2); }
-.searchrow { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 10px; }
-.searchrow input { flex: 1 1 200px; font: inherit; font-size: 13.5px; border: 1px solid var(--line); border-radius: 999px; padding: 7px 14px; background: var(--surface); color: var(--ink); min-width: 0; }
-.case-select { font-size: 13px; padding: 5px 8px; border-radius: 8px; }
-.empty { text-align: center; display: grid; gap: 12px; justify-items: center; padding: 40px 20px; }
-.empty svg { color: var(--ink-3); }
-.sim { display: grid; grid-template-columns: 1fr 1fr; gap: 22px; }
-@media (max-width: 760px) { .sim { grid-template-columns: 1fr; } }
-.sim .fields { grid-template-columns: 1fr 1fr; align-content: start; align-self: start; }
-.stack { display: flex; height: 26px; border-radius: 6px; overflow: hidden; gap: 2px; background: var(--surface); }
-.stack div { min-width: 2px; }
-.sim-out { display: grid; gap: 12px; align-content: start; }
-.sim-big { font-family: var(--display); font-weight: 800; font-size: 34px; letter-spacing: -0.02em; line-height: 1; }
-.notes { margin: 0; padding-left: 18px; display: grid; gap: 6px; color: var(--ink-2); font-size: 13.5px; max-width: 86ch; }
-details summary { cursor: pointer; font-weight: 600; }
-.guide { display: grid; gap: 12px; padding-block: 10px 40px; }
-.guide .card { display: grid; gap: 8px; }
-.guide ol { margin: 0; padding-left: 20px; color: var(--ink-2); display: grid; gap: 4px; font-size: 14px; }
-footer { border-top: 1px solid var(--line); padding-block: 22px 40px; color: var(--ink-3); font-size: 13px; display: grid; gap: 4px; }
-@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
-</style>
+<title>Cek Profit — Laba sebenarnya toko Shopee &amp; TikTok Shop</title>
+<meta name="description" content="Unggah laporan Seller Centre, lihat potongan platform, modal, dan laba bersih per bulan dan per produk. Laporan PDF siap kirim. File diproses di browser Anda.">
+<meta name="theme-color" content="#0e7a5a">
+<meta property="og:title" content="Cek Profit — Laba sebenarnya toko online Anda">
+<meta property="og:description" content="Potongan platform, modal, laba bersih per produk & per bulan. Laporan PDF siap kirim. File tidak diunggah ke server.">
+<meta property="og:image" content="img/dashboard.webp">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="stylesheet" href="assets/base.css">
+<link rel="stylesheet" href="assets/site.css">
+<script src="assets/config.js"></script>
+<script src="assets/analytics.js" defer></script>
 </head>
 <body>
-
-
 <div class="wrap">
   <nav class="topbar" aria-label="Utama">
-    <a class="brand" href="#">
+    <a class="brand" href="./">
       <svg width="30" height="30" viewBox="0 0 30 30" aria-hidden="true"><rect width="30" height="30" rx="8" fill="var(--accent)"/><path d="M7 20.5l5-5 3.5 3 7.5-8" fill="none" stroke="var(--accent-ink)" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/><circle cx="23" cy="10.5" r="2.4" fill="var(--mark)"/></svg>
       Cek Profit
     </a>
-    <div class="toplinks">
-      <a class="btn ghost" href="#panduan">Cara unduh laporan</a>
-      <a class="btn" href="https://github.com/muhammadramdhan2012/cek-profit" target="_blank" rel="noopener">GitHub</a>
+    <div class="nav-links">
+      <a class="lnk" href="#fitur">Fitur</a>
+      <a class="lnk" href="#laporan">Contoh laporan</a>
+      <a class="lnk" href="#harga">Harga</a>
+      <a class="lnk" href="#faq">FAQ</a>
+      <a class="btn primary" href="app.html">Buka aplikasi</a>
     </div>
   </nav>
 
-  <header class="page-hero">
+  <header class="hero">
     <div class="hero-copy">
-      <span class="eyebrow">Untuk penjual Shopee &amp; TikTok Shop</span>
-      <h1>Berapa <span class="hl">untung</span> toko Anda yang sebenarnya?</h1>
-      <p class="lead">Unggah laporan penghasilan dari Seller Centre. Dalam hitungan detik Anda melihat potongan platform, modal, dan margin per bulan, per produk, dan per pesanan.</p>
-      <ol class="steps" id="steps">
-        <li id="step1"><b>1</b>Unggah laporan</li>
-        <li id="step2"><b>2</b>Isi modal</li>
-        <li id="step3"><b>3</b>Lihat hasil</li>
-      </ol>
-      <p class="privacy"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="4" y="10" width="16" height="11" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg>
-        <span>File diolah di browser Anda sendiri. Tidak ada data penjualan atau data pembeli yang dikirim ke server mana pun.</span></p>
+      <span class="eyebrow">Untuk penjual Shopee, TikTok Shop &amp; Tokopedia</span>
+      <h1>Omzet besar belum tentu untung. Lihat <span class="hl">laba sebenarnya</span> toko Anda.</h1>
+      <p class="lead">Unggah laporan dari Seller Centre. Cek Profit menghitung potongan platform, modal, dan laba bersih per bulan, per produk, dan per pesanan, lalu menyusunnya menjadi laporan PDF siap kirim.</p>
+      <div class="cta-row">
+        <a class="btn primary big" href="app.html" data-track="cta-hero">Cek toko saya, gratis</a>
+        <a class="btn big" href="app.html?demo" data-track="cta-demo">Lihat dengan data contoh</a>
+      </div>
+      <ul class="trust">
+        <li><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M5 12l5 5 9-10"/></svg>File tidak diunggah ke server</li>
+        <li><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M5 12l5 5 9-10"/></svg>Tanpa daftar akun</li>
+        <li><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M5 12l5 5 9-10"/></svg>Total dicocokkan dengan ringkasan resmi</li>
+      </ul>
     </div>
-
-    <section class="card upload" aria-labelledby="h-upload">
-      <div class="settings-head"><h3 id="h-upload">1 · Unggah laporan</h3><span class="tiny faint">.xlsx, .xls, .csv</span></div>
-      <div class="drop" id="drop">
-        <svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M12 16V4M7 9l5-5 5 5"/><path d="M4 16v3a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3"/></svg>
-        <strong>Tarik file ke sini</strong>
-        <span class="small muted">atau</span>
-        <label class="btn primary" for="file-input">Pilih file dari komputer</label>
-        <input id="file-input" type="file" multiple accept=".xlsx,.xls,.csv" hidden>
-        <span class="tiny faint">Boleh banyak file sekaligus. File yang sama tidak dihitung dua kali.</span>
-      </div>
-      <ul class="files" id="file-list"></ul>
-      <div class="upload-foot">
-        <button class="btn ghost" type="button" id="demo-btn">Coba dengan data contoh</button>
-        <button class="btn ghost" type="button" id="clear-btn" hidden>Hapus semua file</button>
-      </div>
-    </section>
+    <div class="hero-visual">
+      <div class="frame"><div class="bar"><i></i><i></i><i></i></div><img src="img/dashboard.webp" width="1400" height="607" alt="Dashboard Cek Profit: laba bersih, margin kotor, potongan platform, dan temuan otomatis"></div>
+    </div>
   </header>
+</div>
 
-  <section class="card settings" id="modal" aria-labelledby="h-modal">
-    <div class="settings-head">
-      <div><h3 id="h-modal">2 · Isi modal</h3><p class="small muted">Laporan marketplace tidak berisi harga beli Anda. Modal dihitung dari harga acuan pemasok (misalnya harga sampul) dikurangi diskon pemasok.</p></div>
-      <span class="pill todo" id="modal-pill">Belum diisi</span>
+<section class="blk band" aria-labelledby="h-masalah">
+  <div class="wrap">
+    <div class="sec-head"><span class="eyebrow">Masalahnya</span><h2 id="h-masalah">Seller Centre menunjukkan uang masuk, bukan untung.</h2>
+      <p>Banyak penjual baru sadar tokonya rugi setelah berbulan-bulan, karena angka penting tersebar di puluhan kolom laporan.</p></div>
+    <div class="cards3">
+      <div class="card problem"><span class="big">15–20%</span><h3>Potongan platform tersebar</h3><p>Biaya admin, komisi dinamis, program ongkir, afiliasi, biaya proses. Masing-masing kecil, totalnya bisa seperlima penjualan dan terus naik.</p></div>
+      <div class="card problem"><span class="big">0</span><h3>Modal tidak tercatat</h3><p>Laporan marketplace tidak tahu harga beli Anda. Tanpa modal, “penghasilan” terlihat besar padahal sebagian besarnya uang Anda sendiri yang kembali.</p></div>
+      <div class="card problem"><span class="big">−Rp</span><h3>Produk laris bisa merugi</h3><p>Produk murah dengan diskon dan biaya tetap per pesanan sering terjual paling banyak, tetapi justru menggerus laba.</p></div>
     </div>
-    <div class="fields">
-      <div class="field">
-        <label for="s-mitra">Diskon dari pemasok</label>
-        <div class="input" id="mitra-box"><input id="s-mitra" type="number" min="0" max="99" step="0.5" inputmode="decimal" placeholder="contoh: 30"><span>%</span></div>
-        <span class="hint">Wajib. Harga beli = harga acuan × (1 − diskon).</span>
+  </div>
+</section>
+
+<section class="blk" aria-labelledby="h-cara">
+  <div class="wrap">
+    <div class="sec-head center"><span class="eyebrow">Cara kerja</span><h2 id="h-cara">Tiga langkah, beberapa menit.</h2></div>
+    <ol class="steps3">
+      <li><h3>Unggah laporan</h3><p>Laporan Penghasilan Shopee &amp; TikTok Shop (pesanan Tokopedia ikut di dalamnya). Opsional: export pesanan dan file retur.</p></li>
+      <li><h3>Isi modal</h3><p>Unduh template berisi produk Anda, isi modal per unit, unggah lagi. Atau pakai modal rata-rata dulu. Tersimpan di browser Anda.</p></li>
+      <li><h3>Baca hasil &amp; kirim laporan</h3><p>Laba bersih, produk yang merugi, saran harga, tren bulanan. Unduh laporan PDF untuk pemilik, mitra, atau investor.</p></li>
+    </ol>
+  </div>
+</section>
+
+<section class="blk band" id="fitur" aria-labelledby="h-fitur">
+  <div class="wrap">
+    <div class="sec-head"><span class="eyebrow">Fitur</span><h2 id="h-fitur">Semua yang perlu Anda tahu tentang untung toko.</h2></div>
+    <div class="features">
+      <div class="card feature"><span class="ic"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 19V5M4 19h16M8 15l3-4 3 2 5-6"/></svg></span><h3>Laba rugi otomatis</h3><p>Penjualan → potongan platform → modal → packing → biaya operasional → laba bersih, per platform.</p></div>
+      <div class="card feature"><span class="ic"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="4" width="16" height="16" rx="3"/><path d="M8 9h8M8 13h8M8 17h5"/></svg></span><h3>Modal per produk</h3><p>Template Excel terisi daftar produk Anda. Cocokkan otomatis lewat SKU atau nama produk.</p></div>
+      <div class="card feature"><span class="ic"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3l2.5 5.5L20 9l-4 4 1 6-5-3-5 3 1-6-4-4 5.5-.5z"/></svg></span><h3>Temuan &amp; saran</h3><p>Produk merugi, potongan yang naik, pesanan kecil yang tidak untung, ketergantungan pada sedikit produk.</p><span class="pill pro tag">PRO</span></div>
+      <div class="card feature"><span class="ic"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 12l-8 8-9-9V4h7z"/><circle cx="7.5" cy="7.5" r="1.5"/></svg></span><h3>Saran harga</h3><p>Harga impas dan harga untuk target margin per produk, memakai potongan platform produk itu sendiri.</p><span class="pill pro tag">PRO</span></div>
+      <div class="card feature"><span class="ic"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 3h9l4 4v14H6z"/><path d="M14 3v5h5M9 13h7M9 17h7"/></svg></span><h3>Laporan PDF profesional</h3><p>Sampul, ringkasan eksekutif, laba rugi, tren, produk, retur, dan metode. Siap dikirim.</p><span class="pill pro tag">PRO</span></div>
+      <div class="card feature"><span class="ic"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/></svg></span><h3>Retur yang tidak kembali</h3><p>Tandai barang retur yang hilang atau rusak; modalnya dikurangkan dari laba.</p></div>
+      <div class="card feature"><span class="ic"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg></span><h3>Simulator harga &amp; diskon</h3><p>Uji harga dan diskon sebelum dipasang. Lihat batas diskon aman sebelum rugi.</p></div>
+      <div class="card feature"><span class="ic"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="10" width="16" height="11" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg></span><h3>Privat &amp; bisa offline</h3><p>Semua dihitung di browser Anda. Setelah halaman terbuka, perhitungan tetap jalan tanpa internet.</p></div>
+    </div>
+  </div>
+</section>
+
+<section class="blk" id="laporan" aria-labelledby="h-laporan">
+  <div class="wrap show">
+    <div class="papers"><img src="img/laporan-1.webp" width="760" height="1076" alt="Halaman sampul laporan PDF" loading="lazy"><img src="img/laporan-2.webp" width="760" height="1076" alt="Halaman laba rugi laporan PDF" loading="lazy"></div>
+    <div class="sec-head" style="margin:0">
+      <span class="eyebrow">Laporan PDF</span>
+      <h2 id="h-laporan">Laporan yang bisa langsung Anda kirim.</h2>
+      <p>Untuk pemilik toko, mitra usaha, investor, atau arsip pribadi. Dengan nama dan logo toko Anda.</p>
+      <ul>
+        <li>Ringkasan eksekutif dan hal terpenting yang perlu ditindaklanjuti</li>
+        <li>Laporan laba rugi per platform dan rincian potongan</li>
+        <li>Tren bulanan penjualan, margin, dan laba bersih</li>
+        <li>Produk teratas dan produk yang perlu dinaikkan harganya</li>
+        <li>Retur, metode hitung, dan batasan, supaya pembaca tahu seberapa yakin angkanya</li>
+      </ul>
+      <div class="cta-row"><a class="btn" href="contoh-laporan.pdf" target="_blank" rel="noopener" data-track="lihat-contoh-pdf">Lihat contoh laporan (PDF)</a></div>
+    </div>
+  </div>
+  <div class="wrap show rev" style="margin-top:56px">
+    <div class="frame"><div class="bar"><i></i><i></i><i></i></div><img src="img/produk.webp" width="1400" height="682" alt="Tabel produk dengan harga impas, harga target, dan status rugi/tipis/sehat" loading="lazy"></div>
+    <div class="sec-head" style="margin:0">
+      <span class="eyebrow">Per produk</span>
+      <h2>Tahu produk mana yang harus dinaikkan harganya.</h2>
+      <p>Setiap produk diberi status <b>rugi</b>, <b>tipis</b>, atau <b>sehat</b>, lengkap dengan harga impas dan harga untuk mencapai target margin Anda.</p>
+    </div>
+  </div>
+</section>
+
+<section class="blk tight" aria-labelledby="h-privasi">
+  <div class="wrap">
+    <div class="privacy-blk">
+      <div class="shield"><svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z"/><path d="M8.5 12l2.5 2.5 4.5-5"/></svg></div>
+      <div style="display:grid;gap:10px">
+        <h2 id="h-privasi">Data penjualan Anda tidak pernah meninggalkan komputer Anda.</h2>
+        <p>Cek Profit adalah halaman web yang berjalan sepenuhnya di browser. File laporan dibaca dan dihitung di perangkat Anda sendiri; tidak ada server yang menerima isi file, data pembeli, atau angka penjualan. Modal produk dan pengaturan disimpan di browser Anda dan bisa dihapus kapan saja.</p>
       </div>
-      <div class="field">
-        <label for="s-packing">Biaya packing per pesanan</label>
-        <div class="input"><span>Rp</span><input id="s-packing" type="number" min="0" step="100" inputmode="numeric" placeholder="contoh: 2000"></div>
-        <span class="hint">Opsional. Plastik, bubble wrap, lakban.</span>
+    </div>
+  </div>
+</section>
+
+<section class="blk" id="harga" aria-labelledby="h-harga">
+  <div class="wrap">
+    <div class="sec-head center"><span class="eyebrow">Harga</span><h2 id="h-harga">Mulai gratis. Bayar saat perlu laporan lengkap.</h2></div>
+    <div class="prices">
+      <div class="card price-card">
+        <h3>Gratis</h3><div><span class="amount">Rp0</span></div>
+        <p class="small muted">Untuk melihat kondisi toko secara cepat.</p>
+        <ul><li>Laba &amp; potongan platform</li><li>Grafik per bulan &amp; per platform</li><li>Modal per produk &amp; template</li><li>5 produk teratas</li><li>2 temuan otomatis</li><li>Simulator harga</li><li class="no">Laporan PDF</li><li class="no">Ekspor Excel</li></ul>
+        <a class="btn" href="app.html" data-track="harga-gratis">Mulai gratis</a>
       </div>
-      <div class="field">
-        <label for="s-coret">TikTok: harga coret vs harga acuan</label>
-        <div class="input"><input id="s-coret" type="number" min="1" step="1" inputmode="numeric"><span>%</span></div>
-        <span class="hint">100 = harga coret sama dengan harga sampul.</span>
+      <div class="card price-card featured">
+        <span class="pill pro ribbon">PALING DIPILIH</span>
+        <h3>Pro</h3><div><span class="amount" data-price="pro">Rp49.000</span> <span class="muted" data-price="proUnit">/ bulan</span><div class="small faint" data-price="proNote">atau Rp399.000 / tahun</div></div>
+        <p class="small muted">Untuk pemilik toko yang ingin keputusan berbasis angka.</p>
+        <ul><li>Semua fitur Gratis</li><li><b>Laporan PDF profesional</b> dengan nama &amp; logo toko</li><li>Analisis semua produk + status rugi/tipis/sehat</li><li>Harga impas &amp; harga target per produk</li><li>Semua temuan &amp; saran</li><li>Ekspor lengkap ke Excel</li></ul>
+        <a class="btn primary" data-wa="pro" href="app.html?pro" data-track="harga-pro">Beli kode akses</a>
+        <span class="tiny faint">Sudah punya kode? Masukkan di aplikasi (tombol PRO).</span>
+      </div>
+      <div class="card price-card">
+        <h3>Jasa laporan</h3><div><span class="amount" data-price="jasa">Rp199.000</span> <span class="muted" data-price="jasaUnit">/ toko / bulan</span></div>
+        <p class="small muted">Tidak sempat? Kami yang kerjakan.</p>
+        <ul><li>Anda kirim file laporan, kami olah</li><li>Bantu menyusun modal per produk</li><li>Laporan PDF bulanan</li><li>Rekomendasi harga &amp; produk</li><li>Sesi tanya jawab</li></ul>
+        <a class="btn" data-wa="jasa" href="#faq" data-track="harga-jasa">Hubungi lewat WhatsApp</a>
       </div>
     </div>
-    <div class="field">
-      <span class="label">Shopee: pola harga jual dibanding harga acuan</span>
-      <span class="hint">Shopee tidak mencatat harga sebelum diskon, jadi isi pola harga Anda. Periode dipilih menurut tanggal pesanan.</span>
-      <div class="periods" id="periods"></div>
-      <div><button class="btn ghost" type="button" id="add-period">+ Tambah periode harga</button></div>
-      <p class="formula" id="formula"></p>
+  </div>
+</section>
+
+<section class="blk band" id="faq" aria-labelledby="h-faq">
+  <div class="wrap">
+    <div class="sec-head center"><span class="eyebrow">FAQ</span><h2 id="h-faq">Pertanyaan yang sering muncul</h2></div>
+    <div class="faq">
+      <details><summary>Apakah data toko saya aman?</summary><p>File tidak dikirim ke mana pun. Cek Profit berjalan di browser Anda: file dibaca dan dihitung di perangkat Anda sendiri. Yang tersimpan (di browser Anda saja) hanya pengaturan modal, profil laporan, dan kode akses. Anda bisa menghapusnya lewat tombol “Hapus data tersimpan”.</p></details>
+      <details><summary>Laporan apa yang perlu saya unduh?</summary><p>Wajib: Laporan Penghasilan dari Shopee dan/atau TikTok Shop. Disarankan: export pesanan (untuk jumlah barang dan SKU). Opsional: file retur. Panduan langkah demi langkah ada di aplikasi, bagian “Cara unduh laporan”.</p></details>
+      <details><summary>Apakah Tokopedia didukung?</summary><p>Ya. Sejak Tokopedia bergabung dengan TikTok Shop, pesanan Tokopedia tercatat di laporan penghasilan TikTok Shop, dan Cek Profit memisahkan hasilnya per sumber pesanan. Lazada belum didukung.</p></details>
+      <details><summary>Seberapa akurat hasilnya?</summary><p>Penjualan dan potongan platform diambil langsung dari laporan resmi, dan total setiap file dicocokkan dengan ringkasan resmi platform. Ketepatan margin bergantung pada modal yang Anda isi. Pesanan yang modalnya belum diketahui tidak dihitung (bukan dianggap nol), dan porsinya ditampilkan dengan jelas.</p></details>
+      <details><summary>Saya tidak tahu modal setiap produk. Bisa tetap dipakai?</summary><p>Bisa. Isi “modal rata-rata” dalam persen dari harga jual sebagai perkiraan awal, lalu lengkapi modal produk terlaris lebih dulu lewat template. Hasil akan makin tepat seiring modal dilengkapi.</p></details>
+      <details><summary>Bagaimana cara membeli dan mengaktifkan Pro?</summary><p>Hubungi kami lewat WhatsApp, lakukan pembayaran, dan Anda akan menerima kode akses. Di aplikasi, klik tombol PRO di kanan atas, tempel kode, lalu “Aktifkan”. Kode berlaku di browser tempat Anda memasukkannya.</p></details>
+      <details><summary>Bisa dipakai di HP?</summary><p>Bisa dibuka di HP, tetapi paling nyaman di laptop atau komputer karena file laporan biasanya diunduh di sana dan tabelnya lebar.</p></details>
+      <details><summary>Apakah ini menggantikan akuntan atau laporan pajak?</summary><p>Tidak. Cek Profit memberi estimasi untuk keputusan usaha sehari-hari (harga, produk, promosi). Untuk laporan keuangan resmi atau pajak, tetap gunakan akuntan.</p></details>
     </div>
-  </section>
+  </div>
+</section>
 
-  <main class="results" id="results" aria-live="polite"></main>
-
-  <section class="guide" id="panduan" aria-labelledby="h-guide">
-    <h2 id="h-guide">Cara unduh laporan</h2>
-    <p class="muted small">Nama menu di Seller Centre bisa sedikit berbeda dari waktu ke waktu. Unduh untuk periode yang sama di semua laporan.</p>
-    <div class="grid2">
-      <div class="card"><h3><i class="sw" style="background:var(--shopee)"></i> Shopee · Laporan Penghasilan</h3>
-        <ol><li>Seller Centre → <b>Keuangan</b> → <b>Penghasilan Saya</b>.</li><li>Pilih tab <b>Sudah Dilepas</b> dan periode tanggal.</li><li>Klik <b>Unduh/Export</b>, lalu unduh file dari daftar laporan.</li></ol>
-        <p class="tiny faint">File berisi sheet <i>Summary</i> dan <i>Penghasilan</i>.</p></div>
-      <div class="card"><h3><i class="sw" style="background:var(--shopee)"></i> Shopee · Pengembalian</h3>
-        <ol><li>Seller Centre → <b>Pesanan</b> → <b>Pengembalian/Pembatalan</b>.</li><li>Pilih periode, lalu <b>Export</b>.</li></ol>
-        <p class="tiny faint">Nama file biasanya <i>Order.return_refund…</i></p></div>
-      <div class="card"><h3><i class="sw" style="background:var(--tiktok)"></i> TikTok Shop · Laporan Penghasilan</h3>
-        <ol><li>Seller Center → <b>Keuangan</b> → <b>Transaksi/Laporan</b>.</li><li>Pilih rentang tanggal (maksimal sekitar 3 bulan per file), lalu <b>Unduh</b>.</li><li>Unggah semua file per periode sekaligus.</li></ol>
-        <p class="tiny faint">Nama file biasanya <i>income_…</i>, berisi sheet <i>Detail pesanan</i>.</p></div>
-      <div class="card"><h3><i class="sw" style="background:var(--tiktok)"></i> TikTok Shop · Retur</h3>
-        <ol><li>Seller Center → <b>Pesanan</b> → <b>Pengembalian</b>.</li><li>Export daftar sebagai CSV.</li></ol>
-        <p class="tiny faint">Nama file biasanya <i>Pesanan yang Barang/Dananya Dikembalikan…csv</i></p></div>
+<section class="blk">
+  <div class="wrap">
+    <div class="final">
+      <h2>Cari tahu untung toko Anda hari ini.</h2>
+      <p class="muted">Gratis untuk dicoba. Tanpa daftar akun. File tetap di komputer Anda.</p>
+      <div class="cta-row" style="justify-content:center"><a class="btn primary big" href="app.html" data-track="cta-bawah">Buka Cek Profit</a><a class="btn big" href="app.html?demo">Lihat data contoh</a></div>
     </div>
-  </section>
+  </div>
+</section>
 
-  <footer>
-    <p>Hasil adalah estimasi dari laporan yang Anda unggah dan pengaturan modal Anda, bukan nasihat keuangan atau pajak.</p>
-    <p>Format laporan marketplace bisa berubah. Jika file gagal dibaca, laporkan lewat halaman GitHub proyek ini.</p>
+<div class="wrap">
+  <footer class="site">
+    <span>© <span id="yr">2026</span> Cek Profit. Estimasi untuk keputusan usaha, bukan nasihat keuangan atau pajak.</span>
+    <nav><a href="app.html">Aplikasi</a><a href="privasi.html">Privasi &amp; ketentuan</a><a href="contoh-laporan.pdf">Contoh laporan</a></nav>
   </footer>
 </div>
 
-<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
-<script id="engine">
-/* Cek Profit Marketplace — mesin hitung.
- * Murni: input = workbook {name, sheets: {namaSheet: array-of-arrays}}, output = angka.
- * Tidak menyentuh DOM, sehingga bisa diuji di Node dengan data asli.
- */
-const Engine = (() => {
-  /* ---------- utilitas ---------- */
-  const num = (v) => {
-    if (v === null || v === undefined || v === '') return 0;
-    if (typeof v === 'number') return isFinite(v) ? v : 0;
-    let s = String(v).replace(/[\r\n\t]/g, '').trim();
-    if (!s || s === '-' || s === '/') return 0;
-    s = s.replace(/^(rp|idr)\s*/i, '').replace(/^-\s*(rp|idr)\s*/i, '-').trim();
-    if (/^-?\d{1,3}(\.\d{3})+(,\d+)?$/.test(s)) s = s.replace(/\./g, '').replace(',', '.');
-    else s = s.replace(/,/g, '');
-    const n = Number(s);
-    return isFinite(n) ? n : 0;
-  };
-  const str = (v) => (v === null || v === undefined ? '' : String(v)).replace(/[\r\t]/g, '').trim();
-  const pad = (n) => String(n).padStart(2, '0');
-  const date = (v) => {
-    if (v === null || v === undefined || v === '') return '';
-    if (typeof v === 'number' && v > 20000 && v < 80000) {
-      const d = new Date(Math.round((v - 25569) * 86400000));
-      return `${d.getUTCFullYear()}-${pad(d.getUTCMonth() + 1)}-${pad(d.getUTCDate())}`;
-    }
-    if (v instanceof Date && !isNaN(v)) return `${v.getFullYear()}-${pad(v.getMonth() + 1)}-${pad(v.getDate())}`;
-    const s = str(v);
-    let m = s.match(/^(\d{4})[-/](\d{1,2})[-/](\d{1,2})/);
-    if (m) return `${m[1]}-${pad(m[2])}-${pad(m[3])}`;
-    m = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
-    if (m) return `${m[3]}-${pad(m[2])}-${pad(m[1])}`;
-    return '';
-  };
-  const findHeader = (aoa, names) => aoa.findIndex((row) => Array.isArray(row) && names.every((n) => row.some((c) => str(c) === n)));
-  const colMap = (row) => { const m = {}; row.forEach((c, i) => { const k = str(c); if (k && !(k in m)) m[k] = i; }); return m; };
-  const getter = (row, map) => (name) => (name in map ? row[map[name]] : '');
-  const firstSheetHeader = (wb, names) => {
-    for (const [sheet, aoa] of Object.entries(wb.sheets)) {
-      const h = findHeader(aoa.slice(0, 30), names);
-      if (h >= 0) return { sheet, aoa, h };
-    }
-    return null;
-  };
-  const lastValue = (row) => row.filter((c) => str(c) !== '').slice(-1)[0];
-
-  /* ---------- deteksi jenis file ---------- */
-  function detect(wb) {
-    const names = Object.keys(wb.sheets);
-    if (names.includes('Penghasilan') && names.includes('Summary')) return 'shopee_income';
-    if (names.includes('Detail pesanan')) return 'tiktok_income';
-    if (names.includes('Transaction Report')) return 'shopee_balance';
-    if (firstSheetHeader(wb, ['No. Pengembalian', 'Solusi Pengembalian Barang/Dana'])) return 'shopee_return';
-    if (firstSheetHeader(wb, ['Return Order ID', 'Order ID'])) return 'tiktok_return';
-    return 'unknown';
-  }
-
-  /* ---------- Shopee: laporan penghasilan ---------- */
-  const SH_SHIP = ['Ongkir Dibayar Pembeli', 'Ongkos Kirim yang Dibayarkan ke Jasa Kirim', 'Potongan Ongkos Kirim dari Jasa Kirim',
-    'Gratis Ongkir dari Shopee', 'Ongkos Kirim Pengembalian Barang', 'Return to Seller Fee', 'Pengembalian Biaya Kirim'];
-  const SH_VOUCHER = ['Voucher disponsor oleh Penjual', 'Cashback Koin disponsori Penjual', 'Diskon Produk dari Shopee',
-    'Voucher co-fund disponsor oleh Penjual', 'Cashback Koin Co-fund disponsori Penjual'];
-  const SH_XTRA = ['Biaya Layanan Gratis Ongkir XTRA (Kategori D)', 'Biaya Layanan Gratis Ongkir XTRA (Kategori E)',
-    'Biaya Gratis Ongkir XTRA - Ukuran Biasa (Kategori D)', 'Biaya Gratis Ongkir XTRA - Ukuran Biasa (Kategori E)'];
-
-  function parseShopeeIncome(wb) {
-    const aoa = wb.sheets['Penghasilan'];
-    const h = findHeader(aoa, ['No. Pesanan', 'Lihat berdasarkan']);
-    if (h < 0) throw new Error('Kolom "No. Pesanan" tidak ditemukan di sheet Penghasilan.');
-    const map = colMap(aoa[h]);
-    const orders = [], items = [];
-    for (const row of aoa.slice(h + 1)) {
-      const g = getter(row, map);
-      const type = str(g('Lihat berdasarkan'));
-      const id = str(g('No. Pesanan'));
-      if (!id || (type !== 'Order' && type !== 'Sku')) continue;
-      const harga = num(g('Harga Produk')), refund = num(g('Jumlah Pengembalian Dana ke Pembeli')), total = num(g('Total Penghasilan'));
-      const orderDate = date(g('Waktu Pesanan Dibuat')), payDate = date(g('Tanggal Dana Dilepaskan'));
-      if (type === 'Sku') {
-        items.push({ orderId: id, productId: str(g('ID Produk')), name: str(g('Nama Produk')), harga, refund, total, orderDate });
-        continue;
-      }
-      const ship = SH_SHIP.reduce((a, c) => a + num(g(c)), 0);
-      const voucher = SH_VOUCHER.reduce((a, c) => a + num(g(c)), 0);
-      const admin = num(g('Biaya Administrasi')), proses = num(g('Biaya Proses Pesanan'));
-      const xtra = SH_XTRA.reduce((a, c) => a + num(g(c)), 0);
-      // Kolom biaya lain/baru apa pun tertangkap sebagai selisih terhadap Total Penghasilan.
-      const lain = total - (harga + refund + ship + voucher + admin + proses + xtra);
-      orders.push({ id, orderDate, payDate, harga, refund, voucher, ship, admin, proses, xtra, lain, total });
-    }
-    let summaryTotal = null, from = '', to = '';
-    for (const row of wb.sheets['Summary'] || []) {
-      const label = str(row[0]);
-      if (/Total yang Dilepas/i.test(label)) summaryTotal = num(lastValue(row));
-      if (label === 'Dari') from = date(row[1]);
-      if (/^ke$/i.test(label)) to = date(row[1]);
-    }
-    const adjustments = [];
-    const adj = wb.sheets['Adjustment'];
-    if (adj) {
-      const ah = findHeader(adj, ['Tipe Penyesuaian | Deskripsi']);
-      if (ah >= 0) {
-        const am = colMap(adj[ah]);
-        for (const row of adj.slice(ah + 1)) {
-          const g = getter(row, am);
-          const tipe = str(g('Tipe Penyesuaian | Deskripsi'));
-          if (!tipe) break;
-          const d = date(g('Tanggal Penyesuaian Dibuat')), amt = num(g('Biaya Penyesuaian')), oid = str(g('No. Pesanan Terhubung'));
-          adjustments.push({ key: `${d}|${tipe}|${amt}|${oid}`, date: d, type: tipe, amount: amt, orderId: oid });
-        }
-      }
-    }
-    return { kind: 'shopee_income', orders, items, adjustments,
-      check: { summaryTotal, sum: orders.reduce((a, o) => a + o.total, 0), from, to } };
-  }
-
-  /* ---------- TikTok: laporan penghasilan ---------- */
-  const TT_FEES = { platform: 'Biaya komisi platform', dinamis: 'Komisi dinamis', proses: 'Biaya pemrosesan pesanan', ongkir: 'Ongkir' };
-  function parseTiktokIncome(wb) {
-    const aoa = wb.sheets['Detail pesanan'];
-    const h = findHeader(aoa, ['ID Pesanan/Penyesuaian', 'Jenis transaksi']);
-    if (h < 0) throw new Error('Kolom "ID Pesanan/Penyesuaian" tidak ditemukan.');
-    const map = colMap(aoa[h]);
-    const rows = [];
-    for (const row of aoa.slice(h + 1)) {
-      const g = getter(row, map);
-      const id = str(g('ID Pesanan/Penyesuaian'));
-      if (!id) continue;
-      const jenis = str(g('Jenis transaksi'));
-      const settle = num(g('Jumlah penyelesaian pembayaran'));
-      const totalBiaya = num(g('Total Biaya'));
-      const fees = {};
-      let known = 0;
-      for (const [k, c] of Object.entries(TT_FEES)) { fees[k] = num(g(c)); known += fees[k]; }
-      fees.lain = totalBiaya - known;   // komisi afiliasi, pre-order, dan biaya baru lainnya
-      rows.push({
-        key: `${id}|${jenis}|${date(g('Waktu pembayaran pesanan'))}|${settle}|${num(g('Total Pendapatan'))}`,
-        id, jenis, isOrder: jenis === 'Pesanan', source: str(g('Sumber pesanan')),
-        orderDate: date(g('Waktu pemesanan')), payDate: date(g('Waktu pembayaran pesanan')),
-        pre: num(g('Subtotal sebelum diskon')) + num(g('Total pengembalian dana sebelum diskon')),
-        preGross: num(g('Subtotal sebelum diskon')),
-        sales: num(g('Total Pendapatan')), fees, totalBiaya, settle,
-      });
-    }
-    let reportSettle = null;
-    for (const row of wb.sheets['Laporan'] || []) {
-      if (row.some((c) => str(c) === 'Jumlah penyelesaian pembayaran')) { reportSettle = num(lastValue(row)); break; }
-    }
-    const dates = rows.map((r) => r.payDate).filter(Boolean).sort();
-    return { kind: 'tiktok_income', rows,
-      check: { reportSettle, sum: rows.reduce((a, r) => a + r.settle, 0), from: dates[0] || '', to: dates[dates.length - 1] || '' } };
-  }
-
-  /* ---------- retur ---------- */
-  function parseShopeeReturn(wb) {
-    const f = firstSheetHeader(wb, ['No. Pengembalian', 'Solusi Pengembalian Barang/Dana']);
-    const map = colMap(f.aoa[f.h]);
-    const cases = [];
-    for (const row of f.aoa.slice(f.h + 1)) {
-      const g = getter(row, map);
-      const rid = str(g('No. Pengembalian'));
-      if (!rid) continue;
-      const status = str(g('Status Pembatalan/ Pengembalian')), solusi = str(g('Solusi Pengembalian Barang/Dana'));
-      const alasan = str(g('Alasan Pengembalian'));
-      let cat;
-      if (/dibatalkan/i.test(status)) cat = 'batal';
-      else if (/barang dan dana/i.test(solusi)) cat = 'retur_barang';
-      else if (/tidak lengkap/i.test(alasan)) cat = 'tidak_dikirim';
-      else if (/tidak menerima/i.test(alasan)) cat = 'paket_bermasalah';
-      else cat = 'refund_tanpa_retur';
-      cases.push({ key: `S|${rid}|${str(g('Nama Produk'))}|${str(g('Variasi'))}`, platform: 'shopee', orderId: str(g('No. Pesanan')),
-        product: str(g('Nama Produk')), variant: str(g('Variasi')), reason: alasan, note: str(g('Catatan Pengembalian Barang')),
-        resi: str(g('No. Resi Pengembalian Barang')), returnStatus: str(g('Status Pengembalian Barang')),
-        amount: num(g('Total Pengembalian Dana')), date: date(g('Waktu Pengembalian Diajukan')), cat });
-    }
-    return { kind: 'shopee_return', cases };
-  }
-  function parseTiktokReturn(wb) {
-    const f = firstSheetHeader(wb, ['Return Order ID', 'Order ID']);
-    const map = colMap(f.aoa[f.h]);
-    const cases = [];
-    for (const row of f.aoa.slice(f.h + 1)) {
-      const g = getter(row, map);
-      const rid = str(g('Return Order ID'));
-      if (!rid) continue;
-      const amount = num(g('Return unit price')) * (num(g('Return Quantity')) || 1);
-      const refunded = !!date(g('Refund Time')) && amount > 0;
-      const type = str(g('Return Type')), reason = str(g('Return Reason')), resi = str(g('Return Logistics Tracking ID'));
-      let cat;
-      if (!refunded) cat = 'batal';
-      else if (resi || /return and refund/i.test(type)) cat = 'retur_barang';
-      else if (/arrive on time|did not receive/i.test(reason)) cat = 'paket_bermasalah';
-      else if (/missing/i.test(reason)) cat = 'tidak_dikirim';
-      else cat = 'refund_tanpa_retur';
-      cases.push({ key: `T|${rid}|${str(g('SKU ID'))}`, platform: 'tiktok', orderId: str(g('Order ID')),
-        product: str(g('Product Name')), variant: str(g('SKU Name')), reason, note: str(g('Buyer Note')),
-        resi, returnStatus: str(g('Return Status')), amount, date: date(g('Time Requested')), cat });
-    }
-    return { kind: 'tiktok_return', cases };
-  }
-
-  function parseWorkbook(wb) {
-    const kind = detect(wb);
-    if (kind === 'shopee_income') return parseShopeeIncome(wb);
-    if (kind === 'tiktok_income') return parseTiktokIncome(wb);
-    if (kind === 'shopee_return') return parseShopeeReturn(wb);
-    if (kind === 'tiktok_return') return parseTiktokReturn(wb);
-    return { kind };
-  }
-
-  /* ---------- gabung & hitung ---------- */
-  const CAT_LABEL = {
-    tidak_dikirim: 'Barang kurang / stok kosong (tidak dikirim)',
-    retur_barang: 'Retur barang ke penjual',
-    paket_bermasalah: 'Paket terlambat / tidak sampai',
-    refund_tanpa_retur: 'Refund tanpa pengembalian barang',
-    batal: 'Pengajuan dibatalkan / ditolak',
-  };
-  const CHECK_CATS = new Set(['retur_barang', 'paket_bermasalah', 'refund_tanpa_retur']);
-  const BUCKETS = [[0, 50000, '< Rp50 rb'], [50000, 100000, 'Rp50–100 rb'], [100000, 200000, 'Rp100–200 rb'],
-    [200000, 500000, 'Rp200–500 rb'], [500000, Infinity, '≥ Rp500 rb']];
-
-  function merge(parsed) {
-    const out = { shopeeOrders: new Map(), shopeeItems: [], shopeeAdj: new Map(), tiktok: new Map(), cases: new Map(), dupes: 0 };
-    for (const p of parsed) {
-      if (p.kind === 'shopee_income') {
-        const fresh = new Set();
-        for (const o of p.orders) { if (out.shopeeOrders.has(o.id)) { out.dupes++; continue; } out.shopeeOrders.set(o.id, o); fresh.add(o.id); }
-        out.shopeeItems.push(...p.items.filter((it) => fresh.has(it.orderId)));
-        for (const a of p.adjustments) out.shopeeAdj.set(a.key, a);
-      } else if (p.kind === 'tiktok_income') {
-        for (const r of p.rows) { if (out.tiktok.has(r.key)) { out.dupes++; continue; } out.tiktok.set(r.key, r); }
-      } else if (p.kind === 'shopee_return' || p.kind === 'tiktok_return') {
-        for (const c of p.cases) out.cases.set(c.key, c);
-      }
-    }
-    return out;
-  }
-
-  const modalReady = (settings) => typeof settings.mitra === 'number' && isFinite(settings.mitra) && settings.mitra >= 0 && settings.mitra < 100;
-
-  /** Modal ÷ harga jual Shopee pada tanggal d. NaN jika diskon pemasok belum diisi. */
-  function shopeeRatio(settings, d) {
-    if (!modalReady(settings)) return NaN;
-    const periods = [...(settings.periods || [])].sort((a, b) => (a.start || '').localeCompare(b.start || ''));
-    if (!periods.length) return NaN;
-    let p = periods[0];
-    for (const q of periods) if (!q.start || q.start <= (d || '')) p = q;
-    const sell = (1 + (p.markup || 0) / 100) * (1 - (p.disc || 0) / 100);
-    return sell > 0 ? (1 - settings.mitra / 100) / sell : NaN;
-  }
-  const monthOf = (d) => (d ? d.slice(0, 7) : '');
-  const daysBetween = (a, b) => (!a || !b ? 0 : Math.round((Date.parse(b) - Date.parse(a)) / 86400000) + 1);
-
-  /**
-   * @param parsed     hasil parseWorkbook untuk semua file
-   * @param settings   {mitra: number|null, packing, coret, periods:[{start, markup, disc}]}
-   * @param caseState  {kunciRetur: 'belum'|'kembali'|'hilang'}
-   * @param filter     {platforms: ['shopee','tiktok'], from: 'YYYY-MM', to: 'YYYY-MM'} (bulan pesanan)
-   */
-  function compute(parsed, settings, caseState = {}, filter = {}) {
-    const m = merge(parsed);
-    const ready = modalReady(settings);
-    const packing = settings.packing || 0;
-    const want = new Set(filter.platforms || ['shopee', 'tiktok']);
-    const inRange = (d) => { const mo = monthOf(d); return (!filter.from || (mo && mo >= filter.from)) && (!filter.to || (mo && mo <= filter.to)); };
-
-    const allMonths = new Set();
-    for (const o of m.shopeeOrders.values()) if (o.orderDate) allMonths.add(monthOf(o.orderDate));
-    for (const r of m.tiktok.values()) if (r.isOrder && r.orderDate) allMonths.add(monthOf(r.orderDate));
-    const available = { shopee: m.shopeeOrders.size > 0, tiktok: [...m.tiktok.values()].some((r) => r.isOrder) };
-
-    const months = new Map();
-    const blank = () => ({ sales: 0, received: 0, fees: 0, margin: 0, orders: 0 });
-    const mon = (k) => { if (!months.has(k)) months.set(k, { month: k, shopee: blank(), tiktok: blank() }); return months.get(k); };
-    const buckets = BUCKETS.map(([lo, hi, label]) => ({ label, lo, hi, orders: 0, value: 0, fees: 0 }));
-    const addBucket = (v, fee) => { const b = buckets.find((x) => v >= x.lo && v < x.hi); if (b) { b.orders++; b.value += v; b.fees += fee; } };
-
-    /* Shopee */
-    const S = { orders: 0, sales: 0, fees: { admin: 0, proses: 0, xtra: 0, ship: 0, lain: 0 }, received: 0, modal: 0, packing: 0, adj: 0, first: '', last: '' };
-    const shopeeIn = new Set();
-    if (want.has('shopee')) for (const o of m.shopeeOrders.values()) {
-      if (!inRange(o.orderDate)) continue;
-      shopeeIn.add(o.id);
-      const r = shopeeRatio(settings, o.orderDate);
-      const net = o.harga + o.refund + o.voucher;
-      const modal = (o.harga + o.refund) * r;
-      const counted = o.harga + o.refund > 0;
-      const pack = counted ? packing : 0;
-      const fee = o.admin + o.proses + o.xtra + o.ship + o.lain;
-      S.orders += counted ? 1 : 0; S.sales += net; S.received += o.total; S.modal += modal; S.packing += pack;
-      S.fees.admin += o.admin; S.fees.proses += o.proses; S.fees.xtra += o.xtra; S.fees.ship += o.ship; S.fees.lain += o.lain;
-      if (o.payDate && (!S.first || o.payDate < S.first)) S.first = o.payDate;
-      if (o.payDate && o.payDate > S.last) S.last = o.payDate;
-      const mm = mon(monthOf(o.orderDate) || '—').shopee;
-      mm.sales += net; mm.received += o.total; mm.fees += fee; mm.margin += o.total - modal - pack; mm.orders += counted ? 1 : 0;
-      if (counted) addBucket(net, fee);
-    }
-    if (want.has('shopee')) S.adj = [...m.shopeeAdj.values()].filter((a) => inRange(a.date)).reduce((a, x) => a + x.amount, 0);
-    S.feeTotal = Object.values(S.fees).reduce((a, b) => a + b, 0);
-    S.margin = S.received - S.modal - S.packing;
-
-    /* TikTok */
-    const ttRatio = ready ? (1 - settings.mitra / 100) / ((settings.coret || 100) / 100) : NaN;
-    const T = { orders: 0, sales: 0, fees: { platform: 0, dinamis: 0, proses: 0, ongkir: 0, lain: 0 }, received: 0, modal: 0, packing: 0, adj: 0, pre: 0, first: '', last: '', bySource: {} };
-    const ttOrderPrice = new Map();
-    if (want.has('tiktok')) for (const r of m.tiktok.values()) {
-      if (!r.isOrder) { if (inRange(r.payDate)) T.adj += r.settle; continue; }
-      if (!inRange(r.orderDate)) continue;
-      if (r.payDate && (!T.first || r.payDate < T.first)) T.first = r.payDate;
-      if (r.payDate && r.payDate > T.last) T.last = r.payDate;
-      const modal = r.pre * ttRatio;
-      const counted = r.pre > 0;             // terjual (tidak dibatalkan/direfund penuh)
-      const pack = counted ? packing : 0;
-      T.orders += counted ? 1 : 0; T.sales += r.sales; T.received += r.settle; T.modal += modal; T.pre += r.pre; T.packing += pack;
-      for (const k of Object.keys(T.fees)) T.fees[k] += r.fees[k];
-      const src = r.source || 'Lainnya';
-      T.bySource[src] = T.bySource[src] || { sales: 0, margin: 0, orders: 0 };
-      T.bySource[src].sales += r.sales; T.bySource[src].margin += r.settle - modal - pack; T.bySource[src].orders += counted ? 1 : 0;
-      if (counted) ttOrderPrice.set(r.id, { pre: r.preGross, paid: r.sales > 0 ? r.sales : 0 });
-      const mm = mon(monthOf(r.orderDate) || '—').tiktok;
-      mm.sales += r.sales; mm.received += r.settle; mm.fees += r.totalBiaya; mm.margin += r.settle - modal - pack; mm.orders += counted ? 1 : 0;
-      if (counted) addBucket(r.sales, r.totalBiaya);
-    }
-    T.feeTotal = Object.values(T.fees).reduce((a, b) => a + b, 0);
-    T.margin = T.received - T.modal - T.packing;
-    T.discount = T.pre > 0 ? 1 - T.sales / T.pre : 0;
-    const ttPaidRatio = T.sales > 0 ? T.pre / T.sales : 1;
-
-    /* Produk Shopee */
-    const prod = new Map();
-    const shopeeOrderDate = new Map([...m.shopeeOrders.values()].map((o) => [o.id, o.orderDate]));
-    for (const it of m.shopeeItems) {
-      if (!shopeeIn.has(it.orderId)) continue;
-      const p = prod.get(it.productId) || { id: it.productId, name: it.name, rows: 0, sales: 0, received: 0, modal: 0 };
-      p.name = it.name || p.name; p.rows += 1; p.sales += it.harga + it.refund; p.received += it.total;
-      p.modal += (it.harga + it.refund) * shopeeRatio(settings, it.orderDate || shopeeOrderDate.get(it.orderId));
-      prod.set(it.productId, p);
-    }
-    const products = [...prod.values()].map((p) => ({ ...p, fees: p.received - p.sales, margin: p.received - p.modal,
-      pct: p.sales ? (p.received - p.modal) / p.sales : 0 }));
-
-    /* Retur */
-    const cases = [...m.cases.values()].filter((c) => want.has(c.platform) && inRange(c.platform === 'shopee' ? (shopeeOrderDate.get(c.orderId) || c.date) : c.date)).map((c) => {
-      let estModal;
-      if (c.platform === 'shopee') estModal = c.amount * shopeeRatio(settings, shopeeOrderDate.get(c.orderId) || c.date);
-      else {
-        const op = ttOrderPrice.get(c.orderId);
-        estModal = c.amount * (op && op.paid > 0 ? op.pre / op.paid : ttPaidRatio) * ttRatio;
-      }
-      const needsCheck = CHECK_CATS.has(c.cat);
-      return { ...c, estModal, needsCheck, state: needsCheck ? (caseState[c.key] || 'belum') : 'na' };
-    });
-    const lostCertain = cases.filter((c) => c.state === 'hilang').reduce((a, c) => a + c.estModal, 0);
-    const unknownRisk = cases.filter((c) => c.state === 'belum').reduce((a, c) => a + c.estModal, 0);
-    const catSummary = {};
-    for (const c of cases) {
-      const k = `${c.platform}|${c.cat}`;
-      catSummary[k] = catSummary[k] || { platform: c.platform, cat: c.cat, label: CAT_LABEL[c.cat], count: 0, amount: 0 };
-      catSummary[k].count += 1; catSummary[k].amount += c.amount;
-    }
-
-    const has = { shopee: want.has('shopee') && available.shopee, tiktok: want.has('tiktok') && available.tiktok };
-    const pick = (f) => (has.shopee ? f(S) : 0) + (has.tiktok ? f(T) : 0);
-    const totalMargin = pick((p) => p.margin) - lostCertain;
-    const first = [has.shopee && S.first, has.tiktok && T.first].filter(Boolean).sort()[0] || '';
-    const last = [has.shopee && S.last, has.tiktok && T.last].filter(Boolean).sort().slice(-1)[0] || '';
-    const days = daysBetween(first, last);
-    const orders = pick((p) => p.orders);
-    return {
-      ready, has, available, shopee: S, tiktok: T, lostCertain, unknownRisk, totalMargin,
-      totalSales: pick((p) => p.sales), totalFees: pick((p) => p.feeTotal), totalReceived: pick((p) => p.received),
-      totalModal: pick((p) => p.modal), totalPacking: pick((p) => p.packing), adjustments: pick((p) => p.adj),
-      orders, first, last, days, perMonth: days > 0 ? totalMargin / (days / 30.4) : NaN, perOrder: orders ? totalMargin / orders : NaN,
-      months: [...months.values()].filter((x) => x.month !== '—').sort((a, b) => a.month.localeCompare(b.month)),
-      allMonths: [...allMonths].sort(), buckets: buckets.filter((b) => b.orders > 0),
-      products, cases, catSummary: Object.values(catSummary), dupes: m.dupes,
-    };
-  }
-
-  /** Simulasi satu produk. Semua persen dalam angka 0–100. */
-  function simulate({ acuan, markup = 0, disc = 0, mitra, feePct, feeFixed = 0, packing = 0 }) {
-    const listPrice = acuan * (1 + markup / 100);
-    const price = listPrice * (1 - disc / 100);
-    const fees = price * feePct / 100 + feeFixed;
-    const modal = acuan * (1 - mitra / 100);
-    const margin = price - fees - modal - packing;
-    // Diskon toko maksimum agar margin = 0
-    const breakEvenPrice = (modal + packing + feeFixed) / (1 - feePct / 100);
-    const maxDisc = listPrice > 0 ? (1 - breakEvenPrice / listPrice) * 100 : NaN;
-    return { listPrice, price, fees, modal, packing, margin, marginPct: price ? margin / price : NaN, maxDisc };
-  }
-
-  return { num, date, detect, parseWorkbook, compute, simulate, shopeeRatio, CAT_LABEL };
-})();
-if (typeof module !== 'undefined') module.exports = Engine;
-
-</script>
-<script id="demo">
-/* Data CONTOH (fiktif) agar pengguna bisa mencoba tanpa file sendiri. */
-function makeDemo() {
-  let seed = 11;
-  const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
-  const titles = ['Komik Petualangan Vol. 1', 'Komik Petualangan Vol. 2', 'Novel Laut Biru', 'Ensiklopedia Anak Hewan',
-    'Buku Bisnis untuk Pemula', 'Komik Detektif Kecil', 'Buku Resep Rumahan', 'Novel Fantasi Kota Awan', 'Buku Mewarnai Anak'];
-  const covers = [35000, 35000, 98000, 165000, 120000, 40000, 88000, 110000, 25000];
-  const day = (m, d) => `2026-${String(m).padStart(2, '0')}-${String(Math.min(d, 28)).padStart(2, '0')}`;
-  const H = ['No.', 'Lihat berdasarkan', 'No. Pesanan', 'ID Produk', 'Nama Produk', 'Waktu Pesanan Dibuat', 'Tanggal Dana Dilepaskan',
-    'Total Penghasilan', 'Harga Produk', 'Jumlah Pengembalian Dana ke Pembeli', 'Ongkos Kirim yang Dibayarkan ke Jasa Kirim', 'Gratis Ongkir dari Shopee',
-    'Biaya Administrasi', 'Biaya Proses Pesanan', 'Biaya Gratis Ongkir XTRA - Ukuran Biasa (Kategori D)'];
-  const rows = [[], [], H];
-  let total = 0;
-  for (let i = 0; i < 180; i++) {
-    const mth = 1 + Math.floor(rnd() * 9), d = 1 + Math.floor(rnd() * 27);
-    const n = 1 + Math.floor(rnd() * 3);
-    const items = Array.from({ length: n }, () => Math.floor(rnd() * titles.length));
-    const prices = items.map((k) => Math.round(covers[k] * 0.9));
-    const price = prices.reduce((a, b) => a + b, 0);
-    const admin = -Math.round(price * 0.09), proses = -1250, xtra = -Math.round(price * 0.045);
-    const tot = price + admin + proses + xtra;
-    total += tot;
-    const id = `CONTOH-S${String(i).padStart(4, '0')}`;
-    rows.push([i, 'Order', id, '-', '-', day(mth, d), day(mth, d + 3), tot, price, 0, -15000, 15000, admin, proses, xtra]);
-    items.forEach((k, j) => {
-      const share = prices[j] / price;
-      rows.push([i, 'Sku', id, `P${k}`, titles[k], day(mth, d), day(mth, d + 3), Math.round(tot * share), prices[j], 0, 0, 0, 0, 0, 0]);
-    });
-  }
-  const shopee = { name: 'contoh-shopee.xlsx', sheets: { Summary: [['3. Total yang Dilepas', '', '', total], ['Dari', '2026-01-01'], ['ke', '2026-09-30']], Penghasilan: rows } };
-  const TH = ['ID Pesanan/Penyesuaian', 'Jenis transaksi', 'Waktu pemesanan', 'Waktu pembayaran pesanan', 'Jumlah penyelesaian pembayaran', 'Total Pendapatan',
-    'Subtotal sebelum diskon', 'Total pengembalian dana sebelum diskon', 'Total Biaya', 'Biaya komisi platform', 'Komisi dinamis', 'Biaya pemrosesan pesanan', 'Ongkir', 'Sumber pesanan'];
-  const tt = [TH];
-  let ttSum = 0;
-  const ttIds = [];
-  for (let i = 0; i < 260; i++) {
-    const mth = 1 + Math.floor(rnd() * 9), d = 1 + Math.floor(rnd() * 27);
-    const k = Math.floor(rnd() * titles.length);
-    const disc = mth >= 7 ? 0.08 : mth >= 4 ? 0.1 : 0.12;
-    const pre = covers[k] * (1 + Math.floor(rnd() * 2)), paid = Math.round(pre * (1 - disc));
-    const plat = -Math.round(paid * 0.1), din = -Math.round(paid * (mth >= 5 ? 0.075 : 0.05)), proc = -1250, ong = -Math.round(rnd() * 1500);
-    const biaya = plat + din + proc + ong;
-    const id = `77${String(i).padStart(10, '0')}`;
-    ttIds.push([id, titles[k], paid, day(mth, d)]);
-    ttSum += paid + biaya;
-    tt.push([id, 'Pesanan', day(mth, d).replace(/-/g, '/'), day(mth, d + 4).replace(/-/g, '/'), paid + biaya, paid, pre, 0, biaya, plat, din, proc, ong, rnd() < 0.6 ? 'Tokopedia' : 'TikTok Shop']);
-  }
-  const tiktok = { name: 'contoh-tiktok.xlsx', sheets: { 'Detail pesanan': tt, Laporan: [['', 'Jumlah penyelesaian pembayaran', '', '', '', ttSum]] } };
-  const RH = ['Return Order ID', 'Order ID', 'Product Name', 'SKU Name', 'Return Type', 'Time Requested', 'Return Reason', 'Return unit price', 'Return Quantity', 'Return Logistics Tracking ID', 'Return Status', 'Refund Time', 'Buyer Note'];
-  const ret = [RH,
-    ['R1', ttIds[3][0], ttIds[3][1], 'Default', 'Return and refund', '10/03/2026', 'Wrong product sent', ttIds[3][2], 1, 'JX000CONTOH1', 'Completed', '12/03/2026', 'Contoh: buku yang dikirim salah'],
-    ['R2', ttIds[8][0], ttIds[8][1], 'Default', 'Refund only', '05/06/2026', "Product wouldn't arrive on time", ttIds[8][2], 1, '', 'Completed', '06/06/2026', 'Contoh: paket belum sampai'],
-    ['R3', ttIds[15][0], ttIds[15][1], 'Default', 'Refund only', '20/04/2026', 'Missing products or accessories', ttIds[15][2], 1, '', 'Completed', '20/04/2026', 'Contoh: stok kosong']];
-  return [shopee, tiktok, { name: 'contoh-retur-tiktok.csv', sheets: { Sheet1: ret } }];
-}
-</script>
-<script id="app">
+<script>
 (() => {
-  const $ = (s) => document.querySelector(s);
-  const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-  const ok = (v) => typeof v === 'number' && isFinite(v);
-  const fmt = (v) => (ok(v) ? (Math.round(v) < 0 ? '−Rp' : 'Rp') + Math.abs(Math.round(v)).toLocaleString('id-ID') : '—');
-  const fmtShort = (v) => { if (!ok(v)) return '—'; const a = Math.abs(v), s = v < 0 ? '−' : ''; if (a >= 1e9) return `${s}${(a / 1e9).toLocaleString('id-ID', { maximumFractionDigits: 1 })} M`; if (a >= 1e6) return `${s}${(a / 1e6).toLocaleString('id-ID', { maximumFractionDigits: 1 })} jt`; if (a >= 1e3) return `${s}${Math.round(a / 1e3)} rb`; return `${s}${Math.round(a)}`; };
-  const pct = (v, d = 1) => (ok(v) ? `${(Math.abs(v) < 0.0005 ? 0 : v * 100).toLocaleString('id-ID', { minimumFractionDigits: d, maximumFractionDigits: d })}%` : '—');
-  const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des'];
-  const monthLabel = (k) => { const [y, mm] = k.split('-'); return `${MONTHS[+mm - 1]} ${y.slice(2)}`; };
-  const PNAME = { shopee: 'Shopee', tiktok: 'TikTok Shop' };
-  const KIND = {
-    shopee_income: ['shopee', 'Shopee · Penghasilan'], shopee_return: ['shopee', 'Shopee · Retur'],
-    tiktok_income: ['tiktok', 'TikTok · Penghasilan'], tiktok_return: ['tiktok', 'TikTok · Retur'],
-    shopee_balance: ['', 'Shopee · Saldo (tidak diperlukan)'], unknown: ['bad', 'Belum dikenali'],
-  };
-
-  /* ---------- state ---------- */
-  const DEFAULTS = { mitra: null, packing: null, coret: 100, periods: [{ start: '', markup: 0, disc: 0 }] };
-  const DEMO_SETTINGS = { mitra: 30, packing: 2000, coret: 100, periods: [{ start: '', markup: 0, disc: 10 }] };
-  let settings = structuredClone(DEFAULTS);
-  try { const s = JSON.parse(localStorage.getItem('cekprofit.v2') || 'null'); if (s && Array.isArray(s.periods)) settings = { ...settings, ...s }; } catch (e) { /* penyimpanan tidak tersedia */ }
-  const save = () => { try { localStorage.setItem('cekprofit.v2', JSON.stringify(settings)); } catch (e) { /* abaikan */ } };
-  let files = [];
-  let demo = false;
-  let caseState = {};
-  const view = { platform: 'all', from: '', to: '', metric: 'margin', q: '', sort: 'margin', showAll: false, onlyCheck: true };
-  let last = null;      // hasil hitung terakhir
-  let sim = { acuan: 100000, markup: null, disc: null, feePct: null, feeFixed: 1250 };
-
-  const modalReady = (s) => typeof s.mitra === 'number' && isFinite(s.mitra) && s.mitra >= 0 && s.mitra < 100;
-  const activeSettings = () => (demo && !modalReady(settings) ? DEMO_SETTINGS : { ...settings, packing: settings.packing || 0 });
-
-  /* ---------- pengaturan ---------- */
-  function renderSettings() {
-    $('#s-mitra').value = ok(settings.mitra) ? settings.mitra : '';
-    $('#s-packing').value = ok(settings.packing) && settings.packing > 0 ? settings.packing : '';
-    $('#s-coret').value = settings.coret;
-    $('#periods').innerHTML = `<div class="period period-head"><span>Mulai tanggal pesanan</span><span>Kenaikan dari harga acuan</span><span>Diskon toko</span><span></span></div>` +
-      settings.periods.map((p, i) => `<div class="period">
-        <div class="input"><input type="date" id="p-start-${i}" value="${esc(p.start)}" aria-label="Mulai tanggal periode ${i + 1}" ${i === 0 && !p.start ? 'title="Kosong = sejak awal data"' : ''}></div>
-        <div class="input"><input type="number" id="p-markup-${i}" step="0.5" value="${p.markup}" aria-label="Kenaikan harga periode ${i + 1}"><span>%</span></div>
-        <div class="input"><input type="number" id="p-disc-${i}" step="0.5" min="0" max="99" value="${p.disc}" aria-label="Diskon toko periode ${i + 1}"><span>%</span></div>
-        ${settings.periods.length > 1 ? `<button class="x" type="button" data-del="${i}" aria-label="Hapus periode ${i + 1}">×</button>` : '<span></span>'}</div>`).join('');
-    renderFormula();
-  }
-  function renderFormula() {
-    const ready = modalReady(settings);
-    $('#modal-pill').className = `pill ${ready ? 'ready' : 'todo'}`;
-    $('#modal-pill').textContent = ready ? 'Siap' : 'Belum diisi';
-    $('#mitra-box').classList.toggle('need', !ready && (files.length > 0));
-    const p = settings.periods[settings.periods.length - 1];
-    if (!ready) { $('#formula').textContent = 'Isi diskon dari pemasok untuk menghitung modal. Tanpa itu, halaman tetap menampilkan penjualan dan potongan platform.'; return; }
-    const sell = 100 * (1 + p.markup / 100) * (1 - p.disc / 100), cost = 100 - settings.mitra;
-    $('#formula').textContent = `Contoh harga acuan Rp100.000 → Anda membeli Rp${(cost * 1000).toLocaleString('id-ID')} dan menjual di Shopee Rp${Math.round(sell * 1000).toLocaleString('id-ID')} (periode terakhir). Sisa sebelum potongan platform: ${pct((sell - cost) / sell)} dari harga jual.`;
-  }
-  document.addEventListener('input', (e) => {
-    const id = e.target.id || '', v = e.target.value;
-    if (id === 's-mitra') settings.mitra = v === '' ? null : Math.min(99, Math.max(0, +v));
-    else if (id === 's-packing') settings.packing = v === '' ? null : Math.max(0, +v);
-    else if (id === 's-coret') settings.coret = Math.max(1, +v || 100);
-    else if (id.startsWith('p-')) { const [, f, i] = id.split('-'); const p = settings.periods[+i]; if (f === 'start') p.start = v; else p[f] = +v || 0; }
-    else if (id === 'q') { view.q = v; renderProducts(); return; }
-    else if (id.startsWith('sim-')) { sim[id.slice(4)] = v === '' ? null : +v; renderSimOut(); return; }
-    else return;
-    save(); renderFormula(); render();
+  const C = window.CEK_CONFIG || {};
+  const p = C.prices || {};
+  document.querySelectorAll('[data-price]').forEach((el) => { const v = p[el.dataset.price]; if (v !== undefined) el.textContent = v; });
+  const wa = (msg) => `https://wa.me/${C.whatsapp}?text=${encodeURIComponent(msg)}`;
+  document.querySelectorAll('[data-wa]').forEach((el) => {
+    if (C.whatsapp) { el.href = wa(el.dataset.wa === 'jasa' ? C.waMessageJasa : C.waMessage); el.target = '_blank'; el.rel = 'noopener'; }
+    else if (el.dataset.wa === 'jasa') { el.removeAttribute('href'); el.setAttribute('aria-disabled', 'true'); el.classList.add('disabled'); el.textContent = 'Kontak segera tersedia'; el.style.opacity = '.55'; el.style.cursor = 'default'; }
   });
-  document.addEventListener('click', (e) => {
-    const t = e.target.closest('button, [data-act]');
-    if (!t) return;
-    if (t.dataset.del !== undefined) { settings.periods.splice(+t.dataset.del, 1); save(); renderSettings(); render(); }
-    else if (t.id === 'add-period') { const p = settings.periods[settings.periods.length - 1]; settings.periods.push({ start: '', markup: p.markup, disc: p.disc }); save(); renderSettings(); }
-    else if (t.id === 'demo-btn' || t.hasAttribute('data-demo')) { demo = true; files = []; caseState = {}; resetView(); renderFiles(); render(); document.getElementById('results').scrollIntoView({ behavior: 'smooth' }); }
-    else if (t.id === 'clear-btn') { files = []; demo = false; caseState = {}; resetView(); renderFiles(); render(); }
-    else if (t.dataset.rm !== undefined) { files.splice(+t.dataset.rm, 1); if (!files.length) demo = false; renderFiles(); render(); }
-    else if (t.dataset.platform) { view.platform = t.dataset.platform; render(); }
-    else if (t.dataset.metric) { view.metric = t.dataset.metric; render(); }
-    else if (t.id === 'show-all') { view.showAll = !view.showAll; renderProducts(); }
-    else if (t.id === 'only-check') { view.onlyCheck = !view.onlyCheck; render(); }
-    else if (t.id === 'go-modal') { $('#modal').scrollIntoView({ behavior: 'smooth' }); setTimeout(() => $('#s-mitra').focus(), 400); }
-    else if (t.id === 'export') exportXlsx();
-  });
-  document.addEventListener('change', (e) => {
-    const t = e.target;
-    if (t.dataset.case) { caseState[t.dataset.case] = t.value; render(); }
-    else if (t.id === 'from') { view.from = t.value; render(); }
-    else if (t.id === 'to') { view.to = t.value; render(); }
-    else if (t.id === 'sort') { view.sort = t.value; renderProducts(); }
-  });
-  const resetView = () => { view.platform = 'all'; view.from = ''; view.to = ''; view.showAll = false; view.q = ''; };
-
-  /* ---------- unggah ---------- */
-  const readFile = (file) => new Promise((resolve) => {
-    const reader = new FileReader();
-    const isCsv = /\.csv$/i.test(file.name);
-    reader.onload = () => {
-      try {
-        if (!window.XLSX) throw new Error('Pembaca Excel gagal dimuat. Periksa koneksi internet lalu muat ulang halaman.');
-        const wbx = isCsv ? XLSX.read(reader.result, { type: 'string', raw: true }) : XLSX.read(new Uint8Array(reader.result), { type: 'array' });
-        const sheets = {};
-        for (const n of wbx.SheetNames) {
-          // Sebagian file TikTok menulis ukuran tabel (<dimension>) yang salah; hitung ulang agar tidak ada baris terpotong.
-          const ws = wbx.Sheets[n]; let mr = -1, mc = -1;
-          for (const k of Object.keys(ws)) { if (k[0] === '!') continue; const a = XLSX.utils.decode_cell(k); if (a.r > mr) mr = a.r; if (a.c > mc) mc = a.c; }
-          if (mr >= 0) ws['!ref'] = XLSX.utils.encode_range({ s: { r: 0, c: 0 }, e: { r: mr, c: mc } });
-          sheets[n] = XLSX.utils.sheet_to_json(ws, { header: 1, raw: true, defval: '' });
-        }
-        const parsed = Engine.parseWorkbook({ name: file.name, sheets });
-        resolve({ name: file.name, kind: parsed.kind, parsed });
-      } catch (err) { resolve({ name: file.name, kind: 'unknown', error: err.message || 'File tidak bisa dibaca.' }); }
-    };
-    reader.onerror = () => resolve({ name: file.name, kind: 'unknown', error: 'File tidak bisa dibaca.' });
-    if (isCsv) reader.readAsText(file, 'utf-8'); else reader.readAsArrayBuffer(file);
-  });
-  async function addFiles(list) {
-    if (!list || !list.length) return;
-    if (demo) { demo = false; files = []; caseState = {}; resetView(); }
-    $('#file-list').insertAdjacentHTML('beforeend', `<li class="file small muted" id="reading">Membaca ${list.length} file…</li>`);
-    const results = await Promise.all([...list].map(readFile));
-    files.push(...results);
-    renderFiles(); render();
-    if (results.some((f) => f.parsed && /income/.test(f.kind)) && !modalReady(settings)) $('#modal').scrollIntoView({ behavior: 'smooth' });
-  }
-  $('#file-input').addEventListener('change', (e) => { addFiles(e.target.files); e.target.value = ''; });
-  const drop = $('#drop');
-  ['dragenter', 'dragover'].forEach((t) => drop.addEventListener(t, (e) => { e.preventDefault(); drop.classList.add('over'); }));
-  ['dragleave', 'drop'].forEach((t) => drop.addEventListener(t, (e) => { e.preventDefault(); drop.classList.remove('over'); }));
-  drop.addEventListener('drop', (e) => addFiles(e.dataTransfer.files));
-
-  function fileStatus(f) {
-    if (f.error) return `<span class="bad">${esc(f.error)}</span>`;
-    const p = f.parsed;
-    if (p.kind === 'shopee_income' || p.kind === 'tiktok_income') {
-      const ref = p.kind === 'shopee_income' ? p.check.summaryTotal : p.check.reportSettle;
-      const n = p.kind === 'shopee_income' ? `${p.orders.length.toLocaleString('id-ID')} pesanan` : `${p.rows.length.toLocaleString('id-ID')} transaksi`;
-      const period = p.check.from ? ` · ${p.check.from} s.d. ${p.check.to}` : '';
-      const chk = ref === null ? '<span class="warn">Ringkasan tidak ditemukan, total tidak bisa dicocokkan</span>'
-        : Math.abs(ref - p.check.sum) <= 1 ? `<span class="ok">✓ Cocok dengan ringkasan (${fmt(p.check.sum)})</span>`
-          : `<span class="warn">Selisih ${fmt(p.check.sum - ref)} dengan ringkasan</span>`;
-      return `${n}${period}<br>${chk}`;
-    }
-    if (p.kind === 'shopee_return' || p.kind === 'tiktok_return') return `${p.cases.length} pengajuan retur/refund`;
-    if (p.kind === 'shopee_balance') return 'Tidak diperlukan. Gunakan Laporan Penghasilan.';
-    return '<span class="bad">Format belum dikenali. Lihat “Cara unduh laporan”.</span>';
-  }
-  function renderFiles() {
-    const list = demo ? makeDemo().map((wb) => ({ name: wb.name, demo: true, kind: Engine.detect(wb) })) : files;
-    $('#file-list').innerHTML = list.map((f, i) => {
-      const [cls, label] = KIND[f.kind] || KIND.unknown;
-      return `<li class="file"><i class="dot ${cls}"></i><div><div class="name">${esc(f.name)}</div><div class="muted">${label}${f.demo ? ' · data contoh' : ` · ${fileStatus(f)}`}</div></div>
-        ${f.demo ? '<span></span>' : `<button class="x" type="button" data-rm="${i}" aria-label="Hapus ${esc(f.name)}">×</button>`}</li>`;
-    }).join('');
-    $('#clear-btn').hidden = !list.length;
-    $('#demo-btn').hidden = demo || files.length > 0;
-  }
-
-  /* ---------- grafik ---------- */
-  function niceStep(x) { const p = 10 ** Math.floor(Math.log10(x || 1)); const n = x / p; return (n <= 1 ? 1 : n <= 2 ? 2 : n <= 5 ? 5 : 10) * p; }
-  function waterfall(r) {
-    const steps = [{ label: 'Penjualan', v: r.totalSales, total: true }, { label: 'Potongan platform', v: r.totalFees }];
-    if (r.ready) {
-      steps.push({ label: 'Modal', v: -r.totalModal });
-      if (r.totalPacking) steps.push({ label: 'Packing', v: -r.totalPacking });
-      if (r.lostCertain) steps.push({ label: 'Retur hilang', v: -r.lostCertain });
-      steps.push({ label: 'Margin', v: r.totalMargin, total: true, accent: true });
-    } else steps.push({ label: 'Dana diterima', v: r.totalReceived, total: true, accent: true });
-    const W = 720, H = 300, L = 8, R = 8, T = 30, B = 46;
-    const max = Math.max(r.totalSales, 1);
-    const y = (v) => T + (H - T - B) * (1 - v / max);
-    const band = (W - L - R) / steps.length, bw = Math.min(78, band * 0.62);
-    let run = 0, g = `<line x1="${L}" x2="${W - R}" y1="${y(0)}" y2="${y(0)}" stroke="var(--line)"/>`;
-    steps.forEach((s, i) => {
-      const x = L + band * i + (band - bw) / 2;
-      let top, bot, fill;
-      if (s.total) { top = y(Math.max(s.v, 0)); bot = y(Math.min(s.v, 0)); fill = s.accent ? 'var(--accent)' : 'var(--ink-2)'; run = s.v; }
-      else { const a = run, b = run + s.v; top = y(Math.max(a, b)); bot = y(Math.min(a, b)); fill = 'var(--cost)'; run = b; }
-      const h = Math.max(2, bot - top);
-      g += `<rect x="${x}" y="${top}" width="${bw}" height="${h}" rx="4" fill="${fill}"/>`;
-      if (i < steps.length - 1 && !steps[i + 1].total) g += `<line x1="${x + bw}" x2="${x + band}" y1="${y(run)}" y2="${y(run)}" stroke="var(--ink-3)" stroke-dasharray="3 3"/>`;
-      const share = s.total ? (s.label === 'Penjualan' ? '' : ` · ${pct(s.v / r.totalSales)}`) : ` · ${pct(-s.v / r.totalSales)}`;
-      g += `<text class="val" x="${x + bw / 2}" y="${top - 8}" text-anchor="middle">${fmtShort(s.v)}</text>`;
-      g += `<text x="${x + bw / 2}" y="${H - 26}" text-anchor="middle">${esc(s.label)}</text>`;
-      g += `<text x="${x + bw / 2}" y="${H - 10}" text-anchor="middle">${share.replace(' · ', '')}</text>`;
-    });
-    return `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Alur dari penjualan ke margin">${g}</svg>`;
-  }
-  function monthly(r) {
-    const months = r.months;
-    if (!months.length) return '<p class="muted small">Tidak ada data bulanan.</p>';
-    const series = ['shopee', 'tiktok'].filter((k) => r.has[k]);
-    const key = view.metric === 'margin' && !r.ready ? 'received' : view.metric;
-    const get = (m, k) => (key === 'fees' ? -m[k].fees : m[k][key]);
-    const W = 860, H = 280, L = 56, R = 8, T = 14, B = 30;
-    const vals = months.flatMap((m) => series.map((k) => get(m, k)));
-    let lo = Math.min(0, ...vals), hi = Math.max(0, ...vals);
-    const step = niceStep((hi - lo) / 4 || 1);
-    lo = Math.floor(lo / step) * step; hi = Math.ceil(hi / step) * step || step;
-    const y = (v) => T + (H - T - B) * (1 - (v - lo) / (hi - lo));
-    const band = (W - L - R) / months.length;
-    const bw = Math.max(4, Math.min(24, (band * 0.7) / series.length - 2));
-    let g = '';
-    for (let v = lo; v <= hi + 1e-9; v += step) {
-      g += `<line x1="${L}" x2="${W - R}" y1="${y(v)}" y2="${y(v)}" stroke="var(--line)" ${Math.abs(v) < 1e-9 ? '' : 'stroke-dasharray="2 4"'}/>`;
-      g += `<text x="${L - 8}" y="${y(v) + 4}" text-anchor="end">${fmtShort(v)}</text>`;
-    }
-    months.forEach((m, i) => {
-      const cx = L + band * i + band / 2;
-      g += `<text x="${cx}" y="${H - 8}" text-anchor="middle">${monthLabel(m.month)}</text>`;
-      series.forEach((k, j) => {
-        const v = get(m, k);
-        const x = cx - (series.length * (bw + 2)) / 2 + j * (bw + 2);
-        const y0 = y(0), y1 = y(v), top = Math.min(y0, y1), h = Math.max(1, Math.abs(y1 - y0)), rr = Math.min(4, h / 2, bw / 2);
-        const path = v >= 0 ? `M${x},${y0}V${top + rr}Q${x},${top} ${x + rr},${top}H${x + bw - rr}Q${x + bw},${top} ${x + bw},${top + rr}V${y0}Z`
-          : `M${x},${y0}V${top + h - rr}Q${x},${top + h} ${x + rr},${top + h}H${x + bw - rr}Q${x + bw},${top + h} ${x + bw},${top + h - rr}V${y0}Z`;
-        const tip = `${PNAME[k]} · ${monthLabel(m.month)}: ${fmt(v)} · ${m[k].orders} pesanan`;
-        g += `<path d="${path}" fill="var(--${k})"/><rect x="${x - 2}" y="${T}" width="${bw + 4}" height="${H - T - B}" fill="transparent" data-tip="${esc(tip)}"/>`;
-      });
-    });
-    return `<div class="legend">${series.map((k) => `<span><i class="sw" style="background:var(--${k})"></i>${PNAME[k]}</span>`).join('')}</div>
-      <svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Grafik per bulan">${g}</svg><div class="tip" id="tip" hidden></div>`;
-  }
-  function bindTips(box) {
-    if (!box) return;
-    const tip = box.querySelector('.tip');
-    box.querySelectorAll('[data-tip]').forEach((el) => {
-      el.addEventListener('mouseenter', () => { tip.textContent = el.dataset.tip; tip.hidden = false; });
-      el.addEventListener('mousemove', (e) => { const b = box.getBoundingClientRect(); tip.style.left = `${e.clientX - b.left}px`; tip.style.top = `${e.clientY - b.top}px`; });
-      el.addEventListener('mouseleave', () => { tip.hidden = true; });
-    });
-  }
-  const barRows = (rows, total, cls = '') => {
-    const max = Math.max(...rows.map((r) => Math.abs(r.v)), 1);
-    return rows.map((r) => `<div class="barrow"><span>${esc(r.label)}</span><div class="bar-track"><div class="bar ${cls}" style="width:${(Math.abs(r.v) / max) * 100}%"></div></div>
-      <span class="num">${fmt(r.v)} <span class="faint">· ${pct(Math.abs(r.v) / total)}</span></span></div>`).join('');
-  };
-
-  /* ---------- hasil ---------- */
-  const steps = (hasFiles, ready, hasResult) => {
-    $('#step1').className = hasFiles ? 'done' : 'active';
-    $('#step2').className = ready ? 'done' : hasFiles ? 'active' : '';
-    $('#step3').className = hasResult && ready ? 'done' : '';
-  };
-
-  function render() {
-    const parsed = demo ? makeDemo().map((wb) => Engine.parseWorkbook(wb)) : files.filter((f) => f.parsed).map((f) => f.parsed);
-    const st = activeSettings();
-    const hasIncome = parsed.some((p) => p.kind === 'shopee_income' || p.kind === 'tiktok_income');
-    steps(demo || files.length > 0, modalReady(st), hasIncome);
-    renderFormula();
-    const out = $('#results');
-    if (!hasIncome) {
-      last = null;
-      out.innerHTML = `<div class="card empty">
-        <svg width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M4 19V5M4 19h16M8 15l3-4 3 2 5-6"/></svg>
-        <h3>Hasil akan muncul di sini</h3>
-        <p class="muted small" style="max-width:48ch">${files.length ? 'File yang diunggah belum berisi laporan penghasilan. File retur saja belum cukup untuk menghitung profit.' : 'Unggah laporan penghasilan Shopee atau TikTok Shop di langkah 1. Belum punya file? Coba dulu dengan data contoh.'}</p>
-        ${files.length ? '' : '<button class="btn primary" type="button" data-demo>Coba dengan data contoh</button>'}</div>`;
-      return;
-    }
-    const filter = { platforms: view.platform === 'all' ? ['shopee', 'tiktok'] : [view.platform], from: view.from, to: view.to };
-    const r = Engine.compute(parsed, st, caseState, filter);
-    last = { r, st };
-    const plats = ['shopee', 'tiktok'].filter((k) => r.has[k]);
-    const S = r.shopee, T = r.tiktok;
-    const monthOpts = (sel, allLabel) => `<option value="">${allLabel}</option>` + r.allMonths.map((m) => `<option value="${m}" ${m === sel ? 'selected' : ''}>${monthLabel(m)}</option>`).join('');
-    const unconfirmedPeriods = st.periods.length === 1 && !st.periods[0].markup && !st.periods[0].disc && r.has.shopee && !demo;
-    const worst = r.totalMargin - r.unknownRisk;
-
-    out.innerHTML = `
-      <div class="toolbar" role="toolbar" aria-label="Filter hasil">
-        <div class="group">
-          <h2>3 · Hasil</h2>
-          ${r.available.shopee && r.available.tiktok ? `<div class="seg" role="group" aria-label="Platform">
-            ${[['all', 'Semua'], ['shopee', 'Shopee'], ['tiktok', 'TikTok']].map(([k, l]) => `<button type="button" data-platform="${k}" aria-pressed="${view.platform === k}">${l}</button>`).join('')}</div>` : ''}
-        </div>
-        <div class="group">
-          <label class="small muted" for="from">Bulan pesanan</label>
-          <select id="from">${monthOpts(view.from, 'Dari awal')}</select>
-          <span class="faint">–</span>
-          <select id="to">${monthOpts(view.to, 'Sampai akhir')}</select>
-          <button class="btn" type="button" id="export" ${window.XLSX ? '' : 'disabled'}>Unduh Excel</button>
-        </div>
-      </div>
-      ${demo ? `<div class="banner info"><span><b>Ini data contoh (fiktif)</b> dengan modal 30% di bawah harga acuan. Unggah laporan Anda untuk melihat angka toko Anda.</span></div>` : ''}
-      ${files.some((f) => f.error) ? `<div class="banner err">Ada file yang gagal dibaca. Lihat keterangan di daftar file.</div>` : ''}
-      ${unconfirmedPeriods && r.ready ? `<div class="banner info"><span>Pola harga Shopee masih 0% kenaikan dan 0% diskon toko. Jika Anda memberi diskon di Shopee, isi di langkah 2 agar modal tidak terlalu rendah.</span></div>` : ''}
-
-      <div class="kpis">
-        <div class="kpi hero">
-          <span class="eyebrow">Margin setelah biaya tercatat</span>
-          ${r.ready ? `<span class="v">${fmt(r.totalMargin)}</span>
-            <span class="sub">${r.unknownRisk > 0 ? `Bisa turun ke ${fmt(worst)} jika retur yang belum dicek tidak kembali` : `${pct(r.totalMargin / r.totalSales)} dari penjualan · ${r.first} s.d. ${r.last}`}</span>`
-            : `<span class="v">Belum dihitung</span><span class="sub">Isi diskon dari pemasok agar modal dan margin bisa dihitung.</span><button class="btn" type="button" id="go-modal">Isi modal</button>`}
-        </div>
-        <div class="kpi"><span class="eyebrow">Rata-rata per bulan</span><span class="v">${r.ready ? fmt(r.perMonth) : '—'}</span><span class="sub">${r.days} hari data</span></div>
-        <div class="kpi"><span class="eyebrow">Per pesanan</span><span class="v">${r.ready ? fmt(r.perOrder) : '—'}</span><span class="sub">${r.orders.toLocaleString('id-ID')} pesanan terjual</span></div>
-        <div class="kpi"><span class="eyebrow">Potongan platform</span><span class="v">${pct(-r.totalFees / r.totalSales)}</span><span class="sub">${fmt(-r.totalFees)} dari ${fmt(r.totalSales)}</span></div>
-      </div>
-      <p class="small muted">Margin = dana dari platform − modal${r.totalPacking ? ' − packing' : ''}${r.lostCertain ? ' − buku retur yang hilang' : ''}. Belum termasuk ${r.totalPacking ? '' : 'packing, '}transport ke kurir, dan waktu kerja, jadi ini <b>belum laba bersih</b>.</p>
-
-      <div class="card chart">
-        <div class="card-head"><h3>Ke mana uang penjualan pergi</h3><p>${plats.map((k) => PNAME[k]).join(' + ')}${view.from || view.to ? ' · periode terpilih' : ''}</p></div>
-        ${waterfall(r)}
-      </div>
-
-      <div class="card chart" id="monthly">
-        <div class="card-head"><h3>Per bulan</h3>
-          <div class="seg" role="group" aria-label="Ukuran">${[['margin', 'Margin'], ['sales', 'Penjualan'], ['fees', 'Potongan']].filter(([k]) => k !== 'margin' || r.ready).map(([k, l]) => `<button type="button" data-metric="${k}" aria-pressed="${(view.metric === k) || (view.metric === 'margin' && !r.ready && k === 'sales')}">${l}</button>`).join('')}</div></div>
-        ${monthly(r)}
-        <details style="margin-top:10px"><summary class="small">Lihat tabel per bulan</summary>
-          <div class="tablewrap" style="margin-top:8px"><table class="data"><thead><tr><th>Bulan</th>${plats.map((k) => `<th>Penjualan ${PNAME[k]}</th><th>Margin ${PNAME[k]}</th>`).join('')}</tr></thead>
-          <tbody>${r.months.map((m) => `<tr><td>${monthLabel(m.month)}</td>${plats.map((k) => `<td>${fmt(m[k].sales)}</td><td class="${m[k].margin < 0 ? 'neg' : ''}">${r.ready ? fmt(m[k].margin) : '—'}</td>`).join('')}</tr>`).join('')}</tbody></table></div></details>
-      </div>
-
-      <div class="grid2">
-        <div class="card">
-          <div class="card-head"><h3>Per platform</h3></div>
-          <div class="tablewrap"><table class="data"><thead><tr><th></th>${plats.map((k) => `<th>${PNAME[k]}</th>`).join('')}</tr></thead><tbody>
-            <tr><td>Pesanan terjual</td>${plats.map((k) => `<td>${r[k].orders.toLocaleString('id-ID')}</td>`).join('')}</tr>
-            <tr><td>Penjualan</td>${plats.map((k) => `<td>${fmt(r[k].sales)}</td>`).join('')}</tr>
-            <tr><td>Potongan platform</td>${plats.map((k) => `<td class="neg">${fmt(r[k].feeTotal)} <span class="faint">${pct(-r[k].feeTotal / r[k].sales)}</span></td>`).join('')}</tr>
-            <tr><td>Dana diterima</td>${plats.map((k) => `<td>${fmt(r[k].received)}</td>`).join('')}</tr>
-            <tr><td>Modal (estimasi)</td>${plats.map((k) => `<td class="neg">${fmt(-r[k].modal)}</td>`).join('')}</tr>
-            ${r.totalPacking ? `<tr><td>Packing</td>${plats.map((k) => `<td class="neg">${fmt(-r[k].packing)}</td>`).join('')}</tr>` : ''}
-            <tr class="total"><td>Margin</td>${plats.map((k) => `<td class="${r[k].margin < 0 ? 'neg' : ''}">${fmt(r[k].margin)} <span class="faint">${r.ready ? pct(r[k].margin / r[k].sales) : ''}</span></td>`).join('')}</tr>
-          </tbody></table></div>
-          ${r.has.tiktok ? `<p class="small muted" style="margin-top:10px">TikTok: diskon toko rata-rata ${pct(T.discount)} (tercatat di data). ${Object.entries(T.bySource).map(([k, v]) => `${esc(k)} ${v.orders.toLocaleString('id-ID')} pesanan${r.ready ? `, margin ${fmt(v.margin)}` : ''}`).join(' · ')}.</p>` : ''}
-          ${r.adjustments ? `<p class="small muted" style="margin-top:6px">Kompensasi dari platform ${fmt(r.adjustments)} ditampilkan terpisah, tidak ditambahkan ke margin.</p>` : ''}
-        </div>
-        <div class="card">
-          <div class="card-head"><h3>Rincian potongan</h3><p>% dari penjualan</p></div>
-          ${r.has.shopee ? `<p class="small" style="font-weight:600;margin-bottom:4px"><i class="sw" style="background:var(--shopee)"></i> Shopee</p>${barRows([
-            { label: 'Biaya administrasi', v: S.fees.admin }, { label: 'Gratis Ongkir XTRA', v: S.fees.xtra }, { label: 'Biaya proses pesanan', v: S.fees.proses },
-            { label: 'Ongkir ditanggung penjual', v: S.fees.ship }, { label: 'Biaya lain', v: S.fees.lain }].filter((x) => Math.abs(x.v) >= 1).sort((a, b) => a.v - b.v), S.sales)}` : ''}
-          ${r.has.tiktok ? `<p class="small" style="font-weight:600;margin:12px 0 4px"><i class="sw" style="background:var(--tiktok)"></i> TikTok Shop</p>${barRows([
-            { label: 'Komisi platform', v: T.fees.platform }, { label: 'Komisi dinamis', v: T.fees.dinamis }, { label: 'Biaya pemrosesan', v: T.fees.proses },
-            { label: 'Ongkir', v: T.fees.ongkir }, { label: 'Biaya lain (afiliasi, pre-order)', v: T.fees.lain }].filter((x) => Math.abs(x.v) >= 1).sort((a, b) => a.v - b.v), T.sales)}` : ''}
-        </div>
-      </div>
-
-      ${r.buckets.length > 1 ? `<div class="card">
-        <div class="card-head"><h3>Potongan menurut nilai pesanan</h3><p>Biaya per pesanan yang tetap membuat pesanan kecil terpotong lebih besar</p></div>
-        ${r.buckets.map((b) => { const p = -b.fees / b.value; const maxp = Math.max(...r.buckets.map((x) => -x.fees / x.value));
-          return `<div class="barrow"><span>${esc(b.label)} <span class="faint tiny">${b.orders.toLocaleString('id-ID')} pesanan</span></span><div class="bar-track"><div class="bar" style="width:${(p / maxp) * 100}%"></div></div><span class="num">${pct(p)}</span></div>`; }).join('')}
-      </div>` : ''}
-
-      ${r.products.length ? `<div class="card" id="products">
-        <div class="card-head"><h3>Produk Shopee</h3><p>Laporan TikTok tidak memuat nama produk</p></div>
-        <div class="searchrow"><input id="q" type="search" placeholder="Cari judul buku…" value="${esc(view.q)}" aria-label="Cari produk">
-          <select id="sort" aria-label="Urutkan">${[['margin', 'Margin terbesar'], ['margin-asc', 'Margin terkecil'], ['pct-asc', 'Margin % paling tipis'], ['sales', 'Penjualan terbesar'], ['rows', 'Paling sering terjual']].map(([k, l]) => `<option value="${k}" ${view.sort === k ? 'selected' : ''}>${l}</option>`).join('')}</select></div>
-        <div id="product-table"></div>
-      </div>` : ''}
-
-      <div class="card" id="returns">
-        <div class="card-head"><h3>Retur dan refund</h3>${r.cases.some((c) => c.needsCheck) ? `<button class="btn ghost" type="button" id="only-check">${view.onlyCheck ? 'Tampilkan semua' : 'Hanya yang perlu dicek'}</button>` : ''}</div>
-        ${r.cases.length ? `<div class="chips">${r.catSummary.sort((a, b) => b.count - a.count).map((c) => `<span class="chip"><i class="sw" style="background:var(--${c.platform});width:8px;height:8px"></i> ${esc(c.label)}: ${c.count}</span>`).join('')}</div>
-          <p class="small muted" style="margin-block:10px">Barang kurang karena stok kosong tidak memakan modal. Untuk retur dan paket bermasalah, pilih <b>Tidak kembali/rusak</b> jika bukunya tidak Anda terima lagi; modalnya akan dikurangkan dari margin.${r.unknownRisk > 0 ? ` Kasus yang belum dicek berisiko ${fmt(r.unknownRisk)}.` : ''}</p>
-          <div class="tablewrap"><table class="data"><thead><tr><th>Produk / alasan</th><th>Resi retur</th><th>Est. modal</th><th>Status barang</th></tr></thead><tbody>
-          ${r.cases.filter((c) => !view.onlyCheck || c.needsCheck).sort((a, b) => (b.needsCheck - a.needsCheck) || (b.estModal - a.estModal)).slice(0, 200).map((c) => `<tr>
-            <td><i class="sw" style="background:var(--${c.platform});width:8px;height:8px"></i> <b>${esc(c.product || '-')}</b>${c.variant && c.variant !== 'Default' && c.variant !== 'Not Specified' ? ` · ${esc(c.variant)}` : ''}<br><span class="tiny faint">${esc(Engine.CAT_LABEL[c.cat])}${c.note ? ` · “${esc(c.note.slice(0, 70))}”` : ''}</span></td>
-            <td>${esc(c.resi || '–')}</td><td>${r.ready ? fmt(c.estModal) : '—'}</td>
-            <td>${c.needsCheck ? `<select class="case-select" data-case="${esc(c.key)}" aria-label="Status barang">${[['belum', 'Belum dicek'], ['kembali', 'Sudah kembali'], ['hilang', 'Tidak kembali/rusak']].map(([v, l]) => `<option value="${v}" ${c.state === v ? 'selected' : ''}>${l}</option>`).join('')}</select>` : '<span class="faint small">Tidak perlu</span>'}</td></tr>`).join('') || '<tr><td colspan="4" class="muted">Tidak ada kasus yang perlu dicek.</td></tr>'}
-          </tbody></table></div>`
-          : `<p class="small muted">Belum ada file retur. Unggah file retur Shopee/TikTok untuk mengecek buku yang tidak kembali. Tanpa file ini, refund dianggap tidak memakan modal.</p>`}
-      </div>
-
-      <div class="card" id="sim">
-        <div class="card-head"><h3>Simulator harga satu buku</h3><p>Uji harga dan diskon sebelum dipasang di toko. Potongan platform diambil dari data Anda.</p></div>
-        <div class="sim">
-          <div class="fields">
-            ${simField('acuan', 'Harga acuan (sampul)', 'Rp', sim.acuan)}
-            ${simField('markup', 'Kenaikan harga', '%', sim.markup ?? st.periods[st.periods.length - 1].markup)}
-            ${simField('disc', 'Diskon toko', '%', sim.disc ?? st.periods[st.periods.length - 1].disc)}
-            ${simField('feePct', 'Potongan platform', '%', sim.feePct ?? +(-r.totalFees / r.totalSales * 100).toFixed(1))}
-          </div>
-          <div class="sim-out" id="sim-out"></div>
-        </div>
-      </div>
-
-      <details class="card"><summary>Cara hitung dan batasan</summary>
-        <ul class="notes" style="margin-top:12px">
-          <li>Modal Shopee = (harga produk + refund) × (1 − diskon pemasok) ÷ [(1 + kenaikan harga) × (1 − diskon toko)], menurut periode tanggal pesanan. Ini <b>perkiraan</b> dari pola harga yang Anda isi, karena Shopee tidak mencatat harga sebelum diskon.</li>
-          <li>Modal TikTok = harga sebelum diskon (setelah refund) × (1 − diskon pemasok) ÷ harga coret vs acuan. Diskon toko diambil langsung dari data.</li>
-          <li>Pesanan yang dibatalkan atau direfund penuh tidak dihitung sebagai pesanan terjual.</li>
-          <li>Refund dianggap tidak memakan modal sampai Anda menandai bukunya tidak kembali di bagian retur.</li>
-          <li>Kompensasi dari platform (paket hilang, barang rusak) tidak ditambahkan ke margin karena biasanya mengganti kerugian.</li>
-          <li>Grafik dan filter memakai bulan pesanan dibuat. Rata-rata per bulan memakai rentang tanggal dana diterima.</li>
-          <li>Shopee tidak mencantumkan kuantitas per baris, jadi "baris" di tabel produk dianggap satu buku.</li>
-          ${r.dupes ? `<li>${r.dupes.toLocaleString('id-ID')} baris dari file yang terunggah dua kali tidak dihitung ulang.</li>` : ''}
-        </ul>
-      </details>`;
-    bindTips($('#monthly'));
-    renderProducts();
-    renderSimOut();
-  }
-  const simField = (k, label, unit, v) => `<div class="field"><label for="sim-${k}">${label}</label><div class="input">${unit === 'Rp' ? '<span>Rp</span>' : ''}<input id="sim-${k}" type="number" step="${unit === 'Rp' ? 1000 : 0.5}" value="${v ?? ''}">${unit === '%' ? '<span>%</span>' : ''}</div></div>`;
-
-  function renderProducts() {
-    const box = $('#product-table');
-    if (!box || !last) return;
-    const { r } = last;
-    const q = view.q.trim().toLowerCase();
-    const sorters = { margin: (a, b) => b.margin - a.margin, 'margin-asc': (a, b) => a.margin - b.margin, 'pct-asc': (a, b) => a.pct - b.pct, sales: (a, b) => b.sales - a.sales, rows: (a, b) => b.rows - a.rows };
-    let list = r.products.filter((p) => !q || p.name.toLowerCase().includes(q));
-    if (view.sort === 'pct-asc') list = list.filter((p) => p.rows >= 3);
-    list.sort(sorters[view.sort] || sorters.margin);
-    const shown = view.showAll ? list : list.slice(0, 12);
-    box.innerHTML = `<div class="tablewrap"><table class="data"><thead><tr><th>Judul</th><th>Baris</th><th>Penjualan</th><th>Potongan</th><th>Margin</th><th>%</th></tr></thead><tbody>
-      ${shown.map((p) => `<tr><td>${esc(p.name)}</td><td>${p.rows}</td><td>${fmt(p.sales)}</td><td class="neg">${fmt(p.fees)}</td><td class="${p.margin < 0 ? 'neg' : ''}">${r.ready ? fmt(p.margin) : '—'}</td><td class="${p.pct < 0 ? 'neg' : ''}">${r.ready ? pct(p.pct) : '—'}</td></tr>`).join('') || '<tr><td colspan="6" class="muted">Tidak ada produk yang cocok.</td></tr>'}
-      </tbody></table></div>
-      ${list.length > 12 ? `<button class="btn ghost" type="button" id="show-all">${view.showAll ? 'Tampilkan lebih sedikit' : `Tampilkan semua ${list.length} produk`}</button>` : ''}`;
-  }
-
-  function renderSimOut() {
-    const box = $('#sim-out');
-    if (!box || !last) return;
-    const { r, st } = last;
-    if (!modalReady(st)) { box.innerHTML = '<p class="muted small">Isi diskon dari pemasok di langkah 2 untuk memakai simulator.</p>'; return; }
-    const g = (k, d) => (ok(sim[k]) ? sim[k] : d);
-    const lastP = st.periods[st.periods.length - 1];
-    const s = Engine.simulate({ acuan: g('acuan', 100000), markup: g('markup', lastP.markup), disc: g('disc', lastP.disc), mitra: st.mitra,
-      feePct: g('feePct', -r.totalFees / r.totalSales * 100), feeFixed: 0, packing: st.packing || 0 });
-    if (!(s.price > 0)) { box.innerHTML = '<p class="muted small">Isi harga acuan dan diskon yang masuk akal.</p>'; return; }
-    const parts = [['Modal', s.modal, 'var(--ink-2)'], ['Potongan platform', s.fees, 'var(--cost)'], ['Packing', s.packing, 'var(--warn)'], ['Margin', Math.max(s.margin, 0), 'var(--accent)']].filter((p) => p[1] > 0);
-    const tot = parts.reduce((a, p) => a + p[1], 0);
-    box.innerHTML = `
-      <span class="eyebrow">Margin per buku</span>
-      <span class="sim-big ${s.margin < 0 ? 'neg' : ''}">${fmt(s.margin)} <span class="small faint">${pct(s.marginPct)}</span></span>
-      <div class="stack" role="img" aria-label="Pembagian harga jual">${parts.map(([l, v, c]) => `<div title="${l}: ${fmt(v)}" style="flex:${v / tot};background:${c}"></div>`).join('')}</div>
-      <div class="legend">${parts.map(([l, v, c]) => `<span><i class="sw" style="background:${c}"></i>${l} ${fmt(v)}</span>`).join('')}</div>
-      <p class="small">Harga di toko ${fmt(s.listPrice)} → dibayar pembeli ${fmt(s.price)}.</p>
-      <p class="small ${s.margin < 0 ? 'bad' : ''}"><b>${s.margin < 0 ? 'Rugi di harga ini.' : 'Batas aman:'}</b> diskon toko maksimal sekitar <b>${pct(s.maxDisc / 100)}</b> sebelum setiap penjualan rugi.</p>
-      <p class="tiny faint">Potongan platform dihitung dari harga yang dibayar pembeli. Angka ini rata-rata dari data Anda; untuk buku murah persentasenya biasanya lebih besar.</p>`;
-  }
-
-  /* ---------- ekspor ---------- */
-  function exportXlsx() {
-    if (!last || !window.XLSX) return;
-    const { r } = last;
-    const R = (v) => (ok(v) ? Math.round(v) : '');
-    const plats = ['shopee', 'tiktok'].filter((k) => r.has[k]);
-    const wb = XLSX.utils.book_new();
-    const sum = [['Cek Profit Marketplace', ''], ['Periode data', `${r.first} s.d. ${r.last}`], [], ['Komponen', ...plats.map((k) => PNAME[k]), 'Total'],
-      ['Pesanan terjual', ...plats.map((k) => r[k].orders), r.orders],
-      ['Penjualan', ...plats.map((k) => R(r[k].sales)), R(r.totalSales)],
-      ['Potongan platform', ...plats.map((k) => R(r[k].feeTotal)), R(r.totalFees)],
-      ['Dana diterima', ...plats.map((k) => R(r[k].received)), R(r.totalReceived)],
-      ['Modal (estimasi)', ...plats.map((k) => R(-r[k].modal)), R(-r.totalModal)],
-      ['Packing', ...plats.map((k) => R(-r[k].packing)), R(-r.totalPacking)],
-      ['Buku retur hilang', ...plats.map(() => ''), R(-r.lostCertain)],
-      ['Margin setelah biaya tercatat', ...plats.map((k) => R(r[k].margin)), R(r.totalMargin)]];
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(sum), 'Ringkasan');
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([['Bulan pesanan', ...plats.flatMap((k) => [`Penjualan ${PNAME[k]}`, `Potongan ${PNAME[k]}`, `Margin ${PNAME[k]}`])],
-      ...r.months.map((m) => [m.month, ...plats.flatMap((k) => [R(m[k].sales), R(m[k].fees), R(m[k].margin)])])]), 'Per bulan');
-    if (r.products.length) XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([['Judul', 'Baris', 'Penjualan', 'Potongan', 'Dana diterima', 'Modal', 'Margin', 'Margin %'],
-      ...[...r.products].sort((a, b) => b.margin - a.margin).map((p) => [p.name, p.rows, R(p.sales), R(p.fees), R(p.received), R(p.modal), R(p.margin), ok(p.pct) ? +(p.pct * 100).toFixed(1) : ''])]), 'Produk Shopee');
-    if (r.cases.length) XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([['Platform', 'No. pesanan', 'Produk', 'Kategori', 'Alasan', 'Resi retur', 'Nilai refund', 'Est. modal', 'Status barang'],
-      ...r.cases.map((c) => [PNAME[c.platform], c.orderId, c.product, Engine.CAT_LABEL[c.cat], c.reason, c.resi, R(c.amount), R(c.estModal), c.needsCheck ? c.state : 'tidak perlu'])]), 'Retur');
-    XLSX.writeFile(wb, `cek-profit-${r.first || 'data'}-${r.last || ''}.xlsx`);
-  }
-
-  renderSettings(); renderFiles(); render();
+  document.getElementById('yr').textContent = new Date().getFullYear();
+  document.addEventListener('click', (e) => { const t = e.target.closest('[data-track]'); if (t && window.cekTrack) window.cekTrack(t.dataset.track); });
+  if ('serviceWorker' in navigator && location.protocol === 'https:') navigator.serviceWorker.register('sw.js').catch(() => {});
 })();
 </script>
-
 </body>
 </html>

@@ -1,0 +1,12 @@
+{
+  "name": "Cek Profit",
+  "short_name": "Cek Profit",
+  "description": "Laba sebenarnya toko Shopee & TikTok Shop, dihitung di browser Anda.",
+  "start_url": "app.html",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#f3f4ef",
+  "theme_color": "#0e7a5a",
+  "lang": "id",
+  "icons": [{ "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }]
+}

@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Privasi &amp; Ketentuan — Cek Profit</title>
+<meta name="description" content="Bagaimana Cek Profit memperlakukan data Anda, dan ketentuan penggunaan.">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="assets/base.css">
+<link rel="stylesheet" href="assets/site.css">
+<script src="assets/config.js"></script>
+<script src="assets/analytics.js" defer></script>
+</head>
+<body>
+<div class="wrap">
+  <nav class="topbar" aria-label="Utama">
+    <a class="brand" href="./"><svg width="30" height="30" viewBox="0 0 30 30" aria-hidden="true"><rect width="30" height="30" rx="8" fill="var(--accent)"/><path d="M7 20.5l5-5 3.5 3 7.5-8" fill="none" stroke="var(--accent-ink)" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/><circle cx="23" cy="10.5" r="2.4" fill="var(--mark)"/></svg>Cek Profit</a>
+    <div class="nav-links"><a class="btn primary" href="app.html">Buka aplikasi</a></div>
+  </nav>
+  <main class="prose">
+    <h1 style="font-size:clamp(30px,4vw,42px)">Privasi &amp; ketentuan</h1>
+    <p class="small faint">Berlaku sejak Oktober 2026.</p>
+
+    <h2>Data yang Anda unggah</h2>
+    <p>Cek Profit berjalan sepenuhnya di browser Anda. File laporan (penghasilan, pesanan, retur, template modal) dibaca dan dihitung di perangkat Anda. Isi file, data pembeli, dan angka penjualan <b>tidak dikirim</b> ke server Cek Profit atau pihak lain.</p>
+
+    <h2>Yang disimpan di browser Anda</h2>
+    <ul>
+      <li>Pengaturan modal (modal per produk, modal rata-rata, pola harga), biaya packing dan operasional.</li>
+      <li>Profil laporan: nama toko, keterangan penyusun, dan logo.</li>
+      <li>Status barang retur yang Anda tandai.</li>
+      <li>Kode akses Pro.</li>
+    </ul>
+    <p>Data ini tersimpan di penyimpanan lokal browser (localStorage) dan hanya bisa dibaca oleh browser tersebut. Hapus kapan saja melalui tombol <b>“Hapus data tersimpan”</b> di bagian bawah aplikasi, atau dengan menghapus data situs di pengaturan browser.</p>
+
+    <h2>Statistik kunjungan</h2>
+    <p id="analytics-note">Jika diaktifkan, Cek Profit memakai GoatCounter, layanan statistik tanpa cookie yang tidak melacak individu. Yang tercatat hanya halaman yang dibuka dan nama tombol yang diklik (misalnya “unduh laporan PDF”), bukan isi file atau angka toko Anda.</p>
+
+    <h2>Kode akses Pro</h2>
+    <ul>
+      <li>Kode diperiksa di browser Anda dan berlaku di browser tempat kode dimasukkan, sampai tanggal yang tertera.</li>
+      <li>Kode bersifat pribadi untuk pembeli dan tidak untuk diperjualbelikan kembali.</li>
+      <li>Jika kode tidak berfungsi, hubungi penjual dengan menyertakan bukti pembelian.</li>
+    </ul>
+
+    <h2>Batasan tanggung jawab</h2>
+    <ul>
+      <li>Hasil perhitungan adalah <b>estimasi</b> berdasarkan laporan marketplace dan data modal yang Anda isi. Cek Profit bukan laporan keuangan yang diaudit dan bukan nasihat keuangan, investasi, atau pajak.</li>
+      <li>Format laporan marketplace dapat berubah sewaktu-waktu. Setiap file penghasilan dicocokkan dengan ringkasan resminya; jika tidak cocok, aplikasi menampilkan peringatan.</li>
+      <li>Keputusan usaha yang diambil berdasarkan hasil Cek Profit sepenuhnya menjadi tanggung jawab pengguna.</li>
+    </ul>
+
+    <h2>Kontak</h2>
+    <p id="contact">Pertanyaan atau laporan masalah dapat disampaikan melalui kontak yang tertera di halaman harga.</p>
+  </main>
+  <footer class="site"><span>© 2026 Cek Profit</span><nav><a href="./">Beranda</a><a href="app.html">Aplikasi</a></nav></footer>
+</div>
+<script>
+(() => {
+  const C = window.CEK_CONFIG || {};
+  const bits = [];
+  if (C.whatsapp) bits.push(`WhatsApp <a href="https://wa.me/${C.whatsapp}">+${C.whatsapp}</a>`);
+  if (C.email) bits.push(`email <a href="mailto:${C.email}">${C.email}</a>`);
+  if (bits.length) document.getElementById('contact').innerHTML = `Hubungi kami melalui ${bits.join(' atau ')}.`;
+  if (!C.goatcounter) document.getElementById('analytics-note').textContent = 'Saat ini Cek Profit tidak memakai statistik kunjungan. Jika nanti diaktifkan, yang dipakai adalah GoatCounter: tanpa cookie, hanya mencatat halaman yang dibuka dan nama tombol yang diklik, bukan isi file atau angka toko Anda.';
+})();
+</script>
+</body>
+</html>

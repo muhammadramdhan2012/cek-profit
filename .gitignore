@@ -1,0 +1,4 @@
+# Jangan pernah commit kunci privat
+*kunci-privat*.json
+*private*.json
+.DS_Store
