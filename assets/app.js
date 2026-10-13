@@ -187,9 +187,9 @@
       return;
     }
     if (!u) {
-      $('#account-box').innerHTML = `<div style="display:grid;gap:8px"><a class="btn primary" href="akun.html?mode=daftar&next=app.html">Daftar gratis</a><a class="btn quiet" href="akun.html?next=app.html">Masuk</a>
+      $('#account-box').innerHTML = `<div style="display:grid;gap:8px"><a class="btn primary" href="akun.html?mode=daftar&next=dashboard.html">Daftar gratis</a><a class="btn quiet" href="akun.html?next=dashboard.html">Masuk</a>
         <p class="tiny faint" style="padding-inline:4px">Akun menyimpan modal produk dan riwayat agar bisa dibuka dari perangkat lain.</p></div>`;
-      $('#account-sm').innerHTML = '<a class="btn sm" href="akun.html?next=app.html">Masuk</a>';
+      $('#account-sm').innerHTML = '<a class="btn sm" href="akun.html?next=dashboard.html">Masuk</a>';
       return;
     }
     const name = (p && p.full_name) || u.email;
@@ -511,7 +511,7 @@
   function viewRiwayat() {
     if (!cloud.enabled) return `<div class="panel empty"><span class="ic">${svg('riwayat', 24)}</span><h2>Riwayat butuh akun</h2><p>Fitur akun belum diaktifkan di situs ini. Sementara itu, gunakan Laporan PDF atau Excel untuk menyimpan hasil.</p></div>`;
     if (!account.user) return `<div class="panel empty"><span class="ic">${svg('riwayat', 24)}</span><h2>Simpan hasil tiap bulan, bandingkan kapan saja</h2><p>Dengan akun gratis, ringkasan angka toko Anda tersimpan dan bisa dibandingkan antarperiode dari perangkat mana pun. File laporan tetap tidak diunggah.</p>
-      <div class="row-actions" style="justify-content:center"><a class="btn primary" href="akun.html?mode=daftar&next=app.html%23riwayat">Daftar gratis</a><a class="btn" href="akun.html?next=app.html%23riwayat">Masuk</a></div></div>`;
+      <div class="row-actions" style="justify-content:center"><a class="btn primary" href="akun.html?mode=daftar&next=dashboard.html%23riwayat">Daftar gratis</a><a class="btn" href="akun.html?next=dashboard.html%23riwayat">Masuk</a></div></div>`;
     if (!account.reports) return '<p class="muted">Memuat riwayat…</p>';
     const reps = account.reports;
     const cur = last && last.r && !demo ? snapshot(last.r) : null;
@@ -754,7 +754,7 @@
       let action;
       if (pending) action = `<p class="note-box">Permintaan <b>${pending.plan === 'pro_tahunan' ? 'Pro tahunan' : 'Pro bulanan'}</b> tercatat ${tgl(pending.created_at)} dan sedang diproses. Pro aktif setelah pembayaran dikonfirmasi.</p>
         ${C.whatsapp ? `<a class="btn primary" href="${esc(waLink(`${C.waMessage} Email akun: ${account.user.email}. Paket: ${pending.plan === 'pro_tahunan' ? 'Pro tahunan' : 'Pro bulanan'}.`))}" target="_blank" rel="noopener">Kirim bukti bayar lewat WhatsApp</a>` : ''}`;
-      else if (cloud.enabled && !account.user) action = '<a class="btn primary" href="akun.html?mode=daftar&next=app.html%23upgrade">Daftar atau masuk untuk berlangganan</a>';
+      else if (cloud.enabled && !account.user) action = '<a class="btn primary" href="akun.html?mode=daftar&next=dashboard.html%23upgrade">Daftar atau masuk untuk berlangganan</a>';
       else if (cloud.enabled) action = '<button class="btn primary" type="button" id="req-upgrade">Lanjut ke pembayaran</button><p class="tiny faint">Kami catat permintaan Anda, lalu Anda membayar lewat transfer atau QRIS melalui WhatsApp. Pro aktif di akun ini setelah dikonfirmasi.</p>';
       else action = C.whatsapp ? `<a class="btn primary" href="${esc(waLink(C.waMessage))}" target="_blank" rel="noopener" data-track="beli-wa">Pesan lewat WhatsApp</a>` : '<p class="small warn">Kontak pembelian belum diatur.</p>';
       d.innerHTML = `${dHead('Cek Profit Pro', 'Untuk keputusan harga dan produk yang berbasis angka.')}
@@ -767,7 +767,7 @@
   async function saveHistory() {
     if (!last) return;
     if (!cloud.enabled) { toast('Fitur akun belum aktif. Gunakan Laporan PDF atau Excel untuk menyimpan hasil.'); return; }
-    if (!account.user) { location.href = 'akun.html?mode=daftar&next=app.html%23riwayat'; return; }
+    if (!account.user) { location.href = 'akun.html?mode=daftar&next=dashboard.html%23riwayat'; return; }
     if (demo) { toast('Data contoh tidak disimpan. Unggah laporan Anda dulu.'); return; }
     if (!account.reports) { try { account.reports = await cloud.db.listReports(); } catch (e) { account.reports = []; } }
     if (!isPro() && account.reports.length >= FREE_HIST) { toast(`Akun gratis menyimpan ${FREE_HIST} riwayat. Hapus yang lama atau upgrade ke Pro.`); openUpgrade(); return; }

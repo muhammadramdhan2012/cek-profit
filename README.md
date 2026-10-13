@@ -3,7 +3,7 @@
 Alat web untuk menghitung **laba sebenarnya toko Shopee, TikTok Shop, dan Tokopedia** dari laporan Seller Centre. Hasilnya bisa disusun menjadi laporan PDF yang siap dikirim.
 
 - Situs: https://muhammadramdhan2012.github.io/cek-profit/
-- Aplikasi: https://muhammadramdhan2012.github.io/cek-profit/app.html
+- Aplikasi: https://muhammadramdhan2012.github.io/cek-profit/dashboard.html
 - Contoh laporan: [contoh-laporan.pdf](contoh-laporan.pdf)
 
 ## Fitur
@@ -59,7 +59,7 @@ Buka `assets/config.js` di GitHub, klik ikon pensil, ubah isinya, lalu **Commit 
 
 ```
 index.html            halaman depan
-app.html              aplikasi (menu: Ringkasan, Produk, Biaya, Retur, Simulator, Riwayat, Data & modal)
+dashboard.html              aplikasi (menu: Ringkasan, Produk, Biaya, Retur, Simulator, Riwayat, Data & modal)
 akun.html             masuk, daftar, lupa sandi, profil
 admin.html            admin: pengguna, permintaan upgrade, aktifkan Pro
 privasi.html          privasi & ketentuan
@@ -85,7 +85,7 @@ tests/                uji Node + server tiruan Supabase
 node tests/engine.test.js     # mesin hitung dengan data contoh
 node tests/license.test.js    # kode akses
 node tests/cloud.test.js      # akun & database terhadap server tiruan
-python3 -m http.server 8000   # lalu buka http://localhost:8000/app.html
+python3 -m http.server 8000   # lalu buka http://localhost:8000/dashboard.html
 ```
 
 Data penjualan asli tidak disimpan di repo. Uji dengan file asli dilakukan terpisah.

@@ -2,8 +2,8 @@
  * Strategi: jaringan dulu untuk HTML/JS/CSS (agar pembaruan langsung terlihat), cache sebagai cadangan offline.
  * Naikkan VERSION setiap rilis agar cache lama dibersihkan.
  */
-const VERSION = 'cekprofit-7332d4e22e';
-const CORE = ['./', 'index.html', 'app.html', 'akun.html', 'privasi.html', 'icon.svg', 'manifest.webmanifest',
+const VERSION = 'cekprofit-2d0aefa3ab';
+const CORE = ['./', 'index.html', 'dashboard.html', 'akun.html', 'privasi.html', 'icon.svg',
   'assets/base.css', 'assets/app.css', 'assets/site.css', 'assets/report.css', 'assets/account.css',
   'assets/config.js', 'assets/theme.js', 'assets/analytics.js', 'assets/engine.js', 'assets/demo.js', 'assets/license.js', 'assets/cloud.js', 'assets/report.js', 'assets/app.js', 'assets/akun.js',
   'vendor/xlsx.full.min.js', 'fonts/jakarta.woff'];
@@ -20,6 +20,6 @@ self.addEventListener('fetch', (e) => {
   e.respondWith(
     fetch(e.request)
       .then((res) => { if (res.ok) { const copy = res.clone(); caches.open(VERSION).then((c) => c.put(e.request, copy)); } return res; })
-      .catch(() => caches.match(e.request, { ignoreSearch: true }).then((hit) => hit || caches.match('app.html')))
+      .catch(() => caches.match(e.request, { ignoreSearch: true }).then((hit) => hit || caches.match('dashboard.html')))
   );
 });

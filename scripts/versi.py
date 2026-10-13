@@ -13,7 +13,7 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-PAGES = ["index.html", "app.html", "akun.html", "admin.html", "privasi.html"]
+PAGES = ["index.html", "dashboard.html", "akun.html", "admin.html", "privasi.html"]
 REF = re.compile(r'((?:href|src)=")((?:assets|vendor)/[^"?]+\.(?:css|js))(?:\?v=[^"]*)?(")')
 
 

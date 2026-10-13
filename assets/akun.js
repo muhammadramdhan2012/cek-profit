@@ -5,7 +5,7 @@
   const $ = (s) => document.querySelector(s);
   const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   const params = new URLSearchParams(location.search);
-  const next = /^[\w-]+\.html([?#].*)?$/.test(params.get('next') || '') ? params.get('next') : 'app.html';
+  const next = /^[\w-]+\.html([?#].*)?$/.test(params.get('next') || '') ? params.get('next') : 'dashboard.html';
   const here = () => location.href.split('#')[0].split('?')[0];
   const toast = (m) => { const t = $('#toast'); t.textContent = m; t.hidden = false; clearTimeout(toast.t); toast.t = setTimeout(() => { t.hidden = true; }, 3500); };
   const track = (e) => { try { window.cekTrack && window.cekTrack(e); } catch (err) { /* abaikan */ } };
@@ -23,7 +23,7 @@
     const card = $('#card');
     if (!cloud.enabled) {
       card.innerHTML = `<h1>Akun belum aktif</h1><p class="muted">Pemilik situs belum menghubungkan layanan akun. Anda tetap bisa memakai Cek Profit tanpa login; modal dan pengaturan tersimpan di browser ini.</p>
-        <a class="btn primary" href="app.html">Buka aplikasi</a>`;
+        <a class="btn primary" href="dashboard.html">Mulai hitung</a>`;
       return;
     }
     const user = cloud.auth.user();
@@ -59,14 +59,14 @@
     const pending = (reqs || []).find((r) => r.status === 'baru' || r.status === 'diproses');
     card.innerHTML = `<div><h1>Akun saya</h1><p class="muted" style="margin-top:6px">${esc(user.email || '')}</p></div>${msgHtml()}
       <div class="plan"><div><b>${pro ? 'Pro' : 'Gratis'}</b><span class="small muted">${pro ? `Aktif sampai ${fmtDate(p.pro_until)}` : pending ? 'Permintaan upgrade sedang diproses' : 'Laporan PDF & analisis lengkap ada di Pro'}</span></div>
-        ${pro ? '<span class="badge pro">PRO</span>' : `<a class="btn sm" href="app.html#upgrade">${pending ? 'Lihat status' : 'Upgrade'}</a>`}</div>
+        ${pro ? '<span class="badge pro">PRO</span>' : `<a class="btn sm" href="dashboard.html#upgrade">${pending ? 'Lihat status' : 'Upgrade'}</a>`}</div>
       <form id="f-profile">
         <div class="field"><label for="pf-name">Nama</label><input class="plain" id="pf-name" value="${esc(p && p.full_name)}" autocomplete="name"></div>
         <div class="field"><label for="pf-store">Nama toko</label><input class="plain" id="pf-store" value="${esc(p && p.store_name)}" placeholder="Tampil di sampul laporan PDF"></div>
         <div class="field"><label for="pf-wa">Nomor WhatsApp</label><input class="plain" id="pf-wa" value="${esc(p && p.whatsapp)}" inputmode="tel" placeholder="08…"><span class="hint">Dipakai untuk konfirmasi pembayaran.</span></div>
         <button class="btn" type="submit">Simpan profil</button>
       </form>
-      <div class="row-gap"><a class="btn primary" href="${esc(next)}" style="flex:1">Buka aplikasi</a><button class="btn quiet" type="button" id="logout">Keluar</button></div>
+      <div class="row-gap"><a class="btn primary" href="${esc(next)}" style="flex:1">Buka dashboard</a><button class="btn quiet" type="button" id="logout">Keluar</button></div>
       <button class="btn link" type="button" data-view="sandi-baru" style="justify-self:center">Ganti kata sandi</button>`;
     message = null;
   }
