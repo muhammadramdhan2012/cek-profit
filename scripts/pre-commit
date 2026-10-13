@@ -1,0 +1,5 @@
+#!/bin/sh
+# Pasang: cp scripts/pre-commit .git/hooks/pre-commit && chmod +x .git/hooks/pre-commit
+# Menolak commit bila nomor versi CSS/JS tidak cocok dengan isi file.
+python3 scripts/versi.py --check || exit 1
+node tests/engine.test.js >/dev/null || { echo "Uji engine gagal"; exit 1; }

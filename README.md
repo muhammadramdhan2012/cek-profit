@@ -92,4 +92,4 @@ Data penjualan asli tidak disimpan di repo. Uji dengan file asli dilakukan terpi
 
 Sebagian file TikTok menulis ukuran tabel yang salah di dalam file Excel (`<dimension ref="A1:X19">` padahal datanya sampai baris 544). SheetJS mempercayai catatan itu dan diam-diam memotong data. `Engine.sheetsFromSheetJS` menghitung ulang rentang dari sel yang benar-benar terisi.
 
-Setiap rilis, naikkan `VERSION` di `sw.js` agar cache lama di browser pengguna dibersihkan.
+**Cache browser.** GitHub Pages menyuruh browser menyimpan CSS/JS sekitar 10 menit. Tanpa penanganan, halaman baru bisa termuat bersama CSS lama sehingga tampilan berantakan. Karena itu setiap file diberi nomor versi dari hash isinya (`site.css?v=44b26f4e4f`), begitu juga versi cache `sw.js`. Jalankan `python3 scripts/versi.py` sebelum commit. Hook `scripts/pre-commit` dan GitHub Actions (`.github/workflows/periksa.yml`) menolak perubahan bila nomor versinya belum diperbarui.
