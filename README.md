@@ -11,6 +11,13 @@ Alat web untuk menghitung **profit toko Shopee dan TikTok Shop** dari laporan ya
 - Margin per platform, per bulan, dan per produk (Shopee)
 - Ringkasan retur dan refund, termasuk buku yang tidak kembali
 - Pemeriksaan otomatis: total dicocokkan dengan ringkasan resmi Shopee/TikTok, dan file yang terunggah dua kali tidak dihitung dobel
+- Filter platform (Semua/Shopee/TikTok) dan rentang bulan pesanan
+- Grafik alur uang (penjualan → potongan → modal → margin) dan grafik per bulan
+- Potongan menurut nilai pesanan (pesanan kecil vs besar)
+- Cari dan urutkan produk; tandai status setiap retur (belum dicek / kembali / hilang)
+- Simulator harga satu buku, termasuk batas diskon aman sebelum rugi
+- Unduh hasil sebagai Excel
+- Data contoh hanya tampil jika tombol "Coba dengan data contoh" ditekan; tanpa file, halaman tidak menampilkan angka
 
 ## File yang didukung
 
@@ -34,4 +41,4 @@ Semua file diolah **di browser pengguna**. Tidak ada data yang dikirim ke server
 
 ## Teknis
 
-Satu file `index.html` (HTML, CSS, JavaScript tanpa framework). File Excel dibaca dengan [SheetJS](https://sheetjs.com/) di browser. Logika perhitungan diuji dengan data penjualan nyata Shopee dan TikTok Shop (Jan–Okt 2026) dan hasilnya cocok dengan ringkasan resmi kedua platform.
+Satu file `index.html` (HTML, CSS, JavaScript tanpa framework). Mesin hitung (`Engine`) terpisah dari tampilan dan diuji dengan Node. File Excel dibaca dengan [SheetJS](https://sheetjs.com/) di browser. Logika perhitungan diuji dengan data penjualan nyata Shopee dan TikTok Shop (Jan–Okt 2026) dan hasilnya cocok dengan ringkasan resmi kedua platform.
