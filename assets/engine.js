@@ -223,6 +223,7 @@ const Engine = (() => {
     const f = firstSheetHeader(wb, isShopeeOrderHeader);
     const map = colMap(f.aoa[f.h]);
     const lines = [];
+    const hasReturnStatusCol = COL.shopeeReturnStatus.some((n) => n in map);
     for (const row of f.aoa.slice(f.h + 1)) {
       const g = getterAny(row, map);
       const orderId = str(g(...COL.shopeeOrderId));
@@ -243,7 +244,10 @@ const Engine = (() => {
         // jadi tidak boleh dipakai sebagai identitas variasi.
         skuVariant: str(filled(...COL.shopeeSkuVariant)), skuParent: str(filled(...COL.shopeeSkuParent)),
         subtotal: optNum(COL.shopeeSubtotal), priceAfterDisc: optNum(COL.shopeePriceAfterDisc),
-        returnedQty: optNum(COL.shopeeReturnedQty), returnStatus: str(g(...COL.shopeeReturnStatus)) });
+        // Fase 2.1: null = kolom status pembatalan/pengembalian TIDAK ADA di file ini (informasi tidak tersedia),
+        // berbeda dari '' = kolomnya ada tetapi kosong (tidak ada tanda retur saat export dibuat).
+        returnedQty: optNum(COL.shopeeReturnedQty),
+        returnStatus: hasReturnStatusCol ? str(g(...COL.shopeeReturnStatus)) : null });
     }
     return { kind: 'shopee_orders', lines };
   }
@@ -489,9 +493,11 @@ const Engine = (() => {
   function merge(parsed) {
     const out = { shopeeOrders: new Map(), shopeeItems: [], shopeeAdj: new Map(), tiktok: new Map(), cases: new Map(),
       shopeeLines: new Map(), tiktokLines: new Map(), dupes: 0,
-      shopeeLineCount: new Map(),     // nomor pesanan → Map(kunci isi baris → jumlah baris), dari file pertama yang memuatnya
-      shopeeExportConflict: new Set(), // nomor pesanan yang isi barisnya BERBEDA antar file export
+      // Pesanan Shopee yang muncul di ≥2 versi export yang isinya berbeda → hasil pembandingan (lihat
+      // resolveShopeeVersions). Pesanan yang hanya punya satu versi tidak tercatat di sini.
+      shopeeOrderMeta: new Map(),
     };
+    const shopeeVersions = new Map();   // nomor pesanan → Map(isi versi → baris) dari semua file export Shopee
     const seenLine = new Set();
     for (const p of parsed) {
       if (p.kind === 'shopee_income') {
@@ -504,7 +510,7 @@ const Engine = (() => {
       } else if (p.kind === 'shopee_return' || p.kind === 'tiktok_return') {
         for (const c of p.cases) out.cases.set(c.key, c);
       } else if (p.kind === 'shopee_orders') {
-        mergeShopeeLines(p.lines, out);
+        collectShopeeLines(p.lines, shopeeVersions);
       } else if (p.kind === 'tiktok_orders') {
         const target = out.tiktokLines;   // TikTok: mekanisme dedup lama, tidak diubah
         for (const l of p.lines) {
@@ -516,39 +522,147 @@ const Engine = (() => {
         }
       }
     }
+    finalizeShopeeLines(shopeeVersions, out);
     return out;
   }
 
-  /**
-   * Gabungkan baris SATU file export pesanan Shopee ke `out.shopeeLines` (H1/H3, keputusan pemilik A3).
-   *
-   * Masalah cara lama: baris yang isinya sama persis dianggap duplikat walaupun berasal dari file yang sama,
-   * sehingga pembeli yang memang punya dua baris identik dalam satu pesanan kehilangan satu baris.
-   *
-   * Aturan baru, per nomor pesanan:
-   *  - Dalam SATU file, semua baris dipakai (baris kembar sah tidak dibuang).
-   *  - Pesanan yang sudah dimuat file sebelumnya (file sama diunggah ulang / periode tumpang tindih) tidak
-   *    ditambahkan lagi. Isi barisnya dibandingkan sebagai "berapa baris untuk tiap isi baris", sehingga urutan
-   *    baris tidak berpengaruh.
-   *  - Bila isinya berbeda (mis. file kedua punya lebih banyak baris kembar), tidak ada cara memastikan file mana
-   *    yang benar karena export tidak punya nomor baris unik. Pesanan itu ditandai di `shopeeExportConflict`, dan
-   *    jumlah barangnya tidak dianggap terverifikasi (lihat shopeeOrderModal). Baris file pertama yang dipakai.
-   * Status pesanan/pengembalian TIDAK masuk kunci karena bisa berubah antar export untuk baris yang sama.
+  /* ---------- export pesanan Shopee dari beberapa file (H1/H3 Fase 2 A3 + Fase 2.1) ----------
+   * Satu pesanan bisa muncul di beberapa file export (file diunggah ulang, periode tumpang tindih, export lama
+   * dan baru). Export tidak punya nomor baris unik, jadi baris dibandingkan bertingkat (keputusan pemilik):
+   *  1. Identitas wajib  : nama, variasi, jumlah. Selalu ada di semua format. Jumlah baris per kombinasi ini
+   *                        harus sama di semua versi; bila tidak → konflik FINANSIAL.
+   *  2. Field opsional   : SKU variasi (identitas), harga setelah diskon dan subtotal (finansial). Dibandingkan
+   *                        HANYA bila tersedia di kedua versi. Tidak tersedia ≠ 0 dan ≠ "sama".
+   *  3. Metadata status  : Status Pesanan, status pembatalan/pengembalian, returnedQty. Bukan identitas: bila
+   *                        berbeda → konflik STATUS. Tanda retur/belum selesai digabung dari semua versi.
+   * Semua keputusan memakai urutan ISI, tidak pernah urutan unggah, sehingga hasilnya sama untuk urutan apa pun.
+   * Dalam SATU file, semua baris tetap dipakai (dua baris kembar yang sah tidak dibuang).
    */
-  function mergeShopeeLines(lines, out) {
-    const lineKey = (l) => [l.sku, l.name, l.variant, l.qty, l.unitPrice, l.subtotal].map(String).join('|');
-    const byOrder = new Map();   // pesanan → { lines, count: Map(kunci → jumlah) } untuk file ini
-    for (const l of lines) {
-      if (!byOrder.has(l.orderId)) byOrder.set(l.orderId, { lines: [], count: new Map() });
-      const o = byOrder.get(l.orderId), k = lineKey(l);
-      o.lines.push(l); o.count.set(k, (o.count.get(k) || 0) + 1);
+  const SH_OPTIONAL = [
+    { f: 'skuVariant', kind: 'identitas', ok: (v) => str(v) !== '' },   // SKU kosong = tidak ada informasi
+    { f: 'priceAfterDisc', kind: 'finansial', ok: isOk },
+    { f: 'subtotal', kind: 'finansial', ok: isOk },
+  ];
+  const shNum = (v) => (typeof v === 'number' && !isFinite(v) ? 'NaN' : v);
+  const shKey1 = (l) => [l.name, l.variant, l.qty].map(String).join('|');
+  const shLineSer = (l) => JSON.stringify([l.name, l.variant, l.qty, l.skuVariant, l.sku, l.unitPrice, l.priceAfterDisc,
+    l.subtotal, l.status, l.returnStatus, l.returnedQty].map(shNum));
+  const byText = (a, b) => (a < b ? -1 : a > b ? 1 : 0);
+  /** Multiset (kumpulan nilai yang boleh kembar) dalam bentuk teks yang bisa dibandingkan. */
+  const multiset = (vals) => vals.map((v) => String(shNum(v))).sort().join('\u0001');
+  const isSubMultiset = (part, whole) => {
+    const left = whole.map((v) => String(shNum(v)));
+    return part.every((v) => { const i = left.indexOf(String(shNum(v))); if (i < 0) return false; left.splice(i, 1); return true; });
+  };
+
+  /**
+   * Kumpulkan isi pesanan dari SATU file export Shopee sebagai "versi". Versi yang isinya sama persis (file sama
+   * diunggah ulang, atau hanya urutan barisnya berbeda) disimpan sekali → baris tidak pernah digandakan.
+   */
+  function collectShopeeLines(lines, versions) {
+    const byOrder = new Map();
+    for (const l of lines) { if (!byOrder.has(l.orderId)) byOrder.set(l.orderId, []); byOrder.get(l.orderId).push(l); }
+    for (const [orderId, ls] of byOrder) {
+      const ser = ls.map(shLineSer).sort().join('\n');     // diurutkan → urutan baris tidak berpengaruh
+      const rowSer = ls.map(shLineSer).join('\n');           // urutan baris asli, hanya untuk memilih secara tetap
+      if (!versions.has(orderId)) versions.set(orderId, new Map());
+      const vm = versions.get(orderId), old = vm.get(ser);
+      if (!old || rowSer < old.rowSer) vm.set(ser, { ls, rowSer });
     }
-    for (const [orderId, o] of byOrder) {
-      const prev = out.shopeeLineCount.get(orderId);
-      if (!prev) { out.shopeeLineCount.set(orderId, o.count); out.shopeeLines.set(orderId, o.lines); continue; }
-      const same = prev.size === o.count.size && [...o.count].every(([k, n]) => prev.get(k) === n);
-      if (!same) out.shopeeExportConflict.add(orderId);
+  }
+
+  /** Tetapkan baris final tiap pesanan. Versi diurutkan menurut isinya, bukan urutan unggah. */
+  function finalizeShopeeLines(versions, out) {
+    for (const [orderId, vm] of versions) {
+      const vs = [...vm.entries()].sort((a, b) => byText(a[0], b[0])).map((e) => e[1].ls);
+      if (vs.length === 1) { out.shopeeLines.set(orderId, vs[0]); continue; }
+      const r = resolveShopeeVersions(vs);
+      out.shopeeLines.set(orderId, r.lines);
+      out.shopeeOrderMeta.set(orderId, r.meta);
     }
+  }
+
+  /**
+   * Bandingkan ≥2 versi isi satu pesanan.
+   * @param vs  daftar versi (masing-masing daftar baris), sudah diurutkan menurut isi
+   * @returns {{lines: object[], meta: {versi, finansial, identitas, sebagian, status, tandaRetur,
+   *            statusBelumSelesai, infoRetur}}}
+   *   finansial  = jumlah baris, harga, atau subtotal berbeda → kuantitas belum, HPP tidak diketahui
+   *   identitas  = SKU variasi berbeda (finansial sama) → kuantitas tetap, HPP tidak diketahui
+   *   sebagian   = ada info di versi lain yang tidak bisa digabung dengan aman → HPP belum terverifikasi
+   *   status     = Status Pesanan / status retur / returnedQty berbeda → HPP belum terverifikasi
+   *   tandaRetur, statusBelumSelesai = gabungan dari SEMUA versi; infoRetur = ada versi yang punya info retur
+   *   skuSatuSumber = SKU variasi hanya ada di sebagian versi → HPP yang modalnya dicari lewat SKU itu "belum"
+   */
+  function resolveShopeeVersions(vs) {
+    const meta = { versi: vs.length, finansial: false, identitas: false, sebagian: false, status: false,
+      tandaRetur: false, statusBelumSelesai: false, infoRetur: false, skuSatuSumber: false };
+    const groups = vs.map((ls) => {
+      const g = new Map();
+      for (const l of ls) { const k = shKey1(l); if (!g.has(k)) g.set(k, []); g.get(k).push(l); }
+      return g;
+    });
+    const keys = [...new Set(groups.flatMap((g) => [...g.keys()]))].sort(byText);
+    // Bandingkan nilai satu field sebagai multiset, HANYA antar versi yang punya info untuk semua baris kelompok.
+    const differs = (lists, ok, get) => new Set(lists.filter((ls) => ls.length && ls.every((l) => ok(get(l))))
+      .map((ls) => multiset(ls.map(get)))).size > 1;
+
+    // Tingkat 1: identitas wajib.
+    for (const k of keys) if (new Set(groups.map((g) => (g.get(k) || []).length)).size > 1) meta.finansial = true;
+
+    // Tingkat 3: metadata status. Gabungan "ada tanda di salah satu versi" tidak bergantung urutan.
+    for (const ls of vs) for (const l of ls) {
+      if (str(l.returnStatus) !== '' || l.returnedQty > 0) meta.tandaRetur = true;
+      if (str(l.status) && str(l.status) !== 'Selesai') meta.statusBelumSelesai = true;
+    }
+    meta.infoRetur = vs.some((ls) => ls.every((l) => l.returnStatus !== null || isOk(l.returnedQty)));
+    for (const k of keys) {
+      const lists = groups.map((g) => g.get(k) || []);
+      if (differs(lists, (v) => str(v) !== '', (l) => l.status)
+        || differs(lists, (v) => v !== null, (l) => l.returnStatus)
+        || differs(lists, isOk, (l) => l.returnedQty)) meta.status = true;
+    }
+    // SKU variasi hanya tercatat di sebagian versi: bukan konflik, tetapi juga belum terbukti sama (lihat shopeeOrderModal).
+    for (const k of keys) {
+      const hasSku = groups.map((g) => (g.get(k) || []).some((l) => str(l.skuVariant) !== ''));
+      if (hasSku.includes(true) && hasSku.includes(false)) meta.skuSatuSumber = true;
+    }
+    // Konflik finansial: baris versi pertama (menurut isi) hanya untuk tampilan; jumlahnya tidak dipakai.
+    if (meta.finansial) return { lines: vs[0], meta };
+
+    // Tingkat 2: field opsional, per kelompok identitas wajib.
+    const lines = [];
+    for (const k of keys) {
+      const lists = groups.map((g) => g.get(k));
+      for (const { f, kind, ok } of SH_OPTIONAL) if (differs(lists, ok, (l) => l[f])) meta[kind] = true;
+      if (lists[0].length === 1) {
+        // Tiap versi punya tepat SATU baris untuk kombinasi ini → pasangan barisnya pasti, field boleh digabung.
+        // Nilai yang tidak tersedia diambil dari versi yang punya, tidak pernah diisi 0.
+        const merged = { ...lists[0][0] };
+        for (const { f, ok } of SH_OPTIONAL) { const src = lists.find((ls) => ok(ls[0][f])); if (src) merged[f] = src[0][f]; }
+        lines.push(merged);
+        continue;
+      }
+      // Beberapa baris kembar: pasangan antar versi TIDAK bisa dibuktikan, jadi field tidak digabung lintas baris.
+      // Dipakai satu versi utuh dengan info terlengkap. Ini aturan teknis agar hasil tetap sama, BUKAN bukti.
+      const info = (ls) => ls.reduce((a, l) => a + SH_OPTIONAL.filter(({ f, ok }) => ok(l[f])).length, 0);
+      let best = 0;
+      lists.forEach((ls, i) => { if (info(ls) > info(lists[best])) best = i; });
+      const chosen = lists[best];
+      for (const { f, kind, ok } of SH_OPTIONAL) {
+        const chosenVals = chosen.filter((l) => ok(l[f])).map((l) => l[f]);
+        const chosenFull = chosenVals.length === chosen.length;
+        for (const ls of lists) {
+          if (ls === chosen) continue;
+          const vals = ls.filter((l) => ok(l[f])).map((l) => l[f]);
+          if (!vals.length) continue;
+          if (chosenFull) { if (!isSubMultiset(vals, chosenVals)) meta[kind] = true; }   // nilai versi lain bertentangan
+          else if (multiset(vals) !== multiset(chosenVals)) meta.sebagian = true;        // info versi lain tidak terpakai
+        }
+      }
+      lines.push(...chosen);
+    }
+    return { lines, meta };
   }
 
   /* ---------- modal ---------- */
@@ -637,14 +751,19 @@ const Engine = (() => {
     //  kuantitas: terverifikasi = jumlah terbukti dari export; belum = tidak ada bukti cukup
     //  hpp: terverifikasi = kuantitas, variasi, dan modal pasti, tanpa refund/status yang belum jelas
     //       terverifikasi_kelompok = total satu kelompok variasi ambigu pasti, rincian per variasi tidak pasti
-    //       estimasi = ada angka, tetapi jumlah barang dianggap 1 unit (pesanan tidak ada di export)
+    //       estimasi = ada angka, tetapi jumlah barang dianggap 1 unit (pesanan tidak ada di export), atau modal
+    //                  rata-rata tanpa alasan rekonsiliasi yang lebih serius
     //       belum = ada angka, tetapi ada asumsi lain (lihat hppReasons)
     //       tidak_diketahui = tidak ada angka: modal belum diisi, atau jumlah barang tidak diketahui (A1)
     //  kuantitasTidakDiketahui: pesanan ada di export tetapi barisnya tidak cocok meyakinkan (A1)
-    //  exportBerbeda: baris dari pesanan yang isi export-nya berbeda antar file (A3)
+    //  exportBerbeda: baris dari pesanan yang isi FINANSIAL export-nya berbeda antar file (A3)
+    //  identitasBerbeda / identitasSebagian / statusExportBerbeda: konflik antar file (Fase 2.1)
+    //  infoReturTidakTersedia: file export tidak punya kolom retur (bukan bukti tidak ada retur)
     const shopeeQty = { baris: 0, kuantitas: { terverifikasi: 0, belum: 0 }, variasi: { terverifikasi: 0, tidak_relevan: 0, ambigu: 0, belum: 0 },
       hpp: { terverifikasi: 0, terverifikasi_kelompok: 0, estimasi: 0, belum: 0, tidak_diketahui: 0 },
       unitTerverifikasi: 0, estimasiSatuUnit: 0, refundPenuhTanpaKuantitas: 0, kuantitasTidakDiketahui: 0, exportBerbeda: 0,
+      identitasBerbeda: 0, identitasSebagian: 0, statusExportBerbeda: 0, infoReturTidakTersedia: 0,
+      metodeHpp: { modal_per_unit: 0, modal_rata_rata: 0 },   // dari mana angka HPP berasal (lihat hppMethod)
       refundBelumJelas: 0, statusBelumDivalidasi: 0 };
 
     /* ===== Shopee ===== */
@@ -667,16 +786,24 @@ const Engine = (() => {
       // Cara lama memberi SEMUA baris export bernama sama ke item pertama, sehingga variasi berikutnya dianggap
       // 1 unit lagi (unit terhitung ganda). Pencocok memastikan tiap baris export dipakai paling banyak sekali.
       const match = matchShopeeOrder(o.id, items, exp);
-      // A3: isi export pesanan ini berbeda antar file (lihat mergeShopeeLines). Tidak bisa dipastikan file mana yang
-      // benar, jadi hasil pencocokan tidak dipakai: semua item dianggap "ada di export tetapi belum cocok" (aturan A1).
-      const conflict = m.shopeeExportConflict.has(o.id);
+      // Fase 2.1: hasil pembandingan bila pesanan ini muncul di ≥2 versi export yang berbeda (resolveShopeeVersions).
+      // null = hanya satu versi; pemeriksaan status dilakukan per baris seperti biasa.
+      const meta = m.shopeeOrderMeta.get(o.id) || null;
+      // A3 konflik FINANSIAL: tidak bisa dipastikan versi mana yang benar, jadi hasil pencocokan tidak dipakai:
+      // semua item dianggap "ada di export tetapi belum cocok" (aturan A1).
+      const conflict = !!(meta && meta.finansial);
       if (conflict) {
         match.items = match.items.map(() => ({ rule: 'export_berbeda', qtyStatus: 'belum', variantStatus: 'belum', qty: null, lineIdx: [], candidateIdx: [], groupId: null }));
         match.groups = [];
       }
-      const notYetValidated = new Set(match.nonCompletedLines);   // status pesanan selain "Selesai"
+      // Pemeriksaan status per BARIS hanya untuk pesanan dengan satu versi export. Untuk beberapa versi, status
+      // diambil dari gabungan semua versi di `meta` (per pesanan), supaya tidak bergantung pada versi yang terpilih.
+      const notYetValidated = new Set(meta ? [] : match.nonCompletedLines);   // status pesanan selain "Selesai"
       // Tanda pembatalan/pengembalian di export. Dampaknya ke HPP belum diketahui (menunggu H2).
-      const hasReturnSign = (j) => str(exp[j].returnStatus) !== '' || exp[j].returnedQty > 0;
+      const hasReturnSign = (j) => !meta && (str(exp[j].returnStatus) !== '' || exp[j].returnedQty > 0);
+      // Kolom retur tidak ada di file (returnStatus null) dan returnedQty juga tidak ada → info retur tidak tersedia.
+      // Ini BUKAN bukti tidak ada retur.
+      const noReturnInfo = (j) => !meta && exp[j].returnStatus === null && !isOk(exp[j].returnedQty);
 
       // Kelompok variasi ambigu (nilai kembar): HPP dihitung SEKALI untuk seluruh kelompok, hanya bila semua
       // baris export kandidat punya modal. Total kelompok pasti; pembagian per variasi tidak bisa dipastikan.
@@ -688,6 +815,7 @@ const Engine = (() => {
           base: known ? costs.reduce((a, c) => a + c.entry.cost * exp[c.j].qty, 0) : NaN,   // Σ modal × jumlah
           sameUnit: known && new Set(costs.map((c) => c.entry.cost)).size === 1,
           variantCost: known && costs.every((c) => c.key !== 'produk_legacy'),
+          viaSku: costs.some((c) => c.key === 'sku_variasi'),
         };
       });
 
@@ -733,6 +861,10 @@ const Engine = (() => {
           if (isOk(fallback)) cost = (it.harga + it.refund) * fallback;
           else { cost = NaN; ok = false; linesWithoutCost++; }
         }
+        // Konflik IDENTITAS (SKU variasi berbeda antar export, finansial sama): jumlah barang tetap terbukti, tetapi
+        // modal per unit yang benar tidak bisa dipastikan → HPP tidak diketahui. Modal rata-rata (persen dari nilai
+        // penjualan) tidak bergantung pada SKU, jadi tetap dipakai dengan status "belum".
+        if (meta && meta.identitas && entry && isOk(cost)) { cost = NaN; ok = false; }
         modal += isOk(cost) ? cost : 0;
 
         // Status HPP. "terverifikasi" hanya bila semua syarat terpenuhi; alasan lain dicatat di hppReasons.
@@ -744,20 +876,37 @@ const Engine = (() => {
         if (entry && key === 'produk_legacy' && lines.length) reasons.push('modal_tingkat_produk'); // belum terbukti berlaku untuk variasi ini
         // Refund di SATU baris kelompok membuat pembagian kelompok tidak pasti, jadi seluruh kelompok ikut "belum" (D1).
         const refunded = (k) => items[k].refund !== 0 || !(items[k].harga + items[k].refund > 0);
-        if ((group ? group.itemIdx.some(refunded) : refunded(i)) || lines.some(hasReturnSign)) reasons.push('refund');
-        if (lines.some((j) => notYetValidated.has(j))) reasons.push('status_pesanan');
+        if ((group ? group.itemIdx.some(refunded) : refunded(i)) || lines.some(hasReturnSign) || (meta && meta.tandaRetur)) reasons.push('refund');
+        if (lines.some((j) => notYetValidated.has(j)) || (meta && meta.statusBelumSelesai)) reasons.push('status_pesanan');
+        if (meta ? !meta.infoRetur : lines.some(noReturnInfo)) reasons.push('info_retur_tidak_tersedia');
+        if (meta && meta.identitas) reasons.push('identitas_berbeda');
+        // SKU yang hanya tercatat di sebagian export belum terbukti sama dengan baris di export lain.
+        const viaSku = group ? groupCost[r.groupId].viaSku : key === 'sku_variasi';
+        if (meta && (meta.sebagian || (meta.skuSatuSumber && viaSku))) reasons.push('identitas_sebagian');
+        if (meta && meta.status) reasons.push('status_export_berbeda');
+        // Metode HPP (metadata, tidak mengubah angka): modal per unit dari daftar modal × jumlah barang, atau modal
+        // rata-rata = persen dari nilai penjualan (Laporan Penghasilan). null bila tidak ada HPP sama sekali.
+        const hppMethod = entry ? 'modal_per_unit' : isOk(cost) ? 'modal_rata_rata' : null;
         let hppStatus;
         if (!isOk(cost)) hppStatus = 'tidak_diketahui';
+        else if (hppMethod === 'modal_rata_rata') {
+          // Modal rata-rata selalu ESTIMASI (bukan HPP aktual). Alasan yang tidak memengaruhi persen dari nilai
+          // penjualan (jumlah barang, konflik SKU) tidak menurunkannya. Alasan rekonsiliasi yang lebih serius
+          // (refund/retur, status pesanan, info retur tidak ada, identitas sebagian, konflik finansial) → "belum",
+          // supaya tidak tersembunyi di balik label estimasi.
+          const ringan = new Set(['modal_rata_rata', 'kuantitas', 'identitas_berbeda']);
+          hppStatus = reasons.every((x) => ringan.has(x)) ? 'estimasi' : 'belum';
+        }
         else if (qtyBasis === 'estimasi_1') hppStatus = 'estimasi';   // angka ada, tetapi jumlahnya dianggap 1 unit
         else if (reasons.length) hppStatus = 'belum';
         else if (group && !(groupCost[r.groupId].sameUnit && r.qtyStatus === 'terverifikasi')) hppStatus = 'terverifikasi_kelompok';
         else hppStatus = 'terverifikasi';
 
-        countShopeeStatus(r, hppStatus, reasons, group, qtyBasis, it);
+        countShopeeStatus(r, hppStatus, reasons, group, qtyBasis, it, hppMethod);
         // SKU di bawah hanya untuk tampilan tabel produk (sama seperti cara lama), tidak dipakai mencari modal.
         const shown = exp[lines[0]] || exp.find((l) => norm(l.name) === norm(it.name)) || {};
         return { it, qty, cost, unit: entry ? entry.cost : NaN, base: entry ? entry.baseCost : NaN, entry, sku: shown.sku, variant: shown.variant,
-          rule: r.rule, qtyStatus: r.qtyStatus, variantStatus: r.variantStatus, qtyBasis, hppStatus, hppReasons: reasons };
+          rule: r.rule, qtyStatus: r.qtyStatus, variantStatus: r.variantStatus, qtyBasis, hppMethod, hppStatus, hppReasons: reasons };
       });
       // Unit terverifikasi dari kelompok dihitung sekali per kelompok (bukan per baris laporan).
       for (const g of match.groups) shopeeQty.unitTerverifikasi += g.qtyTotal;
@@ -798,8 +947,9 @@ const Engine = (() => {
     }
 
     /** Tambah hitungan ringkasan status Shopee (hanya informasi; tidak mengubah angka lain). */
-    function countShopeeStatus(r, hppStatus, reasons, group, qtyBasis, it) {
+    function countShopeeStatus(r, hppStatus, reasons, group, qtyBasis, it, hppMethod) {
       shopeeQty.baris++;
+      if (hppMethod) shopeeQty.metodeHpp[hppMethod]++;
       shopeeQty.kuantitas[r.qtyStatus]++;
       shopeeQty.variasi[r.variantStatus]++;
       shopeeQty.hpp[hppStatus]++;
@@ -807,6 +957,10 @@ const Engine = (() => {
       if (qtyBasis === 'estimasi_1') { if (it.harga + it.refund > 0) shopeeQty.estimasiSatuUnit++; else shopeeQty.refundPenuhTanpaKuantitas++; }
       if (qtyBasis === 'tidak_diketahui') shopeeQty.kuantitasTidakDiketahui++;
       if (reasons.includes('export_berbeda')) shopeeQty.exportBerbeda++;
+      if (reasons.includes('identitas_berbeda')) shopeeQty.identitasBerbeda++;
+      if (reasons.includes('identitas_sebagian')) shopeeQty.identitasSebagian++;
+      if (reasons.includes('status_export_berbeda')) shopeeQty.statusExportBerbeda++;
+      if (reasons.includes('info_retur_tidak_tersedia')) shopeeQty.infoReturTidakTersedia++;
       if (reasons.includes('refund')) shopeeQty.refundBelumJelas++;
       if (reasons.includes('status_pesanan')) shopeeQty.statusBelumDivalidasi++;
     }

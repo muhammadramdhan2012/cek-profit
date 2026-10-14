@@ -333,7 +333,8 @@ test('P3 kelompok ambigu dengan modal tidak lengkap → tidak diketahui (bukan 0
   const r = hitung(kaosDuaVariasi(50000, 50000), lines, ST([cat('Kaos', 'Merah', 20000)]));
   eq(r.coverage, 0, 'pesanan keluar dari "modal diketahui"'); eq(r.shopeeQty.hpp.tidak_diketahui, 2); eq(r.linesWithoutCost, 2);
   const f = hitung(kaosDuaVariasi(50000, 50000), lines, ST([cat('Kaos', 'Merah', 20000)], { fallbackPct: 40 }));
-  eq(f.totalModal, 40000, 'memakai persen modal rata-rata (cara lama)'); eq(f.shopeeQty.hpp.belum, 2);
+  eq(f.totalModal, 40000, 'memakai persen modal rata-rata (cara lama)'); eq(f.shopeeQty.hpp.estimasi, 2, 'modal rata-rata = estimasi');
+  eq(f.shopeeQty.metodeHpp.modal_rata_rata, 2);
 });
 test('P4 multi-unit produk tanpa variasi, modal tingkat produk → jumlah dari export, terverifikasi', () => {
   const r = hitung([{ id: 'SINT-P4', items: [{ name: 'Pulpen', productId: 'PP', harga: 15000 }] }],
@@ -437,19 +438,146 @@ test('P9d A3: file kedua punya LEBIH BANYAK baris identik → pesanan ditandai e
   const balik = hitungFiles(ordersKembar, [[kembar, kembar], [kembar]], stKembar);
   eq(balik.shopeeQty.exportBerbeda, 2, 'urutan unggah tidak mengubah kesimpulan'); eq(balik.coverage, 0);
 });
-test('P9e KETERBATASAN A3: export kedua identik kecuali status retur/returnedQty → BUKAN konflik, info file pertama dipakai', () => {
-  // Status pesanan/pengembalian sengaja tidak masuk kunci (bisa berubah antar export untuk baris yang sama),
-  // sehingga tanda retur yang hanya ada di file kedua tidak terbaca. Aturan retur H2 tidak diubah di sini.
-  const orders = [{ id: 'SINT-R', items: [{ name: 'Kaos', harga: 50000 }] }];
-  const awal = { order: 'SINT-R', name: 'Kaos', qty: 1, price: 50000 };
-  const retur = { ...awal, returned: 1, returnStatus: 'Permintaan Disetujui' };
-  const st = ST([cat('Kaos', '', 20000)]);
-  const a = hitungFiles(orders, [[awal], [retur]], st);
-  eq(a.shopeeQty.exportBerbeda, 0, 'tidak terdeteksi sebagai konflik');
-  eq(a.shopeeQty.refundBelumJelas, 0, 'tanda retur file kedua hilang (keterbatasan)'); eq(a.shopeeQty.hpp.terverifikasi, 1);
-  const b = hitungFiles(orders, [[retur], [awal]], st);
-  eq(b.shopeeQty.refundBelumJelas, 1, 'urutan unggah menentukan status (keterbatasan)'); eq(b.shopeeQty.hpp.belum, 1);
-  eq(a.totalModal, b.totalModal, 'angka modal sama; yang berbeda hanya status');
+/* ---------- Fase 2.1: identitas bertingkat & konflik status antar export (dua urutan unggah) ---------- */
+/** Bantu: hitung dengan file export [baris, format] dalam urutan yang diberikan. */
+const hitungFmt = (orders, files, st) => E.compute([E.parseWorkbook(Sint.penghasilan(orders)), ...files.map(([ls, fmt]) => E.parseWorkbook(Sint.exportPesanan(ls, fmt)))], st);
+const ringkas = (r) => JSON.stringify([r.totalModal, r.coverage, r.totalMargin, r.shopeeQty, r.products.map((p) => [p.key, p.qty, p.qtyKnown, p.modal, p.modalKnown])], (k, v) => (typeof v === 'number' && !isFinite(v) ? 'NaN' : v));
+/** Jalankan dua urutan unggah (A,B) dan (B,A); keduanya WAJIB identik. Mengembalikan hasil urutan pertama. */
+const duaUrutan = (orders, fileA, fileB, st) => {
+  const ab = hitungFmt(orders, [fileA, fileB], st), ba = hitungFmt(orders, [fileB, fileA], st);
+  eq(ringkas(ab), ringkas(ba), 'hasil tidak boleh bergantung urutan unggah');
+  return ab;
+};
+const satu = [{ id: 'SINT-S', items: [{ name: 'Kaos', harga: 50000 }] }];
+const bs = { order: 'SINT-S', name: 'Kaos', variant: 'M', qty: 1, price: 50000 };
+const stSku = ST([cat('', '', 10000, 'KS-M'), cat('', '', 30000, 'KS-X'), cat('Kaos', 'M', 20000)]);
+
+test('Q1 SKU sama di dua export → bukan konflik, HPP terverifikasi lewat SKU', () => {
+  const r = duaUrutan(satu, [[{ ...bs, skuVariant: 'KS-M' }]], [[{ ...bs, skuVariant: 'KS-M' }], 'baru'], stSku);
+  eq(r.totalModal, 10000); eq(r.shopeeQty.hpp.terverifikasi, 1); eq(r.shopeeQty.identitasBerbeda, 0);
+});
+test('Q2 SKU berbeda, finansial sama → konflik identitas: kuantitas tetap terverifikasi, HPP tidak diketahui', () => {
+  const r = duaUrutan(satu, [[{ ...bs, skuVariant: 'KS-M' }]], [[{ ...bs, skuVariant: 'KS-X' }]], stSku);
+  eq(r.shopeeQty.identitasBerbeda, 1); eq(r.shopeeQty.kuantitas.terverifikasi, 1); eq(r.shopeeQty.hpp.tidak_diketahui, 1);
+  eq(r.coverage, 0, 'pesanan keluar dari "modal diketahui"');
+});
+test('Q3 SKU hanya di satu export → bukan konflik; modal lewat SKU itu berstatus belum', () => {
+  const r = duaUrutan(satu, [[{ ...bs, skuVariant: 'KS-M' }]], [[bs]], stSku);
+  eq(r.totalModal, 10000, 'SKU dari export yang punya tetap dipakai, apa pun urutannya'); eq(r.shopeeQty.identitasBerbeda, 0);
+  eq(r.shopeeQty.identitasSebagian, 1); eq(r.shopeeQty.hpp.belum, 1);
+  // Tanpa modal SKU, modal lewat nama + variasi tidak bergantung SKU → tetap terverifikasi.
+  const n = duaUrutan(satu, [[{ ...bs, skuVariant: 'KS-M' }]], [[bs]], ST([cat('Kaos', 'M', 20000)]));
+  eq(n.totalModal, 20000); eq(n.shopeeQty.hpp.terverifikasi, 1);
+});
+test('Q4 subtotal hanya di satu export (format lama + baru) → bukan konflik, bukan 0, kuantitas terverifikasi', () => {
+  const r = duaUrutan(satu, [[bs], 'lama'], [[bs], 'baru'], ST([cat('Kaos', 'M', 20000)]));
+  eq(r.shopeeQty.exportBerbeda, 0); eq(r.shopeeQty.kuantitas.terverifikasi, 1); eq(r.totalModal, 20000); eq(r.coverage, 1);
+  eq(r.shopeeQty.infoReturTidakTersedia, 0, 'export baru punya info retur');
+  eq(r.shopeeQty.hpp.terverifikasi, 1);
+});
+test('Q5 SKU dan subtotal berbeda → konflik finansial: kuantitas belum, HPP tidak diketahui', () => {
+  const r = duaUrutan(satu, [[{ ...bs, skuVariant: 'KS-M' }]], [[{ ...bs, skuVariant: 'KS-X', subtotal: 45000 }]], stSku);
+  eq(r.shopeeQty.exportBerbeda, 1); eq(r.shopeeQty.kuantitas.belum, 1); eq(r.shopeeQty.hpp.tidak_diketahui, 1); eq(r.coverage, 0);
+  const harga = duaUrutan(satu, [[bs]], [[{ ...bs, afterDisc: 45000, subtotal: 50000 }]], stSku);
+  eq(harga.shopeeQty.exportBerbeda, 1, 'harga setelah diskon berbeda juga konflik finansial');
+});
+test('Q6 dua baris sah identik → dipertahankan; unggah ulang tidak menggandakan (dua urutan)', () => {
+  const r = duaUrutan(ordersKembar, [[kembar, kembar]], [[kembar, kembar]], stKembar);
+  eq(r.shopeeQty.unitTerverifikasi, 4); eq(r.totalModal, 40000);
+  const d = duaUrutan(ordersKembar, [[kembar]], [[kembar, kembar]], stKembar);
+  eq(d.shopeeQty.exportBerbeda, 2, 'jumlah baris kembar berbeda → konflik finansial'); eq(d.coverage, 0);
+});
+test('Q7 dua variasi nama & harga sama, SKU berbeda → tidak tertukar: total kelompok = modal A + modal B', () => {
+  const orders = [{ id: 'SINT-V', items: [{ name: 'Kaos', harga: 50000 }, { name: 'Kaos', harga: 50000 }] }];
+  const la = { order: 'SINT-V', name: 'Kaos', qty: 1, price: 50000, skuVariant: 'KS-M' }, lb = { ...la, skuVariant: 'KS-X' };
+  const st = ST([cat('', '', 10000, 'KS-M'), cat('', '', 30000, 'KS-X')]);
+  const satuFile = hitungFmt(orders, [[[la, lb]]], st);
+  eq(satuFile.totalModal, 40000); eq(satuFile.shopeeQty.hpp.terverifikasi_kelompok, 2);
+  const r = duaUrutan(orders, [[la, lb]], [[lb, la]], st);
+  eq(r.totalModal, 40000, 'urutan baris berbeda, multiset SKU sama'); eq(r.shopeeQty.identitasBerbeda, 0);
+  const tukar = duaUrutan(orders, [[la, lb]], [[la, { ...lb, skuVariant: 'KS-Z' }]], st);
+  eq(tukar.shopeeQty.identitasBerbeda, 2, 'multiset SKU berbeda → konflik identitas'); eq(tukar.coverage, 0);
+});
+test('Q8 status retur berbeda, finansial sama → konflik status: kuantitas terverifikasi, HPP belum, modal sama', () => {
+  const r = duaUrutan(satu, [[bs]], [[{ ...bs, returned: 1, returnStatus: 'Permintaan Disetujui' }]], ST([cat('Kaos', 'M', 20000)]));
+  eq(r.shopeeQty.statusExportBerbeda, 1); eq(r.shopeeQty.refundBelumJelas, 1); eq(r.shopeeQty.kuantitas.terverifikasi, 1);
+  eq(r.shopeeQty.hpp.belum, 1); eq(r.totalModal, 20000); eq(r.coverage, 1);
+});
+test('Q9 hanya returnedQty berbeda → konflik status, HPP belum', () => {
+  const r = duaUrutan(satu, [[bs]], [[{ ...bs, returned: 1 }]], ST([cat('Kaos', 'M', 20000)]));
+  eq(r.shopeeQty.statusExportBerbeda, 1); eq(r.shopeeQty.hpp.belum, 1); eq(r.shopeeQty.kuantitas.terverifikasi, 1);
+});
+test('Q10 Status Pesanan berbeda → konflik status + status belum selesai, HPP belum', () => {
+  const r = duaUrutan(satu, [[bs]], [[{ ...bs, status: 'Sedang Dikirim' }]], ST([cat('Kaos', 'M', 20000)]));
+  eq(r.shopeeQty.statusExportBerbeda, 1); eq(r.shopeeQty.statusBelumDivalidasi, 1); eq(r.shopeeQty.hpp.belum, 1);
+});
+test('Q11 hanya export format lama (tanpa kolom retur) → info retur tidak tersedia, bukan "tidak ada retur"', () => {
+  const p = E.parseWorkbook(Sint.exportPesanan([bs], 'lama'));
+  eq(p.lines[0].returnStatus, null, 'kolom tidak ada → null'); eq(E.parseWorkbook(Sint.exportPesanan([bs])).lines[0].returnStatus, '', 'kolom ada tetapi kosong → ""');
+  const r = hitungFmt(satu, [[[bs], 'lama']], ST([cat('Kaos', 'M', 20000)]));
+  eq(r.shopeeQty.infoReturTidakTersedia, 1); eq(r.shopeeQty.hpp.belum, 1); eq(r.totalModal, 20000, 'angka tidak berubah');
+  const dua = duaUrutan(satu, [[bs], 'lama'], [[bs], 'lama'], ST([cat('Kaos', 'M', 20000)]));
+  eq(dua.shopeeQty.infoReturTidakTersedia, 1);
+});
+test('Q12 kelompok multi-baris dengan identitas sebagian → tidak digabung lintas baris, HPP belum (dua urutan)', () => {
+  const orders = [{ id: 'SINT-V', items: [{ name: 'Kaos', harga: 50000 }, { name: 'Kaos', harga: 50000 }] }];
+  const l = { order: 'SINT-V', name: 'Kaos', qty: 1, price: 50000 };
+  const st = ST([cat('', '', 10000, 'KS-M'), cat('', '', 30000, 'KS-X'), cat('Kaos', '', 20000)]);
+  const r = duaUrutan(orders, [[{ ...l, skuVariant: 'KS-M' }, l]], [[l, { ...l, skuVariant: 'KS-X' }]], st);
+  eq(r.shopeeQty.identitasSebagian, 2); eq(r.shopeeQty.hpp.terverifikasi + r.shopeeQty.hpp.terverifikasi_kelompok, 0);
+  eq(r.shopeeQty.unitTerverifikasi, 2, 'jumlah barang tetap terbukti');
+});
+test('Q13 refund penuh + status berbeda antar export → modal 0 rumus lama (H2), HPP belum, sama di dua urutan', () => {
+  const o = [{ id: 'SINT-S', items: [{ name: 'Kaos', harga: 50000, refund: -50000 }] }];
+  const r = duaUrutan(o, [[bs]], [[{ ...bs, returned: 1, returnStatus: 'Permintaan Disetujui' }]], ST([cat('Kaos', 'M', 20000)]));
+  eq(r.totalModal, 0); eq(r.shopeeQty.hpp.belum, 1); eq(r.shopeeQty.kuantitas.terverifikasi, 1, 'refund ≠ jumlah dipesan 0');
+});
+test('Q14 regresi: file tunggal format baru tanpa tanda retur tetap terverifikasi (perilaku Fase 2)', () => {
+  const r = hitungFmt(satu, [[[bs]]], ST([cat('Kaos', 'M', 20000)]));
+  eq(r.shopeeQty.hpp.terverifikasi, 1); eq(r.shopeeQty.infoReturTidakTersedia, 0); eq(r.totalModal, 20000);
+});
+/* ---------- Fase 2.1: metadata HPP modal rata-rata (hppMethod + status estimasi) ---------- */
+const stRata = ST([], { fallbackPct: 40 });
+/** Angka keuangan yang TIDAK boleh berubah hanya karena status: modal, laba, cakupan, unit, tabel produk. */
+const angka = (r) => JSON.stringify([r.totalModal, r.totalMargin, r.coverage, r.knownSales, r.shopeeQty.unitTerverifikasi, r.shopeeQty.kuantitas,
+  r.products.map((p) => [p.qty, p.modal, p.margin])], (k, v) => (typeof v === 'number' && !isFinite(v) ? 'NaN' : v));
+test('R1 modal rata-rata tanpa konflik → estimasi, metode modal_rata_rata', () => {
+  const r = hitungFmt(satu, [[[bs]]], stRata);
+  eq(r.shopeeQty.hpp.estimasi, 1); eq(r.shopeeQty.metodeHpp.modal_rata_rata, 1); eq(r.shopeeQty.metodeHpp.modal_per_unit, 0);
+  eq(r.totalModal, 20000); eq(r.totalMargin, 30000); eq(r.coverage, 1);
+});
+test('R2 modal rata-rata + konflik SKU → tetap estimasi, alasan identitas tercatat, angka sama (dua urutan)', () => {
+  const r = duaUrutan(satu, [[{ ...bs, skuVariant: 'KS-M' }]], [[{ ...bs, skuVariant: 'KS-X' }]], stRata);
+  eq(r.shopeeQty.hpp.estimasi, 1); eq(r.shopeeQty.identitasBerbeda, 1); eq(r.shopeeQty.kuantitas.terverifikasi, 1);
+  eq(angka(r), angka(hitungFmt(satu, [[[bs]]], stRata)), 'konflik SKU tidak mengubah angka modal rata-rata');
+});
+test('R3 modal rata-rata + konflik status retur → belum, metode tetap modal_rata_rata (dua urutan)', () => {
+  const r = duaUrutan(satu, [[bs]], [[{ ...bs, returned: 1, returnStatus: 'Permintaan Disetujui' }]], stRata);
+  eq(r.shopeeQty.hpp.belum, 1); eq(r.shopeeQty.hpp.estimasi, 0); eq(r.shopeeQty.metodeHpp.modal_rata_rata, 1);
+  eq(r.shopeeQty.statusExportBerbeda, 1); eq(angka(r), angka(hitungFmt(satu, [[[bs]]], stRata)));
+});
+test('R4 modal rata-rata + info retur tidak tersedia (format lama) → belum', () => {
+  const r = hitungFmt(satu, [[[bs], 'lama']], stRata);
+  eq(r.shopeeQty.hpp.belum, 1); eq(r.shopeeQty.infoReturTidakTersedia, 1); eq(r.shopeeQty.metodeHpp.modal_rata_rata, 1);
+  eq(r.totalModal, 20000);
+});
+test('R5 modal rata-rata + identitas sebagian → belum (dua urutan)', () => {
+  const orders = [{ id: 'SINT-V', items: [{ name: 'Kaos', harga: 50000 }, { name: 'Kaos', harga: 50000 }] }];
+  const l = { order: 'SINT-V', name: 'Kaos', qty: 1, price: 50000 };
+  const r = duaUrutan(orders, [[{ ...l, skuVariant: 'KS-M' }, l]], [[l, { ...l, skuVariant: 'KS-X' }]], stRata);
+  eq(r.shopeeQty.identitasSebagian, 2); eq(r.shopeeQty.hpp.belum, 2); eq(r.shopeeQty.hpp.estimasi, 0); eq(r.totalModal, 40000);
+});
+test('R6 konflik finansial: modal per unit → tidak_diketahui; modal rata-rata tetap terhitung tetapi belum (bukan estimasi)', () => {
+  const unit = duaUrutan(satu, [[bs]], [[{ ...bs, afterDisc: 45000, subtotal: 50000 }]], ST([cat('Kaos', 'M', 20000)]));
+  eq(unit.shopeeQty.hpp.tidak_diketahui, 1); eq(unit.shopeeQty.metodeHpp.modal_per_unit, 1); eq(unit.coverage, 0);
+  const rata = duaUrutan(satu, [[bs]], [[{ ...bs, afterDisc: 45000, subtotal: 50000 }]], stRata);
+  eq(rata.shopeeQty.hpp.belum, 1, 'konflik finansial tidak disembunyikan di balik label estimasi'); eq(rata.shopeeQty.kuantitas.belum, 1);
+  eq(rata.totalModal, 20000, 'persen dari Laporan Penghasilan tetap bisa dihitung');
+});
+test('R7 metadata tidak mengubah angka: modal per unit + campuran status → angka sama dengan sebelum metadata', () => {
+  const r = hitungFmt(satu, [[[bs]]], ST([cat('Kaos', 'M', 20000)]));
+  eq(r.shopeeQty.metodeHpp.modal_per_unit, 1); eq(r.shopeeQty.hpp.terverifikasi, 1, 'jalur modal per unit tidak berubah');
+  eq(r.totalModal, 20000); eq(r.totalMargin, 30000);
 });
 test('P10 refund parsial & penuh pada pasangan terverifikasi → kuantitas pasti, HPP belum (menunggu H2), rumus refund lama tetap', () => {
   const parsial = hitung([{ id: 'SINT-PA', items: [{ name: 'Kaos', harga: 100000, refund: -50000 }] }], [{ order: 'SINT-PA', name: 'Kaos', qty: 2, price: 50000 }], ST([cat('Kaos', '', 20000)]));
