@@ -363,10 +363,12 @@ const Engine = (() => {
   }
 
   /** Indeks katalog modal: cari berdasarkan kode (SKU/ID) atau nama (+variasi). */
-  function buildCatalog(entries = []) {
+  function buildCatalog(entries = [], extraPct = 0) {
     const byCode = new Map(), byName = new Map();
-    for (const e of entries) {
-      if (!isOk(e.cost) || e.cost < 0) continue;
+    const mult = 1 + (isOk(extraPct) && extraPct > 0 ? extraPct / 100 : 0);
+    for (const raw of entries) {
+      if (!isOk(raw.cost) || raw.cost < 0) continue;
+      const e = { ...raw, baseCost: raw.cost, cost: raw.cost * mult };   // baseCost = angka yang diisi penjual
       if (e.kode) byCode.set(norm(e.kode), e);
       if (e.nama) {
         if (e.variasi) byName.set(norm(`${e.nama} ${e.variasi}`), e);
@@ -391,14 +393,15 @@ const Engine = (() => {
   /**
    * @param parsed     hasil parseWorkbook untuk semua file
    * @param settings   {modalMode:'produk'|'acuan', catalog:[{kode,nama,variasi,cost}], fallbackPct, mitra, coret, periods,
-   *                    packing, fixedCosts:[{label,amount}], targetMargin}
+   *                    packing, fixedCosts:[{label,amount}], targetMargin,
+   *                    extraCostPct: biaya kulakan (ongkir beli, dll.) dalam % dari harga beli, ditambahkan ke modal per produk}
    * @param caseState  {kunciRetur: 'belum'|'kembali'|'hilang'}
    * @param filter     {platforms: ['shopee','tiktok'], from: 'YYYY-MM', to: 'YYYY-MM'} (bulan pesanan)
    */
   function compute(parsed, settings, caseState = {}, filter = {}) {
     const m = merge(parsed);
     const mode = modeOf(settings);
-    const catalog = buildCatalog(settings.catalog);
+    const catalog = buildCatalog(settings.catalog, settings.extraCostPct);
     const fallback = isOk(settings.fallbackPct) && settings.fallbackPct >= 0 && settings.fallbackPct < 100 ? settings.fallbackPct / 100 : NaN;
     const packing = isOk(settings.packing) ? settings.packing : 0;
     const target = isOk(settings.targetMargin) ? settings.targetMargin / 100 : 0.15;
@@ -423,7 +426,7 @@ const Engine = (() => {
 
     /* produk (gabungan item Shopee + baris SKU TikTok) */
     const prod = new Map();
-    const touchProduct = (key, init) => { if (!prod.has(key)) prod.set(key, { key, rows: 0, qty: 0, qtyKnown: true, sales: 0, received: 0, modal: 0, modalKnown: true, unitCost: NaN, ...init }); return prod.get(key); };
+    const touchProduct = (key, init) => { if (!prod.has(key)) prod.set(key, { key, rows: 0, qty: 0, qtyKnown: true, sales: 0, received: 0, modal: 0, modalKnown: true, unitCost: NaN, baseCost: NaN, ...init }); return prod.get(key); };
     let qtyAssumed = 0, linesWithoutCost = 0, ttNoDetail = 0, ttNoDetailSales = 0;
 
     /* ===== Shopee ===== */
@@ -456,7 +459,7 @@ const Engine = (() => {
         else if (isOk(fallback)) cost = (it.harga + it.refund) * fallback;
         else { cost = NaN; ok = false; linesWithoutCost++; }
         modal += isOk(cost) ? cost : 0;
-        return { it, qty, cost, unit: entry ? entry.cost : NaN, entry, sku: l0.sku, variant: l0.variant };
+        return { it, qty, cost, unit: entry ? entry.cost : NaN, base: entry ? entry.baseCost : NaN, entry, sku: l0.sku, variant: l0.variant };
       });
       if (!items.length) { if (isOk(fallback)) modal = gross * fallback; else ok = false; }
       return { modal: ok ? modal : NaN, items: notes };
@@ -489,7 +492,7 @@ const Engine = (() => {
         p.rows += 1; p.sales += n.it.harga + n.it.refund; p.received += o.total * share;
         if (n.qty === null) p.qtyKnown = false; else p.qty += n.qty * clamp01(n.it.harga > 0 ? (n.it.harga + n.it.refund) / n.it.harga : 0);
         if (isOk(n.cost)) p.modal += n.cost; else p.modalKnown = false;
-        if (isOk(n.unit)) p.unitCost = n.unit;
+        if (isOk(n.unit)) { p.unitCost = n.unit; p.baseCost = n.base; }
         p.packing = (p.packing || 0) + pack * share;
       }
     }
@@ -517,7 +520,7 @@ const Engine = (() => {
         else if (isOk(fallback)) cost = Math.max(r.sales, 0) * fallback * (l.qty / totalQty);
         else { cost = NaN; ok = false; linesWithoutCost++; }
         modal += isOk(cost) ? cost : 0;
-        return { ...l, cost, unit: entry ? entry.cost : NaN, entry, share };
+        return { ...l, cost, unit: entry ? entry.cost : NaN, base: entry ? entry.baseCost : NaN, entry, share };
       });
       return { modal: ok ? modal : NaN, lines: notes };
     }
@@ -551,7 +554,7 @@ const Engine = (() => {
         if (l.name) p.name = l.name; else if (!p.name && l.entry && l.entry.nama) p.name = l.entry.nama;
         p.rows += 1; p.sales += r.sales * w; p.received += r.settle * w; p.qty += l.qty * (l.share ?? 1);
         if (isOk(l.cost)) p.modal += l.cost; else p.modalKnown = false;
-        if (isOk(l.unit)) p.unitCost = l.unit;
+        if (isOk(l.unit)) { p.unitCost = l.unit; p.baseCost = l.base; }
         p.packing = (p.packing || 0) + pack * w;
       }
     }
@@ -565,6 +568,10 @@ const Engine = (() => {
 
     /* ===== Produk + saran harga ===== */
     const platformFeePct = { shopee: S.sales > 0 ? -S.feeTotal / S.sales : 0, tiktok: T.sales > 0 ? -T.feeTotal / T.sales : 0 };
+    // Tarif efektif toko: biaya pemrosesan dihitung tetap per pesanan, sisanya persen dari penjualan.
+    // Inilah "tarif terbaru" yang paling akurat, karena diambil dari potongan yang benar-benar terjadi.
+    const feeModel = (X) => (X.orders > 0 && X.sales > 0 ? { pct: -(X.feeTotal - X.fees.proses) / X.sales, fixed: -X.fees.proses / X.orders, orders: X.orders } : null);
+    const feeModels = { shopee: feeModel(S), tiktok: feeModel(T) };
     const products = [...prod.values()].map((p) => {
       const fees = p.received - p.sales;
       const margin = p.modalKnown ? p.received - p.modal - (p.packing || 0) : NaN;
@@ -640,7 +647,7 @@ const Engine = (() => {
       mode, ready, coverage, knownSales, has, available, shopee: S, tiktok: T, lostCertain, unknownRisk, totalMargin,
       totalSales, totalFees: pick((p) => p.feeTotal), totalReceived: pick((p) => p.received),
       totalModal: pick((p) => p.modal), totalPacking: pick((p) => p.packing), knownReceived: pick((p) => p.knownReceived), knownPacking: pick((p) => p.knownPacking), adjustments: pick((p) => p.adj),
-      orders, first, last, days, monthsSpan,
+      orders, first, last, days, monthsSpan, feeModel: feeModels,
       perMonth: ready && monthsSpan > 0 ? totalMargin / monthsSpan : NaN, perOrder: ready && orders ? totalMargin / orders : NaN,
       fixedMonthly, opex, netProfit: ready ? totalMargin - opex : NaN,
       months: monthList, allMonths: [...allMonths].sort(), buckets: buckets.filter((b) => b.orders > 0),
@@ -750,12 +757,23 @@ const Engine = (() => {
     return { listPrice, price, fees, cost, packing, margin, marginPct: price ? margin / price : NaN, maxDisc, breakEvenPrice, targetPrice };
   }
 
+  /**
+   * HPP per unit untuk produsen: biaya satu kali produksi (batch) dibagi jumlah jadi, ditambah kemasan per unit.
+   * @param {{bahan:number, tenaga:number, overhead:number, hasil:number, kemasan:number}} x  Rupiah; hasil = unit jadi per batch
+   */
+  function hpp({ bahan = 0, tenaga = 0, overhead = 0, hasil = 0, kemasan = 0 } = {}) {
+    const n = Number(hasil);
+    if (!(n > 0)) return NaN;
+    const v = (x) => (isOk(+x) && +x > 0 ? +x : 0);
+    return (v(bahan) + v(tenaga) + v(overhead)) / n + v(kemasan);
+  }
+
   /** Baris template modal: semua produk yang ditemukan, terisi modal yang sudah diketahui. */
   function templateRows(result) {
     const rows = result.products
       .sort((a, b) => a.platform.localeCompare(b.platform) || b.sales - a.sales)
       .map((p) => [p.platform === 'shopee' ? 'Shopee' : 'TikTok Shop', p.platform === 'tiktok' ? (p.code || p.sku) : (p.sku || p.code), p.name, p.variant || '',
-        p.qtyKnown ? Math.round(p.qty) : p.rows, isOk(p.avgPrice) ? Math.round(p.avgPrice) : '', isOk(p.unitCost) ? p.unitCost : '']);
+        p.qtyKnown ? Math.round(p.qty) : p.rows, isOk(p.avgPrice) ? Math.round(p.avgPrice) : '', isOk(p.baseCost) ? p.baseCost : '']);
     return [TEMPLATE_HEADER, ...rows];
   }
 
@@ -781,7 +799,7 @@ const Engine = (() => {
     return sheets;
   }
 
-  return { num, date, norm, detect, sheetsFromSheetJS, monthName, parseWorkbook, compute, simulate, shopeeRatio, insights, templateRows, buildCatalog, modeOf,
+  return { num, date, norm, detect, sheetsFromSheetJS, monthName, parseWorkbook, compute, simulate, hpp, shopeeRatio, insights, templateRows, buildCatalog, modeOf,
     CAT_LABEL, TEMPLATE_HEADER };
 })();
 if (typeof module !== 'undefined') module.exports = Engine;

@@ -125,7 +125,7 @@ const CekDemo = (() => {
     .concat(PRODUCTS.map((p, k) => ({ kode: TTSKU(k), nama: '', variasi: '', cost: p[2] })));
 
   const settings = () => ({
-    modalMode: 'produk', catalog: catalog(), fallbackPct: null, packing: 1500, targetMargin: 15,
+    sellerType: 'stok', modalMode: 'produk', catalog: catalog(), fallbackPct: null, packing: 1500, targetMargin: 15,
     fixedCosts: [{ label: 'Gaji admin paruh waktu', amount: 1000000 }, { label: 'Sewa gudang & listrik', amount: 400000 }],
     mitra: null, coret: 100, periods: [{ start: '', markup: 0, disc: 0 }],
   });

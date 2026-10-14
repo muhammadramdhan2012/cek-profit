@@ -17,6 +17,9 @@ Alat web untuk menghitung **laba sebenarnya toko Shopee, TikTok Shop, dan Tokope
 | 5 produk teratas dan 2 temuan otomatis | Ekspor Excel lengkap |
 | Retur yang tidak kembali, simulator harga | Riwayat tanpa batas |
 | Tema terang, gelap, atau ikuti perangkat | |
+| Jenis usaha: reseller, stok sendiri, produsen (kalkulator HPP), dropshipper | |
+| Tombol "?" yang menjelaskan setiap angka | |
+| Tarif efektif toko dari laporan + tarif umum marketplace di simulator | |
 | Akun: sinkron modal antarperangkat, 3 riwayat | |
 
 Akun (daftar, masuk, lupa sandi, Google opsional) memakai **Supabase**; ikuti [supabase/PANDUAN.md](supabase/PANDUAN.md). Selama belum diatur, situs tetap jalan tanpa login. Pembayaran Pro manual: pengguna mengirim permintaan dari aplikasi, Anda mengaktifkan di `admin.html`.

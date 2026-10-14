@@ -216,3 +216,82 @@ textarea.code { font-family: ui-monospace, Menlo, monospace; font-size: 12.5px; 
 .side-theme { display: flex; justify-content: space-between; align-items: center; padding: 4px 8px; font-size: 13px; color: var(--ink-3); }
 .theme-sm { display: none; }
 @media (max-width: 900px) { .theme-sm { display: block; } .side-head { gap: 8px; } .side-head .brand { margin-right: auto; } }
+
+/* ---------- tombol penjelasan (?) ---------- */
+.qi { display: inline-grid; place-items: center; width: 17px; height: 17px; margin-left: 6px; vertical-align: 1px; flex: none; border-radius: 50%; border: 1px solid var(--line-strong);
+  background: transparent; color: var(--ink-3); font: 700 10.5px/1 var(--font); cursor: pointer; padding: 0; transition: color .12s, border-color .12s, background .12s; }
+.qi:hover, .qi[aria-expanded="true"] { color: var(--accent); border-color: var(--accent); background: var(--accent-soft); }
+/* area sentuh lebih besar tanpa mengubah tampilan */
+.qi { position: relative; } .qi::after { content: ""; position: absolute; inset: -8px; }
+table.data th .qi { margin-left: 4px; }
+.info-pop { position: fixed; z-index: 70; width: min(340px, calc(100vw - 24px)); background: var(--surface); color: var(--ink); border: 1px solid var(--line); border-radius: var(--r);
+  box-shadow: var(--float); padding: 14px 16px 16px; display: grid; gap: 8px; font-size: 13.5px; line-height: 1.5; }
+.info-pop .ip-head { display: flex; justify-content: space-between; align-items: start; gap: 8px; }
+.info-pop .ip-head b { font-size: 14.5px; padding-top: 3px; }
+.info-pop .ip-head .x { margin: -4px -8px 0 0; }
+.info-pop p { color: var(--ink-2); }
+.info-pop .ip-k { display: block; font-size: 11.5px; font-weight: 700; color: var(--ink-3); letter-spacing: .02em; margin-bottom: 1px; }
+.info-pop .ip-d { background: var(--accent-soft); color: var(--ink); border-radius: var(--r-sm); padding: 8px 10px; }
+.info-pop.sheet { left: 0; right: 0; bottom: 0; top: auto; width: 100%; border-radius: var(--r-lg) var(--r-lg) 0 0; padding: 18px 18px calc(22px + env(safe-area-inset-bottom)); max-height: 70vh; overflow-y: auto; }
+
+/* ---------- isian sejajar: label, kotak isian, dan petunjuk berbaris rapi walau label berbeda panjang ---------- */
+@supports (grid-template-rows: subgrid) {
+  .fields.align { grid-auto-rows: auto; row-gap: 0; }
+  .fields.align > .field { grid-row: span 3; grid-template-rows: subgrid; row-gap: 6px; padding-bottom: 16px; }
+  .fields.align > :not(.field) { margin-bottom: 16px; }
+}
+
+/* ---------- jenis usaha ---------- */
+.type-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
+@media (max-width: 1100px) { .type-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 560px) { .type-grid { grid-template-columns: 1fr; } }
+.type-opt { display: grid; grid-template-columns: auto 1fr; gap: 12px; align-items: start; text-align: left; font: inherit; color: var(--ink); cursor: pointer;
+  border: 1.5px solid var(--line-strong); border-radius: var(--r); background: var(--surface); padding: 14px; transition: border-color .12s, background .12s; }
+.type-opt:hover { border-color: var(--accent); }
+.type-opt[aria-checked="true"] { border-color: var(--accent); background: var(--accent-soft); }
+.type-opt .ic { width: 36px; height: 36px; border-radius: 10px; display: grid; place-items: center; background: var(--accent-soft); color: var(--accent); }
+.type-opt[aria-checked="true"] .ic { background: var(--accent); color: var(--accent-ink); }
+.type-opt b { display: block; font-size: 14.5px; margin-bottom: 2px; }
+.type-opt span span { font-size: 12.5px; color: var(--ink-2); line-height: 1.45; }
+.type-pick { display: grid; gap: 4px; }
+.type-chip { display: inline-flex; align-items: center; gap: 8px; justify-self: start; font-size: 13px; font-weight: 650; padding: 4px 6px 4px 10px; border-radius: 999px; background: var(--surface-2); color: var(--ink-2); }
+.type-chip .ic { display: grid; color: var(--accent); }
+.type-chip .btn.link { font-size: 13px; padding: 2px 6px; }
+.modal-panel { display: grid; gap: 16px; }
+
+/* ---------- sub-bagian di dalam panel ---------- */
+.subsec { display: grid; gap: 12px; padding-top: 16px; border-top: 1px solid var(--line); }
+.subsec-head { display: flex; justify-content: space-between; align-items: center; gap: 8px 12px; flex-wrap: wrap; }
+.subsec-head b { font-size: 14.5px; }
+.sm-input { max-width: 240px; } .sm-input input { padding-block: 7px; }
+.sm-input > span { font-size: 12.5px; }
+
+/* ---------- kalkulator HPP ---------- */
+.hpp-row { display: grid; gap: 10px; padding: 14px; border-radius: var(--r); background: var(--surface-2); }
+.hpp-top { display: grid; grid-template-columns: 1fr auto; gap: 8px; align-items: center; }
+.hpp-fields { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 10px; }
+@media (max-width: 1250px) { .hpp-fields { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+@media (max-width: 560px) { .hpp-fields { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+.hpp-fields .field > label { font-size: 12.5px; }
+.hpp-fields .input input { padding: 8px 9px; }
+.hpp-fields .input > span { padding-inline: 8px; font-size: 12px; }
+.hpp-out { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; font-size: 13.5px; }
+.hpp-out b { font-size: 17px; margin-left: 6px; font-variant-numeric: tabular-nums; }
+.hpp-out select { max-width: 260px; }
+
+/* ---------- simulator: sumber potongan ---------- */
+.sim-in { display: grid; gap: 20px; align-content: start; }
+.sim-src { display: grid; gap: 12px; padding: 16px; border-radius: var(--r); background: var(--surface-2); }
+.sim-src .input, .sim-src select.plain { background: var(--surface); }
+.sim-src-head { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; }
+.sim-src .seg { background: var(--surface-3); justify-self: start; flex-wrap: wrap; }
+.seg button[disabled] { opacity: .45; cursor: not-allowed; }
+.checks { display: flex; gap: 8px 16px; flex-wrap: wrap; }
+.check { display: inline-flex; gap: 8px; align-items: center; font-size: 13.5px; cursor: pointer; }
+.check input { accent-color: var(--accent); width: 16px; height: 16px; }
+.plain-list { list-style: none; margin: 8px 0 0; padding: 0; display: grid; }
+.plain-list li { display: flex; justify-content: space-between; gap: 12px; padding: 7px 0; border-bottom: 1px solid var(--line); }
+.plain-list li:last-child { border-bottom: 0; }
+@media (max-width: 560px) { .sim .fields { grid-template-columns: 1fr; } }
+table.data.tight th:first-child, table.data.tight td:first-child { min-width: 0; }
+table.data .sub-val { display: block; margin-top: 1px; }

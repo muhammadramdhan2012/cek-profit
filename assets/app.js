@@ -48,7 +48,8 @@
   };
   const KEYS = { settings: 'cekprofit.v3', profile: 'cekprofit.profile', license: 'cekprofit.license', cases: 'cekprofit.cases', done: 'cekprofit.done' };
   const DEFAULTS = { modalMode: 'produk', catalog: [], fallbackPct: null, mitra: null, coret: 100, periods: [{ start: '', markup: 0, disc: 0 }],
-    packing: null, targetMargin: 15, targetProfit: null, fixedCosts: [] };
+    packing: null, targetMargin: 15, targetProfit: null, fixedCosts: [],
+    sellerType: null, extraCostPct: null, hppList: [], acuanContoh: 100000 };
   function loadSettings() {
     const s = store.get(KEYS.settings, null);
     if (s && Array.isArray(s.periods)) return { ...structuredClone(DEFAULTS), ...s };
@@ -66,8 +67,8 @@
   let demo = false;
   let license = { ok: false };
   let viewName = 'ringkasan';
-  const view = { platform: 'all', from: '', to: '', metric: 'margin', q: '', sort: 'margin', showAll: false, onlyCheck: true, costQ: '', costAll: false, compare: null };
-  const sim = { listPrice: null, disc: null, cost: null, feePct: null };
+  const view = { platform: 'all', from: '', to: '', metric: 'margin', q: '', sort: 'margin', showAll: false, onlyCheck: true, costQ: '', costAll: false, compare: null, typeOpen: false };
+  const sim = { listPrice: null, disc: null, cost: null, feePct: null, feeFixed: null, src: null, plat: null, status: 'nonmall', kat: null, opsi: [], afiliasi: 0 };
   let last = null;
   const cloud = CekCloud.init({ url: C.supabaseUrl, key: C.supabaseAnonKey });
   const account = { user: cloud.auth.user(), profile: null, sync: '', reports: null, loading: false, menu: false };
@@ -76,6 +77,18 @@
   const st = () => (demo ? CekDemo.settings() : settings);
   const prof = () => (demo ? CekDemo.profile() : profile);
   const cases = () => (demo ? {} : caseState);
+  /* jenis usaha: menentukan cara modal dihitung dan fitur yang tampil */
+  const TYPES = {
+    reseller: { label: 'Reseller', desc: 'Beli dari pemasok dengan diskon dari harga acuan, misalnya harga sampul buku atau harga katalog.', cost: 'Harga beli', icon: '<path d="M20.6 13.4l-7.2 7.2a2 2 0 0 1-2.8 0L3 13V3h10l7.6 7.6a2 2 0 0 1 0 2.8z"/><circle cx="7.5" cy="7.5" r="1.5"/>' },
+    stok: { label: 'Penjual stok sendiri', desc: 'Kulakan atau beli grosir, simpan stok, lalu jual lagi. Harga beli per produk diketahui.', cost: 'Harga beli', icon: '<path d="M21 8l-9-5-9 5 9 5 9-5z"/><path d="M3 8v8l9 5 9-5V8"/><path d="M12 13v8"/>' },
+    produsen: { label: 'Produsen / brand sendiri', desc: 'Membuat produk sendiri: makanan, skincare, konveksi, kerajinan. Modal dihitung dari HPP.', cost: 'HPP', icon: '<path d="M9 3h6M10 3v6L4.5 18.5A1.7 1.7 0 0 0 6 21h12a1.7 1.7 0 0 0 1.5-2.5L14 9V3"/><path d="M7 15h10"/>' },
+    dropship: { label: 'Dropshipper', desc: 'Tidak menyimpan stok. Supplier mengirim langsung ke pembeli atas nama toko Anda.', cost: 'Harga supplier', icon: '<path d="M1 4h13v12H1zM14 8h4l3 3v5h-7z"/><circle cx="5.5" cy="18.5" r="2"/><circle cx="17.5" cy="18.5" r="2"/>' },
+  };
+  const typeOf = (s) => (TYPES[s.sellerType] ? s.sellerType : s.modalMode === 'acuan' ? 'reseller' : null);
+  /** Pengaturan yang dipakai menghitung: biaya kulakan hanya berlaku untuk penjual stok sendiri. */
+  const effective = (s) => ({ ...s, extraCostPct: typeOf(s) === 'stok' ? s.extraCostPct : null });
+  const qi = (key, label = '') => `<button type="button" class="qi" data-info="${key}" aria-label="Penjelasan${label ? ` ${esc(label)}` : ''}" aria-haspopup="dialog">?</button>`;
+
   const parsedAll = () => (demo ? CekDemo.make().map((wb) => Engine.parseWorkbook(wb)) : files.filter((f) => f.parsed && f.parsed.kind !== 'modal_template').map((f) => f.parsed));
 
   const save = () => { store.set(KEYS.settings, settings); queueSync(); };
@@ -136,7 +149,7 @@
     const parsed = parsedAll();
     const hasIncome = parsed.some((p) => p.kind === 'shopee_income' || p.kind === 'tiktok_income');
     if (!hasIncome) { last = null; return null; }
-    const s = st();
+    const s = effective(st());
     const filter = { platforms: view.platform === 'all' ? ['shopee', 'tiktok'] : [view.platform], from: view.from, to: view.to };
     const r = Engine.compute(parsed, s, cases(), filter);
     const all = filter.platforms.length === 2 && !filter.from && !filter.to ? r : Engine.compute(parsed, s, cases());
@@ -218,6 +231,7 @@
   }
 
   function render() {
+    hideInfo();
     compute();
     renderNav(); renderAccount(); renderTop();
     const v = $('#view');
@@ -291,23 +305,25 @@
   }
   function nota(r) {
     const lines = [];
-    const L = (label, v, cls = '', note = '') => lines.push(`<div class="ln ${cls}"><dt>${label}${note ? `<small>${note}</small>` : ''}</dt><dd>${fmt(v)}</dd></div>`);
-    L('Penjualan', r.totalSales, '', `${num(r.orders)} pesanan terjual`);
-    L('Potongan marketplace', r.totalFees, 'minus', `${pct(-r.totalFees / r.totalSales)} dari penjualan`);
+    const L = (label, v, cls = '', note = '', key = '') => lines.push(`<div class="ln ${cls}"><dt>${label}${key ? qi(key, label) : ''}${note ? `<small>${note}</small>` : ''}</dt><dd>${fmt(v)}</dd></div>`);
+    const isDrop = typeOf(st()) === 'dropship';
+    L('Penjualan', r.totalSales, '', `${num(r.orders)} pesanan terjual`, 'penjualan');
+    L('Potongan marketplace', r.totalFees, 'minus', `${pct(-r.totalFees / r.totalSales)} dari penjualan`, 'potongan');
     if (r.ready) {
       const unknown = r.totalReceived - r.knownReceived;
-      if (Math.abs(unknown) >= 1) L('Dana dari pesanan tanpa modal', -unknown, 'muted', 'tidak dihitung sampai modalnya diisi');
-      L('Modal barang', -r.totalModal, 'minus');
-      if (r.knownPacking) L('Packing', -r.knownPacking, 'minus');
-      if (r.lostCertain) L('Retur yang tidak kembali', -r.lostCertain, 'minus');
-      if (r.fixedMonthly > 0) { L('Margin kotor', r.totalMargin, 'sub'); L('Biaya operasional', -r.opex, 'minus', `${fmt(r.fixedMonthly)} per bulan`); }
-    } else L('Dana diterima', r.totalReceived, 'sub');
+      if (Math.abs(unknown) >= 1) L('Dana dari pesanan tanpa modal', -unknown, 'muted', 'tidak dihitung sampai modalnya diisi', 'tanpa_modal');
+      L('Modal barang', -r.totalModal, 'minus', '', 'modal');
+      if (r.knownPacking) L(isDrop ? 'Biaya dropship' : 'Packing', -r.knownPacking, 'minus', '', isDrop ? 'dropship_fee' : 'packing');
+      if (r.lostCertain) L('Retur yang tidak kembali', -r.lostCertain, 'minus', '', 'retur_hilang');
+      if (r.fixedMonthly > 0) { L('Margin kotor', r.totalMargin, 'sub', '', 'margin_kotor'); L('Biaya operasional', -r.opex, 'minus', `${fmt(r.fixedMonthly)} per bulan`, 'opex'); }
+    } else L('Dana diterima', r.totalReceived, 'sub', '', 'dana_diterima');
     const total = r.fixedMonthly > 0 ? r.netProfit : r.totalMargin;
     const label = r.fixedMonthly > 0 ? 'Laba bersih' : 'Margin setelah modal';
+    const labelKey = r.fixedMonthly > 0 ? 'laba_bersih' : 'margin_total';
     return `<section class="nota" aria-label="Nota laba">
       <div class="nota-head"><b>Nota laba</b><span>${tgl(r.first)} sampai ${tgl(r.last)}<br>${['shopee', 'tiktok'].filter((k) => r.has[k]).map((k) => PNAME[k]).join(' dan ')}</span></div>
       <dl>${lines.join('')}</dl>
-      <div class="nota-total"><span class="lbl">${label}</span>
+      <div class="nota-total"><span class="lbl">${label}${qi(labelKey, label)}</span>
         ${r.ready ? `<span class="big ${total < 0 ? 'neg' : ''}">${fmt(total)}</span>
           <span class="note">${r.coverage < 0.98 ? `Dari ${pct(r.coverage, 0)} penjualan yang modalnya diketahui.` : `${pct(total / r.totalSales)} dari penjualan.`}${r.unknownRisk > 0 ? ` Bisa turun ${fmt(r.unknownRisk)} bila retur yang belum dicek tidak kembali.` : ''}</span>`
           : '<span class="big faint">Belum dihitung</span><span class="note">Isi modal produk agar laba bisa dihitung.</span><button class="btn sm primary" type="button" data-go="data" style="justify-self:start;margin-top:6px">Isi modal</button>'}
@@ -323,12 +339,12 @@
     const hitN = ok(target) && target > 0 && r.ready ? r.months.filter((m) => (r.fixedMonthly ? m.total.net : m.total.margin) >= target).length : null;
     const key = (m) => (r.ready ? m.total.margin : m.total.sales);
     return `<div class="facts">
-      <div class="fact"><span>Rata-rata per bulan</span><b class="${r.perMonth < 0 ? 'neg' : ''}">${r.ready ? fmt(r.fixedMonthly ? r.netProfit / Math.max(r.monthsSpan, 1) : r.perMonth) : '—'}</b><small>${r.fixedMonthly ? 'laba bersih' : 'margin'}, ${(Math.round(r.monthsSpan * 10) / 10).toLocaleString('id-ID')} bulan data</small></div>
-      <div class="fact"><span>Margin per pesanan</span><b>${r.ready ? fmt(r.perOrder) : '—'}</b><small>dari ${num(r.orders)} pesanan</small></div>
-      ${a && b ? `<div class="fact"><span>${monthLong(a.month)}${running ? ' (berjalan)' : ''}</span><b>${fmt(key(a))}</b><small>${r.ready ? 'margin' : 'penjualan'} ${delta(key(a), key(b))} dibanding ${monthLabel(b.month)}</small></div>
-      <div class="fact"><span>Potongan ${monthLabel(a.month)}</span><b>${pct(-a.total.fees / (a.total.sales || 1))}</b><small>${pct(-b.total.fees / (b.total.sales || 1))} di ${monthLabel(b.month)}</small></div>`
-      : `<div class="fact"><span>Potongan marketplace</span><b>${pct(-r.totalFees / r.totalSales)}</b><small>${fmt(-r.totalFees)}</small></div><div class="fact"><span>Modal diketahui</span><b>${pct(r.coverage, 0)}</b><small>dari penjualan</small></div>`}
-      ${hitN !== null ? `<div class="fact" style="grid-column:1/-1;border-right:0;border-top:1px solid var(--line)"><span>Target ${r.fixedMonthly ? 'laba bersih' : 'margin'} ${fmt(target)} per bulan</span><b>${hitN} dari ${r.months.length} bulan</b><small>mencapai target</small></div>` : ''}
+      <div class="fact"><span>Rata-rata per bulan${qi('rata_bulan')}</span><b class="${r.perMonth < 0 ? 'neg' : ''}">${r.ready ? fmt(r.fixedMonthly ? r.netProfit / Math.max(r.monthsSpan, 1) : r.perMonth) : '—'}</b><small>${r.fixedMonthly ? 'laba bersih' : 'margin'}, ${(Math.round(r.monthsSpan * 10) / 10).toLocaleString('id-ID')} bulan data</small></div>
+      <div class="fact"><span>Margin per pesanan${qi('margin_pesanan')}</span><b>${r.ready ? fmt(r.perOrder) : '—'}</b><small>dari ${num(r.orders)} pesanan</small></div>
+      ${a && b ? `<div class="fact"><span>${monthLong(a.month)}${running ? ' (berjalan)' : ''}${qi('bulan_ini')}</span><b>${fmt(key(a))}</b><small>${r.ready ? 'margin' : 'penjualan'} ${delta(key(a), key(b))} dibanding ${monthLabel(b.month)}</small></div>
+      <div class="fact"><span>Potongan ${monthLabel(a.month)}${qi('potongan_bulan')}</span><b>${pct(-a.total.fees / (a.total.sales || 1))}</b><small>${pct(-b.total.fees / (b.total.sales || 1))} di ${monthLabel(b.month)}</small></div>`
+      : `<div class="fact"><span>Potongan marketplace${qi('potongan')}</span><b>${pct(-r.totalFees / r.totalSales)}</b><small>${fmt(-r.totalFees)}</small></div><div class="fact"><span>Modal diketahui${qi('modal_diketahui')}</span><b>${pct(r.coverage, 0)}</b><small>dari penjualan</small></div>`}
+      ${hitN !== null ? `<div class="fact" style="grid-column:1/-1;border-right:0;border-top:1px solid var(--line)"><span>Target ${r.fixedMonthly ? 'laba bersih' : 'margin'} ${fmt(target)} per bulan${qi('target_laba')}</span><b>${hitN} dari ${r.months.length} bulan</b><small>mencapai target</small></div>` : ''}
     </div>`;
   }
   const insightItem = (i) => `<li class="insight ${i.level}"><span class="bar" aria-hidden="true"></span><div><b>${esc(i.title)}</b><p>${esc(i.detail)}</p>${i.action ? `<div class="act">${esc(i.action)}</div>` : ''}</div></li>`;
@@ -407,7 +423,7 @@
     const row = (p) => `<tr><td><i class="sw" style="background:var(--${p.platform})"></i> ${esc(p.name)}${p.variant && p.variant !== 'Default' ? ` <span class="faint">${esc(p.variant)}</span>` : ''}</td>
       <td>${p.qtyKnown ? num(p.qty) : `${p.rows}×`}</td><td>${fmt(p.sales)}</td><td class="${p.margin < 0 ? 'neg' : ''}">${fmt(p.margin)}</td><td class="${p.pct < 0 ? 'neg' : ''}">${pct(p.pct)}</td>
       <td>${fmt(p.avgPrice)}</td><td>${fmt(p.breakEven)}</td><td><b>${fmt(p.targetPrice)}</b></td><td>${HL[p.health] ? `<span class="chip ${p.health}">${HL[p.health]}</span>` : '<span class="faint">—</span>'}</td></tr>`;
-    const head = '<thead><tr><th>Produk</th><th>Terjual</th><th>Penjualan</th><th>Margin</th><th>%</th><th>Harga rata-rata</th><th>Harga impas</th><th>Harga target</th><th>Status</th></tr></thead>';
+    const head = `<thead><tr><th>Produk</th><th>Terjual${qi('terjual')}</th><th>Penjualan</th><th>Margin${qi('margin_produk')}</th><th>%${qi('margin_pct')}</th><th>Harga rata-rata${qi('harga_rata')}</th><th>Harga impas${qi('harga_impas')}</th><th>Harga target${qi('harga_target')}</th><th>Status${qi('status')}</th></tr></thead>`;
     box.innerHTML = `<div class="tablewrap"><table class="data">${head}<tbody>${shown.map(row).join('') || '<tr><td colspan="9" class="muted">Tidak ada produk yang cocok.</td></tr>'}</tbody></table></div>
       ${!pro && list.length > FREE ? `<div class="locked" style="min-height:200px"><div class="tablewrap blur"><table class="data"><tbody>${list.slice(FREE, FREE + 4).map(row).join('')}</tbody></table></div>${lockVeil(`${num(list.length - FREE)} produk lainnya`, 'Lihat semua produk, status rugi atau tipis, dan harga yang disarankan.')}</div>` : ''}
       ${pro && list.length > 20 ? `<button class="btn quiet" type="button" id="show-all" style="margin-top:8px">${view.showAll ? 'Tampilkan lebih sedikit' : `Tampilkan semua ${num(list.length)} produk`}</button>` : ''}
@@ -417,7 +433,7 @@
   /* ---------- biaya ---------- */
   const barRows = (rows, total) => {
     const max = Math.max(...rows.map((x) => Math.abs(x.v)), 1);
-    return rows.map((x) => `<div class="barrow"><span>${esc(x.label)}</span><div class="track"><i style="width:${(Math.abs(x.v) / max) * 100}%"></i></div><span class="num">${fmt(x.v)} <span class="faint">${pct(Math.abs(x.v) / total)}</span></span></div>`).join('');
+    return rows.map((x) => `<div class="barrow"><span>${esc(x.label)}${x.k ? qi(x.k, x.label) : ''}</span><div class="track"><i style="width:${(Math.abs(x.v) / max) * 100}%"></i></div><span class="num">${fmt(x.v)} <span class="faint">${pct(Math.abs(x.v) / total)}</span></span></div>`).join('');
   };
   function viewBiaya() {
     const { r } = last;
@@ -428,25 +444,27 @@
         <div class="tablewrap"><table class="data"><thead><tr><th></th>${plats.map((k) => `<th>${PNAME[k]}</th>`).join('')}</tr></thead><tbody>
           <tr><td>Pesanan terjual</td>${plats.map((k) => `<td>${num(r[k].orders)}</td>`).join('')}</tr>
           <tr><td>Penjualan</td>${plats.map((k) => `<td>${fmt(r[k].sales)}</td>`).join('')}</tr>
-          <tr><td>Potongan marketplace</td>${plats.map((k) => `<td class="neg">${fmt(r[k].feeTotal)} <span class="faint">${pct(-r[k].feeTotal / r[k].sales)}</span></td>`).join('')}</tr>
-          <tr><td>Dana diterima</td>${plats.map((k) => `<td>${fmt(r[k].received)}</td>`).join('')}</tr>
+          <tr><td>Potongan marketplace${qi('potongan')}</td>${plats.map((k) => `<td class="neg">${fmt(r[k].feeTotal)} <span class="faint">${pct(-r[k].feeTotal / r[k].sales)}</span></td>`).join('')}</tr>
+          <tr><td>Dana diterima${qi('dana_diterima')}</td>${plats.map((k) => `<td>${fmt(r[k].received)}</td>`).join('')}</tr>
           <tr><td>Modal</td>${plats.map((k) => `<td class="neg">${r.ready ? fmt(-r[k].modal) : '—'}</td>`).join('')}</tr>
           ${r.totalPacking ? `<tr><td>Packing</td>${plats.map((k) => `<td class="neg">${fmt(-r[k].knownPacking)}</td>`).join('')}</tr>` : ''}
           <tr class="total"><td>Margin</td>${plats.map((k) => `<td class="${r[k].margin < 0 ? 'neg' : ''}">${fmt(r[k].margin)} <span class="faint">${ok(r[k].margin) && r[k].knownSales ? pct(r[k].margin / r[k].knownSales) : ''}</span></td>`).join('')}</tr>
+          <tr><td>Tarif efektif${qi('tarif_efektif')}</td>${plats.map((k) => { const f = r.feeModel[k]; return `<td>${f ? `${pct(f.pct)} + ${fmt(f.fixed)}<span class="faint tiny"> /pesanan</span>` : '—'}</td>`; }).join('')}</tr>
           <tr><td class="small faint">Modal diketahui</td>${plats.map((k) => `<td class="small faint">${pct(r[k].coverage, 0)}</td>`).join('')}</tr>
         </tbody></table></div>
+        <div class="row-actions" style="margin-top:12px">${plats.filter((k) => r.feeModel[k]).map((k) => `<button class="btn sm" type="button" data-sim-use="${k}">Simulasikan harga dengan tarif ${PNAME[k]}</button>`).join('')}</div>
         ${r.has.tiktok ? `<p class="small muted" style="margin-top:12px">TikTok: diskon toko rata-rata ${pct(T.discount)}. ${Object.entries(T.bySource).map(([k, v]) => `${esc(k)} ${num(v.orders)} pesanan${r.ready ? ` dengan margin ${fmt(v.margin)}` : ''}`).join('; ')}.</p>` : ''}
         ${r.adjustments ? `<p class="small muted" style="margin-top:6px">Kompensasi dari platform ${fmt(r.adjustments)} ditampilkan terpisah dan tidak ditambahkan ke margin.</p>` : ''}
       </section>
       <section class="panel"><div class="panel-head"><h3>Rincian potongan</h3><p>Persen dari penjualan</p></div>
         ${r.has.shopee ? `<p class="small" style="font-weight:700;margin-bottom:4px"><i class="sw" style="background:var(--shopee)"></i> Shopee</p>${barRows([
-          { label: 'Biaya administrasi', v: S.fees.admin }, { label: 'Gratis Ongkir XTRA', v: S.fees.xtra }, { label: 'Biaya proses pesanan', v: S.fees.proses },
-          { label: 'Komisi AMS (afiliasi)', v: S.fees.ams }, { label: 'Ongkir ditanggung penjual', v: S.fees.ship }, { label: 'Biaya lain', v: S.fees.lain }].filter((x) => Math.abs(x.v) >= 1).sort((a, b) => a.v - b.v), S.sales)}` : ''}
+          { label: 'Biaya administrasi', v: S.fees.admin, k: 'fee_admin' }, { label: 'Gratis Ongkir XTRA', v: S.fees.xtra, k: 'fee_xtra' }, { label: 'Biaya proses pesanan', v: S.fees.proses, k: 'fee_proses' },
+          { label: 'Komisi AMS (afiliasi)', v: S.fees.ams, k: 'fee_ams' }, { label: 'Ongkir ditanggung penjual', v: S.fees.ship, k: 'fee_ship' }, { label: 'Biaya lain', v: S.fees.lain, k: 'fee_lain' }].filter((x) => Math.abs(x.v) >= 1).sort((a, b) => a.v - b.v), S.sales)}` : ''}
         ${r.has.tiktok ? `<p class="small" style="font-weight:700;margin:14px 0 4px"><i class="sw" style="background:var(--tiktok)"></i> TikTok Shop</p>${barRows([
-          { label: 'Komisi platform', v: T.fees.platform }, { label: 'Komisi dinamis', v: T.fees.dinamis }, { label: 'Biaya pemrosesan', v: T.fees.proses },
-          { label: 'Ongkir', v: T.fees.ongkir }, { label: 'Komisi afiliasi', v: T.fees.afiliasi }, { label: 'Biaya lain', v: T.fees.lain }].filter((x) => Math.abs(x.v) >= 1).sort((a, b) => a.v - b.v), T.sales)}` : ''}
+          { label: 'Komisi platform', v: T.fees.platform, k: 'fee_platform' }, { label: 'Komisi dinamis', v: T.fees.dinamis, k: 'fee_dinamis' }, { label: 'Biaya pemrosesan', v: T.fees.proses, k: 'fee_tt_proses' },
+          { label: 'Ongkir', v: T.fees.ongkir, k: 'fee_ongkir' }, { label: 'Komisi afiliasi', v: T.fees.afiliasi, k: 'fee_afiliasi' }, { label: 'Biaya lain', v: T.fees.lain, k: 'fee_lain' }].filter((x) => Math.abs(x.v) >= 1).sort((a, b) => a.v - b.v), T.sales)}` : ''}
       </section></div>
-      ${r.buckets.length > 1 ? `<section class="panel"><div class="panel-head"><h3>Potongan menurut nilai pesanan</h3><p>Biaya tetap per pesanan membuat pesanan kecil terpotong lebih besar</p></div>
+      ${r.buckets.length > 1 ? `<section class="panel"><div class="panel-head"><h3>Potongan menurut nilai pesanan${qi('potongan_nilai')}</h3><p>Biaya tetap per pesanan membuat pesanan kecil terpotong lebih besar</p></div>
         ${r.buckets.map((b) => { const p = -b.fees / b.value; const maxp = Math.max(...r.buckets.map((x) => -x.fees / x.value));
           return `<div class="barrow"><span>${esc(b.label)} <span class="faint tiny">${num(b.orders)} pesanan${r.ready && b.known ? `, margin ${fmt(b.margin / b.known)} per pesanan` : ''}</span></span><div class="track"><i style="width:${(p / maxp) * 100}%"></i></div><span class="num">${pct(p)}</span></div>`; }).join('')}
       </section>` : ''}`;
@@ -460,7 +478,7 @@
       <div class="chips">${r.catSummary.sort((a, b) => b.count - a.count).map((c) => `<span class="chip"><i class="sw" style="background:var(--${c.platform})"></i>${esc(c.label)}: ${c.count}</span>`).join('')}</div>
       <p class="small muted" style="margin-block:14px">Barang yang tidak jadi dikirim (stok kosong) tidak memakan modal. Untuk retur dan paket bermasalah, pilih <b>Tidak kembali</b> bila barangnya tidak Anda terima lagi; modalnya akan dikurangkan dari laba.${r.unknownRisk > 0 ? ` Kasus yang belum dicek berisiko ${fmt(r.unknownRisk)}.` : ''}</p>
       <div class="row-actions" style="margin-bottom:8px">${r.cases.some((c) => !c.needsCheck) ? `<button class="btn sm quiet" type="button" id="only-check">${view.onlyCheck ? 'Tampilkan semua kasus' : 'Hanya yang perlu dicek'}</button>` : ''}</div>
-      <div class="tablewrap"><table class="data"><thead><tr><th>Produk dan alasan</th><th>Resi retur</th><th>Perkiraan modal</th><th>Status barang</th></tr></thead><tbody>
+      <div class="tablewrap"><table class="data"><thead><tr><th>Produk dan alasan</th><th>Resi retur</th><th>Perkiraan modal${qi('perkiraan_modal')}</th><th>Status barang${qi('status_barang')}</th></tr></thead><tbody>
       ${r.cases.filter((c) => !view.onlyCheck || c.needsCheck).sort((a, b) => (b.needsCheck - a.needsCheck) || ((b.estModal || 0) - (a.estModal || 0))).slice(0, 300).map((c) => `<tr>
         <td><i class="sw" style="background:var(--${c.platform})"></i> <b>${esc(c.product || '-')}</b>${c.variant && !/^(Default|Not Specified)$/.test(c.variant) ? ` <span class="faint">${esc(c.variant)}</span>` : ''}<br><span class="tiny faint">${esc(Engine.CAT_LABEL[c.cat])}${c.note ? `: “${esc(c.note.slice(0, 70))}”` : ''}</span></td>
         <td>${esc(c.resi || '–')}</td><td>${fmt(c.estModal)}</td>
@@ -469,36 +487,71 @@
   }
 
   /* ---------- simulator ---------- */
-  function viewSimulator() {
+  const resetSimFee = () => { sim.feePct = null; sim.feeFixed = null; };
+  /** Sumber potongan untuk simulator: tarif efektif dari laporan (paling akurat) atau tabel tarif umum. */
+  function simFee() {
     const r = last && last.r;
-    const feeDefault = r ? +(-r.totalFees / r.totalSales * 100).toFixed(1) : 17;
-    const field = (k, label, unit, v) => `<div class="field"><label for="sim-${k}">${label}</label><div class="input">${unit === 'Rp' ? '<span>Rp</span>' : ''}<input id="sim-${k}" type="number" step="${unit === 'Rp' ? 1000 : 0.5}" value="${v ?? ''}">${unit === '%' ? '<span>%</span>' : ''}</div></div>`;
-    return `<section class="panel"><div class="sim"><div class="fields">
-        ${field('listPrice', 'Harga jual normal', 'Rp', sim.listPrice ?? 100000)}
-        ${field('disc', 'Diskon toko', '%', sim.disc ?? 0)}
-        ${field('cost', 'Modal per unit', 'Rp', sim.cost ?? 60000)}
-        ${field('feePct', 'Potongan marketplace', '%', sim.feePct ?? feeDefault)}
-        <p class="tiny faint span-all">${r ? 'Potongan diisi dari rata-rata data Anda. Untuk produk murah, persentasenya biasanya lebih besar.' : 'Unggah laporan agar potongan marketplace diisi dari data Anda.'} Packing ${fmt(ok(st().packing) ? st().packing : 0)} per pesanan ikut dihitung.</p>
+    const fm = (r && r.feeModel) || {};
+    const avail = ['shopee', 'tiktok'].filter((k) => fm[k]);
+    const src = sim.src === 'umum' || !avail.length ? 'umum' : 'laporan';
+    const plat = src === 'laporan' ? (avail.includes(sim.plat) ? sim.plat : avail[0]) : (sim.plat === 'tiktok' ? 'tiktok' : 'shopee');
+    if (src === 'laporan') {
+      const f = fm[plat];
+      return { src, plat, avail, pct: +(f.pct * 100).toFixed(2), fixed: Math.round(f.fixed), rincian: null, note: `Tarif efektif dari ${num(f.orders)} pesanan ${PNAME[plat]} di laporan Anda.` };
+    }
+    const d = CekTarif.DATA[plat];
+    const kat = d.kategori.some((k) => k.id === sim.kat) ? sim.kat : d.kategori[0].id;
+    const est = CekTarif.estimate({ platform: plat, status: sim.status, kategori: kat, opsi: sim.opsi, afiliasi: ok(sim.afiliasi) ? sim.afiliasi : 0 });
+    return { src, plat, avail, kat, pct: est.pct, fixed: est.fixed, rincian: est.rincian, note: '' };
+  }
+  function viewSimulator() {
+    const f = simFee();
+    const s = st();
+    const field = (k, label, unit, v, info = '', hint = '') => `<div class="field"><label for="sim-${k}">${label}${info ? qi(info, label) : ''}</label><div class="input">${unit === 'Rp' ? '<span>Rp</span>' : ''}<input id="sim-${k}" type="number" step="${unit === 'Rp' ? (k === 'feeFixed' ? 50 : 1000) : 0.5}" inputmode="decimal" value="${v ?? ''}">${unit === '%' ? '<span>%</span>' : ''}</div>${hint ? `<span class="hint">${hint}</span>` : ''}</div>`;
+    const d = CekTarif.DATA[f.plat];
+    const umum = f.src === 'umum' ? `<div class="fields two">
+        <div class="field span-all"><label for="simx-kat">Kategori produk</label><select class="plain" id="simx-kat">${d.kategori.map((x) => `<option value="${x.id}" ${f.kat === x.id ? 'selected' : ''}>${esc(x.label)}</option>`).join('')}</select></div>
+        <div class="field"><label for="simx-status">Status toko</label><select class="plain" id="simx-status">${d.status.map((x) => `<option value="${x.id}" ${sim.status === x.id ? 'selected' : ''}>${esc(x.label)}</option>`).join('')}</select></div>
+        <div class="field"><label for="simx-aff">Komisi afiliasi</label><div class="input"><input id="simx-aff" type="number" min="0" max="50" step="0.5" value="${ok(sim.afiliasi) && sim.afiliasi ? sim.afiliasi : ''}" placeholder="0"><span>%</span></div></div>
+        <div class="field span-all"><span class="label">Program yang diikuti</span><div class="checks">${d.opsi.map((o) => `<label class="check"><input type="checkbox" data-sim-opsi="${o.id}" ${sim.opsi.includes(o.id) ? 'checked' : ''}><span>${esc(o.label)} <span class="faint">${String(o.pct).replace('.', ',')}%</span></span></label>`).join('')}</div></div></div>
+      <p class="tiny faint">Perkiraan dari tarif publik ${esc(d.nama)} (${esc(d.berlaku)}), dicek ${tgl(CekTarif.DATA.dicek)}. Angka pasti per subkategori ada di Seller Centre. Sumber: ${d.sumber.map((x) => `<a href="${esc(x.url)}" target="_blank" rel="noopener">${esc(x.label)}</a>`).join(', ')}.</p>` : `<p class="tiny faint">${esc(f.note)} Angka ini otomatis mengikuti tarif terbaru, kategori, dan program yang Anda ikuti.</p>`;
+    return `<section class="panel"><div class="sim"><div class="sim-in">
+        <div class="sim-src">
+          <div class="sim-src-head"><h3>Potongan marketplace${qi('sim_potongan')}</h3>
+            <div class="seg" role="group" aria-label="Sumber potongan"><button type="button" data-sim-src="laporan" aria-pressed="${f.src === 'laporan'}" ${f.avail.length ? '' : 'disabled title="Unggah laporan penghasilan dulu"'}>Dari laporan toko</button><button type="button" data-sim-src="umum" aria-pressed="${f.src === 'umum'}">Tarif umum</button></div></div>
+          <div class="seg" role="group" aria-label="Marketplace">${(f.src === 'laporan' ? f.avail : CekTarif.PLATFORMS).map((k) => `<button type="button" data-sim-plat="${k}" aria-pressed="${f.plat === k}">${f.src === 'umum' ? esc(CekTarif.DATA[k].nama) : PNAME[k]}</button>`).join('')}</div>
+          ${umum}
+        </div>
+        <div class="fields two align">
+          ${field('listPrice', 'Harga jual normal', 'Rp', sim.listPrice ?? 100000)}
+          ${field('disc', 'Diskon toko', '%', sim.disc ?? 0)}
+          ${field('cost', `${(TYPES[typeOf(s)] || { cost: 'Modal' }).cost} per unit`, 'Rp', sim.cost ?? 60000, 'modal')}
+          ${field('packing', typeOf(s) === 'dropship' ? 'Biaya dropship per pesanan' : 'Packing per pesanan', 'Rp', ok(sim.packing) ? sim.packing : (ok(s.packing) ? s.packing : 0), typeOf(s) === 'dropship' ? 'dropship_fee' : 'packing_in')}
+          ${field('feePct', 'Potongan persen', '%', ok(sim.feePct) ? sim.feePct : f.pct, '', 'Terisi dari sumber di atas; boleh diubah.')}
+          ${field('feeFixed', 'Biaya tetap per pesanan', 'Rp', ok(sim.feeFixed) ? sim.feeFixed : f.fixed, '', 'Biaya proses pesanan dan sejenisnya.')}
+        </div>
       </div><div class="sim-out" id="sim-out"></div></div></section>`;
   }
   function renderSimOut() {
     const box = $('#sim-out');
     if (!box) return;
-    const s = st(), r = last && last.r;
+    const s = st(), f = simFee();
     const g = (k, d) => (ok(sim[k]) ? sim[k] : d);
-    const res = Engine.simulate({ listPrice: g('listPrice', 100000), disc: g('disc', 0), cost: g('cost', 60000), feePct: g('feePct', r ? -r.totalFees / r.totalSales * 100 : 17),
-      feeFixed: 0, packing: ok(s.packing) ? s.packing : 0, target: ok(s.targetMargin) ? s.targetMargin : 15 });
+    const target = ok(s.targetMargin) ? s.targetMargin : 15;
+    const res = Engine.simulate({ listPrice: g('listPrice', 100000), disc: g('disc', 0), cost: g('cost', 60000), feePct: g('feePct', f.pct),
+      feeFixed: g('feeFixed', f.fixed), packing: g('packing', ok(s.packing) ? s.packing : 0), target });
     if (!(res.price > 0)) { box.innerHTML = '<p class="muted small">Isi harga dan diskon yang masuk akal.</p>'; return; }
-    const parts = [['Modal', res.cost, 'var(--ink-2)'], ['Potongan', res.fees, 'var(--cost)'], ['Packing', res.packing, 'var(--mark)'], ['Margin', Math.max(res.margin, 0), 'var(--accent)']].filter((p) => p[1] > 0);
+    const parts = [['Modal', res.cost, 'var(--ink-2)'], ['Potongan', res.fees, 'var(--cost)'], [typeOf(s) === 'dropship' ? 'Dropship' : 'Packing', res.packing, 'var(--mark)'], ['Margin', Math.max(res.margin, 0), 'var(--accent)']].filter((p) => p[1] > 0);
     const tot = parts.reduce((a, p) => a + p[1], 0);
-    box.innerHTML = `<span class="small muted">Margin per unit</span>
+    box.innerHTML = `<span class="small muted">Margin per unit${qi('sim_margin')}</span>
       <span class="sim-big ${res.margin < 0 ? 'neg' : ''}">${fmt(res.margin)} <span class="small faint">${pct(res.marginPct)}</span></span>
       <div class="bar-stack" role="img" aria-label="Pembagian harga jual">${parts.map(([l, v, c]) => `<div title="${l}: ${fmt(v)}" style="flex:${v / tot};background:${c}"></div>`).join('')}</div>
       <div class="legend">${parts.map(([l, v, c]) => `<span><i class="sw" style="background:${c}"></i>${l} ${fmt(v)}</span>`).join('')}</div>
-      <div class="facts" style="margin-top:4px"><div class="fact"><span>Harga impas</span><b>${fmt(res.breakEvenPrice)}</b><small>di bawah ini rugi</small></div>
-        <div class="fact"><span>Harga untuk target ${ok(s.targetMargin) ? s.targetMargin : 15}%</span><b>${fmt(res.targetPrice)}</b><small>dibayar pembeli</small></div>
-        <div class="fact"><span>Dibayar pembeli</span><b>${fmt(res.price)}</b><small>setelah diskon</small></div>
-        <div class="fact"><span>Diskon maksimal</span><b class="${res.maxDisc < 0 ? 'neg' : ''}">${pct(res.maxDisc / 100)}</b><small>sebelum rugi</small></div></div>`;
+      <div class="facts" style="margin-top:4px"><div class="fact"><span>Harga impas${qi('harga_impas')}</span><b>${fmt(res.breakEvenPrice)}</b><small>di bawah ini rugi</small></div>
+        <div class="fact"><span>Harga untuk target ${target}%${qi('harga_target')}</span><b>${fmt(res.targetPrice)}</b><small>dibayar pembeli</small></div>
+        <div class="fact"><span>Dibayar pembeli${qi('sim_dibayar')}</span><b>${fmt(res.price)}</b><small>setelah diskon</small></div>
+        <div class="fact"><span>Diskon maksimal${qi('sim_diskon_maks')}</span><b class="${res.maxDisc < 0 ? 'neg' : ''}">${pct(res.maxDisc / 100)}</b><small>sebelum rugi</small></div></div>
+      ${f.rincian && !ok(sim.feePct) && !ok(sim.feeFixed) ? `<details class="small"><summary style="cursor:pointer;font-weight:650">Rincian potongan tarif umum</summary><ul class="plain-list">${f.rincian.map((x) => `<li><span>${esc(x.label)}</span><b>${x.pct !== undefined ? `${String(x.pct).replace('.', ',')}%` : fmt(x.rp)}</b></li>`).join('')}</ul></details>` : ''}`;
   }
 
   /* ---------- riwayat ---------- */
@@ -537,13 +590,22 @@
   }
 
   /* ---------- data & modal ---------- */
+  const typeIcon = (k, size = 20) => `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${TYPES[k].icon}</svg>`;
+  function typePicker(cur) {
+    return `<section class="panel type-pick" aria-labelledby="tp-h"><div class="panel-head" style="margin-bottom:12px"><h3 id="tp-h">Anda berjualan sebagai apa?${qi('jenis_usaha')}</h3><p>Mengatur cara modal dihitung. Bisa diubah kapan saja.</p></div>
+      <div class="type-grid" role="radiogroup" aria-label="Jenis usaha">${Object.entries(TYPES).map(([k, t]) => `<button type="button" class="type-opt" role="radio" aria-checked="${cur === k}" data-type="${k}">
+        <span class="ic">${typeIcon(k)}</span><span><b>${t.label}</b><span>${t.desc}</span></span></button>`).join('')}</div>
+      ${cur ? '<div><button class="btn sm quiet" type="button" data-type-close>Batal</button></div>' : ''}</section>`;
+  }
   function viewData() {
     const s = st();
     const r = last && last.all;
     const dis = demo ? 'disabled' : '';
-    const mode = s.modalMode === 'acuan' ? 'acuan' : 'produk';
+    const type = demo ? 'stok' : typeOf(s);
+    const isDrop = type === 'dropship';
     return `
       ${demo ? '<p class="note-box warn">Mode contoh memakai data dan modal Toko Contoh Sejahtera. Unggah file Anda untuk mulai; data contoh akan diganti.</p>' : ''}
+      ${!demo && (!type || view.typeOpen) ? typePicker(type) : ''}
       <div class="grid-2" style="align-items:start">
         <section class="stack">
           <div class="drop" id="drop"><span class="ic">${svg('data', 22)}</span><strong>Tarik file laporan ke sini</strong>
@@ -558,27 +620,25 @@
               <p><b>Opsional.</b> File retur atau pengembalian, dan template modal yang sudah diisi.</p>
               <p class="faint">Unduh untuk periode yang sama di semua laporan. Nama menu bisa sedikit berubah dari waktu ke waktu.</p></div></details>
         </section>
-        <section class="panel" style="display:grid;gap:18px">
-          <div class="panel-head" style="margin:0"><h3>Modal barang</h3>${r && r.totalSales ? `<span class="badge ${r.coverage >= 0.98 ? 'ok' : 'todo'}">${r.coverage >= 0.98 ? 'Lengkap' : `${pct(r.coverage, 0)} penjualan`}</span>` : ''}</div>
-          <p class="small muted" style="margin-top:-10px">Laporan marketplace tidak berisi harga beli Anda. Pesanan tanpa modal tidak dihitung dalam laba, bukan dianggap nol.</p>
-          <div class="tabs" role="tablist" aria-label="Cara menghitung modal">
-            <button type="button" role="tab" data-mode="produk" aria-selected="${mode === 'produk'}" ${dis}>Per produk</button>
-            <button type="button" role="tab" data-mode="acuan" aria-selected="${mode === 'acuan'}" ${dis}>Reseller: diskon dari harga acuan</button></div>
-          ${mode === 'produk' ? produkPanel(s, r, dis) : acuanPanel(s, dis)}
+        <section class="panel modal-panel">
+          <div class="panel-head" style="margin:0"><h3>${type === 'produsen' ? 'Modal produksi (HPP)' : 'Modal barang'}${qi('modal')}</h3>${r && r.totalSales ? `<span class="badge ${r.coverage >= 0.98 ? 'ok' : 'todo'}">${r.coverage >= 0.98 ? 'Lengkap' : `${pct(r.coverage, 0)} penjualan`}</span>` : ''}</div>
+          ${type ? `<div class="type-chip"><span class="ic">${typeIcon(type, 16)}</span><span>${TYPES[type].label}</span>${demo ? '' : '<button class="btn link" type="button" data-type-open>Ubah</button>'}</div>` : ''}
+          <p class="small muted">Laporan marketplace tidak berisi harga beli Anda. Pesanan tanpa modal tidak dihitung dalam laba, bukan dianggap nol.</p>
+          ${modalBody(s, r, dis, type)}
         </section>
       </div>
       <section class="panel" style="display:grid;gap:16px">
         <div class="panel-head" style="margin:0"><h3>Biaya lain dan target</h3><p>Mengubah margin menjadi laba bersih</p></div>
-        <div class="fields">
-          <div class="field"><label for="s-packing">Packing per pesanan</label><div class="input"><span>Rp</span><input id="s-packing" type="number" min="0" step="100" inputmode="numeric" placeholder="2000" value="${ok(s.packing) && s.packing > 0 ? s.packing : ''}" ${dis}></div><span class="hint">Plastik, bubble wrap, lakban.</span></div>
-          <div class="field"><label for="s-target">Target margin per produk</label><div class="input"><input id="s-target" type="number" min="0" max="80" step="1" inputmode="decimal" value="${ok(s.targetMargin) ? s.targetMargin : 15}" ${dis}><span>% dari harga</span></div><span class="hint">Untuk status produk dan harga target.</span></div>
-          <div class="field"><label for="s-tprofit">Target laba per bulan</label><div class="input"><span>Rp</span><input id="s-tprofit" type="number" min="0" step="100000" inputmode="numeric" placeholder="5000000" value="${ok(s.targetProfit) ? s.targetProfit : ''}" ${dis}></div><span class="hint">Ditampilkan di ringkasan.</span></div>
-          <div class="field span-all"><span class="label">Biaya operasional per bulan</span>
-            <div class="costs-list">${(s.fixedCosts || []).map((c, i) => `<div class="cost-row"><input class="plain" id="fc-label-${i}" value="${esc(c.label)}" placeholder="Misalnya gaji admin" aria-label="Nama biaya ${i + 1}" ${dis}>
-              <div class="input"><span>Rp</span><input id="fc-amount-${i}" type="number" min="0" step="10000" value="${ok(c.amount) ? c.amount : ''}" aria-label="Jumlah biaya ${i + 1}" ${dis}></div>
-              ${demo ? '<span></span>' : `<button class="x" type="button" data-fc-del="${i}" aria-label="Hapus biaya ${i + 1}">×</button>`}</div>`).join('')}</div>
-            ${demo ? '' : '<div><button class="btn sm quiet" type="button" id="fc-add">+ Tambah biaya: gaji, sewa, iklan di luar marketplace</button></div>'}</div>
+        <div class="fields align">
+          <div class="field"><label for="s-packing">${isDrop ? 'Biaya dropship per pesanan' : 'Packing per pesanan'}${qi(isDrop ? 'dropship_fee' : 'packing_in')}</label><div class="input"><span>Rp</span><input id="s-packing" type="number" min="0" step="100" inputmode="numeric" placeholder="2000" value="${ok(s.packing) && s.packing > 0 ? s.packing : ''}" ${dis}></div><span class="hint">${isDrop ? 'Packing atau jasa yang ditagih supplier per pesanan.' : 'Plastik, bubble wrap, lakban.'}</span></div>
+          <div class="field"><label for="s-target">Target margin per produk${qi('target_margin')}</label><div class="input"><input id="s-target" type="number" min="0" max="80" step="1" inputmode="decimal" value="${ok(s.targetMargin) ? s.targetMargin : 15}" ${dis}><span>% dari harga</span></div><span class="hint">Untuk status produk dan harga target.</span></div>
+          <div class="field"><label for="s-tprofit">Target laba per bulan${qi('target_laba_in')}</label><div class="input"><span>Rp</span><input id="s-tprofit" type="number" min="0" step="100000" inputmode="numeric" placeholder="5000000" value="${ok(s.targetProfit) ? s.targetProfit : ''}" ${dis}></div><span class="hint">Ditampilkan di ringkasan.</span></div>
         </div>
+        <div class="field"><span class="label">Biaya operasional per bulan${qi('opex_in')}</span>
+          <div class="costs-list">${(s.fixedCosts || []).map((c, i) => `<div class="cost-row"><input class="plain" id="fc-label-${i}" value="${esc(c.label)}" placeholder="Misalnya gaji admin" aria-label="Nama biaya ${i + 1}" ${dis}>
+            <div class="input"><span>Rp</span><input id="fc-amount-${i}" type="number" min="0" step="10000" value="${ok(c.amount) ? c.amount : ''}" aria-label="Jumlah biaya ${i + 1}" ${dis}></div>
+            ${demo ? '<span></span>' : `<button class="x" type="button" data-fc-del="${i}" aria-label="Hapus biaya ${i + 1}">×</button>`}</div>`).join('')}</div>
+          ${demo ? '' : `<div><button class="btn sm quiet" type="button" id="fc-add">+ Tambah biaya: gaji, sewa, iklan${type === 'produsen' ? ', sewa dapur/alat' : ''}</button></div>`}</div>
       </section>
       <section class="panel" style="display:grid;gap:16px">
         <div class="panel-head" style="margin:0"><h3>Identitas laporan</h3><p>Tampil di sampul laporan PDF</p></div>
@@ -591,51 +651,111 @@
         </div>
       </section>`;
   }
-  function produkPanel(s, r, dis) {
+  /** Isi panel modal sesuai jenis usaha. */
+  function modalBody(s, r, dis, type) {
+    if (!type) return '<p class="note-box">Pilih jenis usaha di atas, lalu isi modal sesuai cara Anda mendapatkan barang.</p>';
+    if (type === 'reseller') {
+      const mode = s.modalMode === 'acuan' ? 'acuan' : 'produk';
+      return `<div class="tabs" role="tablist" aria-label="Cara menghitung modal">
+          <button type="button" role="tab" data-mode="acuan" aria-selected="${mode === 'acuan'}" ${dis}>Diskon dari harga acuan</button>
+          <button type="button" role="tab" data-mode="produk" aria-selected="${mode === 'produk'}" ${dis}>Harga beli per produk</button></div>
+        ${mode === 'acuan' ? acuanPanel(s, dis) : produkPanel(s, r, dis, type)}`;
+    }
+    return produkPanel(s, r, dis, type);
+  }
+  function produkPanel(s, r, dis, type) {
     const hasData = r && r.products.length;
     const missing = hasData ? r.products.filter((p) => !ok(p.unitCost)).length : 0;
+    const word = (TYPES[type] || { cost: 'Modal' }).cost;
+    const intro = { stok: 'Isi harga beli per unit setiap produk. Biaya kulakan ditambahkan otomatis.', produsen: 'Hitung HPP dengan kalkulator di bawah, lalu terapkan ke produk. Atau isi langsung lewat template.', dropship: 'Isi harga yang Anda bayar ke supplier untuk satu unit. Biaya dropship per pesanan diisi di bagian Biaya lain.', reseller: 'Isi harga beli per unit bila diskon pemasok berbeda-beda per produk.' }[type] || '';
     return `
+      ${intro ? `<p class="small">${intro}</p>` : ''}
       <div class="row-actions"><button class="btn sm" type="button" id="tpl-download" ${hasData ? '' : 'disabled'}>Unduh template modal</button>
         <label class="btn sm" for="tpl-input" ${demo ? 'hidden' : ''}>Unggah template terisi</label><input id="tpl-input" type="file" accept=".xlsx,.xls,.csv" hidden></div>
-      <p class="tiny faint" style="margin-top:-8px">${hasData ? `Template berisi ${num(r.products.length)} produk dari laporan Anda. Isi kolom Modal per unit, simpan, lalu unggah.` : 'Unggah laporan penghasilan dulu agar template berisi produk Anda.'}${s.catalog.length ? ` Tersimpan: ${num(s.catalog.length)} modal produk.` : ''}</p>
-      <div class="field"><label for="s-fallback">Modal rata-rata untuk produk yang belum diisi</label>
+      <p class="tiny faint" style="margin-top:-8px">${hasData ? `Template berisi ${num(r.products.length)} produk dari laporan Anda. Isi kolom Modal per unit (${lower(word)}), simpan, lalu unggah.` : 'Unggah laporan penghasilan dulu agar template berisi produk Anda.'}${s.catalog.length ? ` Tersimpan: ${num(s.catalog.length)} modal produk.` : ''}</p>
+      ${type === 'stok' ? `<div class="field"><label for="s-extra">Biaya kulakan${qi('biaya_kulakan')}</label><div class="input"><input id="s-extra" type="number" min="0" max="100" step="0.5" inputmode="decimal" placeholder="Misalnya 3" value="${ok(s.extraCostPct) && s.extraCostPct > 0 ? s.extraCostPct : ''}" ${dis}><span>% dari harga beli</span></div><span class="hint">Ongkir dari supplier dan biaya angkut, ditambahkan ke modal setiap produk.</span></div>` : ''}
+      ${type === 'produsen' ? hppPanel(s, r, dis) : ''}
+      <div class="field"><label for="s-fallback">Modal rata-rata untuk produk yang belum diisi${qi('modal_rata')}</label>
         <div class="input"><input id="s-fallback" type="number" min="0" max="99" step="1" inputmode="decimal" placeholder="Misalnya 60" value="${ok(s.fallbackPct) ? s.fallbackPct : ''}" ${dis}><span>% dari harga jual</span></div>
         <span class="hint">Perkiraan cepat. Kosongkan bila ingin hanya angka pasti.</span></div>
       ${r && r.totalSales ? `<div class="cover-meter"><div class="small"><b>${pct(r.coverage, 0)}</b> penjualan sudah punya modal${missing ? `, ${num(missing)} produk belum diisi` : ''}.</div>
         <div class="progress" aria-hidden="true"><i style="width:${Math.round(r.coverage * 100)}%"></i></div>
         ${r.ttNoDetail && !r.hasOrderExport.tiktok ? `<p class="tiny faint">${num(r.ttNoDetail)} pesanan TikTok tidak mencantumkan produk. Unggah export pesanan TikTok, atau isi modal rata-rata.</p>` : ''}
         ${r.qtyAssumed && !r.hasOrderExport.shopee ? '<p class="tiny faint">Jumlah barang Shopee dianggap 1 per produk per pesanan. Unggah export pesanan Shopee agar tepat.</p>' : ''}</div>` : ''}
-      ${hasData ? `<details ${missing && missing <= 40 ? 'open' : ''}><summary class="small" style="cursor:pointer;font-weight:700">Isi modal langsung di sini</summary>
+      ${hasData ? `<details ${missing && missing <= 40 ? 'open' : ''}><summary class="small" style="cursor:pointer;font-weight:700">Isi ${lower(word)} per unit langsung di sini</summary>
         <div class="searchrow" style="margin-top:10px"><input class="plain" id="cost-q" type="search" placeholder="Cari produk" value="${esc(view.costQ)}" aria-label="Cari produk"></div><div id="cost-table"></div></details>` : ''}`;
+  }
+  const lower = (w) => (w === 'HPP' ? w : w.toLowerCase());
+  const HPP_FIELDS = [['bahan', 'Bahan baku', 'Rp', 'per produksi'], ['tenaga', 'Tenaga kerja', 'Rp', 'per produksi'], ['overhead', 'Overhead', 'Rp', 'listrik, gas, alat'], ['hasil', 'Hasil jadi', 'unit', 'per produksi'], ['kemasan', 'Kemasan', 'Rp', 'per unit']];
+  function hppPanel(s, r, dis) {
+    const list = s.hppList || [];
+    const prods = r && r.products.length ? [...r.products].sort((a, b) => b.sales - a.sales) : [];
+    const row = (h, i) => `<div class="hpp-row">
+        <div class="hpp-top"><input class="plain" id="h-nama-${i}" value="${esc(h.nama)}" placeholder="Nama produk, misalnya Keripik 100 g" aria-label="Nama produk ${i + 1}" ${dis}>
+          ${demo ? '' : `<button class="x" type="button" data-hpp-del="${i}" aria-label="Hapus perhitungan ${i + 1}">×</button>`}</div>
+        <div class="hpp-fields">${HPP_FIELDS.map(([k, l, u, hint]) => `<div class="field"><label for="h-${k}-${i}">${l}</label><div class="input">${u === 'Rp' ? '<span>Rp</span>' : ''}<input id="h-${k}-${i}" type="number" min="0" step="${u === 'Rp' ? 100 : 1}" inputmode="numeric" value="${ok(h[k]) ? h[k] : ''}" ${dis}>${u === 'unit' ? '<span>unit</span>' : ''}</div><span class="hint">${hint}</span></div>`).join('')}</div>
+        <div class="hpp-out"><span>HPP per unit <b id="h-out-${i}">${fmt(Engine.hpp(h))}</b></span>
+          ${prods.length && !demo ? `<span class="row-actions"><select class="compact" id="h-prod-${i}" aria-label="Produk untuk HPP ${i + 1}"><option value="">Pakai untuk produk…</option>${prods.map((p) => `<option value="${esc(p.key)}" ${h.prod === p.key ? 'selected' : ''}>${esc(p.name.slice(0, 60))} (${PNAME[p.platform]})</option>`).join('')}</select>
+            <button class="btn sm" type="button" data-hpp-apply="${i}">Terapkan</button></span>` : '<span class="tiny faint">Unggah laporan untuk menerapkan HPP ke produk.</span>'}</div></div>`;
+    return `<div class="subsec"><div class="subsec-head"><b>Kalkulator HPP${qi('hpp')}</b><span class="tiny faint">Biaya satu kali produksi ÷ hasil jadi + kemasan</span></div>
+      ${list.map(row).join('')}
+      ${demo ? '' : `<div><button class="btn sm quiet" type="button" id="hpp-add">+ ${list.length ? 'Tambah produk' : 'Hitung HPP produk'}</button></div>`}</div>`;
+  }
+  /** Batas harga aman untuk reseller: dinyatakan sebagai persen dari harga acuan. */
+  function batasAman(s) {
+    if (!ok(s.mitra)) return '';
+    const r = last && last.all;
+    const A = ok(s.acuanContoh) && s.acuanContoh > 0 ? s.acuanContoh : 100000;
+    const target = ok(s.targetMargin) ? s.targetMargin : 15;
+    const packing = ok(s.packing) ? s.packing : 0;
+    const plats = r && (r.feeModel.shopee || r.feeModel.tiktok) ? ['shopee', 'tiktok'].filter((k) => r.feeModel[k]) : ['shopee', 'tiktok'];
+    const cols = plats.map((k) => {
+      const fm = r && r.feeModel[k];
+      const f = fm ? { pct: fm.pct * 100, fixed: fm.fixed, src: 'laporan Anda' } : { ...CekTarif.estimate({ platform: k }), src: 'tarif umum (perkiraan)' };
+      const x = Engine.simulate({ listPrice: A, disc: 0, cost: A * (1 - s.mitra / 100), feePct: f.pct, feeFixed: f.fixed, packing, target });
+      return { k, f, x };
+    });
+    const cell = (v) => `<b>${fmt(v)}</b><span class="faint tiny sub-val">${pct(v / A, 0)} dari acuan</span>`;
+    return `<div class="subsec"><div class="subsec-head"><b>Batas harga aman${qi('batas_aman')}</b>
+        <div class="input sm-input"><span>Harga acuan Rp</span><input id="s-acuan-contoh" type="number" min="1000" step="1000" inputmode="numeric" value="${A}" aria-label="Contoh harga acuan"></div></div>
+      <div class="tablewrap"><table class="data tight"><thead><tr><th></th>${cols.map((c) => `<th>${PNAME[c.k]}</th>`).join('')}</tr></thead><tbody>
+        <tr><td>Harga beli Anda</td>${cols.map(() => `<td>${fmt(A * (1 - s.mitra / 100))}</td>`).join('')}</tr>
+        <tr><td>Harga jual minimum (impas)</td>${cols.map((c) => `<td>${cell(c.x.breakEvenPrice)}</td>`).join('')}</tr>
+        <tr><td>Diskon maksimal dari harga acuan</td>${cols.map((c) => `<td class="${c.x.maxDisc < 0 ? 'neg' : ''}"><b>${pct(c.x.maxDisc / 100)}</b></td>`).join('')}</tr>
+        <tr><td>Harga untuk margin ${target}%</td>${cols.map((c) => `<td>${cell(c.x.targetPrice)}</td>`).join('')}</tr>
+      </tbody></table></div>
+      <p class="tiny faint">Potongan: ${cols.map((c) => `${PNAME[c.k]} ${pct(c.f.pct / 100)} + ${fmt(c.f.fixed)} per pesanan (${c.f.src})`).join('; ')}. Packing ${fmt(packing)} per pesanan. Satu barang per pesanan; bila pembeli membeli lebih dari satu, batasnya sedikit lebih rendah.</p></div>`;
   }
   function acuanPanel(s, dis) {
     const ready = ok(s.mitra);
     const p = s.periods[s.periods.length - 1];
     const sell = 100 * (1 + (p.markup || 0) / 100) * (1 - (p.disc || 0) / 100), cost = 100 - (s.mitra || 0);
     return `<p class="small muted">Untuk reseller yang membeli dengan potongan dari harga acuan pemasok, misalnya harga sampul buku atau harga katalog distributor.</p>
-      <div class="fields two">
-        <div class="field"><label for="s-mitra">Diskon dari pemasok</label><div class="input ${!ready && files.length ? 'need' : ''}"><input id="s-mitra" type="number" min="0" max="99" step="0.5" inputmode="decimal" placeholder="30" value="${ready ? s.mitra : ''}" ${dis}><span>%</span></div></div>
-        <div class="field"><label for="s-coret">TikTok: harga coret dibanding harga acuan</label><div class="input"><input id="s-coret" type="number" min="1" step="1" value="${s.coret || 100}" ${dis}><span>%</span></div></div></div>
-      <div class="field"><span class="label">Shopee: pola harga jual dibanding harga acuan</span><span class="hint">Shopee tidak mencatat harga sebelum diskon. Periode dipilih menurut tanggal pesanan.</span>
-        <div class="periods"><div class="period period-head"><span>Mulai tanggal pesanan</span><span>Kenaikan</span><span>Diskon toko</span><span></span></div>
+      <div class="fields two align">
+        <div class="field"><label for="s-mitra">Diskon dari pemasok${qi('diskon_pemasok')}</label><div class="input ${!ready && files.length ? 'need' : ''}"><input id="s-mitra" type="number" min="0" max="99" step="0.5" inputmode="decimal" placeholder="30" value="${ready ? s.mitra : ''}" ${dis}><span>%</span></div><span class="hint">Harga beli = harga acuan − diskon ini.</span></div>
+        <div class="field"><label for="s-coret">Harga coret di TikTok${qi('harga_coret')}</label><div class="input"><input id="s-coret" type="number" min="1" step="1" value="${s.coret || 100}" ${dis}><span>% dari acuan</span></div><span class="hint">100% bila harga coret sama dengan harga acuan.</span></div></div>
+      <div class="subsec"><div class="subsec-head"><b>Pola harga di Shopee${qi('pola_shopee')}</b><span class="tiny faint">Shopee tidak mencatat harga sebelum diskon</span></div>
+        <div class="periods"><div class="period period-head"><span>Mulai tanggal pesanan</span><span>Kenaikan dari acuan</span><span>Diskon toko</span><span></span></div>
         ${s.periods.map((q, i) => `<div class="period"><div class="input"><input type="date" id="p-start-${i}" value="${esc(q.start)}" aria-label="Mulai periode ${i + 1}" ${dis}></div>
-          <div class="input"><input type="number" id="p-markup-${i}" step="0.5" value="${q.markup}" aria-label="Kenaikan periode ${i + 1}" ${dis}><span>%</span></div>
-          <div class="input"><input type="number" id="p-disc-${i}" step="0.5" min="0" max="99" value="${q.disc}" aria-label="Diskon periode ${i + 1}" ${dis}><span>%</span></div>
+          <div class="input"><input type="number" id="p-markup-${i}" step="0.5" value="${q.markup}" aria-label="Kenaikan dari harga acuan periode ${i + 1}" ${dis}><span>%</span></div>
+          <div class="input"><input type="number" id="p-disc-${i}" step="0.5" min="0" max="99" value="${q.disc}" aria-label="Diskon toko periode ${i + 1}" ${dis}><span>%</span></div>
           ${s.periods.length > 1 && !demo ? `<button class="x" type="button" data-del="${i}" aria-label="Hapus periode ${i + 1}">×</button>` : '<span></span>'}</div>`).join('')}</div>
-        ${demo ? '' : '<div><button class="btn sm quiet" type="button" id="add-period">+ Tambah periode harga</button></div>'}
-        <p class="formula">${ready ? `Harga acuan Rp100.000: Anda membeli Rp${(cost * 1000).toLocaleString('id-ID')} dan menjual Rp${Math.round(sell * 1000).toLocaleString('id-ID')} di Shopee (periode terakhir), sisa ${pct((sell - cost) / sell)} sebelum potongan marketplace.` : 'Isi diskon dari pemasok untuk menghitung modal.'}</p></div>`;
+        ${demo ? '' : '<div><button class="btn sm quiet" type="button" id="add-period">+ Tambah periode harga</button></div>'}</div>
+      <p class="formula">${ready ? `Contoh harga acuan Rp100.000: Anda membeli Rp${(cost * 1000).toLocaleString('id-ID')} dan menjual Rp${Math.round(sell * 1000).toLocaleString('id-ID')} di Shopee (periode terakhir), sisa ${pct((sell - cost) / sell)} sebelum potongan marketplace.` : 'Isi diskon dari pemasok untuk menghitung modal.'}</p>
+      ${batasAman(s)}`;
   }
   function renderCostTable() {
     const box = $('#cost-table');
     if (!box || !last) return;
     const q = Engine.norm(view.costQ);
     const list = last.all.products.filter((p) => !q || Engine.norm(`${p.name} ${p.sku} ${p.code}`).includes(q));
-    list.sort((a, b) => (ok(a.unitCost) - ok(b.unitCost)) || b.sales - a.sales);
+    list.sort((a, b) => (ok(a.baseCost) - ok(b.baseCost)) || b.sales - a.sales);
     const shown = view.costAll ? list : list.slice(0, 25);
-    box.innerHTML = `<div class="tablewrap"><table class="data cost-table"><thead><tr><th>Produk</th><th>Terjual</th><th>Harga rata-rata</th><th>Modal per unit</th></tr></thead><tbody>
+    const word = (TYPES[demo ? 'stok' : typeOf(st())] || { cost: 'Modal' }).cost;
+    box.innerHTML = `<div class="tablewrap"><table class="data cost-table"><thead><tr><th>Produk</th><th>Terjual</th><th>Harga rata-rata</th><th>${word} per unit</th></tr></thead><tbody>
       ${shown.map((p) => `<tr><td><i class="sw" style="background:var(--${p.platform})"></i> ${esc(p.name)}<br><span class="tiny faint">${esc(catKey(p) || '-')}</span></td>
         <td>${p.qtyKnown ? num(p.qty) : `${p.rows}×`}</td><td>${fmt(p.avgPrice)}</td>
-        <td><input type="number" min="0" step="100" inputmode="numeric" class="${ok(p.unitCost) ? '' : 'missing'}" data-cost="${esc(p.key)}" value="${ok(p.unitCost) ? p.unitCost : ''}" placeholder="Rp" aria-label="Modal per unit ${esc(p.name)}" ${demo ? 'disabled' : ''}></td></tr>`).join('') || '<tr><td colspan="4" class="muted">Tidak ada produk yang cocok.</td></tr>'}</tbody></table></div>
+        <td><input type="number" min="0" step="100" inputmode="numeric" class="${ok(p.baseCost) ? '' : 'missing'}" data-cost="${esc(p.key)}" value="${ok(p.baseCost) ? p.baseCost : ''}" placeholder="Rp" aria-label="${word} per unit ${esc(p.name)}" ${demo ? 'disabled' : ''}></td></tr>`).join('') || '<tr><td colspan="4" class="muted">Tidak ada produk yang cocok.</td></tr>'}</tbody></table></div>
       ${list.length > 25 ? `<button class="btn sm quiet" type="button" id="cost-all">${view.costAll ? 'Tampilkan lebih sedikit' : `Tampilkan semua ${num(list.length)} produk`}</button>` : ''}`;
   }
   function setProductCost(key, raw) {
@@ -731,6 +851,40 @@
     }
   }
   const resetView = () => Object.assign(view, { platform: 'all', from: '', to: '', showAll: false, q: '', costQ: '', costAll: false, compare: null });
+
+  /* ---------- penjelasan angka (tombol ?) ---------- */
+  function infoPop() {
+    let pop = $('#info-pop');
+    if (!pop) { document.body.insertAdjacentHTML('beforeend', '<div id="info-pop" class="info-pop" role="dialog" aria-labelledby="info-pop-t" hidden></div>'); pop = $('#info-pop'); }
+    return pop;
+  }
+  function hideInfo() {
+    const pop = $('#info-pop');
+    if (!pop || pop.hidden) return;
+    pop.hidden = true;
+    document.querySelectorAll('.qi[aria-expanded="true"]').forEach((b) => b.setAttribute('aria-expanded', 'false'));
+  }
+  function showInfo(btn) {
+    const info = CekInfo.get(btn.dataset.info, last && last.r);
+    if (!info) return;
+    const pop = infoPop();
+    if (!pop.hidden && pop.dataset.key === btn.dataset.info) { hideInfo(); return; }
+    hideInfo();
+    pop.dataset.key = btn.dataset.info;
+    pop.innerHTML = `<div class="ip-head"><b id="info-pop-t">${esc(info.t)}</b><button class="x" type="button" data-info-close aria-label="Tutup">×</button></div>
+      <p>${esc(info.a)}</p>${info.h ? `<p><span class="ip-k">Cara dihitung</span>${esc(info.h)}</p>` : ''}${info.b ? `<p><span class="ip-k">Cara membaca</span>${esc(info.b)}</p>` : ''}
+      ${info.d ? `<p class="ip-d">${esc(info.d)}</p>` : ''}`;
+    pop.hidden = false;
+    btn.setAttribute('aria-expanded', 'true');
+    const sheet = window.innerWidth < 600;
+    pop.classList.toggle('sheet', sheet);
+    if (sheet) { pop.style.left = ''; pop.style.top = ''; return; }
+    const b = btn.getBoundingClientRect(), w = pop.offsetWidth, h = pop.offsetHeight;
+    const left = Math.min(Math.max(12, b.left - 16), window.innerWidth - w - 12);
+    const below = b.bottom + 8;
+    pop.style.left = `${left}px`;
+    pop.style.top = `${below + h > window.innerHeight - 12 && b.top - h - 8 > 12 ? b.top - h - 8 : below}px`;
+  }
 
   /* ================= 6. dialog ================= */
   const dlg = () => $('#dlg');
@@ -837,6 +991,16 @@
     else if (id === 's-fallback') settings.fallbackPct = n(v, 0, 99);
     else if (id === 's-target') settings.targetMargin = n(v, 0, 80) ?? 15;
     else if (id === 's-tprofit') settings.targetProfit = n(v, 0, 1e13);
+    else if (id === 's-extra') settings.extraCostPct = n(v, 0, 100);
+    else if (id === 's-acuan-contoh') settings.acuanContoh = n(v, 1000, 1e10) ?? 100000;
+    else if (/^h-\w+-\d+$/.test(id)) {
+      const [, f, i] = id.split('-'); const h = settings.hppList[+i];
+      if (!h) return;
+      if (f === 'nama' || f === 'prod') h[f] = v; else h[f] = v === '' ? null : Math.max(0, +v);
+      const out = $(`#h-out-${i}`); if (out) out.textContent = fmt(Engine.hpp(h));
+      store.set(KEYS.settings, settings); queueSync();
+      return;
+    }
     else if (id.startsWith('p-')) { const [, f, i] = id.split('-'); const p = settings.periods[+i]; if (f === 'start') p.start = v; else p[f] = +v || 0; }
     else if (id.startsWith('fc-')) { const [, f, i] = id.split('-'); const c = settings.fixedCosts[+i]; if (f === 'label') { c.label = v; save(); return; } c.amount = n(v, 0, 1e12); }
     else if (id === 'pf-store' || id === 'pf-owner') { profile[id === 'pf-store' ? 'store' : 'owner'] = v; saveProfile(); return; }
@@ -852,6 +1016,9 @@
     else if (t.id === 'from') { view.from = t.value; render(); }
     else if (t.id === 'to') { view.to = t.value; render(); }
     else if (t.id === 'sort') { view.sort = t.value; renderProducts(); }
+    else if (t.id === 'simx-status' || t.id === 'simx-kat') { sim[t.id.slice(5)] = t.value; resetSimFee(); render(); }
+    else if (t.id === 'simx-aff') { sim.afiliasi = Math.min(50, Math.max(0, +t.value || 0)); resetSimFee(); render(); }
+    else if (t.dataset.simOpsi) { const k = t.dataset.simOpsi; sim.opsi = t.checked ? [...new Set([...sim.opsi, k])] : sim.opsi.filter((x) => x !== k); resetSimFee(); render(); }
     else if (t.id === 'file-input' || t.id === 'tpl-input') { addFiles(t.files); t.value = ''; }
     else if (t.id === 'pf-logo' && t.files[0]) {
       const f = t.files[0];
@@ -862,6 +1029,10 @@
     }
   });
   document.addEventListener('click', async (e) => {
+    const qb = e.target.closest('[data-info]');
+    if (qb) { e.preventDefault(); showInfo(qb); return; }
+    if (e.target.closest('[data-info-close]') || !e.target.closest('#info-pop')) hideInfo();
+    if (e.target.closest('#info-pop')) return;
     const t = e.target.closest('button, a[data-track]');
     if (!t) { if (account.menu && !e.target.closest('.menu')) { account.menu = false; renderAccount(); } return; }
     if (t.dataset.track) { track(t.dataset.track); return; }
@@ -905,6 +1076,31 @@
       return;
     }
     if (t.dataset.mode && !demo) { settings.modalMode = t.dataset.mode; save(); render(); return; }
+    if (t.dataset.type && !demo) {
+      const k = t.dataset.type;
+      settings.sellerType = k;
+      settings.modalMode = k === 'reseller' ? 'acuan' : 'produk';
+      view.typeOpen = false; save(); render(); track(`jenis-${k}`);
+      toast(`Jenis usaha: ${TYPES[k].label}. ${k === 'reseller' ? 'Isi diskon dari pemasok.' : k === 'produsen' ? 'Hitung HPP di kalkulator.' : 'Isi modal per produk.'}`);
+      return;
+    }
+    if (t.hasAttribute('data-type-open')) { view.typeOpen = true; render(); return; }
+    if (t.hasAttribute('data-type-close')) { view.typeOpen = false; render(); return; }
+    if (t.dataset.simSrc) { sim.src = t.dataset.simSrc; sim.plat = null; resetSimFee(); render(); return; }
+    if (t.dataset.simPlat) { sim.plat = t.dataset.simPlat; sim.kat = null; resetSimFee(); render(); return; }
+    if (t.dataset.simUse) { sim.src = 'laporan'; sim.plat = t.dataset.simUse; resetSimFee(); go('simulator'); return; }
+    if (t.id === 'hpp-add' && !demo) { settings.hppList = [...(settings.hppList || []), { nama: '', bahan: null, tenaga: null, overhead: null, hasil: null, kemasan: null, prod: '' }]; save(); render(); const i = settings.hppList.length - 1; const el = $(`#h-nama-${i}`); if (el) el.focus(); return; }
+    if (t.dataset.hppDel !== undefined && !demo) { settings.hppList.splice(+t.dataset.hppDel, 1); save(); render(); return; }
+    if (t.dataset.hppApply !== undefined && !demo) {
+      const i = +t.dataset.hppApply, h = settings.hppList[i], key = ($(`#h-prod-${i}`) || {}).value;
+      const v = Engine.hpp(h || {});
+      if (!ok(v)) { toast('Isi biaya dan hasil jadi dulu agar HPP bisa dihitung.'); return; }
+      if (!key) { toast('Pilih produk yang memakai HPP ini.'); return; }
+      h.prod = key; setProductCost(key, String(Math.round(v)));
+      const p = last && last.all.products.find((x) => x.key === key);
+      toast(`HPP ${fmt(v)} dipakai untuk ${p ? p.name.slice(0, 40) : 'produk'}.`); track('hpp-terapkan'); render();
+      return;
+    }
     if (t.dataset.del !== undefined) { settings.periods.splice(+t.dataset.del, 1); save(); render(); }
     else if (t.id === 'add-period') { const p = settings.periods[settings.periods.length - 1]; settings.periods.push({ start: '', markup: p.markup, disc: p.disc }); save(); render(); }
     else if (t.dataset.fcDel !== undefined) { settings.fixedCosts.splice(+t.dataset.fcDel, 1); save(); render(); }
@@ -930,6 +1126,9 @@
       render(); toast('Data di browser ini sudah dihapus.');
     }
   });
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape') hideInfo(); });
+  window.addEventListener('scroll', () => { const pop = $('#info-pop'); if (pop && !pop.hidden && !pop.classList.contains('sheet')) hideInfo(); }, { passive: true });
+  window.addEventListener('resize', hideInfo);
   window.addEventListener('popstate', () => go(location.hash.slice(1) || 'ringkasan', false));
   cloud.auth.onChange((s) => { if (!s && account.user) { account.user = null; account.profile = null; renderAccount(); } });
 

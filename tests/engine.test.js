@@ -101,6 +101,28 @@ test('simulasi harga', () => {
   eq(R(s.price), 90000); eq(R(s.margin), 90000 - 13500 - 1250 - 60000 - 1500);
   near(s.breakEvenPrice * 0.85 - 1250 - 60000 - 1500, 0, 1e-6);
 });
+test('biaya kulakan: modal per produk naik sesuai persen, angka isian tetap', () => {
+  const x = E.compute(parsed, { ...st, extraCostPct: 10 });
+  near(x.totalModal, r.totalModal * 1.1, 1);
+  const p = x.products.find((q) => Number.isFinite(q.unitCost));
+  near(p.unitCost, p.baseCost * 1.1, 1e-6);
+  const back = E.parseWorkbook({ name: 't.xlsx', sheets: { Modal: E.templateRows(x) } });
+  const orig = E.parseWorkbook({ name: 't.xlsx', sheets: { Modal: E.templateRows(r) } });
+  eq(JSON.stringify(back.entries), JSON.stringify(orig.entries), 'template memakai modal yang diisi, bukan modal + kulakan');
+});
+test('tarif efektif: persen + biaya tetap per pesanan membentuk ulang total potongan', () => {
+  for (const k of ['shopee', 'tiktok']) {
+    const f = r.feeModel[k], X = r[k];
+    truthy(f && f.pct > 0 && f.fixed >= 0, `${k} feeModel`);
+    near(f.pct * X.sales + f.fixed * X.orders, -X.feeTotal, 1, k);
+  }
+  eq(E.compute(parsed, st, {}, { platforms: ['shopee'] }).feeModel.tiktok, null);
+});
+test('HPP produsen', () => {
+  eq(E.hpp({ bahan: 500000, tenaga: 200000, overhead: 100000, hasil: 100, kemasan: 1500 }), 9500);
+  truthy(Number.isNaN(E.hpp({ bahan: 1000, hasil: 0 })), 'hasil 0 → NaN');
+  eq(E.hpp({ bahan: '', tenaga: -5, hasil: 10, kemasan: 0 }), 0);
+});
 test('angka format Indonesia di CSV', () => {
   eq(E.num('Rp1.234.567'), 1234567); eq(E.num('-1.250'), -1250); eq(E.num('12,5'), 125); eq(E.num('/'), 0);
 });

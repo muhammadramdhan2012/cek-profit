@@ -41,6 +41,8 @@ File ini dibaca Claude di setiap sesi. Isinya visi produk, aturan yang tidak bol
 
 - Situs statis di **GitHub Pages** (branch `main`, root). Tanpa build step dan tanpa framework: HTML, CSS, dan vanilla JS.
 - `assets/engine.js` adalah mesin hitung **murni** (tanpa DOM) dan diuji di Node. Logika perhitungan baru masuk ke sini, bukan ke `app.js`.
+- `assets/tarif.js` berisi tarif umum marketplace untuk simulasi. Laba **tidak** memakai tabel ini; laba memakai potongan nyata dari laporan. Tarif tidak diambil otomatis dari situs marketplace (halaman resmi dirender JS, tarif per subkategori), jadi setiap angka wajib bertanggal dan bersumber.
+- `assets/penjelasan.js` berisi teks tombol "?". Setiap angka baru yang tampil ke pengguna sebaiknya diberi penjelasan.
 - `assets/cloud.js` adalah klien Supabase lewat `fetch` (tanpa supabase-js).
 - Library pihak ketiga di-*vendor* ke `vendor/` dengan versi tetap. Website harus tetap bisa memproses file tanpa internet setelah halaman terbuka (`sw.js`).
 - Halaman:
@@ -69,6 +71,7 @@ File ini dibaca Claude di setiap sesi. Isinya visi produk, aturan yang tidak bol
 ```bash
 python3 scripts/versi.py          # perbarui ?v=<hash> semua aset + versi sw.js
 node tests/engine.test.js
+node tests/tarif.test.js
 node tests/license.test.js
 node tests/cloud.test.js          # memakai server tiruan tests/mock-supabase.js
 ```
@@ -90,6 +93,8 @@ node tests/cloud.test.js          # memakai server tiruan tests/mock-supabase.js
 ## 9. Status saat ini dan yang masih menunggu
 
 - ✅ Halaman depan, dashboard, laporan PDF, akun Supabase (schema dan RLS sudah dijalankan), admin, tema gelap/terang, versi aset otomatis.
+- ✅ Jenis usaha (reseller, stok sendiri, produsen, dropshipper) dengan fitur masing-masing; tombol "?" penjelasan angka (`assets/penjelasan.js`); tarif efektif dari laporan + tabel tarif umum (`assets/tarif.js`, diperbarui manual dengan tanggal dan sumber).
+- ⏳ Tarif umum di `assets/tarif.js` dicek 14 Okt 2026 dari sumber sekunder; perlu dicocokkan ulang saat marketplace mengumumkan perubahan tarif.
 - ⏳ Nomor WhatsApp dan harga final di `assets/config.js`. Harga sekarang masih placeholder: Rp49.000/bulan, Rp399.000/tahun, jasa Rp199.000.
 - ⏳ Supabase URL Configuration (Site URL dan Redirect URL ke domain GitHub Pages) belum dikonfirmasi.
 - ⏳ Parser export pesanan Shopee dan TikTok masih Beta, belum diuji dengan file asli.
