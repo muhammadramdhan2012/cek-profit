@@ -423,6 +423,25 @@ const Engine = (() => {
   }
 
   /* ---------- retur ---------- */
+  /**
+   * Baca jumlah unit dari file retur (H2-A). Membedakan:
+   *  'ada'         angka valid (termasuk 0 yang ditulis eksplisit)
+   *  'kosong'      kolom ada tetapi sel kosong
+   *  'tidak_valid' kolom ada tetapi isinya bukan angka ≥ 0
+   *  'tidak_ada'   kolom tidak ada di file
+   * Selain 'ada', nilainya NaN (tidak diketahui). Tidak pernah diganti 1 atau 0.
+   * Dipakai untuk jumlah unit retur dan nominal refund (keduanya tidak boleh negatif).
+   */
+  function optField(row, map, names) {
+    const name = names.find((n) => n in map);
+    if (!name) return { value: NaN, info: 'tidak_ada' };
+    const v = row[map[name]];
+    if (str(v) === '') return { value: NaN, info: 'kosong' };
+    const n = typeof v === 'number' ? v : (/\d/.test(str(v)) ? num(v) : NaN);
+    return isOk(n) && n >= 0 ? { value: n, info: 'ada' } : { value: NaN, info: 'tidak_valid' };
+  }
+  const returnQty = (row, map, names) => { const f = optField(row, map, names); return { qty: f.value, qtyInfo: f.info }; };
+
   function parseShopeeReturn(wb) {
     const f = firstSheetHeader(wb, headerHas(['No. Pengembalian', 'Solusi Pengembalian Barang/Dana']));
     const map = colMap(f.aoa[f.h]);
@@ -442,7 +461,12 @@ const Engine = (() => {
       cases.push({ key: `S|${rid}|${str(g('Nama Produk'))}|${str(g('Variasi'))}`, platform: 'shopee', orderId: str(g('No. Pesanan')),
         product: str(g('Nama Produk')), variant: str(g('Variasi')), reason: alasan, note: str(g('Catatan Pengembalian Barang')),
         resi: str(g('No. Resi Pengembalian Barang')), returnStatus: str(g('Status Pengembalian Barang')),
-        qty: num(g('Jumlah')) || 1, amount: num(g('Total Pengembalian Dana')), date: date(g('Waktu Pengembalian Diajukan')), cat });
+        // H2-A/K1: kolom di file asli bernama "Jumlah Produk Dikembalikan" (unit yang direfund). Kolom "Jumlah"
+        // tetap didukung untuk format lama. Sebelumnya kolom yang tidak ada terbaca 1.
+        ...returnQty(row, map, ['Jumlah Produk Dikembalikan', 'Jumlah']),
+        // H2-A/P2: nominal refund kosong/tidak valid = tidak diketahui (dulu terbaca Rp0). Nol eksplisit tetap 0.
+        ...(({ value, info }) => ({ amount: value, amountInfo: info, amountSource: info === 'ada' ? 'file_retur' : null }))(optField(row, map, ['Total Pengembalian Dana'])),
+        date: date(g('Waktu Pengembalian Diajukan')), cat });
     }
     return { kind: 'shopee_return', cases };
   }
@@ -454,9 +478,17 @@ const Engine = (() => {
       const g = getter(row, map);
       const rid = str(g('Return Order ID'));
       if (!rid) continue;
-      const qty = num(g('Return Quantity')) || 1;
-      const amount = num(g('Return unit price')) * qty;
-      const refunded = !!date(g('Refund Time')) && amount > 0;
+      // H2-A: jumlah kosong/tidak valid = tidak diketahui (dulu dianggap 1).
+      // P1: file retur TikTok tidak punya kolom nominal refund, jadi nominal = harga satuan × jumlah, HANYA bila
+      // harga valid dan jumlah > 0. Jumlah 0 bukan bukti refund Rp0, dan harga kosong/tidak valid bukan Rp0 →
+      // nominal tidak diketahui (NaN). Harga 0 yang ditulis eksplisit tetap 0. Jumlah unit tidak pernah diturunkan
+      // dari nominal. Kategori "sudah direfund" tetap memakai cara lama (tidak bergantung pada jumlah).
+      const { qty, qtyInfo } = returnQty(row, map, ['Return Quantity']);
+      const price = optField(row, map, ['Return unit price']);
+      const amountOk = isOk(qty) && qty > 0 && price.info === 'ada';
+      const amount = amountOk ? price.value * qty : NaN;
+      const amountInfo = amountOk ? 'ada' : price.info !== 'ada' ? `harga_${price.info}` : qty === 0 ? 'jumlah_nol' : `jumlah_${qtyInfo}`;
+      const refunded = !!date(g('Refund Time')) && num(g('Return unit price')) > 0;
       const type = str(g('Return Type')), reason = str(g('Return Reason')), resi = str(g('Return Logistics Tracking ID'));
       let cat;
       if (!refunded) cat = 'batal';
@@ -466,7 +498,8 @@ const Engine = (() => {
       else cat = 'refund_tanpa_retur';
       cases.push({ key: `T|${rid}|${str(g('SKU ID'))}`, platform: 'tiktok', orderId: str(g('Order ID')), skuId: str(g('SKU ID')),
         product: str(g('Product Name')), variant: str(g('SKU Name')), reason, note: str(g('Buyer Note')),
-        resi, returnStatus: str(g('Return Status')), qty, amount, date: date(g('Time Requested')), cat });
+        resi, returnStatus: str(g('Return Status')), qty, qtyInfo, amount, amountInfo,
+        amountSource: amountOk ? 'harga_satuan_x_jumlah' : null, date: date(g('Time Requested')), cat });
     }
     return { kind: 'tiktok_return', cases };
   }
@@ -498,6 +531,7 @@ const Engine = (() => {
       shopeeOrderMeta: new Map(),
     };
     const shopeeVersions = new Map();   // nomor pesanan → Map(isi versi → baris) dari semua file export Shopee
+    const caseVersions = new Map();     // kunci kasus retur → Map(isi → kasus) dari semua file retur
     const seenLine = new Set();
     for (const p of parsed) {
       if (p.kind === 'shopee_income') {
@@ -508,7 +542,12 @@ const Engine = (() => {
       } else if (p.kind === 'tiktok_income') {
         for (const r of p.rows) { if (out.tiktok.has(r.key)) { out.dupes++; continue; } out.tiktok.set(r.key, r); }
       } else if (p.kind === 'shopee_return' || p.kind === 'tiktok_return') {
-        for (const c of p.cases) out.cases.set(c.key, c);
+        // H2-A: kasus yang sama bisa muncul di beberapa file retur. Simpan semua versinya; versi final dipilih
+        // menurut isinya (bukan urutan unggah) di finalizeCases.
+        for (const c of p.cases) {
+          if (!caseVersions.has(c.key)) caseVersions.set(c.key, new Map());
+          caseVersions.get(c.key).set(caseSer(c), c);
+        }
       } else if (p.kind === 'shopee_orders') {
         collectShopeeLines(p.lines, shopeeVersions);
       } else if (p.kind === 'tiktok_orders') {
@@ -523,7 +562,22 @@ const Engine = (() => {
       }
     }
     finalizeShopeeLines(shopeeVersions, out);
+    finalizeCases(caseVersions, out);
     return out;
+  }
+
+  /** Isi kasus retur yang relevan untuk angka/status (dipakai membandingkan versi antar file). */
+  const caseSer = (c) => JSON.stringify([c.qty, c.qtyInfo, c.amount, c.cat, c.returnStatus, c.resi, c.reason, c.date].map(shNum));
+  /**
+   * Satu kasus per kunci. Bila beberapa file memuat kasus yang sama dengan isi BERBEDA (mis. status berubah),
+   * dipakai versi pertama menurut urutan isi agar hasil tidak bergantung urutan unggah, dan kasus ditandai
+   * `versiBerbeda` → jumlah unitnya tidak dianggap pasti (lihat returnUnits di compute).
+   */
+  function finalizeCases(caseVersions, out) {
+    for (const [key, vm] of caseVersions) {
+      const vs = [...vm.entries()].sort((a, b) => byText(a[0], b[0]));
+      out.cases.set(key, vs.length === 1 ? vs[0][1] : { ...vs[0][1], versiBerbeda: true });
+    }
   }
 
   /* ---------- export pesanan Shopee dari beberapa file (H1/H3 Fase 2 A3 + Fase 2.1) ----------
@@ -746,8 +800,18 @@ const Engine = (() => {
     const prod = new Map();
     const touchProduct = (key, init) => { if (!prod.has(key)) prod.set(key, { key, rows: 0, qty: 0, qtyKnown: true, sales: 0, received: 0, modal: 0, modalKnown: true, unitCost: NaN, baseCost: NaN, ...init }); return prod.get(key); };
     let qtyAssumed = 0, linesWithoutCost = 0, ttNoDetail = 0, ttNoDetailSales = 0;
+    // H2-A: ringkasan kepastian HPP (metadata; tidak mengubah angka). Penjualan = nilai produk setelah refund.
+    // "terverifikasi" termasuk total kelompok variasi yang pasti. "tidak_diketahui" tidak punya nilai HPP.
+    const K = { hpp: { terverifikasi: 0, estimasi: 0, belum: 0 },
+      penjualan: { terverifikasi: 0, estimasi: 0, belum: 0, tidak_diketahui: 0 },
+      baris: { terverifikasi: 0, estimasi: 0, belum: 0, tidak_diketahui: 0 } };
+    const kAdd = (status, sales, cost) => {
+      const st = status === 'terverifikasi_kelompok' ? 'terverifikasi' : status;
+      K.baris[st]++; K.penjualan[st] += isOk(sales) ? sales : 0;
+      if (st !== 'tidak_diketahui') K.hpp[st] += cost;
+    };
     // Ringkasan status Shopee mode modal per produk (H1/H3 Fase 2). Informasi tambahan saja: tidak dipakai
-    // menghitung angka lain dan tidak disimpan. Mode harga acuan tidak memakai kuantitas → null.
+    // menghitung angka lain dan tidak disimpan. Mode harga acuan tidak memakai kuantitas: hanya hpp/metodeHpp terisi.
     //  kuantitas: terverifikasi = jumlah terbukti dari export; belum = tidak ada bukti cukup
     //  hpp: terverifikasi = kuantitas, variasi, dan modal pasti, tanpa refund/status yang belum jelas
     //       terverifikasi_kelompok = total satu kelompok variasi ambigu pasti, rincian per variasi tidak pasti
@@ -763,7 +827,7 @@ const Engine = (() => {
       hpp: { terverifikasi: 0, terverifikasi_kelompok: 0, estimasi: 0, belum: 0, tidak_diketahui: 0 },
       unitTerverifikasi: 0, estimasiSatuUnit: 0, refundPenuhTanpaKuantitas: 0, kuantitasTidakDiketahui: 0, exportBerbeda: 0,
       identitasBerbeda: 0, identitasSebagian: 0, statusExportBerbeda: 0, infoReturTidakTersedia: 0,
-      metodeHpp: { modal_per_unit: 0, modal_rata_rata: 0 },   // dari mana angka HPP berasal (lihat hppMethod)
+      metodeHpp: { modal_per_unit: 0, modal_rata_rata: 0, harga_acuan: 0 },   // dari mana angka HPP berasal (lihat hppMethod)
       refundBelumJelas: 0, statusBelumDivalidasi: 0 };
 
     /* ===== Shopee ===== */
@@ -778,8 +842,19 @@ const Engine = (() => {
       const items = itemsByOrder.get(o.id) || [];
       const gross = o.harga + o.refund;
       if (mode === 'acuan') {
+        // Mode reseller: modal = harga jual × rasio (diskon pemasok dan pola harga dari isian seller). Harga acuan
+        // ditaksir dari harga jual, jadi HPP selalu ESTIMASI; refund (rumus lama, tidak diubah) → "belum".
+        // Status hanya metadata; angka modal tidak berubah.
         const r = shopeeRatio(settings, o.orderDate);
-        return { modal: gross * r, items: items.map((it) => ({ it, qty: null, cost: (it.harga + it.refund) * r, unit: NaN, entry: null })) };
+        return { modal: gross * r, items: items.map((it) => {
+          const cost = (it.harga + it.refund) * r;
+          const reasons = isOk(cost) ? ['harga_acuan', ...(it.refund !== 0 || !(it.harga + it.refund > 0) ? ['refund'] : [])] : [];
+          const hppStatus = !isOk(cost) ? 'tidak_diketahui' : reasons.includes('refund') ? 'belum' : 'estimasi';
+          shopeeQty.baris++; shopeeQty.hpp[hppStatus]++;
+          if (isOk(cost)) shopeeQty.metodeHpp.harga_acuan++;
+          if (reasons.includes('refund')) shopeeQty.refundBelumJelas++;
+          return { it, qty: null, cost, unit: NaN, entry: null, hppMethod: isOk(cost) ? 'harga_acuan' : null, hppStatus, hppReasons: reasons };
+        }) };
       }
       const exp = m.shopeeLines.get(o.id) || [];
       // H1/H3 Fase 2: pasangkan baris laporan ↔ baris export dengan aturan M0–M2 (lihat matchShopeeOrder).
@@ -897,7 +972,9 @@ const Engine = (() => {
           const ringan = new Set(['modal_rata_rata', 'kuantitas', 'identitas_berbeda']);
           hppStatus = reasons.every((x) => ringan.has(x)) ? 'estimasi' : 'belum';
         }
-        else if (qtyBasis === 'estimasi_1') hppStatus = 'estimasi';   // angka ada, tetapi jumlahnya dianggap 1 unit
+        // Estimasi 1 unit (pesanan tidak ada di export). H2-A: bila ada alasan yang lebih serius (refund/retur,
+        // status pesanan, info retur tidak ada, konflik), statusnya "belum" agar tidak tampak sekadar estimasi biasa.
+        else if (qtyBasis === 'estimasi_1') hppStatus = reasons.every((x) => x === 'kuantitas' || x === 'estimasi_satu_unit') ? 'estimasi' : 'belum';
         else if (reasons.length) hppStatus = 'belum';
         else if (group && !(groupCost[r.groupId].sameUnit && r.qtyStatus === 'terverifikasi')) hppStatus = 'terverifikasi_kelompok';
         else hppStatus = 'terverifikasi';
@@ -969,6 +1046,10 @@ const Engine = (() => {
       if (!inRange(o.orderDate)) continue;
       shopeeIn.add(o.id);
       const { modal, items } = shopeeOrderModal(o);
+      // Kepastian: pesanan yang modalnya tidak diketahui tidak masuk laba, jadi semua barisnya "tidak_diketahui".
+      if (!isOk(modal)) { if (items.length) items.forEach((n) => kAdd('tidak_diketahui', n.it.harga + n.it.refund, 0)); else kAdd('tidak_diketahui', o.harga + o.refund, 0); }
+      else if (!items.length) kAdd('estimasi', o.harga + o.refund, modal);   // tanpa baris produk: modal rata-rata
+      else items.forEach((n) => kAdd(n.hppStatus || 'belum', n.it.harga + n.it.refund, n.cost));
       const net = o.harga + o.refund + o.voucher;
       const counted = o.harga + o.refund > 0;
       const pack = counted ? packing : 0;
@@ -1037,6 +1118,9 @@ const Engine = (() => {
       if (r.payDate && (!T.first || r.payDate < T.first)) T.first = r.payDate;
       if (r.payDate && r.payDate > T.last) T.last = r.payDate;
       const { modal, lines } = tiktokRowModal(r);
+      // Kepastian TikTok: status HPP per baris belum dievaluasi (belum ada pencocokan seperti Shopee), jadi modal
+      // per unit = "belum"; modal rata-rata / harga acuan = "estimasi"; tanpa modal = "tidak_diketahui".
+      kAdd(!isOk(modal) ? 'tidak_diketahui' : mode === 'acuan' ? 'estimasi' : lines.some((l) => l.entry) ? 'belum' : 'estimasi', r.sales, modal);
       const counted = r.pre > 0;             // terjual (tidak dibatalkan/direfund penuh)
       const pack = counted ? packing : 0;
       const margin = isOk(modal) ? r.settle - modal - pack : NaN;
@@ -1101,30 +1185,107 @@ const Engine = (() => {
       if (mode === 'acuan') return shopeeRatio(settings, d);
       return isOk(fallback) ? fallback : NaN;
     };
+    /* H2-A: jumlah unit yang direfund per kasus retur, beserta tingkat keyakinannya.
+     * Sumber: file retur (c.qty) dan, khusus Shopee, kolom returnedQty export pesanan pada baris yang SAMA
+     * (nomor pesanan + nama produk + variasi). Jumlah unit TIDAK PERNAH diturunkan dari nominal refund.
+     *  terverifikasi   file retur dan export menyebut jumlah yang sama
+     *  satu_sumber     hanya satu sumber punya angka → dipakai, tetapi tidak dianggap terverifikasi
+     *  konflik         sumber berbeda, atau kasus berbeda antar file retur → TIDAK dipakai (bukan min/maks)
+     *  tidak_cocok     pesanan ada di export tetapi baris produknya tidak ditemukan → TIDAK dipakai
+     *  tidak_diketahui tidak ada sumber yang punya angka
+     * Kasus dengan pesanan + produk + variasi yang sama dibandingkan bersama (beberapa pengajuan retur). */
+    const caseGroupKey = (c) => (c.platform === 'shopee' ? `S|${c.orderId}|${norm(c.product)}|${norm(c.variant)}` : `T|${c.orderId}|${c.skuId}`);
+    const caseGroups = new Map();
+    for (const c of m.cases.values()) { const k = caseGroupKey(c); if (!caseGroups.has(k)) caseGroups.set(k, []); caseGroups.get(k).push(c); }
+    /** Unit direfund menurut export Shopee untuk baris produk yang sama. */
+    function exportRefundUnits(c) {
+      const ls = c.platform === 'shopee' ? m.shopeeLines.get(c.orderId) : null;
+      if (!ls) return { status: 'tanpa_export' };
+      const meta = m.shopeeOrderMeta.get(c.orderId);
+      if (meta && (meta.finansial || meta.status)) return { status: 'konflik' };   // export pesanan ini sendiri berbeda antar file
+      const hit = ls.filter((l) => norm(l.name) === norm(c.product) && norm(l.variant) === norm(c.variant));
+      if (!hit.length) return { status: 'tidak_cocok' };
+      if (!hit.every((l) => isOk(l.returnedQty))) return { status: 'tanpa_kolom' };
+      return { status: 'ada', units: hit.reduce((a, l) => a + l.returnedQty, 0) };
+    }
+    const unitCache = new Map();
+    function returnUnits(c) {
+      const k = caseGroupKey(c);
+      if (!unitCache.has(k)) {
+        const g = caseGroups.get(k), ex = exportRefundUnits(g[0]);
+        const caseKnown = g.every((x) => isOk(x.qty)), caseSum = g.reduce((a, x) => a + x.qty, 0);
+        let status;
+        if (g.some((x) => x.versiBerbeda) || ex.status === 'konflik') status = 'konflik';
+        else if (ex.status === 'tidak_cocok') status = 'tidak_cocok';
+        else if (ex.status === 'ada') status = caseKnown ? (caseSum === ex.units ? 'terverifikasi' : 'konflik') : (g.length === 1 ? 'satu_sumber' : 'tidak_diketahui');
+        else status = caseKnown ? 'satu_sumber' : 'tidak_diketahui';
+        const fromExport = ex.status === 'ada' && !caseKnown && g.length === 1;
+        unitCache.set(k, { status, source: fromExport ? 'export' : (caseKnown ? 'file_retur' : null), exportUnits: ex.units });
+      }
+      const u = unitCache.get(k);
+      const units = u.status === 'terverifikasi' || (u.status === 'satu_sumber' && u.source === 'file_retur') ? c.qty
+        : u.status === 'satu_sumber' && u.source === 'export' ? u.exportUnits : NaN;
+      return { units, unitStatus: u.status, unitSource: u.source };
+    }
+
     const cases = [...m.cases.values()].filter((c) => want.has(c.platform) && inRange(c.platform === 'shopee' ? (shopeeOrderDate.get(c.orderId) || c.date) : c.date)).map((c) => {
-      let estModal;
+      const { units, unitStatus, unitSource } = returnUnits(c);
+      let estModal, usesUnits = false, modalSource = null, modalKeyOk = false;
       if (c.platform === 'shopee') {
-        const entry = mode === 'produk' ? catalog.find([], c.product, c.variant) : null;
-        estModal = entry ? entry.cost * (c.qty || 1) : c.amount * shopeeOrderCostRatio(c.orderId, shopeeOrderDate.get(c.orderId) || c.date);
+        // Modal per unit memakai aturan pencarian Shopee yang sama dengan penjualan (E1/E2): modal milik variasi
+        // lain tidak dipakai. Mode lain memakai nilai refund × rasio seperti sebelumnya (tidak memakai jumlah unit).
+        const found = mode === 'produk' ? shopeeCostOf({ name: c.product, productId: '' }, { variant: c.variant, skuVariant: '', sku: '' }) : { entry: null };
+        usesUnits = !!found.entry;
+        if (found.entry) { modalSource = `modal_per_unit:${found.key}`; modalKeyOk = found.key !== 'produk_legacy'; }
+        else modalSource = mode === 'acuan' ? 'harga_acuan' : 'modal_rata_rata';
+        estModal = found.entry ? found.entry.cost * units : c.amount * shopeeOrderCostRatio(c.orderId, shopeeOrderDate.get(c.orderId) || c.date);
       } else if (mode === 'produk') {
         const unit = ttUnitCost.get(c.skuId) ?? (catalog.find([c.skuId], c.product, c.variant) || {}).cost;
-        estModal = isOk(unit) ? unit * (c.qty || 1) : c.amount * fallback;
+        usesUnits = isOk(unit);
+        modalSource = usesUnits ? 'modal_per_unit:sku_tiktok' : 'modal_rata_rata';
+        modalKeyOk = usesUnits;
+        estModal = isOk(unit) ? unit * units : c.amount * fallback;
       } else {
         const op = ttOrderPrice.get(c.orderId);
+        modalSource = 'harga_acuan';
         estModal = c.amount * (op && op.paid > 0 ? op.pre / op.paid : ttPaidRatio) * ttRatio;
       }
+      // Alasan bila perkiraan modal retur tidak bisa dihitung (A3: tidak pernah diganti 0).
+      const estReason = isOk(estModal) ? null : usesUnits ? `jumlah_${unitStatus}` : !isOk(c.amount) ? 'nilai_refund_tidak_diketahui' : 'modal_tidak_ditemukan';
+      // P4: dasar dan kepastian nilai kerugian/risiko retur (metadata; tidak mengubah angka).
+      //  terverifikasi  = modal per unit dengan kunci variasi/produk yang tepat + jumlah unit terverifikasi 2 sumber
+      //  sementara      = ada angka, tetapi dasarnya satu sumber, modal tingkat produk, atau nilai refund × rasio
+      //                   (modal rata-rata / harga acuan = estimasi)
+      //  tidak_diketahui = tidak ada angka
+      const lossBasis = !isOk(estModal) ? null : usesUnits ? 'modal_per_unit' : 'nilai_refund_x_rasio';
+      const lossCertainty = !isOk(estModal) ? 'tidak_diketahui'
+        : usesUnits && modalKeyOk && unitStatus === 'terverifikasi' ? 'terverifikasi' : 'sementara';
+      const lossReason = lossCertainty === 'terverifikasi' ? null : lossCertainty === 'tidak_diketahui' ? estReason
+        : !usesUnits ? 'nilai_refund_x_rasio' : !modalKeyOk ? 'modal_tingkat_produk' : `jumlah_${unitStatus}`;
       const needsCheck = CHECK_CATS.has(c.cat);
-      return { ...c, estModal, needsCheck, state: needsCheck ? (caseState[c.key] || 'belum') : 'na' };
+      return { ...c, estModal, estReason, units, unitStatus, unitSource, modalSource, lossBasis, lossCertainty, lossReason,
+        needsCheck, state: needsCheck ? (caseState[c.key] || 'belum') : 'na' };
     });
+    // Angka risiko/kerugian hanya menjumlahkan kasus yang nilainya diketahui. Kasus tanpa nilai dihitung terpisah
+    // (kerugianTanpaNilai / risikoTanpaNilai) agar "Rp0" tidak disalahartikan sebagai "tidak ada risiko".
     const sumOk = (arr) => arr.reduce((a, c) => a + (isOk(c.estModal) ? c.estModal : 0), 0);
     const lostCertain = sumOk(cases.filter((c) => c.state === 'hilang'));
     const unknownRisk = sumOk(cases.filter((c) => c.state === 'belum'));
+    const lostNoValue = cases.filter((c) => c.state === 'hilang' && !isOk(c.estModal)).length;
+    const riskNoValue = cases.filter((c) => c.state === 'belum' && !isOk(c.estModal)).length;
+    // P5: kerugian yang masuk laba (lostCertain) dipecah menurut kepastiannya; jumlah keduanya = lostCertain.
+    const lostVerified = sumOk(cases.filter((c) => c.state === 'hilang' && c.lossCertainty === 'terverifikasi'));
+    const lostProvisional = sumOk(cases.filter((c) => c.state === 'hilang' && c.lossCertainty === 'sementara'));
     const catSummary = {};
     for (const c of cases) {
       const k = `${c.platform}|${c.cat}`;
-      catSummary[k] = catSummary[k] || { platform: c.platform, cat: c.cat, label: CAT_LABEL[c.cat], count: 0, amount: 0 };
-      catSummary[k].count += 1; catSummary[k].amount += c.amount;
+      catSummary[k] = catSummary[k] || { platform: c.platform, cat: c.cat, label: CAT_LABEL[c.cat], count: 0, amount: 0, amountKnown: 0, amountUnknown: 0 };
+      catSummary[k].count += 1;
+      if (isOk(c.amount)) catSummary[k].amountKnown += c.amount; else catSummary[k].amountUnknown += 1;   // nilai refund tidak diketahui
     }
+    // P3: total kategori hanya bila SEMUA nilainya diketahui; selain itu NaN (tampil "—"), bukan jumlah sebagian
+    // yang terlihat lengkap. Jumlah yang diketahui tetap tersedia di amountKnown.
+    for (const x of Object.values(catSummary)) x.amount = x.amountUnknown ? NaN : x.amountKnown;
 
     /* ===== Total ===== */
     const has = { shopee: want.has('shopee') && available.shopee, tiktok: want.has('tiktok') && available.tiktok };
@@ -1150,6 +1311,54 @@ const Engine = (() => {
       x.total.net = x.total.margin - fixedMonthly;
     }
 
+    /**
+     * H2-A: kepastian laba (metadata, tidak mengubah angka).
+     *  laba.dariDataTersedia = totalMargin (angka yang sama dengan sebelumnya).
+     *  laba.final hanya true bila SEMUA syarat terpenuhi; alasan yang belum terpenuhi ada di alasanTidakFinal.
+     *  "Modal diketahui" (coverage) ≠ modal terverifikasi: estimasi dan "belum" tetap dipisah di hpp/penjualan.
+     */
+    function buildKepastian(r) {
+      const why = [];
+      if (!r.ready) why.push('laba_belum_dapat_dihitung');
+      if (r.knownSales < r.totalSales) why.push('modal_tidak_diketahui');
+      if (K.baris.estimasi) why.push('hpp_estimasi');
+      if (K.baris.belum) why.push('hpp_belum_terverifikasi');
+      if (K.baris.tidak_diketahui) why.push('hpp_tidak_diketahui');
+      const check = r.cases.filter((c) => c.needsCheck);
+      if (check.some((c) => c.state === 'belum')) why.push('retur_belum_dicek');
+      if (check.some((c) => c.state === 'hilang' && c.unitStatus !== 'terverifikasi')) why.push('jumlah_retur_belum_terverifikasi');
+      if (lostNoValue) why.push('kerugian_retur_tanpa_nilai');
+      if (lostProvisional) why.push('kerugian_retur_sementara');
+      if (r.adjustments) why.push('penyesuaian_belum_diklasifikasikan');
+      // Total tiap Laporan Penghasilan harus cocok dengan ringkasan resmi (toleransi Rp1, sama seperti dashboard).
+      for (const p of parsed) {
+        if (p.kind !== 'shopee_income' && p.kind !== 'tiktok_income') continue;
+        if (!want.has(p.kind === 'shopee_income' ? 'shopee' : 'tiktok')) continue;
+        const ref = p.kind === 'shopee_income' ? p.check.summaryTotal : p.check.reportSettle;
+        if (ref === null || ref === undefined) { if (!why.includes('ringkasan_resmi_tidak_ada')) why.push('ringkasan_resmi_tidak_ada'); }
+        else if (Math.abs(ref - p.check.sum) > 1 && !why.includes('total_file_tidak_cocok')) why.push('total_file_tidak_cocok');
+      }
+      // Kelengkapan periode (bulan lengkap, A.17) belum bisa dibuktikan oleh engine → laba tidak pernah final dulu.
+      why.push('periode_belum_divalidasi');
+      const unitRetur = {};
+      for (const c of check) unitRetur[c.unitStatus] = (unitRetur[c.unitStatus] || 0) + 1;
+      const files = (kind) => parsed.filter((p) => p.kind === kind).length;
+      return {
+        laba: { dariDataTersedia: r.totalMargin, final: why.length === 0, alasanTidakFinal: why },
+        hpp: { ...K.hpp }, penjualan: { ...K.penjualan }, baris: { ...K.baris },
+        // kerugianTerverifikasi + kerugianSementara = kerugian yang saat ini masuk laba (lostCertain).
+        risikoBarang: { kerugianTerverifikasi: lostVerified, kerugianSementara: lostProvisional, risikoTerhitung: unknownRisk,
+          kerugianTanpaNilai: lostNoValue, risikoTanpaNilai: riskNoValue, unitRetur },
+        sumberData: {
+          laporanPenghasilan: { shopee: files('shopee_income'), tiktok: files('tiktok_income') },
+          exportPesanan: { shopee: files('shopee_orders'), tiktok: files('tiktok_orders') },
+          fileRetur: { shopee: files('shopee_return'), tiktok: files('tiktok_return') },
+          saldo: files('shopee_balance') ? 'diunggah, belum dipakai' : 'tidak ada',
+          metodeModal: mode === 'acuan' ? 'harga_acuan' : 'modal_per_unit / modal_rata_rata',
+        },
+      };
+    }
+
     const result = {
       mode, ready, coverage, knownSales, has, available, shopee: S, tiktok: T, lostCertain, unknownRisk, totalMargin,
       totalSales, totalFees: pick((p) => p.feeTotal), totalReceived: pick((p) => p.received),
@@ -1159,9 +1368,10 @@ const Engine = (() => {
       fixedMonthly, opex, netProfit: ready ? totalMargin - opex : NaN,
       months: monthList, allMonths: [...allMonths].sort(), buckets: buckets.filter((b) => b.orders > 0),
       products, cases, catSummary: Object.values(catSummary), dupes: m.dupes, target,
-      qtyAssumed, shopeeQty: mode === 'produk' ? shopeeQty : null, linesWithoutCost, ttNoDetail, ttNoDetailSales, hasOrderExport: { shopee: m.shopeeLines.size > 0, tiktok: m.tiktokLines.size > 0 },
+      qtyAssumed, shopeeQty, linesWithoutCost, ttNoDetail, ttNoDetailSales, hasOrderExport: { shopee: m.shopeeLines.size > 0, tiktok: m.tiktokLines.size > 0 },
       productsWithoutCost: products.filter((p) => !p.modalKnown).length,
     };
+    result.kepastian = buildKepastian(result);
     result.insights = insights(result);
     return result;
   }
