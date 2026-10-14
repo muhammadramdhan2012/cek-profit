@@ -47,6 +47,13 @@ const Engine = (() => {
   const getter = (row, map) => (name) => (name in map ? row[map[name]] : '');
   /** Ambil nilai kolom pertama yang ada dari beberapa kemungkinan nama (bahasa Indonesia/Inggris). */
   const getterAny = (row, map) => (...names) => { for (const n of names) if (n in map) return row[map[n]]; return ''; };
+  /**
+   * Seperti getterAny, tetapi mengambil kolom pertama yang ISINYA tidak kosong.
+   * Dipakai untuk SKU Shopee: kolom "Nomor Referensi SKU" bisa ada tetapi kosong (SKU itu opsional
+   * bagi seller), sehingga getterAny akan berhenti di kolom kosong itu. getterAny sengaja tidak diubah
+   * karena dipakai parser lain yang sudah stabil.
+   */
+  const getterFilled = (row, map) => (...names) => { for (const n of names) if (n in map && str(row[map[n]]) !== '') return row[map[n]]; return ''; };
   const hasAny = (row, names) => names.some((n) => row.some((c) => str(c) === n));
   const firstSheetHeader = (wb, test) => {
     for (const [sheet, aoa] of Object.entries(wb.sheets)) {
@@ -67,6 +74,13 @@ const Engine = (() => {
     shopeeName: ['Nama Produk'],
     shopeePrice: ['Harga Setelah Diskon', 'Harga Awal'],
     shopeeStatus: ['Status Pesanan'],
+    // Kolom tambahan export Shopee yang sudah divalidasi (H1/H3). Hanya dibaca, belum dipakai menghitung laba.
+    shopeeSkuVariant: ['Nomor Referensi SKU'],   // SKU per variasi (opsional, sering kosong)
+    shopeeSkuParent: ['SKU Induk'],              // SKU tingkat produk (opsional)
+    shopeeSubtotal: ['Subtotal Pesanan'],        // per baris; pada export yang divalidasi = Jumlah × Harga Setelah Diskon
+    shopeePriceAfterDisc: ['Harga Setelah Diskon'],
+    shopeeReturnedQty: ['Returned quantity'],    // unit yang DIREFUND, bukan unit yang kembali ke stok
+    shopeeReturnStatus: ['Status Pembatalan/ Pengembalian'],
     ttOrderId: ['Order ID', 'ID Pesanan'],
     ttSkuId: ['SKU ID', 'ID SKU'],
     ttSellerSku: ['Seller SKU', 'SKU Penjual'],
@@ -213,8 +227,22 @@ const Engine = (() => {
       const orderId = str(g(...COL.shopeeOrderId));
       const qty = num(g(...COL.shopeeQty));
       if (!orderId || !(qty > 0)) continue;
+      // Kolom angka opsional: kosong, tidak ada, atau berisi teks tanpa angka → NaN,
+      // supaya "tidak ada data" tidak tertukar dengan angka 0 (num() mengubah teks seperti "-" menjadi 0).
+      const optNum = (names) => {
+        const v = g(...names);
+        if (typeof v === 'number') return isFinite(v) ? v : NaN;
+        return /\d/.test(str(v)) ? num(v) : NaN;
+      };
+      const filled = getterFilled(row, map);
       lines.push({ orderId, name: str(g(...COL.shopeeName)), sku: str(g(...COL.shopeeSku)), variant: str(g(...COL.shopeeVar)),
-        qty, unitPrice: num(g(...COL.shopeePrice)), status: str(g(...COL.shopeeStatus)) });
+        qty, unitPrice: num(g(...COL.shopeePrice)), status: str(g(...COL.shopeeStatus)),
+        // Field tambahan (H1/H3). Field lama di atas tidak diubah agar perhitungan yang berjalan tetap sama.
+        // SKU variasi dan SKU induk disimpan TERPISAH. SKU induk berlaku untuk satu produk (semua variasinya),
+        // jadi tidak boleh dipakai sebagai identitas variasi.
+        skuVariant: str(filled(...COL.shopeeSkuVariant)), skuParent: str(filled(...COL.shopeeSkuParent)),
+        subtotal: optNum(COL.shopeeSubtotal), priceAfterDisc: optNum(COL.shopeePriceAfterDisc),
+        returnedQty: optNum(COL.shopeeReturnedQty), returnStatus: str(g(...COL.shopeeReturnStatus)) });
     }
     return { kind: 'shopee_orders', lines };
   }
@@ -231,6 +259,143 @@ const Engine = (() => {
         name: str(g(...COL.ttName)), variant: str(g(...COL.ttVar)), qty, subtotal: num(g(...COL.ttSubtotal)), status: str(g(...COL.ttStatus)) });
     }
     return { kind: 'tiktok_orders', lines };
+  }
+
+  /* ---------- pencocokan Laporan Penghasilan Shopee ↔ export pesanan (H1/H3, Fase 1) ----------
+   * Pada data yang sudah divalidasi, Laporan Penghasilan Shopee punya SATU baris per variasi produk, tetapi
+   * tidak mencatat nama variasi, jumlah barang, maupun SKU. Export pesanan mencatat semuanya.
+   * Fungsi di bawah memasangkan keduanya.
+   *
+   * Aturan (docs/KAMUS_ANGKA.md A.19.4–A.19.5, disetujui sebagai dasar desain):
+   *  - Hanya di dalam NOMOR PESANAN YANG SAMA. Tidak pernah lintas pesanan.
+   *  - Pertama dikelompokkan per nama produk, lalu dipasangkan lewat NILAI:
+   *    "Harga Produk" di laporan harus sama dengan "Subtotal Pesanan" di export (toleransi 0).
+   *  - Urutan baris TIDAK dipakai untuk menebak.
+   *  - Satu baris export hanya boleh dipakai sekali → jumlah barang tidak terhitung ganda.
+   *  - Kalau tidak bisa dipastikan, status dibiarkan "belum"/"ambigu". Tidak ada tebakan.
+   *
+   * Arti status:
+   *  qtyStatus     terverifikasi = jumlah barang terbukti dari export
+   *                belum         = tidak ada bukti yang cukup
+   *  variantStatus terverifikasi = variasi yang terjual diketahui pasti
+   *                tidak_relevan = produk tanpa variasi (nama variasi kosong di export)
+   *                ambigu        = beberapa variasi bernilai sama; mana yang mana tidak bisa dipastikan
+   *                belum         = tidak ada pasangan sama sekali
+   *
+   * Nilai `rule` (alasan hasil): M0 (pesanan tidak ada di export), M1, M2 (pasangan pasti),
+   *  M2_ambigu (nilai kembar), nama_tidak_ditemukan, nilai_tidak_cocok, jumlah_kandidat_beda, pesanan_lain.
+   *
+   * BATAS: status pesanan belum diperiksa. Aturan ini baru divalidasi untuk export "pesanan selesai".
+   * Baris dengan status lain (mis. batal) tetap ikut dicocokkan dan hanya DITANDAI di `nonCompletedLines`;
+   * keputusan perlakuannya menunggu H2. Pasangan "terverifikasi" berarti jumlah/variasi tercatat di export,
+   * BUKAN berarti barang pasti terkirim atau tidak dikembalikan.
+   *
+   * Fungsi ini MURNI (tidak mengubah input, tidak menyentuh DOM) dan belum dipakai menghitung laba.
+   */
+
+  /** Nilai rupiah satu baris export: Subtotal Pesanan; bila kolomnya tidak ada, Jumlah × Harga Setelah Diskon. */
+  const shopeeLineValue = (l) => {
+    if (isOk(l.subtotal)) return l.subtotal;
+    if (isOk(l.priceAfterDisc)) return l.qty * l.priceAfterDisc;
+    return NaN;   // hanya ada "Harga Awal" atau tidak ada harga → tidak bisa dibandingkan
+  };
+  const sameValue = (a, b, tol) => isOk(a) && isOk(b) && Math.abs(Math.round(a) - Math.round(b)) <= tol;
+
+  /**
+   * @param {string} orderId  nomor pesanan yang dicocokkan
+   * @param {{orderId:string,name:string,harga:number}[]} items  baris produk Laporan Penghasilan (pesanan ini)
+   * @param {{orderId:string,name:string,variant:string,qty:number}[]} lines  baris export pesanan
+   * @returns {{orderId:string, items:object[], groups:object[], unusedLines:number[], nonCompletedLines:number[],
+   *            ignored:{items:number,lines:number}}}
+   *   items[i] sejajar dengan input items: {rule, qtyStatus, variantStatus, qty, lineIdx, candidateIdx, groupId}
+   *   lineIdx / candidateIdx menunjuk indeks di array `lines` yang diberikan.
+   */
+  function matchShopeeOrder(orderId, items, lines) {
+    const tol = 0;   // nilai harus sama persis (keputusan pemilik D2). Toleransi lain butuh izin baru.
+    const out = { orderId, items: [], groups: [], unusedLines: [], nonCompletedLines: [], ignored: { items: 0, lines: 0 } };
+    const blank = (rule) => ({ rule, qtyStatus: 'belum', variantStatus: 'belum', qty: null, lineIdx: [], candidateIdx: [], groupId: null });
+
+    // Syarat dasar: hanya baris dengan nomor pesanan yang sama yang ikut dicocokkan.
+    const myLines = [];
+    lines.forEach((l, i) => { if (str(l.orderId) === str(orderId)) myLines.push(i); else out.ignored.lines++; });
+    // Tandai (tidak dibuang) baris yang statusnya diketahui dan bukan "Selesai". Lihat BATAS di atas.
+    out.nonCompletedLines = myLines.filter((j) => str(lines[j].status) && str(lines[j].status) !== 'Selesai');
+    items.forEach((it) => { if (str(it.orderId) !== str(orderId)) out.ignored.items++; });
+    out.items = items.map((it) => blank(str(it.orderId) === str(orderId) ? 'M0' : 'pesanan_lain'));
+
+    const used = new Set();   // pencegah hitung ganda: indeks baris export yang sudah dipakai
+    const variantOf = (idx) => (str(lines[idx].variant) ? 'terverifikasi' : 'tidak_relevan');
+
+    // Kelompokkan per nama produk (dinormalisasi) di dalam pesanan ini.
+    const byName = new Map();
+    items.forEach((it, i) => {
+      if (out.items[i].rule === 'pesanan_lain') return;
+      const k = norm(it.name);
+      if (!byName.has(k)) byName.set(k, { itemIdx: [], lineIdx: [] });
+      byName.get(k).itemIdx.push(i);
+    });
+    for (const i of myLines) { const k = norm(lines[i].name); if (byName.has(k)) byName.get(k).lineIdx.push(i); }
+
+    for (const { itemIdx, lineIdx } of byName.values()) {
+      if (!myLines.length) continue;                         // M0: pesanan ini tidak ada di export
+      if (!lineIdx.length) { itemIdx.forEach((i) => { out.items[i].rule = 'nama_tidak_ditemukan'; }); continue; }
+
+      // M1: tepat satu baris laporan ↔ satu baris export bernama sama, dan nilainya sama.
+      if (itemIdx.length === 1 && lineIdx.length === 1) {
+        const i = itemIdx[0], j = lineIdx[0];
+        if (sameValue(items[i].harga, shopeeLineValue(lines[j]), tol)) {
+          used.add(j);
+          Object.assign(out.items[i], { rule: 'M1', qtyStatus: 'terverifikasi', variantStatus: variantOf(j), qty: lines[j].qty, lineIdx: [j], candidateIdx: [j] });
+        } else out.items[i].rule = 'nilai_tidak_cocok';
+        continue;
+      }
+
+      // M2: beberapa baris bernama sama. Pasangkan per NILAI yang sama persis.
+      const valueKey = (v) => (isOk(v) ? String(Math.round(v)) : 'NaN');
+      const linesByVal = new Map();
+      for (const j of lineIdx) {
+        const k = valueKey(shopeeLineValue(lines[j]));
+        if (!linesByVal.has(k)) linesByVal.set(k, []);
+        linesByVal.get(k).push(j);
+      }
+      const itemsByVal = new Map();
+      for (const i of itemIdx) {
+        const k = valueKey(items[i].harga);
+        if (!itemsByVal.has(k)) itemsByVal.set(k, []);
+        itemsByVal.get(k).push(i);
+      }
+      for (const [k, its] of itemsByVal) {
+        const cand = k === 'NaN' ? [] : (linesByVal.get(k) || []).filter((j) => !used.has(j));
+        if (!cand.length) { its.forEach((i) => { out.items[i].rule = 'nilai_tidak_cocok'; }); continue; }
+        if (its.length === 1 && cand.length === 1) {
+          // Pasangan unik: pasti.
+          const i = its[0], j = cand[0];
+          used.add(j);
+          Object.assign(out.items[i], { rule: 'M2', qtyStatus: 'terverifikasi', variantStatus: variantOf(j), qty: lines[j].qty, lineIdx: [j], candidateIdx: [j] });
+          continue;
+        }
+        if (its.length === cand.length) {
+          // Nilai kembar (mis. dua variasi berharga sama). Kita tahu kelompok baris export ini milik
+          // kelompok baris laporan ini, tetapi TIDAK tahu pasangan per baris. Jangan menebak:
+          // variasi = ambigu. Jumlah barang hanya pasti bila semua kandidat punya jumlah yang sama.
+          const qtys = new Set(cand.map((j) => lines[j].qty));
+          const qtyOk = qtys.size === 1;
+          const groupId = out.groups.length;
+          cand.forEach((j) => used.add(j));
+          out.groups.push({ groupId, itemIdx: its.slice(), lineIdx: cand.slice(), qtyTotal: cand.reduce((a, j) => a + lines[j].qty, 0), complete: true });
+          its.forEach((i) => Object.assign(out.items[i], {
+            rule: 'M2_ambigu', qtyStatus: qtyOk ? 'terverifikasi' : 'belum', variantStatus: 'ambigu',
+            qty: qtyOk ? lines[cand[0]].qty : null, lineIdx: [], candidateIdx: cand.slice(), groupId }));
+          continue;
+        }
+        // Jumlah baris laporan ≠ jumlah kandidat bernilai sama → tidak bisa dipasangkan. Baris export
+        // tidak dipakai (tetap tersedia) dan statusnya belum.
+        its.forEach((i) => Object.assign(out.items[i], { rule: 'jumlah_kandidat_beda', variantStatus: 'ambigu', candidateIdx: cand.slice() }));
+      }
+    }
+    // M4: baris export yang tidak terpakai dicatat, tetapi tidak dipakai untuk pesanan lain.
+    out.unusedLines = myLines.filter((j) => !used.has(j));
+    return out;
   }
 
   /* ---------- template modal per produk ---------- */
@@ -800,6 +965,7 @@ const Engine = (() => {
   }
 
   return { num, date, norm, detect, sheetsFromSheetJS, monthName, parseWorkbook, compute, simulate, hpp, shopeeRatio, insights, templateRows, buildCatalog, modeOf,
+    matchShopeeOrder, shopeeLineValue,
     CAT_LABEL, TEMPLATE_HEADER };
 })();
 if (typeof module !== 'undefined') module.exports = Engine;
