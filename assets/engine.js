@@ -74,7 +74,8 @@ const Engine = (() => {
     shopeeName: ['Nama Produk'],
     shopeePrice: ['Harga Setelah Diskon', 'Harga Awal'],
     shopeeStatus: ['Status Pesanan'],
-    // Kolom tambahan export Shopee yang sudah divalidasi (H1/H3). Hanya dibaca, belum dipakai menghitung laba.
+    // Kolom tambahan export Shopee yang sudah divalidasi (H1/H3). Dipakai pencocok (Fase 2) untuk kuantitas dan
+    // tanda status/refund; rumus refund dan laba tidak memakainya secara langsung.
     shopeeSkuVariant: ['Nomor Referensi SKU'],   // SKU per variasi (opsional, sering kosong)
     shopeeSkuParent: ['SKU Induk'],              // SKU tingkat produk (opsional)
     shopeeSubtotal: ['Subtotal Pesanan'],        // per baris; pada export yang divalidasi = Jumlah × Harga Setelah Diskon
@@ -290,7 +291,8 @@ const Engine = (() => {
    * keputusan perlakuannya menunggu H2. Pasangan "terverifikasi" berarti jumlah/variasi tercatat di export,
    * BUKAN berarti barang pasti terkirim atau tidak dikembalikan.
    *
-   * Fungsi ini MURNI (tidak mengubah input, tidak menyentuh DOM) dan belum dipakai menghitung laba.
+   * Fungsi ini MURNI (tidak mengubah input, tidak menyentuh DOM). Sejak Fase 2 dipakai shopeeOrderModal,
+   * hanya untuk mode modal per produk.
    */
 
   /** Nilai rupiah satu baris export: Subtotal Pesanan; bila kolomnya tidak ada, Jumlah × Harga Setelah Diskon. */
@@ -486,7 +488,10 @@ const Engine = (() => {
 
   function merge(parsed) {
     const out = { shopeeOrders: new Map(), shopeeItems: [], shopeeAdj: new Map(), tiktok: new Map(), cases: new Map(),
-      shopeeLines: new Map(), tiktokLines: new Map(), dupes: 0 };
+      shopeeLines: new Map(), tiktokLines: new Map(), dupes: 0,
+      shopeeLineCount: new Map(),     // nomor pesanan → Map(kunci isi baris → jumlah baris), dari file pertama yang memuatnya
+      shopeeExportConflict: new Set(), // nomor pesanan yang isi barisnya BERBEDA antar file export
+    };
     const seenLine = new Set();
     for (const p of parsed) {
       if (p.kind === 'shopee_income') {
@@ -498,8 +503,10 @@ const Engine = (() => {
         for (const r of p.rows) { if (out.tiktok.has(r.key)) { out.dupes++; continue; } out.tiktok.set(r.key, r); }
       } else if (p.kind === 'shopee_return' || p.kind === 'tiktok_return') {
         for (const c of p.cases) out.cases.set(c.key, c);
-      } else if (p.kind === 'shopee_orders' || p.kind === 'tiktok_orders') {
-        const target = p.kind === 'shopee_orders' ? out.shopeeLines : out.tiktokLines;
+      } else if (p.kind === 'shopee_orders') {
+        mergeShopeeLines(p.lines, out);
+      } else if (p.kind === 'tiktok_orders') {
+        const target = out.tiktokLines;   // TikTok: mekanisme dedup lama, tidak diubah
         for (const l of p.lines) {
           const k = `${p.kind}|${l.orderId}|${l.sku || l.skuId}|${l.name}|${l.variant}|${l.qty}`;
           if (seenLine.has(k)) continue;           // export yang sama diunggah dua kali
@@ -510,6 +517,38 @@ const Engine = (() => {
       }
     }
     return out;
+  }
+
+  /**
+   * Gabungkan baris SATU file export pesanan Shopee ke `out.shopeeLines` (H1/H3, keputusan pemilik A3).
+   *
+   * Masalah cara lama: baris yang isinya sama persis dianggap duplikat walaupun berasal dari file yang sama,
+   * sehingga pembeli yang memang punya dua baris identik dalam satu pesanan kehilangan satu baris.
+   *
+   * Aturan baru, per nomor pesanan:
+   *  - Dalam SATU file, semua baris dipakai (baris kembar sah tidak dibuang).
+   *  - Pesanan yang sudah dimuat file sebelumnya (file sama diunggah ulang / periode tumpang tindih) tidak
+   *    ditambahkan lagi. Isi barisnya dibandingkan sebagai "berapa baris untuk tiap isi baris", sehingga urutan
+   *    baris tidak berpengaruh.
+   *  - Bila isinya berbeda (mis. file kedua punya lebih banyak baris kembar), tidak ada cara memastikan file mana
+   *    yang benar karena export tidak punya nomor baris unik. Pesanan itu ditandai di `shopeeExportConflict`, dan
+   *    jumlah barangnya tidak dianggap terverifikasi (lihat shopeeOrderModal). Baris file pertama yang dipakai.
+   * Status pesanan/pengembalian TIDAK masuk kunci karena bisa berubah antar export untuk baris yang sama.
+   */
+  function mergeShopeeLines(lines, out) {
+    const lineKey = (l) => [l.sku, l.name, l.variant, l.qty, l.unitPrice, l.subtotal].map(String).join('|');
+    const byOrder = new Map();   // pesanan → { lines, count: Map(kunci → jumlah) } untuk file ini
+    for (const l of lines) {
+      if (!byOrder.has(l.orderId)) byOrder.set(l.orderId, { lines: [], count: new Map() });
+      const o = byOrder.get(l.orderId), k = lineKey(l);
+      o.lines.push(l); o.count.set(k, (o.count.get(k) || 0) + 1);
+    }
+    for (const [orderId, o] of byOrder) {
+      const prev = out.shopeeLineCount.get(orderId);
+      if (!prev) { out.shopeeLineCount.set(orderId, o.count); out.shopeeLines.set(orderId, o.lines); continue; }
+      const same = prev.size === o.count.size && [...o.count].every(([k, n]) => prev.get(k) === n);
+      if (!same) out.shopeeExportConflict.add(orderId);
+    }
   }
 
   /* ---------- modal ---------- */
@@ -593,6 +632,20 @@ const Engine = (() => {
     const prod = new Map();
     const touchProduct = (key, init) => { if (!prod.has(key)) prod.set(key, { key, rows: 0, qty: 0, qtyKnown: true, sales: 0, received: 0, modal: 0, modalKnown: true, unitCost: NaN, baseCost: NaN, ...init }); return prod.get(key); };
     let qtyAssumed = 0, linesWithoutCost = 0, ttNoDetail = 0, ttNoDetailSales = 0;
+    // Ringkasan status Shopee mode modal per produk (H1/H3 Fase 2). Informasi tambahan saja: tidak dipakai
+    // menghitung angka lain dan tidak disimpan. Mode harga acuan tidak memakai kuantitas → null.
+    //  kuantitas: terverifikasi = jumlah terbukti dari export; belum = tidak ada bukti cukup
+    //  hpp: terverifikasi = kuantitas, variasi, dan modal pasti, tanpa refund/status yang belum jelas
+    //       terverifikasi_kelompok = total satu kelompok variasi ambigu pasti, rincian per variasi tidak pasti
+    //       estimasi = ada angka, tetapi jumlah barang dianggap 1 unit (pesanan tidak ada di export)
+    //       belum = ada angka, tetapi ada asumsi lain (lihat hppReasons)
+    //       tidak_diketahui = tidak ada angka: modal belum diisi, atau jumlah barang tidak diketahui (A1)
+    //  kuantitasTidakDiketahui: pesanan ada di export tetapi barisnya tidak cocok meyakinkan (A1)
+    //  exportBerbeda: baris dari pesanan yang isi export-nya berbeda antar file (A3)
+    const shopeeQty = { baris: 0, kuantitas: { terverifikasi: 0, belum: 0 }, variasi: { terverifikasi: 0, tidak_relevan: 0, ambigu: 0, belum: 0 },
+      hpp: { terverifikasi: 0, terverifikasi_kelompok: 0, estimasi: 0, belum: 0, tidak_diketahui: 0 },
+      unitTerverifikasi: 0, estimasiSatuUnit: 0, refundPenuhTanpaKuantitas: 0, kuantitasTidakDiketahui: 0, exportBerbeda: 0,
+      refundBelumJelas: 0, statusBelumDivalidasi: 0 };
 
     /* ===== Shopee ===== */
     const S = { orders: 0, sales: 0, fees: { admin: 0, proses: 0, xtra: 0, ams: 0, ship: 0, lain: 0 }, received: 0, modal: 0, packing: 0,
@@ -610,24 +663,152 @@ const Engine = (() => {
         return { modal: gross * r, items: items.map((it) => ({ it, qty: null, cost: (it.harga + it.refund) * r, unit: NaN, entry: null })) };
       }
       const exp = m.shopeeLines.get(o.id) || [];
-      const used = new Set();
-      let modal = 0, ok = true;
-      const notes = items.map((it) => {
-        const lines = exp.filter((l, i) => !used.has(i) && norm(l.name) === norm(it.name));
-        lines.forEach((l) => used.add(exp.indexOf(l)));
-        const qty = lines.length ? lines.reduce((a, l) => a + l.qty, 0) : null;
-        const l0 = lines[0] || {};
-        const entry = catalog.find([l0.sku, it.productId], it.name, l0.variant);
-        const share = it.harga > 0 ? clamp01((it.harga + it.refund) / it.harga) : 0;
-        let cost;
-        if (entry) { cost = entry.cost * (qty ?? 1) * share; if (qty === null) qtyAssumed++; }
-        else if (isOk(fallback)) cost = (it.harga + it.refund) * fallback;
-        else { cost = NaN; ok = false; linesWithoutCost++; }
-        modal += isOk(cost) ? cost : 0;
-        return { it, qty, cost, unit: entry ? entry.cost : NaN, base: entry ? entry.baseCost : NaN, entry, sku: l0.sku, variant: l0.variant };
+      // H1/H3 Fase 2: pasangkan baris laporan ↔ baris export dengan aturan M0–M2 (lihat matchShopeeOrder).
+      // Cara lama memberi SEMUA baris export bernama sama ke item pertama, sehingga variasi berikutnya dianggap
+      // 1 unit lagi (unit terhitung ganda). Pencocok memastikan tiap baris export dipakai paling banyak sekali.
+      const match = matchShopeeOrder(o.id, items, exp);
+      // A3: isi export pesanan ini berbeda antar file (lihat mergeShopeeLines). Tidak bisa dipastikan file mana yang
+      // benar, jadi hasil pencocokan tidak dipakai: semua item dianggap "ada di export tetapi belum cocok" (aturan A1).
+      const conflict = m.shopeeExportConflict.has(o.id);
+      if (conflict) {
+        match.items = match.items.map(() => ({ rule: 'export_berbeda', qtyStatus: 'belum', variantStatus: 'belum', qty: null, lineIdx: [], candidateIdx: [], groupId: null }));
+        match.groups = [];
+      }
+      const notYetValidated = new Set(match.nonCompletedLines);   // status pesanan selain "Selesai"
+      // Tanda pembatalan/pengembalian di export. Dampaknya ke HPP belum diketahui (menunggu H2).
+      const hasReturnSign = (j) => str(exp[j].returnStatus) !== '' || exp[j].returnedQty > 0;
+
+      // Kelompok variasi ambigu (nilai kembar): HPP dihitung SEKALI untuk seluruh kelompok, hanya bila semua
+      // baris export kandidat punya modal. Total kelompok pasti; pembagian per variasi tidak bisa dipastikan.
+      const groupCost = match.groups.map((g) => {
+        const costs = g.lineIdx.map((j) => ({ j, ...shopeeCostOf(items[g.itemIdx[0]], exp[j]) }));
+        const known = costs.every((c) => c.entry);
+        return {
+          costs, known,
+          base: known ? costs.reduce((a, c) => a + c.entry.cost * exp[c.j].qty, 0) : NaN,   // Σ modal × jumlah
+          sameUnit: known && new Set(costs.map((c) => c.entry.cost)).size === 1,
+          variantCost: known && costs.every((c) => c.key !== 'produk_legacy'),
+        };
       });
+
+      let modal = 0, ok = true;
+      const notes = items.map((it, i) => {
+        const r = match.items[i];
+        const group = r.groupId === null ? null : match.groups[r.groupId];
+        const lines = group ? group.lineIdx : r.lineIdx;   // baris export yang terbukti milik item ini (bisa kosong)
+        // Rumus refund LAMA (H2) sengaja tidak diubah: modal dikali porsi yang tidak direfund.
+        const share = it.harga > 0 ? clamp01((it.harga + it.refund) / it.harga) : 0;
+        let entry = null, key = null, cost, qty = r.qty;
+        // Dasar jumlah barang untuk HPP: 'export' (terbukti), 'kelompok' (hanya total kelompok yang terbukti),
+        // 'estimasi_1' (dianggap 1 unit), 'tidak_diketahui' (A1), atau null bila HPP tidak memakai jumlah barang
+        // (modal rata-rata dihitung dari nilai penjualan, bukan dari jumlah).
+        let qtyBasis = null;
+        if (group) {
+          const g = groupCost[r.groupId];
+          if (g.known) {
+            // Nilai baris laporan dalam kelompok sama persis, jadi total kelompok dibagi rata per baris laporan.
+            cost = (g.base / group.itemIdx.length) * share;
+            entry = g.costs[0].entry; key = g.variantCost ? 'variasi' : 'produk_legacy';
+            qtyBasis = r.qtyStatus === 'terverifikasi' ? 'export' : 'kelompok';
+          }
+        } else if (r.qtyStatus === 'terverifikasi') {
+          ({ entry, key } = shopeeCostOf(it, exp[lines[0]]));
+          if (entry) { cost = entry.cost * qty * share; qtyBasis = 'export'; }
+        } else {
+          ({ entry, key } = shopeeCostOf(it, null));
+          if (entry && exp.length) {
+            // A1 (keputusan pemilik): pesanan ADA di export, tetapi baris ini tidak bisa dipasangkan secara meyakinkan.
+            // Export menunjukkan jumlahnya bisa lebih dari 1, sehingga estimasi 1 unit bisa terlalu kecil dan laba
+            // terlihat terlalu besar. HPP baris ini TIDAK DIKETAHUI: bukan 0, bukan estimasi, dan tidak diganti modal
+            // rata-rata. Pesanannya keluar dari "modal diketahui" (sama seperti pesanan yang modalnya belum diisi).
+            cost = NaN; ok = false; qtyBasis = 'tidak_diketahui';
+          } else if (entry) {
+            // Pesanan TIDAK ada di export sama sekali: estimasi minimal 1 unit (cara lama, A.19.1) tetap dipakai agar
+            // kompatibel, dengan pencarian modal tanpa variasi. Statusnya "estimasi", bukan terverifikasi. Bila item
+            // direfund penuh, share = 0 sehingga modalnya 0 menurut rumus refund lama; itu juga bukan HPP pasti.
+            cost = entry.cost * 1 * share; qtyAssumed++; qtyBasis = 'estimasi_1';
+          }
+        }
+        if (!entry) {
+          if (isOk(fallback)) cost = (it.harga + it.refund) * fallback;
+          else { cost = NaN; ok = false; linesWithoutCost++; }
+        }
+        modal += isOk(cost) ? cost : 0;
+
+        // Status HPP. "terverifikasi" hanya bila semua syarat terpenuhi; alasan lain dicatat di hppReasons.
+        const reasons = [];
+        if (!entry && isOk(cost)) reasons.push('modal_rata_rata');            // dari persen modal, bukan isian per produk
+        if (!group && r.qtyStatus !== 'terverifikasi') reasons.push('kuantitas');
+        if (qtyBasis === 'estimasi_1') reasons.push('estimasi_satu_unit');
+        if (conflict) reasons.push('export_berbeda');
+        if (entry && key === 'produk_legacy' && lines.length) reasons.push('modal_tingkat_produk'); // belum terbukti berlaku untuk variasi ini
+        // Refund di SATU baris kelompok membuat pembagian kelompok tidak pasti, jadi seluruh kelompok ikut "belum" (D1).
+        const refunded = (k) => items[k].refund !== 0 || !(items[k].harga + items[k].refund > 0);
+        if ((group ? group.itemIdx.some(refunded) : refunded(i)) || lines.some(hasReturnSign)) reasons.push('refund');
+        if (lines.some((j) => notYetValidated.has(j))) reasons.push('status_pesanan');
+        let hppStatus;
+        if (!isOk(cost)) hppStatus = 'tidak_diketahui';
+        else if (qtyBasis === 'estimasi_1') hppStatus = 'estimasi';   // angka ada, tetapi jumlahnya dianggap 1 unit
+        else if (reasons.length) hppStatus = 'belum';
+        else if (group && !(groupCost[r.groupId].sameUnit && r.qtyStatus === 'terverifikasi')) hppStatus = 'terverifikasi_kelompok';
+        else hppStatus = 'terverifikasi';
+
+        countShopeeStatus(r, hppStatus, reasons, group, qtyBasis, it);
+        // SKU di bawah hanya untuk tampilan tabel produk (sama seperti cara lama), tidak dipakai mencari modal.
+        const shown = exp[lines[0]] || exp.find((l) => norm(l.name) === norm(it.name)) || {};
+        return { it, qty, cost, unit: entry ? entry.cost : NaN, base: entry ? entry.baseCost : NaN, entry, sku: shown.sku, variant: shown.variant,
+          rule: r.rule, qtyStatus: r.qtyStatus, variantStatus: r.variantStatus, qtyBasis, hppStatus, hppReasons: reasons };
+      });
+      // Unit terverifikasi dari kelompok dihitung sekali per kelompok (bukan per baris laporan).
+      for (const g of match.groups) shopeeQty.unitTerverifikasi += g.qtyTotal;
       if (!items.length) { if (isOk(fallback)) modal = gross * fallback; else ok = false; }
       return { modal: ok ? modal : NaN, items: notes };
+    }
+
+    /**
+     * Cari modal per unit untuk SATU baris export Shopee (keputusan pemilik E1, hanya jalur Shopee;
+     * pencarian modal TikTok tidak berubah). Urutan:
+     *  1. SKU variasi ("Nomor Referensi SKU") yang terisi dan ada di daftar modal → modal variasi itu.
+     *  2. Nama produk + nama variasi yang persis ada di daftar modal → modal variasi itu.
+     *  3. Cara lama (SKU/ID produk/nama). Ini modal TINGKAT PRODUK. Dipakai agar data modal lama tetap jalan,
+     *     tetapi bila produk punya variasi, modal ini belum terbukti berlaku untuk variasi tersebut (E2).
+     * SKU induk tidak dipakai di langkah 1–2 karena berlaku untuk semua variasi produk.
+     * @param it    baris produk Laporan Penghasilan
+     * @param line  baris export yang terbukti milik item ini, atau null bila belum diketahui
+     * @returns {{entry: object|null, key: 'sku_variasi'|'nama_variasi'|'produk'|'produk_legacy'|null}}
+     */
+    function shopeeCostOf(it, line) {
+      const variant = line ? str(line.variant) : '';
+      if (line && line.skuVariant) {
+        const e = catalog.find([line.skuVariant], '', '');
+        if (e) return { entry: e, key: 'sku_variasi' };
+      }
+      if (variant) {
+        const e = catalog.find([], it.name, variant);
+        if (e && e.variasi && norm(`${e.nama} ${e.variasi}`) === norm(`${it.name} ${variant}`)) return { entry: e, key: 'nama_variasi' };
+      }
+      const e = catalog.find([line ? line.sku : undefined, it.productId], it.name, variant);   // cara lama
+      if (!e) return { entry: null, key: null };
+      // Pencarian lama lewat nama saja bisa mengembalikan modal VARIASI LAIN (daftar modal memetakan nama produk ke
+      // variasi pertama yang diisi). Untuk baris yang variasinya diketahui, modal milik variasi lain tidak dipakai.
+      if (variant && e.variasi && norm(e.variasi) !== norm(variant)) return { entry: null, key: null };
+      // Hanya produk yang jelas TANPA variasi (baris export cocok dan variasinya kosong) yang boleh memakai modal
+      // tingkat produk sebagai modal pasti. Selain itu nilai lama dipakai, tetapi ditandai.
+      return { entry: e, key: line && !variant ? 'produk' : 'produk_legacy' };
+    }
+
+    /** Tambah hitungan ringkasan status Shopee (hanya informasi; tidak mengubah angka lain). */
+    function countShopeeStatus(r, hppStatus, reasons, group, qtyBasis, it) {
+      shopeeQty.baris++;
+      shopeeQty.kuantitas[r.qtyStatus]++;
+      shopeeQty.variasi[r.variantStatus]++;
+      shopeeQty.hpp[hppStatus]++;
+      if (!group && r.qtyStatus === 'terverifikasi') shopeeQty.unitTerverifikasi += r.qty;
+      if (qtyBasis === 'estimasi_1') { if (it.harga + it.refund > 0) shopeeQty.estimasiSatuUnit++; else shopeeQty.refundPenuhTanpaKuantitas++; }
+      if (qtyBasis === 'tidak_diketahui') shopeeQty.kuantitasTidakDiketahui++;
+      if (reasons.includes('export_berbeda')) shopeeQty.exportBerbeda++;
+      if (reasons.includes('refund')) shopeeQty.refundBelumJelas++;
+      if (reasons.includes('status_pesanan')) shopeeQty.statusBelumDivalidasi++;
     }
 
     if (want.has('shopee')) for (const o of m.shopeeOrders.values()) {
@@ -659,6 +840,13 @@ const Engine = (() => {
         if (isOk(n.cost)) p.modal += n.cost; else p.modalKnown = false;
         if (isOk(n.unit)) { p.unitCost = n.unit; p.baseCost = n.base; }
         p.packing = (p.packing || 0) + pack * share;
+        if (n.qtyStatus) {   // ringkasan status per produk (mode modal per produk saja); informasi tambahan
+          const st = p.statusShopee || (p.statusShopee = { baris: 0, kuantitasBelum: 0, variasiAmbigu: 0, hppTerverifikasi: 0, hppBelum: 0 });
+          st.baris++;
+          if (n.qtyStatus !== 'terverifikasi') st.kuantitasBelum++;
+          if (n.variantStatus === 'ambigu') st.variasiAmbigu++;
+          if (n.hppStatus === 'terverifikasi' || n.hppStatus === 'terverifikasi_kelompok') st.hppTerverifikasi++; else st.hppBelum++;
+        }
       }
     }
     if (want.has('shopee')) S.adj = [...m.shopeeAdj.values()].filter((a) => inRange(a.date)).reduce((a, x) => a + x.amount, 0);
@@ -817,7 +1005,7 @@ const Engine = (() => {
       fixedMonthly, opex, netProfit: ready ? totalMargin - opex : NaN,
       months: monthList, allMonths: [...allMonths].sort(), buckets: buckets.filter((b) => b.orders > 0),
       products, cases, catSummary: Object.values(catSummary), dupes: m.dupes, target,
-      qtyAssumed, linesWithoutCost, ttNoDetail, ttNoDetailSales, hasOrderExport: { shopee: m.shopeeLines.size > 0, tiktok: m.tiktokLines.size > 0 },
+      qtyAssumed, shopeeQty: mode === 'produk' ? shopeeQty : null, linesWithoutCost, ttNoDetail, ttNoDetailSales, hasOrderExport: { shopee: m.shopeeLines.size > 0, tiktok: m.tiktokLines.size > 0 },
       productsWithoutCost: products.filter((p) => !p.modalKnown).length,
     };
     result.insights = insights(result);

@@ -257,15 +257,15 @@ test('T15 SKU kosong maupun terisi tidak mengubah hasil pencocokan (SKU opsional
   const b = cocokkan([{ id: 'SINT-15', items: [{ name: 'Kaos', harga: 50000 }] }], [{ ...base, skuVariant: 'KS-S' }], 'SINT-15').m;
   eq(JSON.stringify(a.items), JSON.stringify(b.items));
 });
-test('T16 jalur produksi belum memakai pencocok: compute Shopee dengan export tetap seperti sebelumnya', () => {
-  // Perilaku LAMA (masih bermasalah, H1/H3) sengaja dipertahankan di Fase 1: baris variasi pertama
-  // mengambil semua jumlah bernama sama. Tes ini memastikan Fase 1 tidak mengubah angka produksi.
+test('T16 (diperbarui Fase 2) variasi bernama sama tidak lagi dihitung ganda; modal tingkat produk ditandai', () => {
+  // Fase 1 mencatat perilaku lama 30.000 (2 unit + 1 unit asumsi). Fase 2 sengaja mengubahnya: 1 + 1 unit = 20.000.
   const orders = [{ id: 'SINT-16', items: [{ name: 'Kaos', productId: 'P1', harga: 50000 }, { name: 'Kaos', productId: 'P1', harga: 60000 }] }];
   const lines = [{ order: 'SINT-16', name: 'Kaos', variant: 'S', qty: 1, price: 50000 }, { order: 'SINT-16', name: 'Kaos', variant: 'L', qty: 1, price: 60000 }];
   const st0 = { modalMode: 'produk', catalog: [{ kode: 'P1', nama: '', variasi: '', cost: 10000 }], periods: [{ start: '', markup: 0, disc: 0 }] };
   const r0 = E.compute([E.parseWorkbook(Sint.penghasilan(orders)), E.parseWorkbook(Sint.exportPesanan(lines))], st0);
-  eq(r0.totalModal, 30000, 'perilaku lama: 2 unit + 1 unit asumsi = 3 × 10.000 (diperbaiki di Fase 2)');
-  eq(r0.qtyAssumed, 1);
+  eq(r0.totalModal, 20000, 'unit = isi export (2), bukan 3');
+  eq(r0.qtyAssumed, 0);
+  eq(r0.shopeeQty.hpp.belum, 2, 'satu modal untuk produk bervariasi belum terbukti berlaku untuk tiap variasi (E2)');
 });
 /* ---------- Tes tambahan dari audit akhir Fase 1 ---------- */
 test('T17 kelompok tidak lengkap: 2 baris laporan bernilai sama, hanya 1 baris export → belum, tidak ada yang dianggap pasti', () => {
@@ -300,6 +300,187 @@ test('T21 SKU induk sama untuk dua variasi tidak memengaruhi pencocokan (bukan i
   const a = cocokkan(orders, tanpa, 'SINT-21').m, b = cocokkan(orders, dengan, 'SINT-21').m;
   eq(JSON.stringify(a), JSON.stringify(b));
   eq(b.items.map((r) => r.variantStatus).join(), 'ambigu,ambigu', 'SKU induk tidak "memecahkan" ambiguitas variasi');
+});
+
+/* ---------- Fase 2 H1/H3: pencocok dipakai menghitung modal Shopee mode per produk (data SINTETIS) ---------- */
+const ST = (catalog, extra = {}) => ({ modalMode: 'produk', catalog, periods: [{ start: '', markup: 0, disc: 0 }], ...extra });
+const cat = (nama, variasi, cost, kode = '') => ({ kode, nama, variasi, cost });
+/** Bantu: hitung laba dari fixture Laporan Penghasilan (+ export pesanan bila `lines` diberikan). */
+const hitung = (orders, lines, st, salinanExport = 1) => {
+  const files = [E.parseWorkbook(Sint.penghasilan(orders))];
+  for (let k = 0; k < salinanExport && lines; k++) files.push(E.parseWorkbook(Sint.exportPesanan(lines)));
+  return E.compute(files, st);
+};
+const kaosDuaVariasi = (h1, h2, id = 'SINT-P') => [{ id, items: [{ name: 'Kaos', productId: 'P', harga: h1 }, { name: 'Kaos', productId: 'P', harga: h2 }] }];
+
+test('P1 variasi harga berbeda + modal berbeda (nama + variasi, tanpa SKU) → modal per variasi, terverifikasi', () => {
+  const lines = [{ order: 'SINT-P', name: 'Kaos', variant: 'S', qty: 1, price: 50000 }, { order: 'SINT-P', name: 'Kaos', variant: 'XL', qty: 2, price: 60000 }];
+  const r = hitung(kaosDuaVariasi(50000, 120000), lines, ST([cat('Kaos', 'S', 20000), cat('Kaos', 'XL', 25000)]));
+  eq(r.totalModal, 70000, '1×20.000 + 2×25.000');
+  eq(r.qtyAssumed, 0); eq(r.shopeeQty.hpp.terverifikasi, 2); eq(r.shopeeQty.unitTerverifikasi, 3);
+  eq(r.products[0].qty, 3); eq(r.products[0].statusShopee.hppTerverifikasi, 2);
+});
+test('P2 variasi harga sama + modal berbeda → total kelompok pasti, rincian per variasi tidak diklaim', () => {
+  const lines = [{ order: 'SINT-P', name: 'Kaos', variant: 'Merah', qty: 1, price: 50000 }, { order: 'SINT-P', name: 'Kaos', variant: 'Biru', qty: 1, price: 50000 }];
+  const r = hitung(kaosDuaVariasi(50000, 50000), lines, ST([cat('Kaos', 'Merah', 20000), cat('Kaos', 'Biru', 30000)]));
+  eq(r.totalModal, 50000, '20.000 + 30.000, dihitung sekali per kelompok');
+  eq(r.shopeeQty.hpp.terverifikasi_kelompok, 2); eq(r.shopeeQty.variasi.ambigu, 2); eq(r.shopeeQty.unitTerverifikasi, 2);
+  const sama = hitung(kaosDuaVariasi(50000, 50000), lines, ST([cat('Kaos', 'Merah', 20000), cat('Kaos', 'Biru', 20000)]));
+  eq(sama.shopeeQty.hpp.terverifikasi, 2, 'modal semua kandidat sama → per baris juga pasti (A.19.5)');
+});
+test('P3 kelompok ambigu dengan modal tidak lengkap → tidak diketahui (bukan 0, bukan modal variasi lain)', () => {
+  const lines = [{ order: 'SINT-P', name: 'Kaos', variant: 'Merah', qty: 1, price: 50000 }, { order: 'SINT-P', name: 'Kaos', variant: 'Biru', qty: 1, price: 50000 }];
+  const r = hitung(kaosDuaVariasi(50000, 50000), lines, ST([cat('Kaos', 'Merah', 20000)]));
+  eq(r.coverage, 0, 'pesanan keluar dari "modal diketahui"'); eq(r.shopeeQty.hpp.tidak_diketahui, 2); eq(r.linesWithoutCost, 2);
+  const f = hitung(kaosDuaVariasi(50000, 50000), lines, ST([cat('Kaos', 'Merah', 20000)], { fallbackPct: 40 }));
+  eq(f.totalModal, 40000, 'memakai persen modal rata-rata (cara lama)'); eq(f.shopeeQty.hpp.belum, 2);
+});
+test('P4 multi-unit produk tanpa variasi, modal tingkat produk → jumlah dari export, terverifikasi', () => {
+  const r = hitung([{ id: 'SINT-P4', items: [{ name: 'Pulpen', productId: 'PP', harga: 15000 }] }],
+    [{ order: 'SINT-P4', name: 'Pulpen', qty: 3, price: 5000 }], ST([cat('', '', 2000, 'PP')]));
+  eq(r.totalModal, 6000); eq(r.shopeeQty.hpp.terverifikasi, 1); eq(r.qtyAssumed, 0);
+});
+test('P5 SKU variasi terisi didahulukan; variasi tanpa SKU memakai modal produk lama dan ditandai', () => {
+  const lines = [{ order: 'SINT-P', name: 'Kaos', variant: 'S', qty: 1, price: 50000 }, { order: 'SINT-P', name: 'Kaos', variant: 'XL', qty: 2, price: 60000, skuVariant: 'KS-XL' }];
+  const r = hitung(kaosDuaVariasi(50000, 120000), lines, ST([cat('', '', 10000, 'P'), cat('', '', 25000, 'KS-XL')]));
+  eq(r.totalModal, 60000, 'S: 1×10.000 (modal produk lama), XL: 2×25.000 (SKU variasi)');
+  eq(r.shopeeQty.hpp.terverifikasi, 1); eq(r.shopeeQty.hpp.belum, 1);
+});
+test('P6 SKU induk tanpa SKU variasi tidak dipakai sebagai identitas variasi', () => {
+  const lines = [{ order: 'SINT-P', name: 'Kaos', variant: 'S', qty: 1, price: 50000, skuParent: 'INDUK-KAOS' }, { order: 'SINT-P', name: 'Kaos', variant: 'XL', qty: 2, price: 60000, skuParent: 'INDUK-KAOS' }];
+  const r = hitung(kaosDuaVariasi(50000, 120000), lines, ST([cat('', '', 15000, 'INDUK-KAOS')]));
+  eq(r.shopeeQty.hpp.tidak_diketahui, 2); eq(r.coverage, 0);
+});
+test('P7 A1: pesanan ADA di export tetapi baris tidak cocok → HPP tidak diketahui (bukan estimasi 1 unit, bukan 0)', () => {
+  // Nama berbeda (M3 belum aktif) → tidak ada pasangan.
+  const a = hitung([{ id: 'SINT-P7', items: [{ name: 'Novel Lama', harga: 80000 }] }], [{ order: 'SINT-P7', name: 'Novel Baru', qty: 2, price: 40000 }], ST([cat('Novel Lama', '', 30000)]));
+  eq(a.coverage, 0, 'pesanan keluar dari "modal diketahui"'); eq(a.totalModal, 0); eq(a.qtyAssumed, 0);
+  eq(a.shopeeQty.hpp.tidak_diketahui, 1); eq(a.shopeeQty.kuantitasTidakDiketahui, 1); eq(a.products[0].modalKnown, false);
+  truthy(Number.isNaN(a.products[0].margin), 'margin produk tidak dihitung');
+  // Nilai tidak cocok: cara lama 80.000 (jumlah 2), Fase 2 awal 40.000 (estimasi 1). Sekarang tidak diketahui.
+  const b = hitung([{ id: 'SINT-P7', items: [{ name: 'Tas', harga: 100000 }] }], [{ order: 'SINT-P7', name: 'Tas', qty: 2, price: 49999 }], ST([cat('Tas', '', 40000)]));
+  eq(b.coverage, 0); eq(b.shopeeQty.hpp.tidak_diketahui, 1);
+  truthy(Number.isNaN(b.totalMargin), 'tidak ada laba yang dihitung dari pesanan ini');
+});
+test('P7b A1: kuantitas tidak bisa dipastikan (1 baris laporan, 2 kandidat bernilai sama) → tidak diketahui', () => {
+  const r = hitung([{ id: 'SINT-P7B', items: [{ name: 'Kaos', harga: 50000 }] }],
+    [{ order: 'SINT-P7B', name: 'Kaos', variant: 'A', qty: 1, price: 50000 }, { order: 'SINT-P7B', name: 'Kaos', variant: 'B', qty: 1, price: 50000 }], ST([cat('Kaos', '', 20000)]));
+  eq(r.shopeeQty.hpp.tidak_diketahui, 1); eq(r.coverage, 0);
+});
+test('P7c A1: satu item tidak cocok membuat SELURUH pesanan keluar dari laba; pesanan lain tetap dihitung', () => {
+  const orders = [{ id: 'SINT-C1', items: [{ name: 'Kaos', harga: 50000 }, { name: 'Novel Lama', harga: 80000 }] }, { id: 'SINT-C2', items: [{ name: 'Topi', harga: 40000 }] }];
+  const lines = [{ order: 'SINT-C1', name: 'Kaos', qty: 1, price: 50000 }, { order: 'SINT-C1', name: 'Novel Baru', qty: 2, price: 40000 }, { order: 'SINT-C2', name: 'Topi', qty: 1, price: 40000 }];
+  const r = hitung(orders, lines, ST([cat('Kaos', '', 20000), cat('Novel Lama', '', 30000), cat('Topi', '', 15000)]));
+  eq(r.totalModal, 15000, 'hanya pesanan Topi'); eq(r.totalMargin, 25000); eq(r.knownSales, 40000);
+  eq(r.totalReceived - r.knownReceived, 130000, 'dana pesanan tanpa modal lengkap tidak masuk laba');
+});
+test('P7d A1 hanya untuk modal per unit: modal rata-rata (dari nilai penjualan) tetap dipakai; modal per unit tidak diganti modal rata-rata', () => {
+  const orders = [{ id: 'SINT-D', items: [{ name: 'Novel Lama', harga: 80000 }] }];
+  const lines = [{ order: 'SINT-D', name: 'Novel Baru', qty: 2, price: 40000 }];
+  eq(hitung(orders, lines, ST([], { fallbackPct: 40 })).totalModal, 32000, 'tanpa modal per unit: 40% × 80.000 seperti sebelumnya');
+  const r = hitung(orders, lines, ST([cat('Novel Lama', '', 30000)], { fallbackPct: 40 }));
+  eq(r.coverage, 0, 'ada modal per unit tetapi jumlah tidak diketahui → tidak diketahui'); eq(r.shopeeQty.hpp.tidak_diketahui, 1);
+});
+test('P7e pesanan TIDAK ada di export → estimasi 1 unit tetap (kompatibel) dengan status "estimasi"', () => {
+  const r = hitung([{ id: 'SINT-E', items: [{ name: 'Topi', harga: 50000 }] }], [{ order: 'SINT-LAIN', name: 'Topi', qty: 3, price: 50000 }], ST([cat('Topi', '', 20000)]));
+  eq(r.totalModal, 20000); eq(r.qtyAssumed, 1); eq(r.shopeeQty.hpp.estimasi, 1); eq(r.shopeeQty.hpp.terverifikasi, 0);
+  // Direfund penuh dan tidak ada di export: modal 0 dari rumus refund lama, status estimasi (bukan pasti).
+  const c = hitung([{ id: 'SINT-E', items: [{ name: 'Topi', harga: 50000, refund: -50000 }] }], [{ order: 'SINT-LAIN', name: 'Topi', qty: 1, price: 50000 }], ST([cat('Topi', '', 20000)]));
+  eq(c.totalModal, 0); eq(c.shopeeQty.refundPenuhTanpaKuantitas, 1); eq(c.shopeeQty.estimasiSatuUnit, 0); eq(c.shopeeQty.hpp.estimasi, 1);
+  eq(c.shopeeQty.unitTerverifikasi, 0, 'nol unit TERVERIFIKASI, bukan nol unit terjual');
+});
+test('P7f A1: refund penuh pada pesanan yang ada di export tetapi tidak cocok → tidak diketahui (bukan 0)', () => {
+  const r = hitung([{ id: 'SINT-F', items: [{ name: 'Novel Lama', harga: 80000, refund: -80000 }] }], [{ order: 'SINT-F', name: 'Novel Baru', qty: 1, price: 80000 }], ST([cat('Novel Lama', '', 30000)]));
+  eq(r.shopeeQty.hpp.tidak_diketahui, 1); eq(r.totalModal, 0, 'tidak ada modal yang ikut dihitung'); eq(r.knownSales, 0);
+});
+
+/* ---------- A3: deduplikasi export pesanan Shopee di merge() ---------- */
+/** Bantu: hitung dengan beberapa FILE export terpisah (masing-masing daftar baris). */
+const hitungFiles = (orders, fileLines, st) => E.compute([E.parseWorkbook(Sint.penghasilan(orders)), ...fileLines.map((ls) => E.parseWorkbook(Sint.exportPesanan(ls)))], st);
+const kembar = { order: 'SINT-K', name: 'Kaos', variant: 'M', qty: 2, price: 30000 };
+const ordersKembar = [{ id: 'SINT-K', items: [{ name: 'Kaos', harga: 60000 }, { name: 'Kaos', harga: 60000 }] }];
+const stKembar = ST([cat('Kaos', 'M', 10000)]);
+test('P8 file export identik diunggah dua kali → angka dan status identik dengan sekali', () => {
+  const lines = [{ order: 'SINT-P', name: 'Kaos', variant: 'Merah', qty: 1, price: 50000 }, { order: 'SINT-P', name: 'Kaos', variant: 'Biru', qty: 1, price: 50000 }];
+  const st = ST([cat('Kaos', 'Merah', 20000), cat('Kaos', 'Biru', 30000)]);
+  const a = hitung(kaosDuaVariasi(50000, 50000), lines, st), b = hitung(kaosDuaVariasi(50000, 50000), lines, st, 2);
+  eq(JSON.stringify([a.totalModal, a.qtyAssumed, a.shopeeQty]), JSON.stringify([b.totalModal, b.qtyAssumed, b.shopeeQty]));
+  eq(b.shopeeQty.exportBerbeda, 0);
+});
+test('P9 A3: dua baris sah identik dalam SATU file → keduanya dipakai (4 unit), terverifikasi', () => {
+  const r = hitung(ordersKembar, [kembar, kembar], stKembar);
+  eq(r.shopeeQty.unitTerverifikasi, 4); eq(r.totalModal, 40000, '2 baris × 2 unit × 10.000');
+  eq(r.shopeeQty.kuantitas.terverifikasi, 2); eq(r.shopeeQty.variasi.ambigu, 2, 'dua baris identik tidak bisa dibedakan satu per satu');
+  // File yang sama diunggah dua kali: tetap 4 unit, tidak menjadi 8.
+  const dua = hitung(ordersKembar, [kembar, kembar], stKembar, 2);
+  eq(dua.shopeeQty.unitTerverifikasi, 4); eq(dua.totalModal, 40000); eq(dua.shopeeQty.exportBerbeda, 0);
+});
+test('P9b A3: dua file dengan periode tumpang tindih → pesanan yang sama tidak digandakan', () => {
+  const orders = [{ id: 'SINT-1', items: [{ name: 'Topi', harga: 20000 }] }, { id: 'SINT-2', items: [{ name: 'Kaos', harga: 60000 }] }, { id: 'SINT-3', items: [{ name: 'Pulpen', harga: 15000 }] }];
+  const l1 = { order: 'SINT-1', name: 'Topi', qty: 1, price: 20000 }, l2 = { order: 'SINT-2', name: 'Kaos', qty: 2, price: 30000 }, l3 = { order: 'SINT-3', name: 'Pulpen', qty: 3, price: 5000 };
+  const st = ST([cat('Topi', '', 5000), cat('Kaos', '', 10000), cat('Pulpen', '', 1000)]);
+  const r = hitungFiles(orders, [[l1, l2], [l2, l3]], st);
+  eq(r.shopeeQty.unitTerverifikasi, 6, '1 + 2 + 3, pesanan SINT-2 tidak dihitung dua kali'); eq(r.totalModal, 28000); eq(r.shopeeQty.exportBerbeda, 0);
+});
+test('P9c A3: file sama dengan urutan baris berbeda → hasil sama, tidak dianggap berbeda', () => {
+  const lines = [{ order: 'SINT-P', name: 'Kaos', variant: 'S', qty: 1, price: 50000 }, { order: 'SINT-P', name: 'Kaos', variant: 'XL', qty: 2, price: 60000 }];
+  const st = ST([cat('Kaos', 'S', 20000), cat('Kaos', 'XL', 25000)]);
+  const a = hitungFiles(kaosDuaVariasi(50000, 120000), [lines], st), b = hitungFiles(kaosDuaVariasi(50000, 120000), [lines, [...lines].reverse()], st);
+  const c = hitungFiles(kaosDuaVariasi(50000, 120000), [[...lines].reverse()], st);
+  eq(JSON.stringify([a.totalModal, a.shopeeQty]), JSON.stringify([b.totalModal, b.shopeeQty]));
+  eq(JSON.stringify([a.totalModal, a.shopeeQty]), JSON.stringify([c.totalModal, c.shopeeQty]));
+});
+test('P9d A3: file kedua punya LEBIH BANYAK baris identik → pesanan ditandai export berbeda, jumlah tidak diklaim pasti', () => {
+  const r = hitungFiles(ordersKembar, [[kembar], [kembar, kembar]], stKembar);
+  eq(r.shopeeQty.exportBerbeda, 2); eq(r.shopeeQty.hpp.tidak_diketahui, 2); eq(r.shopeeQty.unitTerverifikasi, 0);
+  eq(r.coverage, 0, 'tidak ada laba final dari pesanan ini');
+  const balik = hitungFiles(ordersKembar, [[kembar, kembar], [kembar]], stKembar);
+  eq(balik.shopeeQty.exportBerbeda, 2, 'urutan unggah tidak mengubah kesimpulan'); eq(balik.coverage, 0);
+});
+test('P9e KETERBATASAN A3: export kedua identik kecuali status retur/returnedQty → BUKAN konflik, info file pertama dipakai', () => {
+  // Status pesanan/pengembalian sengaja tidak masuk kunci (bisa berubah antar export untuk baris yang sama),
+  // sehingga tanda retur yang hanya ada di file kedua tidak terbaca. Aturan retur H2 tidak diubah di sini.
+  const orders = [{ id: 'SINT-R', items: [{ name: 'Kaos', harga: 50000 }] }];
+  const awal = { order: 'SINT-R', name: 'Kaos', qty: 1, price: 50000 };
+  const retur = { ...awal, returned: 1, returnStatus: 'Permintaan Disetujui' };
+  const st = ST([cat('Kaos', '', 20000)]);
+  const a = hitungFiles(orders, [[awal], [retur]], st);
+  eq(a.shopeeQty.exportBerbeda, 0, 'tidak terdeteksi sebagai konflik');
+  eq(a.shopeeQty.refundBelumJelas, 0, 'tanda retur file kedua hilang (keterbatasan)'); eq(a.shopeeQty.hpp.terverifikasi, 1);
+  const b = hitungFiles(orders, [[retur], [awal]], st);
+  eq(b.shopeeQty.refundBelumJelas, 1, 'urutan unggah menentukan status (keterbatasan)'); eq(b.shopeeQty.hpp.belum, 1);
+  eq(a.totalModal, b.totalModal, 'angka modal sama; yang berbeda hanya status');
+});
+test('P10 refund parsial & penuh pada pasangan terverifikasi → kuantitas pasti, HPP belum (menunggu H2), rumus refund lama tetap', () => {
+  const parsial = hitung([{ id: 'SINT-PA', items: [{ name: 'Kaos', harga: 100000, refund: -50000 }] }], [{ order: 'SINT-PA', name: 'Kaos', qty: 2, price: 50000 }], ST([cat('Kaos', '', 20000)]));
+  eq(parsial.totalModal, 20000, '2 × 20.000 × porsi tidak direfund 0,5 (rumus lama)');
+  eq(parsial.shopeeQty.kuantitas.terverifikasi, 1); eq(parsial.shopeeQty.hpp.belum, 1); eq(parsial.shopeeQty.refundBelumJelas, 1);
+  const penuh = hitung([{ id: 'SINT-PB', items: [{ name: 'Kaos', harga: 50000, refund: -50000 }] }], [{ order: 'SINT-PB', name: 'Kaos', qty: 1, price: 50000, returned: 1, returnStatus: 'Permintaan Disetujui' }], ST([cat('Kaos', '', 20000)]));
+  eq(penuh.totalModal, 0); eq(penuh.shopeeQty.hpp.belum, 1); eq(penuh.shopeeQty.kuantitas.terverifikasi, 1);
+  // Satu baris kelompok direfund → seluruh kelompok belum terverifikasi (D1).
+  const g = hitung([{ id: 'SINT-P', items: [{ name: 'Kaos', productId: 'P', harga: 50000 }, { name: 'Kaos', productId: 'P', harga: 50000, refund: -50000 }] }],
+    [{ order: 'SINT-P', name: 'Kaos', variant: 'Merah', qty: 1, price: 50000 }, { order: 'SINT-P', name: 'Kaos', variant: 'Biru', qty: 1, price: 50000 }],
+    ST([cat('Kaos', 'Merah', 20000), cat('Kaos', 'Biru', 30000)]));
+  eq(g.shopeeQty.hpp.belum, 2); eq(g.totalModal, 25000, '50.000 ÷ 2 × porsi tidak direfund (1 dan 0)');
+  // Tanda retur di export walau Laporan Penghasilan tidak mencatat refund → tetap ditandai.
+  const tanda = hitung([{ id: 'SINT-PC', items: [{ name: 'Kaos', harga: 50000 }] }], [{ order: 'SINT-PC', name: 'Kaos', qty: 1, price: 50000, returned: 1 }], ST([cat('Kaos', '', 20000)]));
+  eq(tanda.shopeeQty.refundBelumJelas, 1); eq(tanda.totalModal, 20000);
+});
+test('P11 status pesanan selain "Selesai" → angka tetap, HPP belum terverifikasi', () => {
+  const r = hitung([{ id: 'SINT-P11', items: [{ name: 'Kaos', harga: 50000 }] }], [{ order: 'SINT-P11', name: 'Kaos', qty: 1, price: 50000, status: 'Batal' }], ST([cat('Kaos', '', 20000)]));
+  eq(r.totalModal, 20000); eq(r.shopeeQty.hpp.belum, 1); eq(r.shopeeQty.statusBelumDivalidasi, 1);
+});
+test('P12 regresi: tanpa export, modal rata-rata, dan harga acuan tidak berubah', () => {
+  const orders = kaosDuaVariasi(50000, 60000);
+  const lines = [{ order: 'SINT-P', name: 'Kaos', variant: 'S', qty: 1, price: 50000 }, { order: 'SINT-P', name: 'Kaos', variant: 'L', qty: 1, price: 60000 }];
+  const tanpa = hitung(orders, null, ST([cat('', '', 10000, 'P')]));
+  eq(tanpa.totalModal, 20000, 'estimasi 1 unit per baris seperti sebelumnya'); eq(tanpa.qtyAssumed, 2); eq(tanpa.shopeeQty.estimasiSatuUnit, 2);
+  eq(tanpa.shopeeQty.hpp.estimasi, 2, 'status estimasi, bukan terverifikasi');
+  for (const ex of [null, lines]) {
+    eq(hitung(orders, ex, ST([], { fallbackPct: 40 })).totalModal, 44000, 'modal rata-rata 40% × 110.000');
+    const acuan = hitung(orders, ex, { modalMode: 'acuan', mitra: 30, periods: [{ start: '', markup: 0, disc: 0 }] });
+    eq(acuan.totalModal, 77000, 'harga acuan: 70% × 110.000'); eq(acuan.shopeeQty, null);
+  }
 });
 
 test('angka format Indonesia di CSV', () => {
