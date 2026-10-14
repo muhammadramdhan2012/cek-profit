@@ -22,9 +22,12 @@ Aturan pemakaian:
 Status persetujuan per 14 Okt 2026:
 - **Sudah ditetapkan pemilik (prinsip/konsep):**
   - konsep Profit Confidence (A.16, kalimat definisinya ada di `CLAUDE.md` §1);
-  - prinsip bahwa penyesuaian diklasifikasikan berdasarkan substansi transaksi, tidak otomatis dikeluarkan dari laba (A.10).
-- **Belum disetujui:** semua rumus, bobot, ambang batas, dan definisi keuangan rinci lain di bagian A, termasuk tabel
-  klasifikasi A.10 dan rumus A.16. Statusnya **DIUSULKAN — BELUM DISETUJUI**.
+  - prinsip bahwa penyesuaian diklasifikasikan berdasarkan substansi transaksi, tidak otomatis dikeluarkan dari laba (A.10);
+  - empat prinsip kuantitas (A.19.1);
+  - aturan pencocokan M0–M2 revisi sebagai **dasar desain** (A.19.4), pemisahan status kuantitas dan variasi (A.19.5),
+    dan SKU opsional (A.19.6).
+- **Belum disetujui:** semua rumus, bobot, ambang batas, aturan pencocokan, dan definisi keuangan rinci lain di bagian A,
+  termasuk tabel klasifikasi A.10, rumus A.16, dan detail A.19.2–A.19.4. Statusnya **DIUSULKAN — BELUM DISETUJUI**.
 
 ---
 
@@ -66,6 +69,10 @@ Semua biaya yang dipotong marketplace dari penjualan:
 
 Kolom yang tidak dikenali tetap dihitung sebagai "biaya lain" agar total cocok dengan laporan, dan diberi peringatan
 bila porsinya tidak wajar.
+
+Catatan: perlakuan **PPh 22** dan kolom pajak lain di Laporan Penghasilan **belum ditetapkan**. Pajak tidak boleh
+ditetapkan sebagai potongan marketplace final maupun pajak dibayar di muka sebelum klasifikasi dan ketentuan pajaknya
+diverifikasi (C.9; KNOWN_ISSUES M11).
 
 ### A.5 Dana diterima (pendapatan bersih dari marketplace)
 Status: **DIUSULKAN — BELUM DISETUJUI**
@@ -207,6 +214,114 @@ Potongan marketplace yang benar-benar terjadi, dipisah menjadi:
 
 Dipakai untuk simulasi. Berbeda dari tarif umum (`assets/tarif.js`), yang hanya perkiraan dari sumber publik.
 
+### A.19 Kuantitas terjual dan status unit
+
+#### A.19.1 Prinsip
+Status: **DITETAPKAN pemilik (14 Okt 2026)**
+
+1. Kuantitas yang tidak diketahui **tidak boleh diam-diam dianggap 1** (atau angka lain).
+2. HPP per unit dikalikan dengan **kuantitas yang relevan dan terverifikasi**.
+3. Unit yang sama **tidak boleh dibebankan dua kali** sebagai HPP dan kerugian retur.
+4. Kuantitas menjadi salah satu **komponen kelengkapan data Profit Confidence**, tanpa skor numerik dahulu.
+
+Keputusan tampilan pemilik (14 Okt 2026), bila kuantitas belum tersedia:
+- Sistem boleh menampilkan simulasi sementara dengan asumsi minimum 1 unit, **hanya bila asumsi itu dapat dibenarkan**.
+- Angka itu diberi label **"Estimasi sementara — kuantitas belum terverifikasi"**.
+- Angka itu bukan laba final, dan tidak disebut batas atas yang pasti bila refund, penyesuaian, atau komponen material
+  lain belum lengkap.
+- Sistem menampilkan kebutuhan mengunggah export pesanan Shopee.
+
+Keputusan refund pemilik (14 Okt 2026):
+- Kuantitas dan status barang diprioritaskan dari data retur yang dapat diverifikasi.
+- Nominal refund **tidak** otomatis diubah menjadi jumlah unit tanpa aturan yang disetujui.
+- Refund uang, barang kembali ke stok, dan barang tidak kembali **dibedakan**.
+- Refund penuh atau nilai penjualan bersih nol **tidak membuktikan** bahwa kuantitas barang nol atau HPP nol.
+  Ada refund **tidak berarti** barang kembali.
+
+#### A.19.2 Jenis kuantitas yang harus dibedakan
+Status: **DIUSULKAN — BELUM DISETUJUI**
+
+| Kuantitas | Arti | Sumber yang diusulkan |
+|---|---|---|
+| Dipesan | Unit yang dipesan pembeli | Export pesanan; TikTok: Detail produk terjual |
+| Dikirim | Unit yang benar-benar keluar dari stok | Perlu verifikasi (status pesanan, file retur kategori "tidak dikirim") |
+| Direfund | Unit yang uangnya dikembalikan | File retur (jumlah produk dikembalikan); **bukan** hasil konversi nominal refund |
+| Kembali ke stok | Unit yang diterima kembali dalam kondisi layak jual | File retur + konfirmasi seller |
+| Hilang / tidak kembali | Unit yang sudah dikirim, direfund, dan tidak kembali | File retur + konfirmasi seller |
+
+HPP dan kerugian retur per unit ditentukan dari kombinasi kuantitas ini (A.6, A.7, A.9). Perlakuan finansial akhirnya
+**menunggu investigasi H2**.
+
+#### A.19.3 Urutan sumber kuantitas dan status
+Status: **DIUSULKAN — BELUM DISETUJUI**
+
+1. TikTok/Tokopedia: kolom "Detail produk terjual" di Laporan Penghasilan.
+2. Export pesanan (Shopee/TikTok) yang cocok dengan pesanan tersebut (A.19.4).
+3. Bila tidak ada: status **belum terverifikasi**. Boleh memakai estimasi minimum 1 unit berlabel (A.19.1) **hanya**
+   bila baris produk itu jelas mewakili barang yang terjual dan belum direfund penuh. Untuk baris yang direfund penuh,
+   tidak ada asumsi kuantitas maupun HPP. Statusnya belum terverifikasi sampai data retur atau H2 memutuskan.
+
+Status kuantitas hanya dua: **terverifikasi** atau **belum terverifikasi**. Estimasi selalu belum terverifikasi.
+
+#### A.19.4 Aturan pencocokan Shopee (Laporan Penghasilan ↔ export pesanan)
+Status:
+- **Revisi M0–M2 DISETUJUI pemilik sebagai dasar desain (14 Okt 2026).** Pencocokan dinyatakan terverifikasi hanya
+  bila tidak ambigu. Implementasi kode belum diizinkan.
+- **M3 dan toleransi ±Rp1: DIUSULKAN — BELUM DISETUJUI.** Toleransi didukung hasil validasi; M3 belum teruji.
+
+Dasar bukti: validasi baca-saja satu bulan export pesanan Shopee "pesanan selesai" dan Laporan Penghasilan periode
+yang sama (data uji pemilik). Rinciannya di `KNOWN_ISSUES.md` (H1, H3). Angka bisnis tidak dicatat.
+
+Fakta yang terbukti untuk file yang diuji:
+- Baris produk Laporan Penghasilan dibuat **per variasi**, tanpa nama variasi; ID produk sama untuk semua variasi.
+- Subtotal export = jumlah × harga setelah diskon. Untuk pasangan yang tidak ambigu, `Harga Produk` = subtotal export.
+- Urutan baris tidak konsisten antara kedua file.
+- Export "pesanan selesai" tidak memuat pesanan batal atau refund penuh.
+
+Aturan:
+- **Syarat dasar:** nomor pesanan sama. Pencocokan tidak pernah lintas pesanan.
+- Kecocokan nama atau nominal saja tidak cukup bila masih ada ambiguitas. Ambiguitas berarti status belum terverifikasi.
+- **Urutan baris tidak dipakai** untuk menebak variasi.
+- **M0:** pesanan tidak ada di export → kuantitas dan variasi belum terverifikasi.
+- **M1:** satu baris produk penghasilan untuk satu nama ↔ satu baris export bernama sama **dan** `Harga Produk` sama
+  dengan subtotal export → kuantitas dan variasi terverifikasi.
+- **M2:** beberapa baris produk penghasilan bernama sama ↔ baris export bernama sama, dipasangkan lewat nilai (subtotal):
+  - pasangan **unik** → kuantitas dan variasi terverifikasi;
+  - nilai **kembar** (variasi berharga sama) → kuantitas terverifikasi **hanya bila** semua kandidat bernilai sama punya
+    jumlah yang sama; variasi **ambigu**.
+- **M3 (usulan):** nama berbeda, hanya bila pesanan punya tepat satu baris produk dan nilai totalnya cocok.
+- **M4:** baris export yang tidak terpakai tidak dipakai untuk pesanan lain.
+- Toleransi nilai **±Rp1** (usulan).
+
+#### A.19.5 Status kuantitas, status variasi, dan HPP terverifikasi
+Status: **DITETAPKAN pemilik (14 Okt 2026)**
+
+- Status **kuantitas** (terverifikasi / belum terverifikasi) dan status **variasi** (terverifikasi / ambigu / tidak
+  relevan) dicatat dan ditampilkan **terpisah**.
+- Bila kuantitas diketahui tetapi variasi ambigu, keduanya ditampilkan dengan statusnya masing-masing.
+- **HPP terverifikasi hanya bila** pemetaan modalnya benar, **atau** semua kandidat variasi punya HPP per unit yang sama
+  (menurut isian seller).
+- Tidak boleh mengasumsikan semua variasi ber-HPP sama. Bila HPP kandidat berbeda atau belum diisi, HPP berstatus
+  "variasi belum terverifikasi".
+- Refund atau `Returned quantity` **tidak** membuktikan barang kembali ke stok (lihat A.19.1, A.19.2, C.10).
+
+#### A.19.6 SKU opsional dan kunci modal
+Status:
+- **Prinsip DITETAPKAN pemilik (14 Okt 2026):** SKU **opsional**. Cek Profit harus tetap bekerja untuk seller yang tidak
+  mengisi SKU, dan untuk seller dengan struktur modal dan diskon yang berbeda-beda.
+- **Urutan kunci di bawah: DIUSULKAN — BELUM DISETUJUI.**
+
+Usulan urutan kunci untuk mencari modal per baris:
+1. SKU, bila diisi seller (kolom SKU yang **terisi**, bukan sekadar ada);
+2. nama produk + nama variasi;
+3. nama produk;
+4. ID produk (kompatibilitas modal lama).
+
+Catatan:
+- Modal per variasi harus bisa diisi tanpa SKU.
+- Mode reseller memakai diskon pemasok dari **isian seller**. Tidak ada nilai diskon yang di-hardcode.
+- Struktur modal lain (stok sendiri, produsen, dropshipper) tetap didukung.
+
 ---
 
 ## B. Implementasi kode saat ini (`assets/engine.js`, per 14 Okt 2026, commit `a31eddb`)
@@ -223,7 +338,7 @@ penilaian hanya memakai:
 | Potongan marketplace | `totalFees` | Jumlah kolom biaya + ongkir neto; sisa terhadap `Total Penghasilan` masuk "biaya lain" | `assets/engine.js:124-130`, `assets/engine.js:184-186`, `assets/engine.js:500`, `assets/engine.js:561` | **Sejalan dengan usulan A.4, belum disetujui.** Kolom wajib belum divalidasi (KNOWN_ISSUES M8). |
 | Dana diterima | `totalReceived` | Shopee `Total Penghasilan`; TikTok `Jumlah penyelesaian pembayaran`, baris "Pesanan" saja | `assets/engine.js:477`, `assets/engine.js:536` | **Sejalan dengan usulan A.5, belum disetujui.** |
 | Penyesuaian | `adjustments` | **Semua** dikeluarkan dari margin, ditampilkan terpisah sebagai "kompensasi" | `assets/engine.js:499`, `assets/engine.js:528` | **Tidak sejalan** dengan prinsip yang sudah ditetapkan (klasifikasi berdasarkan substansi, A.10). Lihat KNOWN_ISSUES P3. |
-| Modal barang | `totalModal` | Per produk: `modal per unit × qty × (harga+refund)/harga`; qty = 1 bila export pesanan tidak ada. Reseller: `(harga+refund) × rasio acuan`. | `assets/engine.js:445`, `assets/engine.js:455-458`, `assets/engine.js:509-512` | **Tidak sejalan dengan usulan A.6** pada kasus qty diasumsikan (H1) dan variasi (H3); sisanya perlu verifikasi. |
+| Modal barang | `totalModal` | Per produk: `modal per unit × qty × (harga+refund)/harga`; qty = 1 bila export pesanan tidak ada; bila export ada, baris variasi bernama sama terhitung ganda (KNOWN_ISSUES H1/H3). Reseller: `(harga+refund) × rasio acuan`. | `assets/engine.js:445`, `assets/engine.js:455-458`, `assets/engine.js:509-512` | **Tidak sejalan dengan usulan A.6** pada kasus qty diasumsikan (H1) dan variasi (H3); sisanya perlu verifikasi. |
 | Retur yang tidak kembali | `lostCertain` | Perkiraan modal kasus yang ditandai "Tidak kembali" | `assets/engine.js:601-607`, `assets/engine.js:613` | **Perlu verifikasi** terhadap A.7 dan A.9. Lihat B.1. |
 | Margin (UI: "Margin kotor" / "Margin setelah modal") | `totalMargin` | `Dana diterima (pesanan bermodal) − modal − packing − retur tidak kembali` | `assets/engine.js:476`, `assets/engine.js:535`, `assets/engine.js:630` | Strukturnya mendekati **margin kontribusi** (usulan A.11), bukan laba kotor (A.12). **Perlu verifikasi**; nama di UI perlu keputusan (B.2). |
 | Biaya operasional | `opex` | `biaya tetap per bulan × (hari periode ÷ 30,4)`; hari dari tanggal dana dilepas | `assets/engine.js:634-637` | **Perlu verifikasi.** Basis waktu campuran (KNOWN_ISSUES M1). |
@@ -274,9 +389,11 @@ Mengganti nama di UI adalah perubahan perilaku fitur utama dan perlu persetujuan
 |---|---|---|---|---|
 | C.1 | Apakah "Total Pendapatan" TikTok setara dengan penjualan bersih Shopee (ongkir pembeli? subsidi platform?) | Penjualan gabungan dan margin % antarplatform bisa tidak sebanding | Cocokkan beberapa pesanan TikTok dengan rinciannya di Seller Center | Pemilik + Claude Code |
 | C.2 | Arti dan tanda kolom Shopee "Diskon Produk dari Shopee" (saat ini dijumlahkan sebagai voucher) | Bisa membuat penjualan terlalu besar atau terlalu kecil | Bandingkan beberapa pesanan di Seller Centre | Pemilik |
-| C.3 | Baris "Sku" di Laporan Penghasilan Shopee per produk atau per variasi | Menentukan perbaikan H3 | Ditemukan pada data uji pemilik: ada pesanan dengan lebih dari satu baris bernama sama. Perlu dicek apakah itu variasi. | Claude Code (dengan file asli) |
+| C.3 | Baris "Sku" di Laporan Penghasilan Shopee per produk atau per variasi | Menentukan perbaikan H3 | **Terjawab untuk file yang diuji (14 Okt 2026): per variasi**, tanpa nama variasi; ID produk sama untuk semua variasi. Masih perlu konfirmasi di bulan/toko lain. | Claude Code (dengan file asli) |
 | C.4 | Jenis penyesuaian yang muncul dan substansinya | Dasar tabel klasifikasi A.10 | Ditemukan pada data uji pemilik: jenis TikTok "Penggantian Biaya Logistik" dan "Kompensasi asuransi pengiriman", serta penyesuaian Shopee; yang ditemukan bersifat positif | Pemilik |
-| C.5 | Refund parsial: per unit atau per nominal? | Aturan A.9 untuk unit yang direfund sebagian | Cocokkan file retur dengan baris pesanan | Claude Code |
+| C.5 | Refund parsial: per unit atau per nominal? | Aturan A.9 untuk unit yang direfund sebagian | Sebagian terjawab: pada file yang diuji, nominal refund = unit direfund × harga setelah diskon, dan semua kasusnya barang tidak dikirim. Refund untuk barang yang sudah dikirim lalu diretur belum ada di data uji. Nominal tetap tidak diubah otomatis menjadi unit (A.19.1). | Claude Code |
 | C.6 | Apakah refund setelah dana dilepas tercatat sebagai penyesuaian atau di baris pesanan | Menentukan apakah P10 terjadi di data nyata | Cari kasus retur "Tidak kembali" yang pesanannya tidak punya refund di baris pesanan | Claude Code (dengan file asli) |
 | C.7 | Batas hari untuk "bulan lengkap" (A.17) | Bulan tidak lengkap salah dibaca sebagai bulan buruk | Distribusi jeda pesanan → dana dilepas di beberapa toko | Pemilik |
 | C.8 | Definisi "Penjualan" untuk Tokopedia lama (sebelum digabung TikTok) | Saat ini hanya pesanan Tokopedia yang tercatat di laporan TikTok yang didukung | Perlu contoh file | Pemilik |
+| C.9 | Bagaimana **PPh 22** (dan kolom pajak lain di Laporan Penghasilan Shopee) diperlakukan: potongan marketplace, pajak dibayar di muka/kredit pajak, atau dipisah sebagai pos pajak? | Bila dihitung sebagai potongan, persen potongan dan tarif efektif membesar dan margin terlihat lebih kecil. Bila dianggap kredit pajak tanpa dasar, laba bisa terlihat lebih besar. | Periksa nilai kolom di laporan (agregat saja), ketentuan PPh 22 yang berlaku untuk penjual marketplace, dan bukti potong dari marketplace; konfirmasi ke konsultan pajak | Pemilik (dengan konsultan pajak) |
+| C.10 | Kuantitas dipesan vs dikirim vs direfund vs kembali vs hilang (A.19.2): kolom mana di export pesanan dan file retur yang bisa dipakai | Dasar HPP dan kerugian retur per unit | Sebagian terjawab (14 Okt 2026): `Returned quantity` di export = "Jumlah Produk Dikembalikan" di file retur = **unit direfund**, bukan unit kembali ke stok. Pada data uji, unit yang direfund termasuk kategori "tidak dikirim". Status dikirim/kembali/hilang perlu alasan di file retur + konfirmasi seller. Belum ada contoh barang dikirim lalu diretur. | Claude Code (dengan file asli) + Pemilik |
