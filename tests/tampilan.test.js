@@ -138,5 +138,72 @@ test('S4 gerak: semua animasi/transisi dimatikan bila pengguna memilih kurangi g
   truthy(/reducedMotion\(\)/.test(appJs), 'penutupan lembar menghormati reduced-motion');
 });
 
+/* ===== UI-2: dashboard memakai metadata engine apa adanya ===== */
+const dashSrc = appJs.slice(appJs.indexOf('/* ---------- ringkasan (UI-2)'), appJs.indexOf('  function nota(r) {'));
+const covKeys = [...daftar('COV').matchAll(/\['(\w+)', '(\w+)', '([^']+)'/g)].map((x) => x[1]);
+const kasus = {
+  terverifikasi: () => [E.parseWorkbook(Sint.penghasilan([{ id: 'SA1', items: [{ name: 'Kaos', harga: 100000 }] }])), E.parseWorkbook(Sint.exportPesanan([{ order: 'SA1', name: 'Kaos', qty: 2, price: 50000 }]))],
+  campuran: () => [E.parseWorkbook(Sint.penghasilan([{ id: 'SB1', items: [{ name: 'Kaos', harga: 100000 }] }, { id: 'SB2', items: [{ name: 'Topi', harga: 60000 }] }, { id: 'SB3', items: [{ name: 'Kaos', harga: 50000 }] },
+    { id: 'SB4', items: [{ name: 'Kaos', harga: 100000, refund: -40000 }] }, { id: 'SB5', items: [{ name: 'Kaos', harga: 70000 }] }, { id: 'SB6', items: [{ name: 'Kaos', harga: 50000, refund: -50000 }] }])),
+  E.parseWorkbook(Sint.exportPesanan([{ order: 'SB1', name: 'Kaos', qty: 2, price: 50000 }, { order: 'SB5', name: 'Celana', qty: 1, price: 70000 }]))],
+};
+const stKaos = { modalMode: 'produk', catalog: [{ kode: '', nama: 'Kaos', variasi: '', cost: 20000 }], fallbackPct: 40, periods: [{ start: '', markup: 0, disc: 0 }] };
+test('D1 status di kartu Kepastian Profit = semua status cakupan engine (tidak ada status buatan UI)', () => {
+  const r = E.compute(kasus.campuran(), stKaos);
+  const keys = Object.keys(r.kepastian.cakupan.penjualan).filter((k) => k !== 'total');
+  eq(covKeys.join(','), keys.join(','), 'kunci status');
+  for (const k of keys) truthy(r.kepastian.cakupan.penjualan[k] > 0, `kasus campuran punya status ${k}`);
+});
+test('D2 data yang dipakai dashboard tersedia dan bebas NaN/Infinity (100% terverifikasi, campuran, tanpa modal)', () => {
+  for (const [nama, files, s] of [['terverifikasi', kasus.terverifikasi(), stKaos], ['campuran', kasus.campuran(), stKaos], ['tanpa modal', kasus.campuran(), { modalMode: 'produk', catalog: [] }]]) {
+    const r = E.compute(files, s), K = r.kepastian;
+    truthy(typeof K.laba.final === 'boolean' && Array.isArray(K.laba.alasanTidakFinal), `${nama}: status final`);
+    const pakai = { cov: r.coverage, dasar: K.cakupan.labaTerhitung.dasarPenjualan, total: K.cakupan.penjualan.total, sales: r.totalSales, fees: r.totalFees, dikeluarkan: K.cakupan.dikeluarkan.danaDiterima };
+    for (const [k, v] of Object.entries(pakai)) truthy(Number.isFinite(v), `${nama}: ${k} = ${v}`);
+    if (nama === 'tanpa modal') eq(r.ready, false, 'tanpa modal: laba belum dapat dihitung'); else truthy(Number.isFinite(r.totalMargin), `${nama}: laba`);
+  }
+});
+test('D3 dashboard tidak menghitung angka finansial baru dan tidak membuat skor', () => {
+  truthy(dashSrc.length > 1000, 'kode dashboard ditemukan');
+  for (const pola of [/totalMargin\s*\//, /netProfit\s*\//, /\/\s*r\.totalSales/, /totalFees\s*\//, /\/\s*r\.knownSales/, /\*\s*100\)\s*\}?\s*\/\s*100/])
+    truthy(!pola.test(dashSrc), `pola pembagian finansial di dashboard: ${pola}`);
+  truthy(!/skor|score\s*[:=]\s*[^i]/i.test(dashSrc.replace(/i\.score/g, '')), 'tidak ada skor Profit Confidence');
+  truthy(/K\.laba\.final \?/.test(dashSrc), 'status "Belum final" berasal dari kepastian.laba.final engine');
+  truthy(/pct\(r\.coverage, 0\)/.test(dashSrc), '"dihitung dari X% penjualan" memakai r.coverage dari engine');
+});
+test('D4 istilah: tidak ada "Laba bersih" yang tampil; margin hanya persen', () => {
+  for (const f of ['app.js', 'report.js', 'penjelasan.js']) truthy(!/['"`>]\s*Laba bersih|laba bersih[^_]/.test(src(f).replace(/laba_bersih/g, '')), `${f} masih menampilkan "Laba bersih"`);
+});
+
+/* Cakupan ≠ kepastian: persen cakupan berarti "masuk dalam perhitungan", bukan tingkat akurasi. */
+const sheetSrc = appJs.slice(appJs.indexOf("if (sheetKind === 'kepastian')"), appJs.indexOf("if (sheetKind === 'filter')"));
+test('D5 teks cakupan memakai arti "masuk dalam perhitungan", bukan akurasi', () => {
+  truthy(sheetSrc.length > 500, 'kode laci Kepastian Profit ditemukan');
+  truthy(/pct\(r\.coverage, 0\)\} penjualan masuk dalam perhitungan/.test(dashSrc), 'hero: "X% penjualan masuk dalam perhitungan"');
+  truthy(/<\/b> penjualan \(\$\{fmt\(c\.labaTerhitung\.dasarPenjualan\)\}\) masuk dalam perhitungan laba/.test(dashSrc), 'kartu: "X% penjualan (Rp…) masuk dalam perhitungan laba"');
+  truthy(/penjualan masuk dalam perhitungan laba\.[^<]*Ini bukan tingkat akurasi/.test(sheetSrc), 'laci: cakupan dijelaskan bukan tingkat akurasi');
+  truthy(!/Laba dihitung dari/.test(appJs), 'tidak ada lagi "Laba dihitung dari X%"');
+  truthy(/Seberapa kuat data yang mendasari perhitungan laba Anda/.test(dashSrc), 'subjudul Kepastian Profit');
+});
+test('D6 tidak ada klaim akurasi berpersen dan tidak ada skor tunggal Profit Confidence', () => {
+  for (const f of ['app.js', 'report.js', 'penjelasan.js']) {
+    const s = src(f);
+    truthy(!/\d+\s*%\s*akurat|\}\s*%?\s*akurat|akurasi\s*\$\{|akurasi\s+\d/i.test(s), `${f}: ada klaim "X% akurat"/"akurasi X%"`);
+  }
+  truthy(!/skor|score\s*[:=]\s*[^i]/i.test(sheetSrc.replace(/tidak digabung menjadi satu skor/, '').replace(/i\.score/g, '')), 'laci tidak membuat skor');
+  truthy(/tidak digabung menjadi satu skor/.test(sheetSrc), 'laci menyatakan cakupan dan kualitas tidak digabung jadi satu skor');
+});
+test('D7 cakupan 100% + "perlu dicek" 100% tidak tampil sebagai terverifikasi', () => {
+  const r = E.compute(Demo.make().map((wb) => E.parseWorkbook(wb)), Demo.settings()), c = r.kepastian.cakupan.penjualan;
+  eq(r.coverage, 1, 'cakupan contoh');
+  eq(c.belum, c.total, 'semua penjualan berstatus perlu dicek');
+  eq(c.terverifikasi, 0, 'tidak ada yang terverifikasi');
+  eq(r.kepastian.laba.final, false, 'laba belum final');
+  // Lencana "Terverifikasi" hanya muncul bila engine punya penjualan terverifikasi; kalimat peringatan muncul bila ada "perlu dicek".
+  truthy(/c\.penjualan\.terverifikasi > 0 \? '<div class="m-status"><span class="status verified">Terverifikasi/.test(dashSrc), 'lencana Terverifikasi bergantung pada cakupan.terverifikasi');
+  truthy(/covCaveat = \(c\) => \(c\.penjualan\.belum > 0 \? ' Namun sebagian angka masih perlu diperiksa\.'/.test(dashSrc), 'peringatan "perlu diperiksa" bergantung pada cakupan.belum');
+  truthy(/masuk dalam perhitungan laba\.\$\{covCaveat\(c\)\}/.test(dashSrc) && /\$\{covCaveat\(r\.kepastian\.cakupan\)\}/.test(sheetSrc), 'peringatan dipasang di kartu dan laci');
+});
+
 console.log(failed ? `\n${failed} uji GAGAL` : '\nSemua uji lulus');
 process.exitCode = failed ? 1 : 0;

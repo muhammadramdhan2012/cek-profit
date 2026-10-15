@@ -62,7 +62,7 @@ const CekInfo = (() => {
       h: 'Biaya per bulan yang Anda isi × lama periode data (dalam bulan).',
     },
     laba_bersih: {
-      t: 'Laba bersih',
+      t: 'Laba dari data tersedia',
       a: 'Perkiraan laba dari data yang tersedia setelah modal dan biaya yang sudah tercatat, termasuk biaya operasional yang Anda isi. Ini bukan saldo kas.',
       h: 'Laba setelah modal − biaya operasional. Hanya dari pesanan yang modalnya diketahui. Biaya yang belum tercatat di laporan atau isian Anda belum termasuk.',
       b: 'Negatif berarti toko belum menutup biaya. Lihat Temuan dan saran untuk penyebab terbesarnya.',
@@ -70,7 +70,7 @@ const CekInfo = (() => {
     margin_total: {
       t: 'Laba setelah modal',
       a: 'Perkiraan laba dari data yang tersedia: penjualan setelah potongan marketplace, modal, packing, dan retur yang hilang.',
-      h: 'Dana diterima − modal − packing − retur yang tidak kembali. Hanya dari pesanan yang modalnya diketahui. Isi biaya operasional bulanan agar terlihat laba bersihnya.',
+      h: 'Dana diterima − modal − packing − retur yang tidak kembali. Hanya dari pesanan yang modalnya diketahui. Isi biaya operasional bulanan agar terlihat laba setelah biaya operasional yang tercatat.',
       b: 'Margin (laba dibagi penjualan) 10–25% umum untuk toko online. Di bawah 10% rawan rugi bila potongan naik.',
     },
     rata_bulan: {
@@ -105,7 +105,7 @@ const CekInfo = (() => {
     target_laba: {
       t: 'Target laba per bulan',
       a: 'Berapa bulan di periode ini yang labanya mencapai target yang Anda isi.',
-      h: 'Laba bersih (atau laba setelah modal bila biaya operasional kosong) per bulan dibanding target di Data & modal.',
+      h: 'Laba dari data tersedia (setelah biaya operasional yang tercatat, atau laba setelah modal bila biaya operasional kosong) per bulan dibanding target di Data & pengaturan.',
     },
 
     /* ---------- produk ---------- */

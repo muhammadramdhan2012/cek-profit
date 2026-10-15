@@ -82,7 +82,7 @@ const CekReport = (() => {
     const narr = [
       `Selama periode ${tgl(r.first)} sampai ${tgl(r.last)}, ${esc(store)} mencatat <b>${r.orders.toLocaleString('id-ID')} pesanan</b> dengan penjualan <b>${rp(r.totalSales)}</b> di ${plats.map((k) => PN[k]).join(' dan ')}.`,
       `Marketplace memotong <b>${rp(-r.totalFees)}</b> (${pc(-r.totalFees / r.totalSales)} dari penjualan), sehingga dana yang diterima ${rp(r.totalReceived)}.`,
-      r.ready ? `Setelah modal barang${r.totalPacking ? ', packing' : ''}${r.lostCertain ? ' dan barang retur yang hilang' : ''}, laba setelah modal <b>${rp(r.totalMargin)}</b> (${pc(marginPct)} dari penjualan yang modalnya diketahui)${hasOpex ? `; setelah biaya operasional ${rp(r.opex)}, laba bersih <b>${rp(r.netProfit)}</b>` : ''}.` : 'Modal barang belum diisi, sehingga laba belum dapat dihitung.',
+      r.ready ? `Setelah modal barang${r.totalPacking ? ', packing' : ''}${r.lostCertain ? ' dan barang retur yang hilang' : ''}, laba setelah modal <b>${rp(r.totalMargin)}</b> (${pc(marginPct)} dari penjualan yang modalnya diketahui)${hasOpex ? `; setelah biaya operasional yang tercatat ${rp(r.opex)}, laba dari data tersedia <b>${rp(r.netProfit)}</b>` : ''}.` : 'Modal barang belum diisi, sehingga laba belum dapat dihitung.',
       r.ready && r.coverage < 0.98 ? `Catatan: modal baru diketahui untuk ${pc(r.coverage, 0)} penjualan; laba di laporan ini hanya mencakup bagian tersebut.` : '',
       best ? `${PN[best]} memberi margin per rupiah penjualan yang lebih tinggi pada periode ini.` : '',
     ].filter(Boolean).join(' ');
@@ -99,7 +99,7 @@ const CekReport = (() => {
       ...(r.coverage < 0.98 && r.ready ? [['Dana dari pesanan tanpa modal (tidak dihitung)', (k) => rp(-excludedOf(k)), rp(-excludedAll), '', 'neg f']] : []),
       ...(r.lostCertain || lostNoValue ? [[`Barang retur hilang${lostNoValue ? ` (${lostNoValue} kasus tanpa nilai belum dikurangkan)` : ''}`, () => '', r.lostCertain ? rp(-r.lostCertain) : '—', r.lostCertain ? pc(r.lostCertain / r.totalSales) : '', 'neg']] : []),
       ['Laba setelah modal', (k) => rp(r[k].margin), rp(r.totalMargin), pc(marginPct), 'total'],
-      ...(hasOpex ? [['Biaya operasional', () => '', rp(-r.opex), pc(r.opex / r.totalSales), 'neg'], ['Laba bersih', () => '', rp(r.netProfit), pc(r.netProfit / r.totalSales), 'total']] : []),
+      ...(hasOpex ? [['Biaya operasional', () => '', rp(-r.opex), pc(r.opex / r.totalSales), 'neg'], ['Laba dari data tersedia (setelah biaya operasional)', () => '', rp(r.netProfit), pc(r.netProfit / r.totalSales), 'total']] : []),
     ];
 
     return `
@@ -117,7 +117,7 @@ ${ctx.demo ? '<div class="rwatermark">CONTOH</div>' : ''}
     ${kpi('Penjualan', rp(r.totalSales), `${r.orders.toLocaleString('id-ID')} pesanan`)}
     ${kpi('Potongan platform', pc(-r.totalFees / r.totalSales), rp(-r.totalFees))}
     ${kpi('Laba setelah modal', rp(r.totalMargin), r.ready ? `margin ${pc(marginPct)} dari penjualan bermodal` : 'modal belum diisi')}
-    ${hasOpex ? kpi('Laba bersih', rp(r.netProfit), `setelah biaya operasional ${short(r.opex)}`, 'hero') : kpi('Laba per bulan', rp(r.perMonth), `rata-rata ${Math.round(r.monthsSpan * 10) / 10} bulan`, 'hero')}
+    ${hasOpex ? kpi('Laba dari data tersedia', rp(r.netProfit), `setelah biaya operasional yang tercatat ${short(r.opex)}`, 'hero') : kpi('Laba per bulan', rp(r.perMonth), `rata-rata ${Math.round(r.monthsSpan * 10) / 10} bulan`, 'hero')}
   </div>
   <div class="rsummary"><h2>Ringkasan</h2><p>${narr}</p></div>
   ${r.insights.length ? `<div class="rtop"><h2>Hal terpenting</h2><ol>${r.insights.slice(0, 4).map((i) => `<li><b>${esc(i.title)}.</b> ${esc(i.detail)}${i.action ? ` <em>${esc(i.action)}</em>` : ''}</li>`).join('')}</ol></div>` : ''}
@@ -127,7 +127,7 @@ ${ctx.demo ? '<div class="rwatermark">CONTOH</div>' : ''}
 <section class="rpage">
   ${header('Laba rugi', '2')}
   <h2>Laporan laba rugi</h2>
-  <p class="rlead">Dari penjualan sampai ${hasOpex ? 'laba bersih' : 'laba setelah modal'}, per platform. Persentase terhadap total penjualan, kecuali baris laba setelah modal: terhadap penjualan yang modalnya diketahui.</p>
+  <p class="rlead">Dari penjualan sampai ${hasOpex ? 'laba dari data tersedia' : 'laba setelah modal'}, per platform. Persentase terhadap total penjualan, kecuali baris laba setelah modal: terhadap penjualan yang modalnya diketahui.</p>
   <table class="rtable">
     <thead><tr><th></th>${plats.map((k) => `<th>${PN[k]}</th>`).join('')}${plats.length > 1 ? '<th>Total</th>' : ''}<th>%</th></tr></thead>
     <tbody>${plRows.map(([label, fn, tot, share, cls = '']) => `<tr class="${cls}"><td>${esc(label)}</td>${plats.map((k) => `<td>${fn(k)}</td>`).join('')}${plats.length > 1 ? `<td>${tot}</td>` : ''}<td class="f">${share}</td></tr>`).join('')}</tbody>
@@ -149,7 +149,7 @@ ${ctx.demo ? '<div class="rwatermark">CONTOH</div>' : ''}
   <p class="rlead">Menurut bulan pesanan dibuat.</p>
   ${monthChart(r)}
   <table class="rtable rsmall">
-    <thead><tr><th>Bulan</th><th>Pesanan</th><th>Penjualan</th><th>Potongan</th><th>% potongan</th><th>Laba setelah modal</th><th>Margin %</th>${hasOpex ? '<th>Laba bersih</th>' : ''}</tr></thead>
+    <thead><tr><th>Bulan</th><th>Pesanan</th><th>Penjualan</th><th>Potongan</th><th>% potongan</th><th>Laba setelah modal</th><th>Margin %</th>${hasOpex ? '<th>Laba dari data tersedia</th>' : ''}</tr></thead>
     <tbody>${r.months.map((m) => `<tr><td>${BULAN_P[+m.month.slice(5) - 1]} ${m.month.slice(0, 4)}</td><td>${m.total.orders.toLocaleString('id-ID')}</td><td>${rp(m.total.sales)}</td><td>${rp(m.total.fees)}</td>
       <td class="f">${pc(-m.total.fees / (m.total.sales || 1))}</td><td class="${m.total.margin < 0 ? 'neg' : ''}">${r.ready ? rp(m.total.margin) : '—'}</td><td class="f">${r.ready && m.total.knownSales ? pc(m.total.margin / m.total.knownSales) : '—'}</td>
       ${hasOpex ? `<td class="${m.total.net < 0 ? 'neg' : ''}">${r.ready ? rp(m.total.net) : '—'}</td>` : ''}</tr>`).join('')}
@@ -191,7 +191,7 @@ ${r.products.length ? `<section class="rpage">
     <li>Sumber: laporan penghasilan resmi ${plats.map((k) => PN[k]).join(' dan ')}${r.hasOrderExport.shopee || r.hasOrderExport.tiktok ? ', export pesanan' : ''}${r.cases.length ? ', dan file retur' : ''}. Total tiap file dicocokkan dengan ringkasan resmi platform.</li>
     <li>${r.mode === 'acuan' ? 'Modal dihitung dari harga acuan pemasok dikurangi diskon pemasok, mengikuti pola harga jual yang diisi penjual.' : `Modal = modal per unit yang diisi penjual${ok(s.extraCostPct) && s.extraCostPct > 0 ? ` ditambah biaya kulakan ${String(s.extraCostPct).replace('.', ',')}%` : ''} × jumlah terjual${ok(s.fallbackPct) ? `; produk tanpa data modal memakai estimasi ${s.fallbackPct}% dari harga jual` : ''}.`} Pesanan tanpa modal tidak dihitung dalam margin.</li>
     ${r.qtyAssumed ? `<li>${r.qtyAssumed.toLocaleString('id-ID')} item Shopee memakai jumlah = 1 karena export pesanan tidak disertakan.</li>` : ''}
-    <li>Laba setelah modal = dana diterima − modal${r.totalPacking ? ' − packing' : ''} − barang retur yang hilang. Margin = laba setelah modal ÷ penjualan yang modalnya diketahui. ${hasOpex ? `Laba bersih = laba setelah modal − biaya operasional ${rp(r.fixedMonthly)}/bulan × ${(Math.round(r.monthsSpan * 10) / 10).toLocaleString('id-ID')} bulan.` : 'Biaya operasional (gaji, sewa, iklan di luar platform) belum dimasukkan.'}</li>
+    <li>Laba setelah modal = dana diterima − modal${r.totalPacking ? ' − packing' : ''} − barang retur yang hilang. Margin = laba setelah modal ÷ penjualan yang modalnya diketahui. ${hasOpex ? `Laba dari data tersedia = laba setelah modal − biaya operasional yang tercatat ${rp(r.fixedMonthly)}/bulan × ${(Math.round(r.monthsSpan * 10) / 10).toLocaleString('id-ID')} bulan.` : 'Biaya operasional (gaji, sewa, iklan di luar platform) belum dimasukkan.'}</li>
     <li>Kompensasi dari platform${r.adjustments ? ` (${rp(r.adjustments)})` : ''} tidak ditambahkan ke laba. Pajak penghasilan belum diperhitungkan.</li>
     <li>Laporan ini adalah estimasi untuk pengambilan keputusan usaha, bukan laporan keuangan yang diaudit.</li>
   </ul>
