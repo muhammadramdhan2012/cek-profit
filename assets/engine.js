@@ -901,7 +901,7 @@ const Engine = (() => {
         const lines = group ? group.lineIdx : r.lineIdx;   // baris export yang terbukti milik item ini (bisa kosong)
         // Rumus refund LAMA (H2) sengaja tidak diubah: modal dikali porsi yang tidak direfund.
         const share = it.harga > 0 ? clamp01((it.harga + it.refund) / it.harga) : 0;
-        let entry = null, key = null, cost, qty = r.qty;
+        let entry = null, key = null, cost, qty = r.qty, ledger = null;
         // Dasar jumlah barang untuk HPP: 'export' (terbukti), 'kelompok' (hanya total kelompok yang terbukti),
         // 'estimasi_1' (dianggap 1 unit), 'tidak_diketahui' (A1), atau null bila HPP tidak memakai jumlah barang
         // (modal rata-rata dihitung dari nilai penjualan, bukan dari jumlah).
@@ -916,7 +916,18 @@ const Engine = (() => {
           }
         } else if (r.qtyStatus === 'terverifikasi') {
           ({ entry, key } = shopeeCostOf(it, exp[lines[0]]));
-          if (entry) { cost = entry.cost * qty * share; qtyBasis = 'export'; }
+          // H2-B1: bila unit refund bisa direkonsiliasi dari field kuantitas, HPP = modal × unit terjual bersih.
+          // Nominal refund tidak dipakai. Bila tidak bisa, rumus lama (share) tetap dipakai dan ditandai.
+          if (entry && !conflict) ledger = unitLedger(o.id, it, exp[lines[0]], meta);
+          if (ledger) {   // ringkasan buku unit (metadata)
+            ledgerStats.baris++; ledgerStats.status[ledger.unitStatus] = (ledgerStats.status[ledger.unitStatus] || 0) + 1;
+            if (ledger.unitLedgerComplete) {
+              ledgerStats.lengkap++; ledgerStats.unitBelumDiketahui += ledger.qtyUnknown;
+              ledgerStats.nilaiUnitBelumDiketahui += entry.cost * ledger.qtyUnknown;
+            }
+          }
+          if (entry && ledger && ledger.unitLedgerComplete) { cost = entry.cost * ledger.qtySold; qtyBasis = 'buku_unit'; }
+          else if (entry) { cost = entry.cost * qty * share; qtyBasis = 'export'; }
         } else {
           ({ entry, key } = shopeeCostOf(it, null));
           if (entry && exp.length) {
@@ -983,12 +994,88 @@ const Engine = (() => {
         // SKU di bawah hanya untuk tampilan tabel produk (sama seperti cara lama), tidak dipakai mencari modal.
         const shown = exp[lines[0]] || exp.find((l) => norm(l.name) === norm(it.name)) || {};
         return { it, qty, cost, unit: entry ? entry.cost : NaN, base: entry ? entry.baseCost : NaN, entry, sku: shown.sku, variant: shown.variant,
-          rule: r.rule, qtyStatus: r.qtyStatus, variantStatus: r.variantStatus, qtyBasis, hppMethod, hppStatus, hppReasons: reasons };
+          rule: r.rule, qtyStatus: r.qtyStatus, variantStatus: r.variantStatus, qtyBasis, hppMethod, hppStatus, hppReasons: reasons, ledger };
       });
       // Unit terverifikasi dari kelompok dihitung sekali per kelompok (bukan per baris laporan).
       for (const g of match.groups) shopeeQty.unitTerverifikasi += g.qtyTotal;
       if (!items.length) { if (isOk(fallback)) modal = gross * fallback; else ok = false; }
       return { modal: ok ? modal : NaN, items: notes };
+    }
+
+    /* H2-B1: kasus retur Shopee per nomor pesanan, untuk buku unit. */
+    const shopeeCasesByOrder = new Map();
+    for (const c of m.cases.values()) {
+      if (c.platform !== 'shopee') continue;
+      if (!shopeeCasesByOrder.has(c.orderId)) shopeeCasesByOrder.set(c.orderId, []);
+      shopeeCasesByOrder.get(c.orderId).push(c);
+    }
+    const ledgerStats = { baris: 0, lengkap: 0, unitBelumDiketahui: 0, nilaiUnitBelumDiketahui: 0, invariantGagal: 0, status: {} };
+
+    /**
+     * H2-B1: buku unit untuk SATU baris pesanan Shopee yang terpasang pasti ke satu baris export.
+     * Bukan catatan persediaan; hanya membagi unit baris ini ke satu perlakuan masing-masing:
+     *   qtySold + qtyNotShipped + qtyReturnedGood + qtyReturnedDamaged + qtyLost + qtyUnknown = qtyOrdered
+     * qtySold = unit yang tetap menjadi penjualan bersih setelah unit yang direfund dikeluarkan.
+     * Sumber unit refund HANYA field kuantitas: returnedQty export + "Jumlah Produk Dikembalikan" file retur
+     * (pesanan + produk + variasi yang sama). Nominal refund tidak pernah dipakai, termasuk untuk menyimpulkan 0.
+     *   terverifikasi = kedua sumber sama · satu_sumber = hanya satu · konflik = berbeda · tidak_diketahui = tidak ada
+     * Kondisi fisik tidak ditebak: hanya kasus yang sudah ditandai seller "Tidak kembali" (hilang) atau
+     * "Kembali" yang dipakai. Kategori dari teks alasan (mis. "tidak dikirim") belum disetujui sebagai bukti,
+     * dan nilai rusak belum bisa diisi → unit itu masuk qtyUnknown.
+     * @returns {object} ledger; unitLedgerComplete = false bila jumlah unit tidak bisa direkonsiliasi (rumus lama dipakai)
+     */
+    function unitLedger(orderId, it, line, meta) {
+      const reasons = [], sources = [];
+      const qtyOrdered = line.qty;
+      // Sumber 1: export. Bila export pesanan ini berbeda antar file (Fase 2.1), returnedQty tidak dapat dipakai.
+      let ex;
+      if (meta && (meta.finansial || meta.status)) ex = { status: 'konflik' };
+      else if (isOk(line.returnedQty)) ex = { status: 'ada', units: line.returnedQty };
+      else ex = { status: 'tidak_ada' };
+      // Sumber 2: file retur. Pengajuan "batal" (ditolak/dibatalkan) bukan unit yang direfund.
+      const cs = (shopeeCasesByOrder.get(orderId) || []).filter((c) => c.cat !== 'batal'
+        && norm(c.product) === norm(it.name) && norm(c.variant) === norm(line.variant));
+      let rf;
+      if (!cs.length) rf = { status: 'tidak_ada' };
+      else if (cs.some((c) => c.versiBerbeda)) rf = { status: 'konflik' };
+      else if (cs.every((c) => isOk(c.qty))) rf = { status: 'ada', units: cs.reduce((a, c) => a + c.qty, 0) };
+      else rf = { status: 'tidak_valid' };
+      if (ex.status === 'ada') sources.push('export_returnedQty');
+      if (rf.status === 'ada') sources.push('file_retur');
+      let unitStatus, qtyRefunded = NaN;
+      if (ex.status === 'konflik' || rf.status === 'konflik') unitStatus = 'konflik';
+      else if (ex.status === 'ada' && rf.status === 'ada') {
+        unitStatus = ex.units === rf.units ? 'terverifikasi' : 'konflik';
+        if (unitStatus === 'terverifikasi') qtyRefunded = ex.units;
+      } else if (ex.status === 'ada' || rf.status === 'ada') {
+        unitStatus = 'satu_sumber'; qtyRefunded = ex.status === 'ada' ? ex.units : rf.units;
+      } else unitStatus = 'tidak_diketahui';
+      if (unitStatus === 'konflik') reasons.push('sumber_unit_berbeda');
+      if (unitStatus === 'tidak_diketahui') reasons.push('unit_refund_tidak_diketahui');
+      if (isOk(qtyRefunded) && qtyRefunded > qtyOrdered) { reasons.push('unit_refund_melebihi_pesanan'); qtyRefunded = NaN; }
+      // Pemeriksaan konsistensi (BUKAN menurunkan unit dari nominal): ada unit direfund tetapi Laporan Penghasilan
+      // belum mencatat refund apa pun untuk baris ini (mis. refund baru muncul di laporan berikutnya). Mengeluarkan
+      // unit dari HPP saat pendapatan masih penuh akan membuat laba terlalu besar → rumus lama dipakai, ditandai.
+      if (isOk(qtyRefunded) && qtyRefunded > 0 && it.refund === 0) { reasons.push('unit_refund_tanpa_refund_di_laporan_penghasilan'); qtyRefunded = NaN; }
+
+      const L = { qtyOrdered, qtyRefunded, qtySold: NaN, qtyNotShipped: 0, qtyReturnedGood: 0, qtyReturnedDamaged: 0,
+        qtyLost: 0, qtyUnknown: NaN, unitLedgerComplete: false, unitStatus, unitReasons: reasons, unitSources: sources };
+      if (!isOk(qtyRefunded)) return L;   // tidak bisa direkonsiliasi → rumus lama, ditandai
+
+      // Kondisi fisik unit yang direfund: hanya dari tanda seller yang sudah ada.
+      const st = (c) => (CHECK_CATS.has(c.cat) ? (caseState[c.key] || 'belum') : 'na');
+      const sum = (f) => cs.filter((c) => isOk(c.qty) && f(st(c))).reduce((a, c) => a + c.qty, 0);
+      let lost = sum((x) => x === 'hilang'), good = sum((x) => x === 'kembali');
+      if (lost + good > qtyRefunded) { reasons.push('kondisi_fisik_melebihi_unit_refund'); lost = 0; good = 0; }
+      L.qtySold = qtyOrdered - qtyRefunded;
+      L.qtyLost = lost; L.qtyReturnedGood = good;
+      L.qtyUnknown = qtyRefunded - lost - good;
+      if (L.qtyUnknown > 0) reasons.push('kondisi_fisik_belum_diketahui');
+      // Invariant: setiap unit tepat satu perlakuan. Bila tidak terpenuhi, buku unit tidak dipakai.
+      const total = L.qtySold + L.qtyNotShipped + L.qtyReturnedGood + L.qtyReturnedDamaged + L.qtyLost + L.qtyUnknown;
+      if (total !== qtyOrdered || L.qtySold < 0 || L.qtyUnknown < 0) { reasons.push('invariant_unit_gagal'); ledgerStats.invariantGagal++; return L; }
+      L.unitLedgerComplete = true;
+      return L;
     }
 
     /**
@@ -1071,7 +1158,9 @@ const Engine = (() => {
         const p = touchProduct(`shopee|${n.it.productId || norm(n.it.name)}`, { platform: 'shopee', code: n.it.productId, sku: n.sku || '', name: n.it.name, variant: '' });
         p.name = n.it.name || p.name; if (n.sku && !p.sku) p.sku = n.sku;
         p.rows += 1; p.sales += n.it.harga + n.it.refund; p.received += o.total * share;
-        if (n.qty === null) p.qtyKnown = false; else p.qty += n.qty * clamp01(n.it.harga > 0 ? (n.it.harga + n.it.refund) / n.it.harga : 0);
+        // H2-B1: baris dengan buku unit memakai unit terjual bersih (bilangan bulat); baris lain tetap cara lama.
+        if (n.ledger && n.ledger.unitLedgerComplete) p.qty += n.ledger.qtySold;
+        else if (n.qty === null) p.qtyKnown = false; else p.qty += n.qty * clamp01(n.it.harga > 0 ? (n.it.harga + n.it.refund) / n.it.harga : 0);
         if (isOk(n.cost)) p.modal += n.cost; else p.modalKnown = false;
         if (isOk(n.unit)) { p.unitCost = n.unit; p.baseCost = n.base; }
         p.packing = (p.packing || 0) + pack * share;
@@ -1329,6 +1418,7 @@ const Engine = (() => {
       if (check.some((c) => c.state === 'hilang' && c.unitStatus !== 'terverifikasi')) why.push('jumlah_retur_belum_terverifikasi');
       if (lostNoValue) why.push('kerugian_retur_tanpa_nilai');
       if (lostProvisional) why.push('kerugian_retur_sementara');
+      if (ledgerStats.unitBelumDiketahui) why.push('kondisi_fisik_unit_refund_belum_diketahui');
       if (r.adjustments) why.push('penyesuaian_belum_diklasifikasikan');
       // Total tiap Laporan Penghasilan harus cocok dengan ringkasan resmi (toleransi Rp1, sama seperti dashboard).
       for (const p of parsed) {
@@ -1346,6 +1436,9 @@ const Engine = (() => {
       return {
         laba: { dariDataTersedia: r.totalMargin, final: why.length === 0, alasanTidakFinal: why },
         hpp: { ...K.hpp }, penjualan: { ...K.penjualan }, baris: { ...K.baris },
+        // H2-B1: buku unit Shopee. nilaiUnitBelumDiketahui = modal unit yang direfund tetapi kondisi fisiknya belum
+        // diketahui (risiko, BUKAN kerugian; tidak masuk laba). Bisa tumpang tindih dengan risiko kasus "belum dicek".
+        bukuUnit: { ...ledgerStats, status: { ...ledgerStats.status } },
         // kerugianTerverifikasi + kerugianSementara = kerugian yang saat ini masuk laba (lostCertain).
         risikoBarang: { kerugianTerverifikasi: lostVerified, kerugianSementara: lostProvisional, risikoTerhitung: unknownRisk,
           kerugianTanpaNilai: lostNoValue, risikoTanpaNilai: riskNoValue, unitRetur },
