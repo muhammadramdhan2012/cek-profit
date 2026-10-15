@@ -105,5 +105,38 @@ test('10 penjelasan angka: semua entri bisa dibaca (r = null maupun hasil hitung
   for (const k of CekInfo.keys()) { const a = CekInfo.get(k, null), b = CekInfo.get(k, r); truthy(a && a.t && a.a && b && b.t, k); truthy(!/NaN|Infinity/.test(`${b.a}${b.h}${b.b}${b.d}`), `${k}: NaN`); }
 });
 
+/* ===== UI-1: kerangka aplikasi (pemeriksaan statis, tanpa browser) ===== */
+const html = fs.readFileSync(path.join(__dirname, '..', 'dashboard.html'), 'utf8');
+const appJs = src('app.js');
+/** Ambil daftar VIEWS dan NAV dari app.js tanpa menjalankannya (app.js butuh DOM). */
+const daftar = (nama) => { const m = appJs.match(new RegExp(`const ${nama} = \\[([\\s\\S]*?)\\n  \\];`)); truthy(m, `${nama} tidak ditemukan`); return m[1]; };
+test('S1 menu: semua label wajib ada dan setiap menu menuju tampilan yang sudah ada', () => {
+  const views = [...daftar('VIEWS').matchAll(/\['(\w+)', '/g)].map((x) => x[1]);
+  eq(views.join(','), 'ringkasan,produk,biaya,retur,simulator,riwayat,data', 'tampilan lama tetap ada');
+  const nav = [...daftar('NAV').matchAll(/\['(\w+)', '([^']+)', '(\w+)'(?:, '(\w+)')?\]/g)].map((x) => ({ k: x[1], label: x[2], view: x[3], section: x[4] }));
+  eq(nav.map((n) => n.label).join(' | '), 'Ringkasan | Laba | Produk | Retur & refund | Simulator harga | Laporan & riwayat | Unggah data | Modal & HPP | Pengaturan');
+  for (const n of nav) truthy(views.includes(n.view), `menu ${n.label} menuju tampilan yang tidak ada: ${n.view}`);
+  for (const n of nav.filter((x) => x.section)) truthy(appJs.includes(`id="sec-${n.section}"`), `bagian #sec-${n.section} tidak ada di tampilan Data`);
+  for (const g of ['Utama', 'Data & laporan', 'Lainnya']) truthy(daftar('NAV').includes(`['${g}',`), `kelompok ${g}`);
+});
+test('S2 bilah bawah HP: 4 menu utama + "Lainnya" yang berisi sisa menu; lembar memakai <dialog>', () => {
+  truthy(/const BOTTOM = \['ringkasan', 'laba', 'produk', 'retur'\]/.test(appJs), 'isi bilah bawah');
+  truthy(/data-sheet="more"/.test(appJs) && /Lainnya/.test(appJs), 'tombol Lainnya');
+  truthy(/<nav class="bnav[^"]*" id="bnav"/.test(html), 'wadah bilah bawah di dashboard.html');
+  truthy(/<dialog id="sheet" class="dialog sheet"/.test(html), 'lembar memakai dialog bawaan');
+});
+test('S3 aksesibilitas: #view tanpa aria-live; area status selalu ada (tidak hidden)', () => {
+  truthy(!/id="view"[^>]*aria-live/.test(html), '#view masih memakai aria-live');
+  const t = html.match(/<div id="toast"[^>]*>/); truthy(t, 'toast ada');
+  truthy(/role="status"/.test(t[0]) && /aria-live="polite"/.test(t[0]) && !/\shidden/.test(t[0]), `toast: ${t[0]}`);
+  truthy(!/t\.hidden = /.test(appJs), 'toast tidak boleh disembunyikan dengan atribut hidden');
+});
+test('S4 gerak: semua animasi/transisi dimatikan bila pengguna memilih kurangi gerakan', () => {
+  const base = src('base.css');
+  truthy(/prefers-reduced-motion: reduce\)\s*\{\s*\*, \*::before, \*::after, ::backdrop \{ transition: none !important; animation: none !important;/.test(base), 'aturan reduced-motion');
+  truthy(/--dur-fast: 150ms; --dur: 200ms; --dur-slow: 250ms;/.test(base), 'durasi gerak 150–250 ms');
+  truthy(/reducedMotion\(\)/.test(appJs), 'penutupan lembar menghormati reduced-motion');
+});
+
 console.log(failed ? `\n${failed} uji GAGAL` : '\nSemua uji lulus');
 process.exitCode = failed ? 1 : 0;

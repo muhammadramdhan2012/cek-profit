@@ -1757,8 +1757,8 @@ const Engine = (() => {
     }
     if (r.ready && r.fixedMonthly > 0) {
       const net = r.netProfit;
-      add(net < 0 ? 'bad' : 'good', 92, net < 0 ? 'Margin belum menutup biaya operasional' : 'Margin menutup biaya operasional',
-        `Biaya tetap ${rp(r.fixedMonthly)}/bulan. Laba bersih periode ini ${rp(net)}.`, net < 0 ? `Butuh tambahan margin ${rp(-net / Math.max(r.monthsSpan, 1))} per bulan.` : '');
+      add(net < 0 ? 'bad' : 'good', 92, net < 0 ? 'Laba belum menutup biaya operasional' : 'Laba menutup biaya operasional',
+        `Biaya tetap ${rp(r.fixedMonthly)}/bulan. Laba dari data tersedia periode ini ${rp(net)}.`, net < 0 ? `Butuh tambahan laba ${rp(-net / Math.max(r.monthsSpan, 1))} per bulan.` : '');
     }
     return out.sort((a, b) => b.score - a.score);
   }

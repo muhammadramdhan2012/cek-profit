@@ -15,6 +15,25 @@
   --font: "Plus Jakarta Sans", ui-sans-serif, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
   --r-lg: 18px; --r: 14px; --r-sm: 10px;
   --float: 0 1px 2px rgb(26 31 28 / 6%), 0 18px 40px -18px rgb(26 31 28 / 28%);
+  /* Status kepastian (selalu dipasangkan dengan simbol + teks, tidak hanya warna). Warna platform tidak dipakai untuk status. */
+  --info: #3f5aa8; --info-soft: #e8ecf8; --unknown: #6a736e; --unknown-soft: #eceeea;
+  /* Jarak (kelipatan 4) */
+  --sp-1: 4px; --sp-2: 8px; --sp-3: 12px; --sp-4: 16px; --sp-5: 20px; --sp-6: 24px; --sp-8: 32px; --sp-10: 40px;
+  /* Ukuran huruf: caption · teks kecil · teks · subjudul · judul bagian · judul halaman · angka KPI */
+  --fs-caption: 12.5px; --fs-body-sm: 13.5px; --fs-body: 15px; --fs-subtitle: 16.5px; --fs-heading: 22px;
+  --fs-title: clamp(24px, 2.4vw, 30px); --fs-kpi: clamp(26px, 3vw, 34px);
+  /* Bayangan sangat ringan untuk permukaan datar; --float tetap khusus benda melayang (nota, dialog, menu). */
+  --shadow-xs: 0 1px 2px rgb(26 31 28 / 5%);
+  --shadow-sm: 0 1px 2px rgb(26 31 28 / 4%), 0 4px 14px -8px rgb(26 31 28 / 12%);
+  --shadow-md: 0 2px 4px rgb(26 31 28 / 5%), 0 12px 28px -14px rgb(26 31 28 / 22%);
+  --r-card: 16px;
+  /* Permukaan & garis tambahan */
+  --surface-hover: #f5f6f2; --line-subtle: #eceee8;
+  /* Gerak: singkat dan tenang (dimatikan bila pengguna memilih kurangi gerakan) */
+  --dur-fast: 150ms; --dur: 200ms; --dur-slow: 250ms; --ease: cubic-bezier(.2, .7, .2, 1);
+  /* Alias peran huruf */
+  --fs-page: var(--fs-title); --fs-section: var(--fs-subtitle); --fs-label: 13px; --fs-helper: var(--fs-caption);
+  --ctl-h: 38px;
   color-scheme: light;
 }
 @media (prefers-color-scheme: dark) {
@@ -25,6 +44,9 @@
     --mark: #e9b740; --mark-ink: #2a1d00; --mark-soft: #3a2f12;
     --cost: #f08672; --cost-soft: #3c221e; --warn: #e8b54f; --warn-soft: #362b13; --good: #5fd39b; --good-soft: #173a2e;
     --shopee: #e0652f; --tiktok: #4a92ea; --float: 0 1px 2px rgb(0 0 0 / 50%), 0 18px 40px -18px rgb(0 0 0 / 70%);
+    --info: #a3b4f0; --info-soft: #1f2741; --unknown: #a4aea8; --unknown-soft: #242c28; --shadow-xs: 0 1px 2px rgb(0 0 0 / 35%);
+    --shadow-sm: 0 1px 2px rgb(0 0 0 / 30%); --shadow-md: 0 2px 4px rgb(0 0 0 / 35%), 0 12px 28px -14px rgb(0 0 0 / 60%);
+    --surface-hover: #1b221e; --line-subtle: #232b27;
     color-scheme: dark;
   }
 }
@@ -35,6 +57,9 @@
   --mark: #e9b740; --mark-ink: #2a1d00; --mark-soft: #3a2f12;
   --cost: #f08672; --cost-soft: #3c221e; --warn: #e8b54f; --warn-soft: #362b13; --good: #5fd39b; --good-soft: #173a2e;
   --shopee: #e0652f; --tiktok: #4a92ea; --float: 0 1px 2px rgb(0 0 0 / 50%), 0 18px 40px -18px rgb(0 0 0 / 70%);
+  --info: #a3b4f0; --info-soft: #1f2741; --unknown: #a4aea8; --unknown-soft: #242c28; --shadow-xs: 0 1px 2px rgb(0 0 0 / 35%);
+  --shadow-sm: 0 1px 2px rgb(0 0 0 / 30%); --shadow-md: 0 2px 4px rgb(0 0 0 / 35%), 0 12px 28px -14px rgb(0 0 0 / 60%);
+  --surface-hover: #1b221e; --line-subtle: #232b27;
   color-scheme: dark;
 }
 
@@ -117,7 +142,7 @@ select.compact { font: inherit; font-size: 13.5px; border: 1px solid var(--line-
 footer.site { border-top: 1px solid var(--line); padding-block: 26px 40px; color: var(--ink-3); font-size: 13px; display: flex; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
 footer.site nav { display: flex; gap: 18px; flex-wrap: wrap; }
 footer.site a { color: var(--ink-2); }
-@media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; scroll-behavior: auto !important; } }
+@media (prefers-reduced-motion: reduce) { *, *::before, *::after, ::backdrop { transition: none !important; animation: none !important; scroll-behavior: auto !important; } }
 
 /* pemilih tema */
 .theme-seg { display: inline-flex; background: var(--surface-2); border-radius: 10px; padding: 3px; gap: 2px; }

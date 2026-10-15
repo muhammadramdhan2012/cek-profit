@@ -29,7 +29,15 @@
     modal_template: ['modal', 'Template modal'], shopee_balance: ['', 'Shopee, saldo (tidak diperlukan)'], unknown: ['bad', 'Belum dikenali'],
   };
   const track = (e) => { try { window.cekTrack && window.cekTrack(e); } catch (err) { /* abaikan */ } };
-  const toast = (msg) => { const t = $('#toast'); t.textContent = msg; t.hidden = false; clearTimeout(toast.t); toast.t = setTimeout(() => { t.hidden = true; }, 3600); };
+  /* Pengumuman: #toast selalu ada di halaman sebagai area status (role=status). Isi dikosongkan dulu lalu diisi,
+   * agar pesan yang sama tetap dibacakan pembaca layar; tampilannya hanya dimunculkan/disembunyikan lewat kelas. */
+  const toast = (msg) => {
+    const t = $('#toast');
+    clearTimeout(toast.t); clearTimeout(toast.c);
+    t.textContent = '';
+    toast.c = setTimeout(() => { t.textContent = msg; t.classList.add('show'); }, 40);
+    toast.t = setTimeout(() => { t.classList.remove('show'); toast.c = setTimeout(() => { t.textContent = ''; }, 300); }, 3640);
+  };
   const ICON = {
     ringkasan: '<path d="M3 13h8V3H3zM13 21h8V11h-8zM3 21h8v-6H3zM13 3v6h8V3z"/>',
     produk: '<path d="M21 8l-9-5-9 5 9 5 9-5z"/><path d="M3 8v8l9 5 9-5V8"/><path d="M12 13v8"/>',
@@ -38,6 +46,13 @@
     simulator: '<path d="M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3M1 14h6M9 8h6M17 16h6"/>',
     riwayat: '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',
     data: '<path d="M12 15V3M7 8l5-5 5 5"/><path d="M4 15v4a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-4"/>',
+    laba: '<path d="M3 17l6-6 4 4 8-8"/><path d="M15 7h6v6"/>',
+    laporan: '<path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><path d="M14 3v6h6M8 13h8M8 17h5"/>',
+    modal: '<path d="M20.6 13.4l-7.2 7.2a2 2 0 0 1-2.8 0L3 13V3h10l7.6 7.6a2 2 0 0 1 0 2.8z"/><circle cx="7.5" cy="7.5" r="1.5"/>',
+    pengaturan: '<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/>',
+    lainnya: '<circle cx="5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="19" cy="12" r="1.6"/>',
+    filter: '<path d="M4 6h16M7 12h10M10 18h4"/>',
+    unduh: '<path d="M12 3v12M7 10l5 5 5-5"/><path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/>',
   };
   const svg = (k, s = 18) => `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICON[k]}</svg>`;
 
@@ -67,7 +82,7 @@
   let demo = false;
   let license = { ok: false };
   let viewName = 'ringkasan';
-  const view = { platform: 'all', from: '', to: '', metric: 'margin', q: '', sort: 'margin', showAll: false, onlyCheck: true, costQ: '', costAll: false, compare: null, typeOpen: false };
+  const view = { section: 'unggah', platform: 'all', from: '', to: '', metric: 'margin', q: '', sort: 'margin', showAll: false, onlyCheck: true, costQ: '', costAll: false, compare: null, typeOpen: false };
   const sim = { listPrice: null, disc: null, cost: null, feePct: null, feeFixed: null, src: null, plat: null, status: 'nonmall', kat: null, opsi: [], afiliasi: 0 };
   let last = null;
   const cloud = CekCloud.init({ url: C.supabaseUrl, key: C.supabaseAnonKey });
@@ -177,18 +192,44 @@
   const VIEWS = [
     ['ringkasan', 'Ringkasan', 'Laba toko Anda dalam satu nota'],
     ['produk', 'Produk', 'Laba, margin, status, dan saran harga per produk'],
-    ['biaya', 'Biaya & potongan', 'Ke mana potongan marketplace pergi'],
-    ['retur', 'Retur', 'Barang yang kembali dan yang hilang'],
+    ['biaya', 'Laba', 'Laba per platform dan rincian potongan marketplace'],
+    ['retur', 'Retur & refund', 'Barang yang kembali dan yang belum jelas'],
     ['simulator', 'Simulator harga', 'Uji harga dan diskon sebelum dipasang'],
-    ['riwayat', 'Riwayat', 'Simpan dan bandingkan periode'],
-    ['data', 'Data & modal', 'Unggah laporan, atur modal dan biaya'],
+    ['riwayat', 'Laporan & riwayat', 'Unduh laporan, simpan, dan bandingkan periode'],
+    ['data', 'Data & pengaturan', 'Unggah laporan, isi modal, dan atur biaya'],
   ];
-  function renderNav() {
+  /* Menu: label untuk seller → tampilan yang sudah ada. "Unggah data", "Modal & HPP", dan "Pengaturan" adalah
+   * bagian dari tampilan Data yang sama (tidak ada halaman baru); menu membawa ke bagiannya. */
+  const NAV = [
+    ['Utama', [['ringkasan', 'Ringkasan', 'ringkasan'], ['laba', 'Laba', 'biaya'], ['produk', 'Produk', 'produk'], ['retur', 'Retur & refund', 'retur'], ['simulator', 'Simulator harga', 'simulator']]],
+    ['Data & laporan', [['laporan', 'Laporan & riwayat', 'riwayat'], ['data', 'Unggah data', 'data', 'unggah'], ['modal', 'Modal & HPP', 'data', 'modal']]],
+    ['Lainnya', [['pengaturan', 'Pengaturan', 'data', 'pengaturan']]],
+  ];
+  const BOTTOM = ['ringkasan', 'laba', 'produk', 'retur'];
+  const SHORT = { retur: 'Retur' };
+  const navItems = () => NAV.flatMap(([, items]) => items);
+  const isActive = ([, , v, section]) => viewName === v && (v !== 'data' || (view.section || 'unggah') === section);
+  function navButton(item, cls = '') {
+    const [k, label, v, section] = item;
     const r = last && last.r;
     const open = r ? r.cases.filter((c) => c.state === 'belum').length : 0;
-    $('#nav').innerHTML = VIEWS.map(([k, label], i) => `${i === 6 ? '<div class="sep" role="presentation"></div>' : ''}<button type="button" data-go="${k}" ${viewName === k ? 'aria-current="page"' : ''}>${svg(k)}<span>${label}</span>
-      ${k === 'produk' && r ? `<span class="count">${r.products.length}</span>` : ''}${k === 'retur' && open ? `<span class="count">${open}</span>` : ''}
-      ${k === 'data' && !demo && !files.length ? '<span class="count">mulai</span>' : ''}</button>`).join('');
+    const count = k === 'produk' && r ? `<span class="count">${num(r.products.length)}</span>`
+      : k === 'retur' && open ? `<span class="count attn" title="${open} kasus belum dicek">${num(open)}</span>`
+        : k === 'data' && !demo && !files.length ? '<span class="count attn">mulai</span>' : '';
+    // Bilah bawah HP memakai label pendek; nama lengkap tetap tersedia untuk pembaca layar.
+    const shortLbl = cls === 'bn' && SHORT[k] ? SHORT[k] : label;
+    return `<button type="button" class="${cls}" data-go="${v}" ${section ? `data-section="${section}"` : ''} ${isActive(item) ? 'aria-current="page"' : ''} ${shortLbl !== label ? `aria-label="${label}"` : ''}>${svg(k)}<span class="lbl">${shortLbl}</span>${count}</button>`;
+  }
+  function renderNav() {
+    // Menu hanya ditulis ulang bila isinya berubah, agar animasi penanda aktif tidak berulang di setiap ketikan.
+    const side = NAV.map(([group, items]) => `<div class="nav-group" role="group" aria-label="${group}"><span class="nav-label" aria-hidden="true">${group}</span>${items.map((i) => navButton(i)).join('')}</div>`).join('');
+    if (renderNav.side !== side) { $('#nav').innerHTML = side; renderNav.side = side; }
+    // Bilah bawah (HP): 4 menu utama + "Lainnya" untuk sisanya, sehingga tidak ada menu tersembunyi tanpa penanda.
+    const more = navItems().filter((i) => !BOTTOM.includes(i[0]));
+    const moreActive = more.some(isActive);
+    const bottom = BOTTOM.map((k) => navButton(navItems().find((i) => i[0] === k), 'bn')).join('')
+      + `<button type="button" class="bn" data-sheet="more" aria-haspopup="dialog" ${moreActive ? 'aria-current="page"' : ''}>${svg('lainnya')}<span class="lbl">Lainnya</span></button>`;
+    if (renderNav.bottom !== bottom) { $('#bnav').innerHTML = bottom; renderNav.bottom = bottom; }
   }
   const initials = (s) => (s || '?').trim().split(/\s+/).slice(0, 2).map((w) => w[0]).join('').toUpperCase();
   function renderAccount() {
@@ -202,8 +243,8 @@
       return;
     }
     if (!u) {
-      $('#account-box').innerHTML = `<div style="display:grid;gap:8px"><a class="btn primary" href="akun.html?mode=daftar&next=dashboard.html">Daftar gratis</a><a class="btn quiet" href="akun.html?next=dashboard.html">Masuk</a>
-        <p class="tiny faint" style="padding-inline:4px">Akun menyimpan modal produk dan riwayat agar bisa dibuka dari perangkat lain.</p></div>`;
+      $('#account-box').innerHTML = `<div class="acct-cta"><p>Simpan modal produk dan riwayat di akun agar bisa dibuka dari perangkat lain.</p>
+        <div class="row-actions"><a class="btn sm primary" href="akun.html?mode=daftar&next=dashboard.html">Daftar gratis</a><a class="btn sm" href="akun.html?next=dashboard.html">Masuk</a></div></div>`;
       $('#account-sm').innerHTML = '<a class="btn sm" href="akun.html?next=dashboard.html">Masuk</a>';
       return;
     }
@@ -213,29 +254,92 @@
       <span class="who"><b>${esc(name)}</b><span>${account.loading ? 'Memuat akun…' : esc(account.sync && account.sync !== 'Tersimpan di akun' ? account.sync : planText)}</span></span></button></div>`;
     $('#account-sm').innerHTML = `<a href="akun.html" class="avatar" style="width:30px;height:30px;font-size:12px;text-decoration:none" aria-label="Akun">${esc(initials(name))}</a>`;
   }
+  const LOGO = '<svg width="26" height="26" viewBox="0 0 30 30" aria-hidden="true"><rect width="30" height="30" rx="8" fill="var(--accent)"/><path d="M7 20.5l5-5 3.5 3 7.5-8" fill="none" stroke="var(--accent-ink)" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/><circle cx="23" cy="10.5" r="2.4" fill="var(--mark)"/></svg>';
+  /** Kontrol filter & unduhan. Dipakai di bilah atas (desktop) dan di lembar Filter (HP); di lembar memakai
+   *  data-filter/data-act agar id tidak ganda. */
+  function topControls(r, inSheet) {
+    const pro = isPro();
+    const filters = !['data', 'riwayat', 'simulator'].includes(viewName) && r;
+    const canExport = r && !['data', 'simulator'].includes(viewName);
+    const monthOpts = (sel, label) => `<option value="">${label}</option>` + r.allMonths.map((m) => `<option value="${m}" ${m === sel ? 'selected' : ''}>${monthLabel(m)}</option>`).join('');
+    const sel = (k, label, cur) => `<select class="compact" ${inSheet ? `data-filter="${k}"` : `id="${k}"`} aria-label="${label}">${monthOpts(cur, k === 'from' ? 'Dari awal' : 'Sampai akhir')}</select>`;
+    const seg = r && r.available.shopee && r.available.tiktok ? `<div class="seg" role="group" aria-label="Marketplace">${[['all', 'Semua'], ['shopee', 'Shopee'], ['tiktok', 'TikTok']].map(([k, l]) => `<button type="button" data-platform="${k}" aria-pressed="${view.platform === k}">${l}</button>`).join('')}</div>` : '';
+    const badge = pro ? '' : ' <span class="badge pro">PRO</span>';
+    const act = (id, label, extra = '') => (inSheet ? `<button class="btn ${extra}" type="button" data-act="${id}">${label}</button>` : `<button type="button" role="menuitem" id="${id}">${label}</button>`);
+    const actions = [act('pdf', `Laporan PDF${badge}`, 'primary'), act('export', `Excel${badge}`), act('save-hist', 'Simpan ke riwayat')];
+    if (inSheet) {
+      return `${filters ? `<div class="sheet-sec"><span class="sheet-k">Marketplace</span>${seg || '<span class="small faint">Hanya satu marketplace di data ini</span>'}</div>
+        <div class="sheet-sec"><span class="sheet-k">Periode (bulan pesanan)</span><div class="sheet-row">${sel('from', 'Dari bulan', view.from)}${sel('to', 'Sampai bulan', view.to)}</div></div>` : ''}
+        ${canExport ? `<div class="sheet-sec"><span class="sheet-k">Unduh dan simpan</span><div class="sheet-actions">${actions.join('')}</div></div>` : ''}`;
+    }
+    return { filters: filters ? `${seg}<div class="period-pick">${sel('from', 'Dari bulan', view.from)}<span class="faint" aria-hidden="true">–</span>${sel('to', 'Sampai bulan', view.to)}</div>` : '',
+      download: canExport ? `<details class="dd"><summary class="btn sm">${svg('unduh', 16)}<span>Unduh</span></summary><div class="dd-menu" role="menu">${actions.join('')}</div></details>` : '',
+      any: !!(filters || canExport) };
+  }
   function renderTop() {
     const meta = VIEWS.find((v) => v[0] === viewName);
     const r = last && last.r;
-    const analysis = !['data', 'riwayat', 'simulator'].includes(viewName) && r;
-    const monthOpts = (sel, label) => `<option value="">${label}</option>` + r.allMonths.map((m) => `<option value="${m}" ${m === sel ? 'selected' : ''}>${monthLabel(m)}</option>`).join('');
     const sub = r ? `${demo ? 'Data contoh, ' : ''}${prof().store ? `${esc(prof().store)}, ` : ''}${tgl(r.first)} sampai ${tgl(r.last)}` : meta[2];
-    const pro = isPro();
-    $('#main-top').innerHTML = `<div><h1>${meta[1]}</h1><p class="sub">${sub}</p></div>
-      ${analysis ? `<div class="tools">
-        ${r.available.shopee && r.available.tiktok ? `<div class="seg" role="group" aria-label="Platform">${[['all', 'Semua'], ['shopee', 'Shopee'], ['tiktok', 'TikTok']].map(([k, l]) => `<button type="button" data-platform="${k}" aria-pressed="${view.platform === k}">${l}</button>`).join('')}</div>` : ''}
-        <select class="compact" id="from" aria-label="Dari bulan">${monthOpts(view.from, 'Dari awal')}</select><select class="compact" id="to" aria-label="Sampai bulan">${monthOpts(view.to, 'Sampai akhir')}</select>
-        <span class="divider" aria-hidden="true"></span>
-        <button class="btn sm" type="button" id="save-hist">Simpan ke riwayat</button>
-        <button class="btn sm" type="button" id="export">${pro ? '' : '<span class="badge pro">PRO</span>'}Excel</button>
-        <button class="btn sm primary" type="button" id="pdf">${pro ? '' : '<span class="badge pro">PRO</span>'}Laporan PDF</button></div>` : ''}
-      ${viewName === 'data' && !demo && !files.length ? '<div class="tools"><button class="btn sm" type="button" data-demo>Lihat dengan data contoh</button></div>' : ''}
-      ${viewName === 'data' && demo ? '<div class="tools"><button class="btn sm" type="button" id="exit-demo">Keluar dari mode contoh</button></div>' : ''}`;
+    const short = r ? `${tgl(r.first)} – ${tgl(r.last)}${view.platform !== 'all' ? `, ${PNAME[view.platform]}` : ''}${view.from || view.to ? ', difilter' : ''}` : meta[2];
+    const c = topControls(r, false);
+    const extra = viewName === 'data' && !demo && !files.length ? '<button class="btn sm" type="button" data-demo>Lihat dengan data contoh</button>'
+      : viewName === 'data' && demo ? '<button class="btn sm" type="button" id="exit-demo">Keluar dari mode contoh</button>' : '';
+    $('#main-top').innerHTML = `<div class="top-title"><a class="m-brand" href="./" aria-label="Cek Profit, halaman depan">${LOGO}</a>
+        <div class="top-text"><h1>${meta[1]}</h1><p class="sub"><span class="sub-long">${sub}</span><span class="sub-short">${short}</span></p></div></div>
+      <div class="top-tools">${c.filters}${c.filters && c.download ? '<span class="divider" aria-hidden="true"></span>' : ''}${c.download}</div>
+      ${extra ? `<div class="top-extra">${extra}</div>` : ''}
+      ${c.any ? `<button class="btn sm top-sheet-btn" type="button" data-sheet="filter" aria-haspopup="dialog">${svg('filter', 16)}<span>Filter & unduh</span></button>` : ''}`;
+  }
+
+  /* ---------- lembar bawah (HP): "Lainnya" dan "Filter & unduh" ---------- */
+  let sheetKind = null;
+  function renderSheet() {
+    const d = $('#sheet');
+    if (!d || !sheetKind) return;
+    const r = last && last.r;
+    const head = (t) => `<div class="d-head"><h2 id="sheet-t">${t}</h2><button class="x" type="button" data-sheet-close aria-label="Tutup">×</button></div>`;
+    if (sheetKind === 'filter') {
+      d.innerHTML = `${head('Filter & unduh')}<div class="d-body">${topControls(r, true) || '<p class="small muted">Belum ada data untuk difilter.</p>'}</div>`;
+    } else {
+      const items = navItems().filter((i) => !BOTTOM.includes(i[0]));
+      d.innerHTML = `${head('Menu lainnya')}<div class="d-body">
+        <div class="sheet-nav">${items.map((i) => navButton(i, 'sheet-item')).join('')}</div>
+        <div class="sheet-sec"><span class="sheet-k">Akun</span>${accountSheet()}</div>
+        <div class="sheet-sec sheet-inline"><span class="sheet-k">Tampilan</span><span data-theme-toggle></span></div></div>`;
+      if (window.CekTheme) window.CekTheme.mount();
+    }
+  }
+  function openSheet(kind) {
+    sheetKind = kind;
+    renderSheet();
+    const d = $('#sheet');
+    if (!d.open) d.showModal();
+  }
+  const reducedMotion = () => window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  /** Tutup lembar dengan animasi singkat (langsung bila pengguna memilih kurangi gerakan). */
+  function closeSheet() {
+    const d = $('#sheet');
+    if (!d || !d.open) return;
+    if (reducedMotion()) { d.close(); return; }
+    d.classList.add('closing');
+    setTimeout(() => { d.classList.remove('closing'); d.close(); }, 160);
+  }
+  /** Ringkasan akun untuk lembar "Lainnya" (di HP menu samping tidak tampil). */
+  function accountSheet() {
+    const p = account.profile, u = account.user, pro = isPro();
+    const plan = demo ? 'Mode contoh' : CekCloud.isPro(p) ? `Pro sampai ${tgl(p.pro_until)}` : license.ok ? 'Pro (kode akses)' : 'Paket gratis';
+    const up = pro ? '' : '<button class="btn sm" type="button" data-upgrade>Lihat paket Pro</button>';
+    if (!cloud.enabled) return `<div class="sheet-acct"><span class="small">${plan}. Tersimpan di browser ini.</span>${up}</div>`;
+    if (!u) return `<div class="sheet-acct"><a class="btn sm primary" href="akun.html?mode=daftar&next=dashboard.html">Daftar gratis</a><a class="btn sm" href="akun.html?next=dashboard.html">Masuk</a>${up}</div>`;
+    const name = (p && p.full_name) || u.email;
+    return `<div class="sheet-acct"><span class="avatar">${esc(initials(name))}</span><span class="who"><b>${esc(name)}</b><span class="tiny faint">${esc(plan)}</span></span>
+      <a class="btn sm" href="akun.html">Akun</a>${up}<button class="btn sm quiet" type="button" id="logout">Keluar</button></div>`;
   }
 
   function render() {
     hideInfo();
     compute();
-    renderNav(); renderAccount(); renderTop();
+    renderNav(); renderAccount(); renderTop(); renderSheet();
     const v = $('#view');
     const needData = ['ringkasan', 'produk', 'biaya', 'retur'].includes(viewName) && !last;
     v.innerHTML = needData ? emptyView() : ({ ringkasan: viewRingkasan, produk: viewProduk, biaya: viewBiaya, retur: viewRetur, simulator: viewSimulator, riwayat: viewRiwayat, data: viewData }[viewName])();
@@ -248,12 +352,20 @@
     if (viewName === 'data') { renderFiles(); renderCostTable(); }
     if (viewName === 'riwayat') maybeLoadReports();
   }
-  function go(name, push = true) {
+  function go(name, push = true, section = '') {
     if (!VIEWS.some((v) => v[0] === name)) name = 'ringkasan';
     viewName = name;
+    if (name === 'data') view.section = section || 'unggah';
     if (push && location.hash !== `#${name}`) history.pushState(null, '', `#${name}`);
     render();
-    window.scrollTo({ top: 0 });
+    // Animasi masuk halaman hanya saat berpindah halaman (bukan setiap render ulang).
+    const v = $('#view'); v.classList.remove('enter'); void v.offsetWidth; v.classList.add('enter');
+    clearTimeout(go.t); go.t = setTimeout(() => v.classList.remove('enter'), 400);   // render berikutnya tanpa animasi
+    // Menu "Modal & HPP" dan "Pengaturan" membawa ke bagiannya di tampilan Data.
+    const target = name === 'data' && view.section !== 'unggah' ? $(`#sec-${view.section}`) : null;
+    // Bilah judul menempel di atas, jadi tinggi bilah itu dikurangkan agar judul bagian tidak tertutup.
+    if (target) window.scrollTo({ top: Math.max(0, target.getBoundingClientRect().top + window.scrollY - $('#main-top').offsetHeight - 12) });
+    else window.scrollTo({ top: 0 });
   }
 
   /* ================= 5. tampilan ================= */
@@ -266,9 +378,9 @@
     const all = last.all;
     return [
       { done: true, text: 'Unggah laporan penghasilan' },
-      { done: all.coverage >= 0.95, text: all.ready ? `Lengkapi modal (${pct(all.coverage, 0)} penjualan)` : 'Isi modal produk', go: 'data' },
-      ...(all.qtyAssumed || all.ttNoDetail ? [{ done: false, text: 'Tambah export pesanan agar jumlah barang tepat', go: 'data' }] : []),
-      { done: all.fixedMonthly > 0, text: 'Isi biaya operasional bulanan', go: 'data' },
+      { done: all.coverage >= 0.95, text: all.ready ? `Lengkapi modal (${pct(all.coverage, 0)} penjualan)` : 'Isi modal produk', go: 'data', section: 'modal' },
+      ...(all.qtyAssumed || all.ttNoDetail ? [{ done: false, text: 'Tambah export pesanan agar jumlah barang tepat', go: 'data', section: 'unggah' }] : []),
+      { done: all.fixedMonthly > 0, text: 'Isi biaya operasional bulanan', go: 'data', section: 'pengaturan' },
       { done: !!(done.pdf || done.saved), text: 'Unduh laporan PDF atau simpan ke riwayat', act: 'pdf' },
     ];
   }
@@ -282,7 +394,7 @@
     return `
       ${items.length && nDone < items.length ? `<section class="panel checklist"><div class="panel-head" style="margin:0"><h3>Lengkapi supaya angkanya tepat</h3><p>${nDone} dari ${items.length} selesai</p></div>
         <div class="progress" aria-hidden="true"><i style="width:${(nDone / items.length) * 100}%"></i></div>
-        <ol>${items.map((i) => `<li class="${i.done ? 'done' : ''}"><span class="tick">${i.done ? '✓' : ''}</span>${i.done ? esc(i.text) : `<button type="button" ${i.go ? `data-go="${i.go}"` : 'id="pdf-check"'}>${esc(i.text)}</button>`}</li>`).join('')}</ol></section>` : ''}
+        <ol>${items.map((i) => `<li class="${i.done ? 'done' : ''}"><span class="tick">${i.done ? '✓' : ''}</span>${i.done ? esc(i.text) : `<button type="button" ${i.go ? `data-go="${i.go}" data-section="${i.section || ''}"` : 'id="pdf-check"'}>${esc(i.text)}</button>`}</li>`).join('')}</ol></section>` : ''}
       <div class="grid-nota">
         ${nota(r)}
         <div class="stack">
@@ -299,7 +411,7 @@
           <div class="seg" role="group" aria-label="Ukuran">${[['margin', 'Laba'], ['sales', 'Penjualan'], ['fees', 'Potongan']].filter(([k]) => k !== 'margin' || r.ready).map(([k, l]) => `<button type="button" data-metric="${k}" aria-pressed="${view.metric === k || (view.metric === 'margin' && !r.ready && k === 'sales')}">${l}</button>`).join('')}</div></div>
         ${monthly(r)}
         <details style="margin-top:12px"><summary class="small" style="cursor:pointer;font-weight:650">Lihat tabel per bulan</summary>
-          <div class="tablewrap" style="margin-top:8px"><table class="data"><thead><tr><th>Bulan</th><th>Pesanan</th><th>Penjualan</th><th>Potongan</th><th>Laba setelah modal</th><th>Margin %</th>${r.fixedMonthly ? '<th>Laba bersih</th>' : ''}</tr></thead>
+          <div class="tablewrap" style="margin-top:8px"><table class="data"><thead><tr><th>Bulan</th><th>Pesanan</th><th>Penjualan</th><th>Potongan</th><th>Laba setelah modal</th><th>Margin %</th>${r.fixedMonthly ? '<th>Laba dari data tersedia</th>' : ''}</tr></thead>
           <tbody>${r.months.map((m) => `<tr><td>${monthLong(m.month)}</td><td>${num(m.total.orders)}</td><td>${fmt(m.total.sales)}</td><td class="neg">${fmt(m.total.fees)}</td>
             <td class="${m.total.margin < 0 ? 'neg' : ''}">${r.ready ? fmt(m.total.margin) : '—'}</td><td>${r.ready && m.total.knownSales ? pct(m.total.margin / m.total.knownSales) : '—'}</td>
             ${r.fixedMonthly ? `<td class="${m.total.net < 0 ? 'neg' : ''}">${r.ready ? fmt(m.total.net) : '—'}</td>` : ''}</tr>`).join('')}</tbody></table></div></details>
@@ -323,15 +435,15 @@
       if (r.fixedMonthly > 0) { L('Laba setelah modal', r.totalMargin, 'sub', '', 'margin_kotor'); L('Biaya operasional', -r.opex, 'minus', `${fmt(r.fixedMonthly)} per bulan`, 'opex'); }
     } else L('Dana diterima', r.totalReceived, 'sub', '', 'dana_diterima');
     const total = r.fixedMonthly > 0 ? r.netProfit : r.totalMargin;
-    const label = r.fixedMonthly > 0 ? 'Laba bersih' : 'Laba setelah modal';
+    const label = r.fixedMonthly > 0 ? 'Laba dari data tersedia' : 'Laba setelah modal';
     const labelKey = r.fixedMonthly > 0 ? 'laba_bersih' : 'margin_total';
     return `<section class="nota" aria-label="Nota laba">
       <div class="nota-head"><b>Nota laba</b><span>${tgl(r.first)} sampai ${tgl(r.last)}<br>${['shopee', 'tiktok'].filter((k) => r.has[k]).map((k) => PNAME[k]).join(' dan ')}</span></div>
       <dl>${lines.join('')}</dl>
       <div class="nota-total"><span class="lbl">${label}${qi(labelKey, label)}</span>
         ${r.ready ? `<span class="big ${total < 0 ? 'neg' : ''}">${fmt(total)}</span>
-          <span class="note">${r.coverage < 0.98 ? `Dari ${pct(r.coverage, 0)} penjualan yang modalnya diketahui.` : `${pct(total / r.totalSales)} dari seluruh penjualan.`}${r.unknownRisk > 0 ? ` Bisa turun ${fmt(r.unknownRisk)} bila retur yang belum dicek tidak kembali.` : ''}${rb.risikoTanpaNilai ? ` ${num(rb.risikoTanpaNilai)} kasus retur yang belum dicek belum punya nilai, jadi risikonya belum bisa dihitung.` : ''}</span>`
-          : '<span class="big faint">Belum dihitung</span><span class="note">Isi modal produk agar laba bisa dihitung.</span><button class="btn sm primary" type="button" data-go="data" style="justify-self:start;margin-top:6px">Isi modal</button>'}
+          <span class="note">${r.fixedMonthly > 0 ? 'Setelah biaya operasional yang tercatat. ' : ''}${r.coverage < 0.98 ? `Dari ${pct(r.coverage, 0)} penjualan yang modalnya diketahui.` : `${pct(total / r.totalSales)} dari seluruh penjualan.`}${r.unknownRisk > 0 ? ` Bisa turun ${fmt(r.unknownRisk)} bila retur yang belum dicek tidak kembali.` : ''}${rb.risikoTanpaNilai ? ` ${num(rb.risikoTanpaNilai)} kasus retur yang belum dicek belum punya nilai, jadi risikonya belum bisa dihitung.` : ''}</span>`
+          : '<span class="big faint">Belum dihitung</span><span class="note">Isi modal produk agar laba bisa dihitung.</span><button class="btn sm primary" type="button" data-go="data" data-section="modal" style="justify-self:start;margin-top:6px">Isi modal</button>'}
       </div></section>`;
   }
   function facts(r) {
@@ -344,12 +456,12 @@
     const hitN = ok(target) && target > 0 && r.ready ? r.months.filter((m) => (r.fixedMonthly ? m.total.net : m.total.margin) >= target).length : null;
     const key = (m) => (r.ready ? m.total.margin : m.total.sales);
     return `<div class="facts">
-      <div class="fact"><span>Rata-rata per bulan${qi('rata_bulan')}</span><b class="${r.perMonth < 0 ? 'neg' : ''}">${r.ready ? fmt(r.fixedMonthly ? r.netProfit / Math.max(r.monthsSpan, 1) : r.perMonth) : '—'}</b><small>${r.fixedMonthly ? 'laba bersih' : 'laba setelah modal'}, ${(Math.round(r.monthsSpan * 10) / 10).toLocaleString('id-ID')} bulan data</small></div>
+      <div class="fact"><span>Rata-rata per bulan${qi('rata_bulan')}</span><b class="${r.perMonth < 0 ? 'neg' : ''}">${r.ready ? fmt(r.fixedMonthly ? r.netProfit / Math.max(r.monthsSpan, 1) : r.perMonth) : '—'}</b><small>${r.fixedMonthly ? 'laba dari data tersedia' : 'laba setelah modal'}, ${(Math.round(r.monthsSpan * 10) / 10).toLocaleString('id-ID')} bulan data</small></div>
       <div class="fact"><span>Laba per pesanan${qi('margin_pesanan')}</span><b>${r.ready ? fmt(r.perOrder) : '—'}</b><small>dari ${num(r.orders)} pesanan</small></div>
       ${a && b ? `<div class="fact"><span>${monthLong(a.month)}${running ? ' (berjalan)' : ''}${qi('bulan_ini')}</span><b>${fmt(key(a))}</b><small>${r.ready ? 'laba' : 'penjualan'} ${delta(key(a), key(b))} dibanding ${monthLabel(b.month)}</small></div>
       <div class="fact"><span>Potongan ${monthLabel(a.month)}${qi('potongan_bulan')}</span><b>${pct(-a.total.fees / (a.total.sales || 1))}</b><small>${pct(-b.total.fees / (b.total.sales || 1))} di ${monthLabel(b.month)}</small></div>`
       : `<div class="fact"><span>Potongan marketplace${qi('potongan')}</span><b>${pct(-r.totalFees / r.totalSales)}</b><small>${fmt(-r.totalFees)}</small></div><div class="fact"><span>Modal diketahui${qi('modal_diketahui')}</span><b>${pct(r.coverage, 0)}</b><small>dari penjualan</small></div>`}
-      ${hitN !== null ? `<div class="fact" style="grid-column:1/-1;border-right:0;border-top:1px solid var(--line)"><span>Target ${r.fixedMonthly ? 'laba bersih' : 'laba setelah modal'} ${fmt(target)} per bulan${qi('target_laba')}</span><b>${hitN} dari ${r.months.length} bulan</b><small>mencapai target</small></div>` : ''}
+      ${hitN !== null ? `<div class="fact" style="grid-column:1/-1;border-right:0;border-top:1px solid var(--line)"><span>Target ${r.fixedMonthly ? 'laba' : 'laba setelah modal'} ${fmt(target)} per bulan${qi('target_laba')}</span><b>${hitN} dari ${r.months.length} bulan</b><small>mencapai target</small></div>` : ''}
     </div>`;
   }
   const insightItem = (i) => `<li class="insight ${i.level}"><span class="bar" aria-hidden="true"></span><div><b>${esc(i.title)}</b><p>${esc(i.detail)}</p>${i.action ? `<div class="act">${esc(i.action)}</div>` : ''}</div></li>`;
@@ -578,7 +690,7 @@
     return `<div class="hist">${reps.map((x) => { const s = x.summary || {}; return `<div class="hist-row">
         <div><b>${esc(x.title || 'Tanpa judul')}</b><span class="k">${tgl(s.first)} sampai ${tgl(s.last)}, disimpan ${tgl(x.created_at)}</span></div>
         <div><span class="k">Penjualan</span><b>${fmt(s.sales)}</b></div><div><span class="k">Laba setelah modal</span><b class="${s.margin < 0 ? 'neg' : ''}">${fmt(s.margin)}</b></div>
-        <div><span class="k">Laba bersih</span><b class="${s.net < 0 ? 'neg' : ''}">${s.opex ? fmt(s.net) : '—'}</b></div>
+        <div><span class="k">Laba dari data tersedia</span><b class="${s.net < 0 ? 'neg' : ''}">${s.opex ? fmt(s.net) : '—'}</b></div>
         <div class="row-actions">${cur ? `<button class="btn sm" type="button" data-compare="${esc(x.id)}">${view.compare === x.id ? 'Tutup' : 'Bandingkan'}</button>` : ''}<button class="btn sm quiet danger" type="button" data-del-report="${esc(x.id)}" aria-label="Hapus ${esc(x.title)}">Hapus</button></div></div>`; }).join('')}</div>
       ${!isPro() ? `<p class="small muted">Akun gratis menyimpan ${FREE_HIST} riwayat; Pro tanpa batas.</p>` : ''}
       ${!cur ? '<p class="small muted">Buka laporan Anda di Data &amp; modal untuk membandingkannya dengan riwayat.</p>' : ''}
@@ -586,7 +698,7 @@
   }
   function compareTable(saved, cur) {
     const s = saved.summary || {};
-    const rows = [['Pesanan', s.orders, cur.orders, 'n'], ['Penjualan', s.sales, cur.sales], ['Potongan marketplace', s.feePct, cur.feePct, 'p', true], ['Laba setelah modal', s.margin, cur.margin], ['Laba bersih', s.opex ? s.net : null, cur.opex ? cur.net : null], ['Modal diketahui', s.coverage, cur.coverage, 'p']];
+    const rows = [['Pesanan', s.orders, cur.orders, 'n'], ['Penjualan', s.sales, cur.sales], ['Potongan marketplace', s.feePct, cur.feePct, 'p', true], ['Laba setelah modal', s.margin, cur.margin], ['Laba dari data tersedia', s.opex ? s.net : null, cur.opex ? cur.net : null], ['Modal diketahui', s.coverage, cur.coverage, 'p']];
     const show = (v, t) => (v === null || v === undefined ? '—' : t === 'n' ? num(v) : t === 'p' ? pct(v) : fmt(v));
     const d = (a, b, t, inv) => { if (!ok(a) || !ok(b)) return ''; const diff = b - a; if (Math.abs(diff) < 1e-9) return '<span class="faint">sama</span>'; const good = inv ? diff < 0 : diff > 0; return `<span class="delta ${good ? 'up' : 'down'}">${diff > 0 ? '+' : '−'}${t === 'p' ? `${pct(Math.abs(diff))} poin` : t === 'n' ? num(Math.abs(diff)) : fmt(Math.abs(diff))}</span>`; };
     return `<section class="panel"><div class="panel-head"><h3>Perbandingan</h3><p>${esc(saved.title)} dibanding data yang sedang dibuka</p></div>
@@ -612,7 +724,7 @@
       ${demo ? '<p class="note-box warn">Mode contoh memakai data dan modal Toko Contoh Sejahtera. Unggah file Anda untuk mulai; data contoh akan diganti.</p>' : ''}
       ${!demo && (!type || view.typeOpen) ? typePicker(type) : ''}
       <div class="grid-2" style="align-items:start">
-        <section class="stack">
+        <section class="stack" id="sec-unggah" aria-label="Unggah data">
           <div class="drop" id="drop"><span class="ic">${svg('data', 22)}</span><strong>Tarik file laporan ke sini</strong>
             <label class="btn primary" for="file-input">Pilih file</label><input id="file-input" type="file" multiple accept=".xlsx,.xls,.csv" hidden>
             <span class="tiny faint">.xlsx, .xls, atau .csv. Boleh banyak sekaligus; file yang sama tidak dihitung dua kali.</span></div>
@@ -625,15 +737,15 @@
               <p><b>Opsional.</b> File retur atau pengembalian, dan template modal yang sudah diisi.</p>
               <p class="faint">Unduh untuk periode yang sama di semua laporan. Nama menu bisa sedikit berubah dari waktu ke waktu.</p></div></details>
         </section>
-        <section class="panel modal-panel">
+        <section class="panel modal-panel" id="sec-modal" aria-label="Modal dan HPP">
           <div class="panel-head" style="margin:0"><h3>${type === 'produsen' ? 'Modal produksi (HPP)' : 'Modal barang'}${qi('modal')}</h3>${r && r.totalSales ? `<span class="badge ${r.coverage >= 0.98 ? 'ok' : 'todo'}">${r.coverage >= 0.98 ? 'Lengkap' : `${pct(r.coverage, 0)} penjualan`}</span>` : ''}</div>
           ${type ? `<div class="type-chip"><span class="ic">${typeIcon(type, 16)}</span><span>${TYPES[type].label}</span>${demo ? '' : '<button class="btn link" type="button" data-type-open>Ubah</button>'}</div>` : ''}
           <p class="small muted">Laporan marketplace tidak berisi harga beli Anda. Pesanan tanpa modal tidak dihitung dalam laba, bukan dianggap nol.</p>
           ${modalBody(s, r, dis, type)}
         </section>
       </div>
-      <section class="panel" style="display:grid;gap:16px">
-        <div class="panel-head" style="margin:0"><h3>Biaya lain dan target</h3><p>Mengubah margin menjadi laba bersih</p></div>
+      <section class="panel" style="display:grid;gap:16px" id="sec-pengaturan" aria-label="Pengaturan">
+        <div class="panel-head" style="margin:0"><h3>Biaya lain dan target</h3><p>Mengurangi laba setelah modal dengan biaya operasional yang tercatat</p></div>
         <div class="fields align">
           <div class="field"><label for="s-packing">${isDrop ? 'Biaya dropship per pesanan' : 'Packing per pesanan'}${qi(isDrop ? 'dropship_fee' : 'packing_in')}</label><div class="input"><span>Rp</span><input id="s-packing" type="number" min="0" step="100" inputmode="numeric" placeholder="2000" value="${ok(s.packing) && s.packing > 0 ? s.packing : ''}" ${dis}></div><span class="hint">${isDrop ? 'Packing atau jasa yang ditagih supplier per pesanan.' : 'Plastik, bubble wrap, lakban.'}</span></div>
           <div class="field"><label for="s-target">Target margin per produk${qi('target_margin')}</label><div class="input"><input id="s-target" type="number" min="0" max="80" step="1" inputmode="decimal" value="${ok(s.targetMargin) ? s.targetMargin : 15}" ${dis}><span>% dari harga</span></div><span class="hint">Untuk status produk dan harga target.</span></div>
@@ -814,6 +926,7 @@
     if (!list || !list.length) return;
     if (demo) { demo = false; files = []; resetView(); }
     const fl = $('#file-list'); if (fl) fl.insertAdjacentHTML('beforeend', `<li class="file small muted">Membaca ${list.length} file…</li>`);
+    toast(`Membaca ${list.length} file…`);
     const results = await Promise.all([...list].map(readFile));
     for (const f of results) if (f.parsed && f.parsed.kind === 'modal_template') { mergeCatalog(f.parsed.entries); f.note = `${num(f.parsed.entries.length)} modal produk dimuat`; toast(f.note); }
     const hadIncome = !!last;
@@ -953,9 +1066,9 @@
       ['Retur tidak kembali', ...plats.map(() => ''), R(-r.lostCertain)],
       ...(r.kepastian.risikoBarang.kerugianTanpaNilai ? [['Kasus retur tidak kembali tanpa nilai (belum dikurangkan)', ...plats.map(() => ''), r.kepastian.risikoBarang.kerugianTanpaNilai]] : []),
       ['Laba setelah modal', ...plats.map((k) => R(r[k].margin)), R(r.totalMargin)],
-      ['Biaya operasional', ...plats.map(() => ''), R(-r.opex)], ['Laba bersih', ...plats.map(() => ''), R(r.netProfit)],
+      ['Biaya operasional', ...plats.map(() => ''), R(-r.opex)], ['Laba dari data tersedia (setelah biaya operasional)', ...plats.map(() => ''), R(r.netProfit)],
       ['Porsi penjualan dengan modal diketahui (%)', ...plats.map((k) => +(r[k].coverage * 100).toFixed(1)), +(r.coverage * 100).toFixed(1)]]), 'Ringkasan');
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([['Bulan pesanan', 'Pesanan', 'Penjualan', 'Potongan', 'Dana diterima', 'Laba setelah modal', 'Laba bersih', ...plats.flatMap((k) => [`Penjualan ${PNAME[k]}`, `Laba setelah modal ${PNAME[k]}`])],
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([['Bulan pesanan', 'Pesanan', 'Penjualan', 'Potongan', 'Dana diterima', 'Laba setelah modal', 'Laba dari data tersedia', ...plats.flatMap((k) => [`Penjualan ${PNAME[k]}`, `Laba setelah modal ${PNAME[k]}`])],
       ...r.months.map((m) => [m.month, m.total.orders, R(m.total.sales), R(m.total.fees), R(m.total.received), R(m.total.margin), R(m.total.net), ...plats.flatMap((k) => [R(m[k].sales), R(m[k].margin)])])]), 'Per bulan');
     if (r.products.length) XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([['Platform', 'Kode', 'Produk', 'Terjual', 'Penjualan', 'Dana diterima', 'Modal', 'Laba', 'Margin %', 'Modal per unit', 'Harga rata-rata', 'Harga impas', 'Harga target', 'Status'],
       ...[...r.products].sort((a, b) => (ok(b.margin) ? b.margin : -1e15) - (ok(a.margin) ? a.margin : -1e15)).map((p) => [PNAME[p.platform], catKey(p), p.name, p.qtyKnown ? Math.round(p.qty) : '', R(p.sales), R(p.received), R(p.modal), R(p.margin), ok(p.pct) ? +(p.pct * 100).toFixed(1) : '', R(p.unitCost), R(p.avgPrice), R(p.breakEven), R(p.targetPrice), p.health])]), 'Produk');
@@ -1020,8 +1133,8 @@
     const t = e.target;
     if (t.dataset.cost !== undefined) { setProductCost(t.dataset.cost, t.value); const y = window.scrollY; render(); window.scrollTo({ top: y }); return; }
     if (t.dataset.case) { caseState[t.dataset.case] = t.value; store.set(KEYS.cases, caseState); render(); }
-    else if (t.id === 'from') { view.from = t.value; render(); }
-    else if (t.id === 'to') { view.to = t.value; render(); }
+    else if (t.id === 'from' || t.dataset.filter === 'from') { view.from = t.value; render(); }
+    else if (t.id === 'to' || t.dataset.filter === 'to') { view.to = t.value; render(); }
     else if (t.id === 'sort') { view.sort = t.value; renderProducts(); }
     else if (t.id === 'simx-status' || t.id === 'simx-kat') { sim[t.id.slice(5)] = t.value; resetSimFee(); render(); }
     else if (t.id === 'simx-aff') { sim.afiliasi = Math.min(50, Math.max(0, +t.value || 0)); resetSimFee(); render(); }
@@ -1036,6 +1149,10 @@
     }
   });
   document.addEventListener('click', async (e) => {
+    // Menu "Unduh" (details): tutup bila klik di luar, atau setelah memilih salah satu isinya.
+    document.querySelectorAll('details.dd[open]').forEach((d) => { if (!d.contains(e.target) || e.target.closest('.dd-menu button')) d.open = false; });
+    // Klik di latar lembar bawah (di luar isinya) menutup lembar.
+    if (e.target.id === 'sheet') { closeSheet(); return; }
     const qb = e.target.closest('[data-info]');
     if (qb) { e.preventDefault(); showInfo(qb); return; }
     if (e.target.closest('[data-info-close]') || !e.target.closest('#info-pop')) hideInfo();
@@ -1043,8 +1160,12 @@
     const t = e.target.closest('button, a[data-track]');
     if (!t) { if (account.menu && !e.target.closest('.menu')) { account.menu = false; renderAccount(); } return; }
     if (t.dataset.track) { track(t.dataset.track); return; }
-    if (t.dataset.go) { go(t.dataset.go); return; }
-    if (t.hasAttribute('data-upgrade')) { account.menu = false; renderAccount(); openUpgrade(); return; }
+    if (t.dataset.sheet) { openSheet(t.dataset.sheet); return; }
+    if (t.hasAttribute('data-sheet-close')) { closeSheet(); return; }
+    if (t.dataset.go) { closeSheet(); go(t.dataset.go, true, t.dataset.section); return; }
+    // Tombol di lembar Filter & unduh memakai fungsi yang sama dengan menu Unduh di bilah atas.
+    if (t.dataset.act) { closeSheet(); ({ pdf: openReport, export: exportXlsx, 'save-hist': saveHistory })[t.dataset.act](); return; }
+    if (t.hasAttribute('data-upgrade')) { closeSheet(); account.menu = false; renderAccount(); openUpgrade(); return; }
     if (t.dataset.close !== undefined) { dlg().close(); return; }
     if (t.id === 'acct-toggle') { account.menu = !account.menu; renderAccount(); return; }
     if (t.id === 'logout') { await cloud.auth.signOut(); account.user = null; account.profile = null; account.reports = null; account.menu = false; toast('Anda sudah keluar.'); render(); return; }
@@ -1133,7 +1254,11 @@
       render(); toast('Data di browser ini sudah dihapus.');
     }
   });
-  document.addEventListener('keydown', (e) => { if (e.key === 'Escape') hideInfo(); });
+  document.addEventListener('keydown', (e) => {
+    if (e.key !== 'Escape') return;
+    hideInfo();
+    document.querySelectorAll('details.dd[open]').forEach((d) => { d.open = false; d.querySelector('summary').focus(); });
+  });
   window.addEventListener('scroll', () => { const pop = $('#info-pop'); if (pop && !pop.hidden && !pop.classList.contains('sheet')) hideInfo(); }, { passive: true });
   window.addEventListener('resize', hideInfo);
   window.addEventListener('popstate', () => go(location.hash.slice(1) || 'ringkasan', false));

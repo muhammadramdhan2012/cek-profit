@@ -1099,6 +1099,16 @@ test('I6 insight bulan dengan laba tertinggi tidak memakai "Margin Rp"; nilainya
   truthy(!/Margin\s*−?Rp/.test(insTeks(r)), 'masih ada "Margin Rp"');
 });
 
+test('I7 insight biaya operasional memakai istilah laba (level, skor, dan nilai tetap)', () => {
+  const insOpex = (amount) => E.compute(parsed, { ...st, fixedCosts: [{ label: 'Gaji', amount }] }).insights.find((i) => i.score === 92);
+  const untung = insOpex(100000), rugi = insOpex(1e9);
+  eq(untung.title, 'Laba menutup biaya operasional'); eq(untung.level, 'good');
+  eq(rugi.title, 'Laba belum menutup biaya operasional'); eq(rugi.level, 'bad');
+  truthy(/^Butuh tambahan laba −?Rp/.test(rugi.action), rugi.action);
+  for (const i of [untung, rugi]) truthy(!/Margin|margin\s*−?Rp|Laba bersih/.test(`${i.title} ${i.detail} ${i.action}`), `${i.title} ${i.detail} ${i.action}`);
+  truthy(untung.detail.includes('Laba dari data tersedia periode ini'), untung.detail);
+});
+
 test('angka format Indonesia di CSV', () => {
   eq(E.num('Rp1.234.567'), 1234567); eq(E.num('-1.250'), -1250); eq(E.num('12,5'), 125); eq(E.num('/'), 0);
 });
