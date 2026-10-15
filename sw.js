@@ -2,7 +2,7 @@
  * Strategi: jaringan dulu untuk HTML/JS/CSS (agar pembaruan langsung terlihat), cache sebagai cadangan offline.
  * Naikkan VERSION setiap rilis agar cache lama dibersihkan.
  */
-const VERSION = 'cekprofit-381510e01f';
+const VERSION = 'cekprofit-2342f59002';
 const CORE = ['./', 'index.html', 'dashboard.html', 'akun.html', 'privasi.html', 'icon.svg',
   'assets/base.css', 'assets/app.css', 'assets/site.css', 'assets/report.css', 'assets/account.css',
   'assets/config.js', 'assets/theme.js', 'assets/analytics.js', 'assets/engine.js', 'assets/demo.js', 'assets/license.js', 'assets/cloud.js', 'assets/report.js', 'assets/tarif.js', 'assets/penjelasan.js', 'assets/app.js', 'assets/akun.js',

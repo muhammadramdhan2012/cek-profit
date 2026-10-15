@@ -1703,7 +1703,7 @@ const Engine = (() => {
       if (r.ready) {
         const best = ms.reduce((a, x) => (x.total.margin > a.total.margin ? x : a));
         const worst = ms.reduce((a, x) => (x.total.margin < a.total.margin ? x : a));
-        add('info', 30, `Bulan terbaik ${monthName(best.month)}, terlemah ${monthName(worst.month)}`, `Margin ${rp(best.total.margin)} vs ${rp(worst.total.margin)}.`);
+        add('info', 30, `Laba tertinggi di ${monthName(best.month)}, terendah di ${monthName(worst.month)}`, `Laba setelah modal ${rp(best.total.margin)} vs ${rp(worst.total.margin)}.`);
       }
     }
 
@@ -1725,7 +1725,7 @@ const Engine = (() => {
     if (r.ready && known.length >= 10) {
       const tot = known.reduce((a, p) => a + p.margin, 0);
       const top = known.slice(0, 5).reduce((a, p) => a + p.margin, 0);
-      if (tot > 0) add(top / tot > 0.6 ? 'warn' : 'info', 45, `5 produk teratas menyumbang ${pc(top / tot, 0)} margin`,
+      if (tot > 0) add(top / tot > 0.6 ? 'warn' : 'info', 45, `5 produk teratas menyumbang ${pc(top / tot, 0)} laba dari produk yang untung`,
         `Teratas: ${known[0].name.slice(0, 50)}.`, top / tot > 0.6 ? 'Jaga stok produk ini; ketergantungan tinggi pada sedikit produk.' : '');
     }
 
@@ -1738,10 +1738,22 @@ const Engine = (() => {
 
     const refunds = r.cases.filter((c) => c.cat !== 'batal');
     if (refunds.length) {
-      const amt = refunds.reduce((a, c) => a + c.amount, 0);
+      // Nominal refund yang tidak diketahui (NaN) tidak dianggap 0 dan tidak ikut dijumlahkan; jumlah kasusnya
+      // disebut terpisah. Persentase terhadap penjualan hanya ditampilkan bila SEMUA nominal diketahui, karena
+      // persentase dari total yang tidak lengkap akan menyesatkan.
+      const known = refunds.filter((c) => isOk(c.amount));
+      const noValue = refunds.length - known.length;
+      const amt = known.reduce((a, c) => a + c.amount, 0);
       const unchecked = r.cases.filter((c) => c.state === 'belum').length;
-      add(amt / r.totalSales > 0.03 ? 'warn' : 'info', 58, `Retur & refund ${pc(amt / r.totalSales)} dari penjualan`,
-        `${refunds.length} kasus senilai ${rp(amt)}.${unchecked ? ` ${unchecked} kasus belum dicek apakah barangnya kembali.` : ''}`, unchecked ? 'Tandai status barang di bagian Retur.' : '');
+      const share = !noValue && r.totalSales > 0 ? amt / r.totalSales : NaN;
+      const title = !known.length ? `Retur & refund: ${refunds.length} kasus, nilainya belum diketahui`
+        : isOk(share) ? `Retur & refund ${pc(share)} dari penjualan`
+          : `Retur & refund senilai ${rp(amt)} dari kasus yang memiliki nilai`;
+      const detail = !known.length ? `${refunds.length} kasus tanpa nominal refund di file retur.`
+        : noValue ? `${known.length} kasus senilai ${rp(amt)}, ditambah ${noValue} kasus yang nilainya belum diketahui.`
+          : `${refunds.length} kasus senilai ${rp(amt)}.`;
+      add(isOk(share) && share > 0.03 ? 'warn' : 'info', 58, title,
+        `${detail}${unchecked ? ` ${unchecked} kasus belum dicek apakah barangnya kembali.` : ''}`, unchecked ? 'Tandai status barang di bagian Retur.' : '');
     }
     if (r.ready && r.fixedMonthly > 0) {
       const net = r.netProfit;

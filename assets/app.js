@@ -87,6 +87,8 @@
   const typeOf = (s) => (TYPES[s.sellerType] ? s.sellerType : s.modalMode === 'acuan' ? 'reseller' : null);
   /** Pengaturan yang dipakai menghitung: biaya kulakan hanya berlaku untuk penjual stok sendiri. */
   const effective = (s) => ({ ...s, extraCostPct: typeOf(s) === 'stok' ? s.extraCostPct : null });
+  /** Label kategori retur. "Tidak dikirim" berasal dari alasan di marketplace: indikasi, bukan fakta. */
+  const catLabel = (cat) => (cat === 'tidak_dikirim' ? 'Terindikasi tidak dikirim (menurut alasan di marketplace)' : Engine.CAT_LABEL[cat]);
   const qi = (key, label = '') => `<button type="button" class="qi" data-info="${key}" aria-label="Penjelasan${label ? ` ${esc(label)}` : ''}" aria-haspopup="dialog">?</button>`;
 
   const parsedAll = () => (demo ? CekDemo.make().map((wb) => Engine.parseWorkbook(wb)) : files.filter((f) => f.parsed && f.parsed.kind !== 'modal_template').map((f) => f.parsed));
@@ -174,7 +176,7 @@
   /* ================= 4. kerangka ================= */
   const VIEWS = [
     ['ringkasan', 'Ringkasan', 'Laba toko Anda dalam satu nota'],
-    ['produk', 'Produk', 'Margin, status, dan saran harga per produk'],
+    ['produk', 'Produk', 'Laba, margin, status, dan saran harga per produk'],
     ['biaya', 'Biaya & potongan', 'Ke mana potongan marketplace pergi'],
     ['retur', 'Retur', 'Barang yang kembali dan yang hilang'],
     ['simulator', 'Simulator harga', 'Uji harga dan diskon sebelum dipasang'],
@@ -294,10 +296,10 @@
       </div>
       <section class="panel chart" id="monthly">
         <div class="panel-head"><h3>Per bulan</h3>
-          <div class="seg" role="group" aria-label="Ukuran">${[['margin', 'Margin'], ['sales', 'Penjualan'], ['fees', 'Potongan']].filter(([k]) => k !== 'margin' || r.ready).map(([k, l]) => `<button type="button" data-metric="${k}" aria-pressed="${view.metric === k || (view.metric === 'margin' && !r.ready && k === 'sales')}">${l}</button>`).join('')}</div></div>
+          <div class="seg" role="group" aria-label="Ukuran">${[['margin', 'Laba'], ['sales', 'Penjualan'], ['fees', 'Potongan']].filter(([k]) => k !== 'margin' || r.ready).map(([k, l]) => `<button type="button" data-metric="${k}" aria-pressed="${view.metric === k || (view.metric === 'margin' && !r.ready && k === 'sales')}">${l}</button>`).join('')}</div></div>
         ${monthly(r)}
         <details style="margin-top:12px"><summary class="small" style="cursor:pointer;font-weight:650">Lihat tabel per bulan</summary>
-          <div class="tablewrap" style="margin-top:8px"><table class="data"><thead><tr><th>Bulan</th><th>Pesanan</th><th>Penjualan</th><th>Potongan</th><th>Margin</th><th>Margin %</th>${r.fixedMonthly ? '<th>Laba bersih</th>' : ''}</tr></thead>
+          <div class="tablewrap" style="margin-top:8px"><table class="data"><thead><tr><th>Bulan</th><th>Pesanan</th><th>Penjualan</th><th>Potongan</th><th>Laba setelah modal</th><th>Margin %</th>${r.fixedMonthly ? '<th>Laba bersih</th>' : ''}</tr></thead>
           <tbody>${r.months.map((m) => `<tr><td>${monthLong(m.month)}</td><td>${num(m.total.orders)}</td><td>${fmt(m.total.sales)}</td><td class="neg">${fmt(m.total.fees)}</td>
             <td class="${m.total.margin < 0 ? 'neg' : ''}">${r.ready ? fmt(m.total.margin) : '—'}</td><td>${r.ready && m.total.knownSales ? pct(m.total.margin / m.total.knownSales) : '—'}</td>
             ${r.fixedMonthly ? `<td class="${m.total.net < 0 ? 'neg' : ''}">${r.ready ? fmt(m.total.net) : '—'}</td>` : ''}</tr>`).join('')}</tbody></table></div></details>
@@ -309,23 +311,26 @@
     const isDrop = typeOf(st()) === 'dropship';
     L('Penjualan', r.totalSales, '', `${num(r.orders)} pesanan terjual`, 'penjualan');
     L('Potongan marketplace', r.totalFees, 'minus', `${pct(-r.totalFees / r.totalSales)} dari penjualan`, 'potongan');
+    const rb = r.kepastian.risikoBarang;
     if (r.ready) {
-      const unknown = r.totalReceived - r.knownReceived;
+      // Dana dari pesanan yang dikeluarkan dari laba (modal tidak diketahui), langsung dari engine. Bisa negatif.
+      const unknown = r.kepastian.cakupan.dikeluarkan.danaDiterima;
       if (Math.abs(unknown) >= 1) L('Dana dari pesanan tanpa modal', -unknown, 'muted', 'tidak dihitung sampai modalnya diisi', 'tanpa_modal');
       L('Modal barang', -r.totalModal, 'minus', '', 'modal');
       if (r.knownPacking) L(isDrop ? 'Biaya dropship' : 'Packing', -r.knownPacking, 'minus', '', isDrop ? 'dropship_fee' : 'packing');
-      if (r.lostCertain) L('Retur yang tidak kembali', -r.lostCertain, 'minus', '', 'retur_hilang');
-      if (r.fixedMonthly > 0) { L('Margin kotor', r.totalMargin, 'sub', '', 'margin_kotor'); L('Biaya operasional', -r.opex, 'minus', `${fmt(r.fixedMonthly)} per bulan`, 'opex'); }
+      // Kasus "tidak kembali" tanpa nilai tidak dikurangkan dan tidak ditampilkan sebagai Rp0.
+      if (r.lostCertain || rb.kerugianTanpaNilai) L('Retur yang tidak kembali', r.lostCertain ? -r.lostCertain : NaN, 'minus', rb.kerugianTanpaNilai ? `${num(rb.kerugianTanpaNilai)} kasus tanpa nilai belum dikurangkan` : '', 'retur_hilang');
+      if (r.fixedMonthly > 0) { L('Laba setelah modal', r.totalMargin, 'sub', '', 'margin_kotor'); L('Biaya operasional', -r.opex, 'minus', `${fmt(r.fixedMonthly)} per bulan`, 'opex'); }
     } else L('Dana diterima', r.totalReceived, 'sub', '', 'dana_diterima');
     const total = r.fixedMonthly > 0 ? r.netProfit : r.totalMargin;
-    const label = r.fixedMonthly > 0 ? 'Laba bersih' : 'Margin setelah modal';
+    const label = r.fixedMonthly > 0 ? 'Laba bersih' : 'Laba setelah modal';
     const labelKey = r.fixedMonthly > 0 ? 'laba_bersih' : 'margin_total';
     return `<section class="nota" aria-label="Nota laba">
       <div class="nota-head"><b>Nota laba</b><span>${tgl(r.first)} sampai ${tgl(r.last)}<br>${['shopee', 'tiktok'].filter((k) => r.has[k]).map((k) => PNAME[k]).join(' dan ')}</span></div>
       <dl>${lines.join('')}</dl>
       <div class="nota-total"><span class="lbl">${label}${qi(labelKey, label)}</span>
         ${r.ready ? `<span class="big ${total < 0 ? 'neg' : ''}">${fmt(total)}</span>
-          <span class="note">${r.coverage < 0.98 ? `Dari ${pct(r.coverage, 0)} penjualan yang modalnya diketahui.` : `${pct(total / r.totalSales)} dari penjualan.`}${r.unknownRisk > 0 ? ` Bisa turun ${fmt(r.unknownRisk)} bila retur yang belum dicek tidak kembali.` : ''}</span>`
+          <span class="note">${r.coverage < 0.98 ? `Dari ${pct(r.coverage, 0)} penjualan yang modalnya diketahui.` : `${pct(total / r.totalSales)} dari seluruh penjualan.`}${r.unknownRisk > 0 ? ` Bisa turun ${fmt(r.unknownRisk)} bila retur yang belum dicek tidak kembali.` : ''}${rb.risikoTanpaNilai ? ` ${num(rb.risikoTanpaNilai)} kasus retur yang belum dicek belum punya nilai, jadi risikonya belum bisa dihitung.` : ''}</span>`
           : '<span class="big faint">Belum dihitung</span><span class="note">Isi modal produk agar laba bisa dihitung.</span><button class="btn sm primary" type="button" data-go="data" style="justify-self:start;margin-top:6px">Isi modal</button>'}
       </div></section>`;
   }
@@ -339,12 +344,12 @@
     const hitN = ok(target) && target > 0 && r.ready ? r.months.filter((m) => (r.fixedMonthly ? m.total.net : m.total.margin) >= target).length : null;
     const key = (m) => (r.ready ? m.total.margin : m.total.sales);
     return `<div class="facts">
-      <div class="fact"><span>Rata-rata per bulan${qi('rata_bulan')}</span><b class="${r.perMonth < 0 ? 'neg' : ''}">${r.ready ? fmt(r.fixedMonthly ? r.netProfit / Math.max(r.monthsSpan, 1) : r.perMonth) : '—'}</b><small>${r.fixedMonthly ? 'laba bersih' : 'margin'}, ${(Math.round(r.monthsSpan * 10) / 10).toLocaleString('id-ID')} bulan data</small></div>
-      <div class="fact"><span>Margin per pesanan${qi('margin_pesanan')}</span><b>${r.ready ? fmt(r.perOrder) : '—'}</b><small>dari ${num(r.orders)} pesanan</small></div>
-      ${a && b ? `<div class="fact"><span>${monthLong(a.month)}${running ? ' (berjalan)' : ''}${qi('bulan_ini')}</span><b>${fmt(key(a))}</b><small>${r.ready ? 'margin' : 'penjualan'} ${delta(key(a), key(b))} dibanding ${monthLabel(b.month)}</small></div>
+      <div class="fact"><span>Rata-rata per bulan${qi('rata_bulan')}</span><b class="${r.perMonth < 0 ? 'neg' : ''}">${r.ready ? fmt(r.fixedMonthly ? r.netProfit / Math.max(r.monthsSpan, 1) : r.perMonth) : '—'}</b><small>${r.fixedMonthly ? 'laba bersih' : 'laba setelah modal'}, ${(Math.round(r.monthsSpan * 10) / 10).toLocaleString('id-ID')} bulan data</small></div>
+      <div class="fact"><span>Laba per pesanan${qi('margin_pesanan')}</span><b>${r.ready ? fmt(r.perOrder) : '—'}</b><small>dari ${num(r.orders)} pesanan</small></div>
+      ${a && b ? `<div class="fact"><span>${monthLong(a.month)}${running ? ' (berjalan)' : ''}${qi('bulan_ini')}</span><b>${fmt(key(a))}</b><small>${r.ready ? 'laba' : 'penjualan'} ${delta(key(a), key(b))} dibanding ${monthLabel(b.month)}</small></div>
       <div class="fact"><span>Potongan ${monthLabel(a.month)}${qi('potongan_bulan')}</span><b>${pct(-a.total.fees / (a.total.sales || 1))}</b><small>${pct(-b.total.fees / (b.total.sales || 1))} di ${monthLabel(b.month)}</small></div>`
       : `<div class="fact"><span>Potongan marketplace${qi('potongan')}</span><b>${pct(-r.totalFees / r.totalSales)}</b><small>${fmt(-r.totalFees)}</small></div><div class="fact"><span>Modal diketahui${qi('modal_diketahui')}</span><b>${pct(r.coverage, 0)}</b><small>dari penjualan</small></div>`}
-      ${hitN !== null ? `<div class="fact" style="grid-column:1/-1;border-right:0;border-top:1px solid var(--line)"><span>Target ${r.fixedMonthly ? 'laba bersih' : 'margin'} ${fmt(target)} per bulan${qi('target_laba')}</span><b>${hitN} dari ${r.months.length} bulan</b><small>mencapai target</small></div>` : ''}
+      ${hitN !== null ? `<div class="fact" style="grid-column:1/-1;border-right:0;border-top:1px solid var(--line)"><span>Target ${r.fixedMonthly ? 'laba bersih' : 'laba setelah modal'} ${fmt(target)} per bulan${qi('target_laba')}</span><b>${hitN} dari ${r.months.length} bulan</b><small>mencapai target</small></div>` : ''}
     </div>`;
   }
   const insightItem = (i) => `<li class="insight ${i.level}"><span class="bar" aria-hidden="true"></span><div><b>${esc(i.title)}</b><p>${esc(i.detail)}</p>${i.action ? `<div class="act">${esc(i.action)}</div>` : ''}</div></li>`;
@@ -403,7 +408,7 @@
     return `<section class="panel">
       <div class="chips" style="margin-bottom:14px">${['rugi', 'tipis', 'sehat', 'unknown'].map((h) => { const n = r.products.filter((p) => p.health === h).length; return n ? `<span class="chip ${h}">${{ rugi: 'Rugi', tipis: `Di bawah target ${pct(r.target, 0)}`, sehat: 'Sehat', unknown: 'Modal belum ada' }[h]}: ${n}</span>` : ''; }).join('')}</div>
       <div class="searchrow"><input class="plain" id="q" type="search" placeholder="Cari produk atau SKU" value="${esc(view.q)}" aria-label="Cari produk">
-        <select class="compact" id="sort" aria-label="Urutkan">${[['margin', 'Margin terbesar'], ['margin-asc', 'Margin terkecil atau rugi'], ['pct-asc', 'Margin % paling tipis'], ['sales', 'Penjualan terbesar'], ['qty', 'Paling laku']].map(([k, l]) => `<option value="${k}" ${view.sort === k ? 'selected' : ''}>${l}</option>`).join('')}</select></div>
+        <select class="compact" id="sort" aria-label="Urutkan">${[['margin', 'Laba terbesar'], ['margin-asc', 'Laba terkecil atau rugi'], ['pct-asc', 'Margin paling tipis'], ['sales', 'Penjualan terbesar'], ['qty', 'Paling laku']].map(([k, l]) => `<option value="${k}" ${view.sort === k ? 'selected' : ''}>${l}</option>`).join('')}</select></div>
       <div id="product-table"></div></section>`;
   }
   function renderProducts() {
@@ -423,7 +428,7 @@
     const row = (p) => `<tr><td><i class="sw" style="background:var(--${p.platform})"></i> ${esc(p.name)}${p.variant && p.variant !== 'Default' ? ` <span class="faint">${esc(p.variant)}</span>` : ''}</td>
       <td>${p.qtyKnown ? num(p.qty) : `${p.rows}×`}</td><td>${fmt(p.sales)}</td><td class="${p.margin < 0 ? 'neg' : ''}">${fmt(p.margin)}</td><td class="${p.pct < 0 ? 'neg' : ''}">${pct(p.pct)}</td>
       <td>${fmt(p.avgPrice)}</td><td>${fmt(p.breakEven)}</td><td><b>${fmt(p.targetPrice)}</b></td><td>${HL[p.health] ? `<span class="chip ${p.health}">${HL[p.health]}</span>` : '<span class="faint">—</span>'}</td></tr>`;
-    const head = `<thead><tr><th>Produk</th><th>Terjual${qi('terjual')}</th><th>Penjualan</th><th>Margin${qi('margin_produk')}</th><th>%${qi('margin_pct')}</th><th>Harga rata-rata${qi('harga_rata')}</th><th>Harga impas${qi('harga_impas')}</th><th>Harga target${qi('harga_target')}</th><th>Status${qi('status')}</th></tr></thead>`;
+    const head = `<thead><tr><th>Produk</th><th>Terjual${qi('terjual')}</th><th>Penjualan</th><th>Laba${qi('margin_produk')}</th><th>Margin${qi('margin_pct')}</th><th>Harga rata-rata${qi('harga_rata')}</th><th>Harga impas${qi('harga_impas')}</th><th>Harga target${qi('harga_target')}</th><th>Status${qi('status')}</th></tr></thead>`;
     box.innerHTML = `<div class="tablewrap"><table class="data">${head}<tbody>${shown.map(row).join('') || '<tr><td colspan="9" class="muted">Tidak ada produk yang cocok.</td></tr>'}</tbody></table></div>
       ${!pro && list.length > FREE ? `<div class="locked" style="min-height:200px"><div class="tablewrap blur"><table class="data"><tbody>${list.slice(FREE, FREE + 4).map(row).join('')}</tbody></table></div>${lockVeil(`${num(list.length - FREE)} produk lainnya`, 'Lihat semua produk, status rugi atau tipis, dan harga yang disarankan.')}</div>` : ''}
       ${pro && list.length > 20 ? `<button class="btn quiet" type="button" id="show-all" style="margin-top:8px">${view.showAll ? 'Tampilkan lebih sedikit' : `Tampilkan semua ${num(list.length)} produk`}</button>` : ''}
@@ -448,12 +453,12 @@
           <tr><td>Dana diterima${qi('dana_diterima')}</td>${plats.map((k) => `<td>${fmt(r[k].received)}</td>`).join('')}</tr>
           <tr><td>Modal</td>${plats.map((k) => `<td class="neg">${r.ready ? fmt(-r[k].modal) : '—'}</td>`).join('')}</tr>
           ${r.totalPacking ? `<tr><td>Packing</td>${plats.map((k) => `<td class="neg">${fmt(-r[k].knownPacking)}</td>`).join('')}</tr>` : ''}
-          <tr class="total"><td>Margin</td>${plats.map((k) => `<td class="${r[k].margin < 0 ? 'neg' : ''}">${fmt(r[k].margin)} <span class="faint">${ok(r[k].margin) && r[k].knownSales ? pct(r[k].margin / r[k].knownSales) : ''}</span></td>`).join('')}</tr>
+          <tr class="total"><td>Laba setelah modal</td>${plats.map((k) => `<td class="${r[k].margin < 0 ? 'neg' : ''}">${fmt(r[k].margin)} <span class="faint">${ok(r[k].margin) && r[k].knownSales ? pct(r[k].margin / r[k].knownSales) : ''}</span></td>`).join('')}</tr>
           <tr><td>Tarif efektif${qi('tarif_efektif')}</td>${plats.map((k) => { const f = r.feeModel[k]; return `<td>${f ? `${pct(f.pct)} + ${fmt(f.fixed)}<span class="faint tiny"> /pesanan</span>` : '—'}</td>`; }).join('')}</tr>
           <tr><td class="small faint">Modal diketahui</td>${plats.map((k) => `<td class="small faint">${pct(r[k].coverage, 0)}</td>`).join('')}</tr>
         </tbody></table></div>
         <div class="row-actions" style="margin-top:12px">${plats.filter((k) => r.feeModel[k]).map((k) => `<button class="btn sm" type="button" data-sim-use="${k}">Simulasikan harga dengan tarif ${PNAME[k]}</button>`).join('')}</div>
-        ${r.has.tiktok ? `<p class="small muted" style="margin-top:12px">TikTok: diskon toko rata-rata ${pct(T.discount)}. ${Object.entries(T.bySource).map(([k, v]) => `${esc(k)} ${num(v.orders)} pesanan${r.ready ? ` dengan margin ${fmt(v.margin)}` : ''}`).join('; ')}.</p>` : ''}
+        ${r.has.tiktok ? `<p class="small muted" style="margin-top:12px">TikTok: diskon toko rata-rata ${pct(T.discount)}. ${Object.entries(T.bySource).map(([k, v]) => `${esc(k)} ${num(v.orders)} pesanan${r.ready ? ` dengan laba ${fmt(v.margin)}` : ''}`).join('; ')}.</p>` : ''}
         ${r.adjustments ? `<p class="small muted" style="margin-top:6px">Kompensasi dari platform ${fmt(r.adjustments)} ditampilkan terpisah dan tidak ditambahkan ke margin.</p>` : ''}
       </section>
       <section class="panel"><div class="panel-head"><h3>Rincian potongan</h3><p>Persen dari penjualan</p></div>
@@ -466,23 +471,23 @@
       </section></div>
       ${r.buckets.length > 1 ? `<section class="panel"><div class="panel-head"><h3>Potongan menurut nilai pesanan${qi('potongan_nilai')}</h3><p>Biaya tetap per pesanan membuat pesanan kecil terpotong lebih besar</p></div>
         ${r.buckets.map((b) => { const p = -b.fees / b.value; const maxp = Math.max(...r.buckets.map((x) => -x.fees / x.value));
-          return `<div class="barrow"><span>${esc(b.label)} <span class="faint tiny">${num(b.orders)} pesanan${r.ready && b.known ? `, margin ${fmt(b.margin / b.known)} per pesanan` : ''}</span></span><div class="track"><i style="width:${(p / maxp) * 100}%"></i></div><span class="num">${pct(p)}</span></div>`; }).join('')}
+          return `<div class="barrow"><span>${esc(b.label)} <span class="faint tiny">${num(b.orders)} pesanan${r.ready && b.known ? `, laba ${fmt(b.margin / b.known)} per pesanan` : ''}</span></span><div class="track"><i style="width:${(p / maxp) * 100}%"></i></div><span class="num">${pct(p)}</span></div>`; }).join('')}
       </section>` : ''}`;
   }
 
   /* ---------- retur ---------- */
   function viewRetur() {
     const { r } = last;
-    if (!r.cases.length) return `<div class="panel empty"><span class="ic">${svg('retur', 24)}</span><h2>Belum ada file retur</h2><p>Unggah file pengembalian Shopee atau retur TikTok untuk menandai barang yang tidak kembali. Tanpa file ini, refund dianggap tidak memakan modal.</p><button class="btn primary" type="button" data-go="data">Unggah file retur</button></div>`;
+    if (!r.cases.length) return `<div class="panel empty"><span class="ic">${svg('retur', 24)}</span><h2>Belum ada file retur</h2><p>Unggah file pengembalian Shopee atau retur TikTok untuk menandai barang yang tidak kembali. Tanpa data retur, kondisi barang setelah refund mungkin belum dapat dipastikan.</p><button class="btn primary" type="button" data-go="data">Unggah file retur</button></div>`;
     return `<section class="panel">
-      <div class="chips">${r.catSummary.sort((a, b) => b.count - a.count).map((c) => `<span class="chip"><i class="sw" style="background:var(--${c.platform})"></i>${esc(c.label)}: ${c.count}</span>`).join('')}</div>
-      <p class="small muted" style="margin-block:14px">Barang yang tidak jadi dikirim (stok kosong) tidak memakan modal. Untuk retur dan paket bermasalah, pilih <b>Tidak kembali</b> bila barangnya tidak Anda terima lagi; modalnya akan dikurangkan dari laba.${r.unknownRisk > 0 ? ` Kasus yang belum dicek berisiko ${fmt(r.unknownRisk)}.` : ''}</p>
+      <div class="chips">${r.catSummary.sort((a, b) => b.count - a.count).map((c) => `<span class="chip"><i class="sw" style="background:var(--${c.platform})"></i>${esc(catLabel(c.cat))}: ${c.count}</span>`).join('')}</div>
+      <p class="small muted" style="margin-block:14px">Untuk retur dan paket bermasalah, pilih <b>Tidak kembali</b> bila barangnya tidak Anda terima lagi; modalnya akan dikurangkan dari laba. Beberapa refund terindikasi tidak dikirim menurut alasan di marketplace. Kondisi barangnya tetap perlu dipastikan.${r.unknownRisk > 0 ? ` Kasus yang belum dicek berisiko ${fmt(r.unknownRisk)}${r.kepastian.risikoBarang.risikoTanpaNilai ? `, ditambah ${num(r.kepastian.risikoBarang.risikoTanpaNilai)} kasus yang nilainya belum diketahui` : ''}.` : r.kepastian.risikoBarang.risikoTanpaNilai ? ` ${num(r.kepastian.risikoBarang.risikoTanpaNilai)} kasus yang belum dicek nilainya belum diketahui.` : ''}</p>
       <div class="row-actions" style="margin-bottom:8px">${r.cases.some((c) => !c.needsCheck) ? `<button class="btn sm quiet" type="button" id="only-check">${view.onlyCheck ? 'Tampilkan semua kasus' : 'Hanya yang perlu dicek'}</button>` : ''}</div>
       <div class="tablewrap"><table class="data"><thead><tr><th>Produk dan alasan</th><th>Resi retur</th><th>Perkiraan modal${qi('perkiraan_modal')}</th><th>Status barang${qi('status_barang')}</th></tr></thead><tbody>
       ${r.cases.filter((c) => !view.onlyCheck || c.needsCheck).sort((a, b) => (b.needsCheck - a.needsCheck) || ((b.estModal || 0) - (a.estModal || 0))).slice(0, 300).map((c) => `<tr>
-        <td><i class="sw" style="background:var(--${c.platform})"></i> <b>${esc(c.product || '-')}</b>${c.variant && !/^(Default|Not Specified)$/.test(c.variant) ? ` <span class="faint">${esc(c.variant)}</span>` : ''}<br><span class="tiny faint">${esc(Engine.CAT_LABEL[c.cat])}${c.note ? `: “${esc(c.note.slice(0, 70))}”` : ''}</span></td>
-        <td>${esc(c.resi || '–')}</td><td>${fmt(c.estModal)}</td>
-        <td>${c.needsCheck ? `<select class="compact" data-case="${esc(c.key)}" aria-label="Status barang" ${demo ? 'disabled' : ''}>${[['belum', 'Belum dicek'], ['kembali', 'Sudah kembali'], ['hilang', 'Tidak kembali']].map(([v, l]) => `<option value="${v}" ${c.state === v ? 'selected' : ''}>${l}</option>`).join('')}</select>` : '<span class="faint small">Tidak perlu</span>'}</td></tr>`).join('') || '<tr><td colspan="4" class="muted">Tidak ada kasus yang perlu dicek.</td></tr>'}
+        <td><i class="sw" style="background:var(--${c.platform})"></i> <b>${esc(c.product || '-')}</b>${c.variant && !/^(Default|Not Specified)$/.test(c.variant) ? ` <span class="faint">${esc(c.variant)}</span>` : ''}<br><span class="tiny faint">${esc(catLabel(c.cat))}${c.note ? `: “${esc(c.note.slice(0, 70))}”` : ''}</span></td>
+        <td>${esc(c.resi || '–')}</td><td>${ok(c.estModal) ? fmt(c.estModal) : '<span class="faint small">Nilai belum diketahui</span>'}</td>
+        <td>${c.needsCheck ? `<select class="compact" data-case="${esc(c.key)}" aria-label="Status barang" ${demo ? 'disabled' : ''}>${[['belum', 'Belum dicek'], ['kembali', 'Sudah kembali'], ['hilang', 'Tidak kembali']].map(([v, l]) => `<option value="${v}" ${c.state === v ? 'selected' : ''}>${l}</option>`).join('')}</select>` : `<span class="faint small">${c.cat === 'tidak_dikirim' ? 'Belum bisa ditandai' : 'Pengajuan batal'}</span>`}</td></tr>`).join('') || '<tr><td colspan="4" class="muted">Tidak ada kasus yang perlu dicek.</td></tr>'}
       </tbody></table></div></section>`;
   }
 
@@ -541,9 +546,9 @@
     const res = Engine.simulate({ listPrice: g('listPrice', 100000), disc: g('disc', 0), cost: g('cost', 60000), feePct: g('feePct', f.pct),
       feeFixed: g('feeFixed', f.fixed), packing: g('packing', ok(s.packing) ? s.packing : 0), target });
     if (!(res.price > 0)) { box.innerHTML = '<p class="muted small">Isi harga dan diskon yang masuk akal.</p>'; return; }
-    const parts = [['Modal', res.cost, 'var(--ink-2)'], ['Potongan', res.fees, 'var(--cost)'], [typeOf(s) === 'dropship' ? 'Dropship' : 'Packing', res.packing, 'var(--mark)'], ['Margin', Math.max(res.margin, 0), 'var(--accent)']].filter((p) => p[1] > 0);
+    const parts = [['Modal', res.cost, 'var(--ink-2)'], ['Potongan', res.fees, 'var(--cost)'], [typeOf(s) === 'dropship' ? 'Dropship' : 'Packing', res.packing, 'var(--mark)'], ['Laba', Math.max(res.margin, 0), 'var(--accent)']].filter((p) => p[1] > 0);
     const tot = parts.reduce((a, p) => a + p[1], 0);
-    box.innerHTML = `<span class="small muted">Margin per unit${qi('sim_margin')}</span>
+    box.innerHTML = `<span class="small muted">Laba per unit${qi('sim_margin')}</span>
       <span class="sim-big ${res.margin < 0 ? 'neg' : ''}">${fmt(res.margin)} <span class="small faint">${pct(res.marginPct)}</span></span>
       <div class="bar-stack" role="img" aria-label="Pembagian harga jual">${parts.map(([l, v, c]) => `<div title="${l}: ${fmt(v)}" style="flex:${v / tot};background:${c}"></div>`).join('')}</div>
       <div class="legend">${parts.map(([l, v, c]) => `<span><i class="sw" style="background:${c}"></i>${l} ${fmt(v)}</span>`).join('')}</div>
@@ -572,7 +577,7 @@
     if (!reps.length) return `<div class="panel empty"><span class="ic">${svg('riwayat', 24)}</span><h2>Belum ada riwayat</h2><p>Setelah melihat hasil, klik <b>Simpan ke riwayat</b> di bagian atas. Simpan setiap bulan untuk melihat perkembangan toko.</p>${cur ? '<button class="btn primary" type="button" id="save-hist">Simpan hasil sekarang</button>' : '<button class="btn primary" type="button" data-go="data">Unggah laporan</button>'}</div>`;
     return `<div class="hist">${reps.map((x) => { const s = x.summary || {}; return `<div class="hist-row">
         <div><b>${esc(x.title || 'Tanpa judul')}</b><span class="k">${tgl(s.first)} sampai ${tgl(s.last)}, disimpan ${tgl(x.created_at)}</span></div>
-        <div><span class="k">Penjualan</span><b>${fmt(s.sales)}</b></div><div><span class="k">Margin</span><b class="${s.margin < 0 ? 'neg' : ''}">${fmt(s.margin)}</b></div>
+        <div><span class="k">Penjualan</span><b>${fmt(s.sales)}</b></div><div><span class="k">Laba setelah modal</span><b class="${s.margin < 0 ? 'neg' : ''}">${fmt(s.margin)}</b></div>
         <div><span class="k">Laba bersih</span><b class="${s.net < 0 ? 'neg' : ''}">${s.opex ? fmt(s.net) : '—'}</b></div>
         <div class="row-actions">${cur ? `<button class="btn sm" type="button" data-compare="${esc(x.id)}">${view.compare === x.id ? 'Tutup' : 'Bandingkan'}</button>` : ''}<button class="btn sm quiet danger" type="button" data-del-report="${esc(x.id)}" aria-label="Hapus ${esc(x.title)}">Hapus</button></div></div>`; }).join('')}</div>
       ${!isPro() ? `<p class="small muted">Akun gratis menyimpan ${FREE_HIST} riwayat; Pro tanpa batas.</p>` : ''}
@@ -581,7 +586,7 @@
   }
   function compareTable(saved, cur) {
     const s = saved.summary || {};
-    const rows = [['Pesanan', s.orders, cur.orders, 'n'], ['Penjualan', s.sales, cur.sales], ['Potongan marketplace', s.feePct, cur.feePct, 'p', true], ['Margin', s.margin, cur.margin], ['Laba bersih', s.opex ? s.net : null, cur.opex ? cur.net : null], ['Modal diketahui', s.coverage, cur.coverage, 'p']];
+    const rows = [['Pesanan', s.orders, cur.orders, 'n'], ['Penjualan', s.sales, cur.sales], ['Potongan marketplace', s.feePct, cur.feePct, 'p', true], ['Laba setelah modal', s.margin, cur.margin], ['Laba bersih', s.opex ? s.net : null, cur.opex ? cur.net : null], ['Modal diketahui', s.coverage, cur.coverage, 'p']];
     const show = (v, t) => (v === null || v === undefined ? '—' : t === 'n' ? num(v) : t === 'p' ? pct(v) : fmt(v));
     const d = (a, b, t, inv) => { if (!ok(a) || !ok(b)) return ''; const diff = b - a; if (Math.abs(diff) < 1e-9) return '<span class="faint">sama</span>'; const good = inv ? diff < 0 : diff > 0; return `<span class="delta ${good ? 'up' : 'down'}">${diff > 0 ? '+' : '−'}${t === 'p' ? `${pct(Math.abs(diff))} poin` : t === 'n' ? num(Math.abs(diff)) : fmt(Math.abs(diff))}</span>`; };
     return `<section class="panel"><div class="panel-head"><h3>Perbandingan</h3><p>${esc(saved.title)} dibanding data yang sedang dibuka</p></div>
@@ -677,7 +682,7 @@
       ${type === 'produsen' ? hppPanel(s, r, dis) : ''}
       <div class="field"><label for="s-fallback">Modal rata-rata untuk produk yang belum diisi${qi('modal_rata')}</label>
         <div class="input"><input id="s-fallback" type="number" min="0" max="99" step="1" inputmode="decimal" placeholder="Misalnya 60" value="${ok(s.fallbackPct) ? s.fallbackPct : ''}" ${dis}><span>% dari harga jual</span></div>
-        <span class="hint">Perkiraan cepat. Kosongkan bila ingin hanya angka pasti.</span></div>
+        <span class="hint">Perkiraan cepat. Kosongkan bila hanya ingin memakai modal per produk yang Anda isi.</span></div>
       ${r && r.totalSales ? `<div class="cover-meter"><div class="small"><b>${pct(r.coverage, 0)}</b> penjualan sudah punya modal${missing ? `, ${num(missing)} produk belum diisi` : ''}.</div>
         <div class="progress" aria-hidden="true"><i style="width:${Math.round(r.coverage * 100)}%"></i></div>
         ${r.ttNoDetail && !r.hasOrderExport.tiktok ? `<p class="tiny faint">${num(r.ttNoDetail)} pesanan TikTok tidak mencantumkan produk. Unggah export pesanan TikTok, atau isi modal rata-rata.</p>` : ''}
@@ -945,12 +950,14 @@
       ['Pesanan terjual', ...plats.map((k) => r[k].orders), r.orders], ['Penjualan', ...plats.map((k) => R(r[k].sales)), R(r.totalSales)],
       ['Potongan marketplace', ...plats.map((k) => R(r[k].feeTotal)), R(r.totalFees)], ['Dana diterima', ...plats.map((k) => R(r[k].received)), R(r.totalReceived)],
       ['Modal', ...plats.map((k) => R(-r[k].modal)), R(-r.totalModal)], ['Packing', ...plats.map((k) => R(-r[k].knownPacking)), R(-r.knownPacking)],
-      ['Retur tidak kembali', ...plats.map(() => ''), R(-r.lostCertain)], ['Margin', ...plats.map((k) => R(r[k].margin)), R(r.totalMargin)],
+      ['Retur tidak kembali', ...plats.map(() => ''), R(-r.lostCertain)],
+      ...(r.kepastian.risikoBarang.kerugianTanpaNilai ? [['Kasus retur tidak kembali tanpa nilai (belum dikurangkan)', ...plats.map(() => ''), r.kepastian.risikoBarang.kerugianTanpaNilai]] : []),
+      ['Laba setelah modal', ...plats.map((k) => R(r[k].margin)), R(r.totalMargin)],
       ['Biaya operasional', ...plats.map(() => ''), R(-r.opex)], ['Laba bersih', ...plats.map(() => ''), R(r.netProfit)],
       ['Porsi penjualan dengan modal diketahui (%)', ...plats.map((k) => +(r[k].coverage * 100).toFixed(1)), +(r.coverage * 100).toFixed(1)]]), 'Ringkasan');
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([['Bulan pesanan', 'Pesanan', 'Penjualan', 'Potongan', 'Dana diterima', 'Margin', 'Laba bersih', ...plats.flatMap((k) => [`Penjualan ${PNAME[k]}`, `Margin ${PNAME[k]}`])],
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([['Bulan pesanan', 'Pesanan', 'Penjualan', 'Potongan', 'Dana diterima', 'Laba setelah modal', 'Laba bersih', ...plats.flatMap((k) => [`Penjualan ${PNAME[k]}`, `Laba setelah modal ${PNAME[k]}`])],
       ...r.months.map((m) => [m.month, m.total.orders, R(m.total.sales), R(m.total.fees), R(m.total.received), R(m.total.margin), R(m.total.net), ...plats.flatMap((k) => [R(m[k].sales), R(m[k].margin)])])]), 'Per bulan');
-    if (r.products.length) XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([['Platform', 'Kode', 'Produk', 'Terjual', 'Penjualan', 'Dana diterima', 'Modal', 'Margin', 'Margin %', 'Modal per unit', 'Harga rata-rata', 'Harga impas', 'Harga target', 'Status'],
+    if (r.products.length) XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([['Platform', 'Kode', 'Produk', 'Terjual', 'Penjualan', 'Dana diterima', 'Modal', 'Laba', 'Margin %', 'Modal per unit', 'Harga rata-rata', 'Harga impas', 'Harga target', 'Status'],
       ...[...r.products].sort((a, b) => (ok(b.margin) ? b.margin : -1e15) - (ok(a.margin) ? a.margin : -1e15)).map((p) => [PNAME[p.platform], catKey(p), p.name, p.qtyKnown ? Math.round(p.qty) : '', R(p.sales), R(p.received), R(p.modal), R(p.margin), ok(p.pct) ? +(p.pct * 100).toFixed(1) : '', R(p.unitCost), R(p.avgPrice), R(p.breakEven), R(p.targetPrice), p.health])]), 'Produk');
     if (r.insights.length) XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([['Tingkat', 'Temuan', 'Rincian', 'Saran'], ...r.insights.map((i) => [i.level, i.title, i.detail, i.action])]), 'Temuan');
     if (r.cases.length) XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([['Platform', 'No. pesanan', 'Produk', 'Kategori', 'Alasan', 'Resi retur', 'Nilai refund', 'Perkiraan modal', 'Status barang'],

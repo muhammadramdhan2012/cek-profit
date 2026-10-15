@@ -32,7 +32,7 @@ const CekInfo = (() => {
       t: 'Dana dari pesanan tanpa modal',
       a: 'Uang yang Anda terima dari pesanan yang modal barangnya belum diisi.',
       h: 'Pesanan ini sengaja tidak dihitung dalam laba. Menganggap modalnya nol akan membuat laba terlihat lebih besar dari kenyataan.',
-      b: 'Isi modal produk di Data & modal agar angka ini hilang dan laba lengkap.',
+      b: 'Isi modal produk di Data & modal agar pesanan ini ikut dihitung dalam laba.',
     },
     modal: {
       t: 'Modal barang',
@@ -52,9 +52,9 @@ const CekInfo = (() => {
       b: 'Kasus yang belum dicek tidak dikurangkan, tetapi ditampilkan sebagai risiko di bawah angka laba.',
     },
     margin_kotor: {
-      t: 'Margin kotor',
-      a: 'Sisa uang setelah potongan marketplace, modal, packing, dan retur yang hilang, sebelum biaya operasional bulanan.',
-      h: 'Dana diterima dari marketplace − modal − packing − retur yang tidak kembali.',
+      t: 'Laba setelah modal',
+      a: 'Perkiraan laba dari data yang tersedia setelah potongan marketplace, modal, packing, dan retur yang hilang, sebelum biaya operasional bulanan.',
+      h: 'Dana diterima dari marketplace − modal − packing − retur yang tidak kembali. Hanya dari pesanan yang modalnya diketahui.',
     },
     opex: {
       t: 'Biaya operasional',
@@ -63,26 +63,26 @@ const CekInfo = (() => {
     },
     laba_bersih: {
       t: 'Laba bersih',
-      a: 'Uang yang benar-benar tersisa untuk Anda setelah semua biaya.',
-      h: 'Margin kotor − biaya operasional. Hanya dari pesanan yang modalnya diketahui.',
+      a: 'Perkiraan laba dari data yang tersedia setelah modal dan biaya yang sudah tercatat, termasuk biaya operasional yang Anda isi. Ini bukan saldo kas.',
+      h: 'Laba setelah modal − biaya operasional. Hanya dari pesanan yang modalnya diketahui. Biaya yang belum tercatat di laporan atau isian Anda belum termasuk.',
       b: 'Negatif berarti toko belum menutup biaya. Lihat Temuan dan saran untuk penyebab terbesarnya.',
     },
     margin_total: {
-      t: 'Margin setelah modal',
-      a: 'Sisa uang dari penjualan setelah potongan marketplace, modal, packing, dan retur yang hilang.',
-      h: 'Dana diterima − modal − packing − retur yang tidak kembali. Isi biaya operasional bulanan agar angka ini menjadi laba bersih.',
-      b: 'Margin 10–25% dari penjualan umum untuk toko online. Di bawah 10% rawan rugi bila potongan naik.',
+      t: 'Laba setelah modal',
+      a: 'Perkiraan laba dari data yang tersedia: penjualan setelah potongan marketplace, modal, packing, dan retur yang hilang.',
+      h: 'Dana diterima − modal − packing − retur yang tidak kembali. Hanya dari pesanan yang modalnya diketahui. Isi biaya operasional bulanan agar terlihat laba bersihnya.',
+      b: 'Margin (laba dibagi penjualan) 10–25% umum untuk toko online. Di bawah 10% rawan rugi bila potongan naik.',
     },
     rata_bulan: {
       t: 'Rata-rata per bulan',
-      a: 'Perkiraan laba (atau margin) dalam satu bulan.',
+      a: 'Perkiraan laba rata-rata dalam satu bulan.',
       h: 'Total laba dibagi lama periode data dalam bulan (jumlah hari ÷ 30,4).',
       b: 'Bandingkan dengan target laba bulanan Anda. Periode data yang pendek (kurang dari sebulan) membuat angka ini kurang stabil.',
     },
     margin_pesanan: {
-      t: 'Margin per pesanan',
-      a: 'Rata-rata uang yang tersisa dari satu pesanan setelah potongan, modal, dan packing.',
-      h: 'Total margin dibagi jumlah pesanan terjual.',
+      t: 'Laba per pesanan',
+      a: 'Perkiraan laba rata-rata dari satu pesanan setelah potongan, modal, dan packing.',
+      h: 'Total laba setelah modal dibagi jumlah pesanan terjual.',
       b: 'Bila angka ini kecil, satu pesanan retur atau satu voucher bisa menghapus laba beberapa pesanan lain.',
     },
     bulan_ini: {
@@ -105,7 +105,7 @@ const CekInfo = (() => {
     target_laba: {
       t: 'Target laba per bulan',
       a: 'Berapa bulan di periode ini yang labanya mencapai target yang Anda isi.',
-      h: 'Laba (atau margin bila biaya operasional kosong) per bulan dibanding target di Data & modal.',
+      h: 'Laba bersih (atau laba setelah modal bila biaya operasional kosong) per bulan dibanding target di Data & modal.',
     },
 
     /* ---------- produk ---------- */
@@ -115,13 +115,13 @@ const CekInfo = (() => {
       h: 'Dari export pesanan. Tanda × berarti jumlah baris pesanan, karena laporan penghasilan Shopee tidak mencatat jumlah barang. Unggah export pesanan agar tepat.',
     },
     margin_produk: {
-      t: 'Margin produk',
-      a: 'Sisa uang dari produk ini setelah potongan marketplace, modal, dan packing.',
+      t: 'Laba produk',
+      a: 'Perkiraan laba dari produk ini setelah potongan marketplace, modal, dan packing.',
       h: 'Potongan dan packing satu pesanan dibagi ke produk-produk di dalamnya sesuai porsi harganya.',
     },
     margin_pct: {
-      t: 'Margin %',
-      a: 'Margin dibagi penjualan produk ini. Menunjukkan berapa rupiah tersisa dari setiap Rp100 penjualan.',
+      t: 'Margin',
+      a: 'Laba produk dibagi penjualan produk ini, dalam persen. Menunjukkan perkiraan laba dari setiap Rp100 penjualan.',
       b: 'Bandingkan dengan target margin Anda. Produk dengan persen tinggi tetapi terjual sedikit tetap layak dipromosikan.',
     },
     harga_rata: {
@@ -142,14 +142,14 @@ const CekInfo = (() => {
     },
     status: {
       t: 'Status produk',
-      a: 'Rugi: margin negatif atau harga rata-rata di bawah harga impas. Tipis: untung, tetapi di bawah target margin. Sehat: di atas target.',
+      a: 'Rugi: laba negatif atau harga rata-rata di bawah harga impas. Tipis: untung, tetapi di bawah target margin. Sehat: di atas target.',
       b: 'Mulai perbaikan dari produk Rugi dengan penjualan terbesar.',
     },
 
     /* ---------- biaya ---------- */
     dana_diterima: {
       t: 'Dana diterima',
-      a: 'Uang yang benar-benar masuk ke saldo penjual dari marketplace.',
+      a: 'Uang yang menjadi bagian Anda setelah potongan marketplace, menurut Laporan Penghasilan. Pencairan ke rekening belum dicocokkan.',
       h: 'Penjualan − potongan marketplace, sesuai Laporan Penghasilan. Totalnya dicocokkan dengan ringkasan resmi di file.',
     },
     tarif_efektif: {
@@ -159,7 +159,7 @@ const CekInfo = (() => {
       b: 'Ini angka paling akurat untuk simulasi harga. Unggah laporan bulan terbaru agar tetap mutakhir.',
     },
     fee_admin: { t: 'Biaya administrasi (Shopee)', a: 'Persentase dari harga jual yang dipotong Shopee untuk setiap pesanan.', h: 'Besarnya tergantung kategori produk dan status toko (biasa atau Mall).' },
-    fee_xtra: { t: 'Gratis Ongkir XTRA dan program sejenis', a: 'Biaya program opsional yang Anda ikuti, misalnya Gratis Ongkir XTRA atau Promo XTRA.', h: 'Persentase dari harga jual. Imbalannya: produk tampil dengan label program dan pembeli mendapat subsidi.', b: 'Bandingkan kenaikan pesanan dengan biayanya. Bila pesanan tidak naik berarti, program ini hanya mengurangi margin.' },
+    fee_xtra: { t: 'Gratis Ongkir XTRA dan program sejenis', a: 'Biaya program opsional yang Anda ikuti, misalnya Gratis Ongkir XTRA atau Promo XTRA.', h: 'Persentase dari harga jual. Imbalannya: produk tampil dengan label program dan pembeli mendapat subsidi.', b: 'Bandingkan kenaikan pesanan dengan biayanya. Bila pesanan tidak naik berarti, program ini hanya mengurangi laba.' },
     fee_proses: { t: 'Biaya proses pesanan', a: 'Biaya tetap untuk setiap pesanan yang berhasil, berapa pun nilainya.', h: 'Sekitar Rp1.250 per pesanan.', b: 'Biaya tetap ini paling terasa di pesanan bernilai kecil. Bundling membantu menekannya.' },
     fee_ams: { t: 'Komisi AMS (afiliasi)', a: 'Komisi untuk affiliator atau iklan afiliasi yang membawa pembeli ke produk Anda.', h: 'Persentase sesuai yang Anda atur di program afiliasi.' },
     fee_ship: { t: 'Ongkir ditanggung penjual', a: 'Bagian ongkos kirim yang dibebankan ke Anda, termasuk ongkir pengembalian barang.', h: 'Dari kolom ongkir di Laporan Penghasilan.' },
@@ -178,10 +178,10 @@ const CekInfo = (() => {
 
     /* ---------- retur ---------- */
     perkiraan_modal: { t: 'Perkiraan modal', a: 'Perkiraan harga beli barang di kasus retur ini.', h: 'Dari modal per unit produk tersebut, atau dari nilai refund × rasio modal bila produknya tidak dikenali.' },
-    status_barang: { t: 'Status barang', a: 'Apakah barang retur sudah kembali ke gudang Anda.', h: 'Pilih Tidak kembali bila barang hilang atau rusak; modalnya akan dikurangkan dari laba. Barang yang tidak jadi dikirim (stok kosong) tidak perlu dicek.' },
+    status_barang: { t: 'Status barang', a: 'Apakah barang retur sudah kembali ke gudang Anda.', h: 'Pilih Tidak kembali bila barang hilang atau rusak; modalnya akan dikurangkan dari laba. Kasus yang terindikasi tidak dikirim (menurut alasan di marketplace) belum bisa ditandai di sini; kondisi barangnya tetap perlu dipastikan.' },
 
     /* ---------- simulator ---------- */
-    sim_margin: { t: 'Margin per unit', a: 'Uang yang tersisa dari satu penjualan dengan harga dan diskon yang Anda isi.', h: 'Harga dibayar pembeli − potongan marketplace (persen + biaya tetap) − modal − packing.' },
+    sim_margin: { t: 'Laba per unit', a: 'Perkiraan laba dari satu penjualan dengan harga dan diskon yang Anda isi. Persen di sebelahnya adalah margin.', h: 'Harga dibayar pembeli − potongan marketplace (persen + biaya tetap) − modal − packing.' },
     sim_potongan: {
       t: 'Potongan marketplace di simulator',
       a: 'Perkiraan potongan untuk satu pesanan: bagian persen dari harga dan bagian tetap per pesanan.',
@@ -222,7 +222,7 @@ const CekInfo = (() => {
       t: 'Modal rata-rata',
       a: 'Perkiraan modal sebagai persen dari harga jual, untuk produk yang modalnya belum diisi.',
       h: 'Contoh: 60% berarti barang seharga Rp100.000 dianggap bermodal Rp60.000.',
-      b: 'Praktis untuk gambaran cepat, tetapi kurang tepat. Isi modal per produk untuk hasil pasti.',
+      b: 'Praktis untuk gambaran cepat, tetapi kurang tepat. Isi modal per produk untuk hasil yang lebih akurat.',
     },
     biaya_kulakan: {
       t: 'Biaya kulakan',

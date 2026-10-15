@@ -1061,6 +1061,44 @@ test('C16 pesanan + produk dengan kandidat tunggal → pencocokan retur tetap be
   eq(rtf(dua).jumlahTransaksi, 0); eq(rtf(dua, 'shopee').kondisiDiketahui.jumlahTransaksi, 1);
 });
 
+/* ===== Temuan otomatis (insights): nilai yang tidak diketahui tidak menghasilkan NaN; "margin" hanya persen ===== */
+const insRefund = (amounts) => {
+  const inc = E.parseWorkbook(Sint.penghasilan([{ id: 'SINT-I1', items: [{ name: 'Kaos', harga: 100000, refund: -100000 }] }, { id: 'SINT-I2', items: [{ name: 'Topi', harga: 400000 }] }]));
+  const r = E.compute([inc, returShopee(amounts.map((amount, i) => ({ id: `RI${i}`, order: 'SINT-I1', product: 'Kaos', qty: 1, amount })))], stRata);
+  return { r, ins: r.insights.find((i) => /^Retur & refund/.test(i.title)) };
+};
+const insTeks = (r) => r.insights.map((i) => `${i.title} ${i.detail} ${i.action}`).join(' | ');
+test('I1 insight refund, semua nominal diketahui → persentase & total seperti sebelumnya', () => {
+  const { r, ins } = insRefund([100000]);
+  truthy(ins, 'insight ada'); eq(ins.title, 'Retur & refund 25,0% dari penjualan', 'sama dengan cara lama: 100.000 ÷ 400.000'); eq(ins.detail.startsWith('1 kasus senilai Rp100.000.'), true, ins.detail);
+  truthy(!/NaN|Infinity/.test(insTeks(r)), 'tanpa NaN/Infinity');
+});
+test('I2 insight refund campuran diketahui + tidak diketahui → tanpa persentase, kasus tanpa nilai disebut', () => {
+  const { r, ins } = insRefund([100000, '']);
+  eq(ins.title, 'Retur & refund senilai Rp100.000 dari kasus yang memiliki nilai');
+  truthy(ins.detail.includes('1 kasus senilai Rp100.000, ditambah 1 kasus yang nilainya belum diketahui.'), ins.detail);
+  truthy(!/%/.test(ins.title), 'tidak ada persentase dari total yang tidak lengkap'); eq(ins.level, 'info');
+  truthy(!/NaN|Infinity/.test(insTeks(r)), 'tanpa NaN/Infinity');
+});
+test('I3 insight refund, semua nominal tidak diketahui → "nilainya belum diketahui", bukan Rp0', () => {
+  const { r, ins } = insRefund(['', '']);
+  eq(ins.title, 'Retur & refund: 2 kasus, nilainya belum diketahui');
+  truthy(!/Rp0|NaN|Infinity/.test(`${ins.title} ${ins.detail}`), ins.detail);
+  truthy(!/NaN|Infinity/.test(insTeks(r)), 'tanpa NaN/Infinity');
+});
+test('I4–I5 seluruh insight data contoh & variasi mode tanpa NaN/Infinity', () => {
+  for (const s of [st, ST([]), stRata, { modalMode: 'acuan', mitra: 30, periods: [{ start: '', markup: 0, disc: 0 }] }]) {
+    const t = insTeks(E.compute(parsed, s)); truthy(!/NaN|Infinity/.test(t), t.slice(0, 200));
+  }
+});
+test('I6 insight bulan dengan laba tertinggi tidak memakai "Margin Rp"; nilainya tetap', () => {
+  const ins = r.insights.find((i) => /^Laba tertinggi di /.test(i.title));
+  truthy(ins, 'insight bulan ada');
+  const ms = r.months.filter((x) => x.total.sales > 0), best = ms.reduce((a, x) => (x.total.margin > a.total.margin ? x : a));
+  truthy(ins.detail.startsWith(`Laba setelah modal ${best.total.margin < 0 ? '−' : ''}Rp${Math.abs(Math.round(best.total.margin)).toLocaleString('id-ID')}`), ins.detail);
+  truthy(!/Margin\s*−?Rp/.test(insTeks(r)), 'masih ada "Margin Rp"');
+});
+
 test('angka format Indonesia di CSV', () => {
   eq(E.num('Rp1.234.567'), 1234567); eq(E.num('-1.250'), -1250); eq(E.num('12,5'), 125); eq(E.num('/'), 0);
 });
