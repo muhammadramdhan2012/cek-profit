@@ -205,5 +205,60 @@ test('D7 cakupan 100% + "perlu dicek" 100% tidak tampil sebagai terverifikasi', 
   truthy(/masuk dalam perhitungan laba\.\$\{covCaveat\(c\)\}/.test(dashSrc) && /\$\{covCaveat\(r\.kepastian\.cakupan\)\}/.test(sheetSrc), 'peringatan dipasang di kartu dan laci');
 });
 
+/* ===== WEB-1 / MOTION-1: halaman depan jujur, gerak ringan ===== */
+const root = (f) => fs.readFileSync(path.join(__dirname, '..', f), 'utf8');
+const indexHtml = root('index.html');
+const indexTeks = teks(indexHtml.replace(/<script[\s\S]*?<\/script>/g, ''));
+const rp = (s) => +s.replace(/[^\d]/g, '') * (/[−-]Rp/.test(s) ? -1 : 1);
+test('W1 halaman depan: tanpa "Laba bersih", tanpa klaim akurasi/realtime/pencairan, tanpa skor', () => {
+  truthy(!/laba bersih/i.test(indexTeks), 'halaman depan masih memakai "Laba bersih"');
+  truthy(!/\d+\s*%\s*akurat|akurasi\s+\d/i.test(indexTeks), 'klaim "X% akurat"/"akurasi X%"');
+  truthy(!/real-?time|sinkron otomatis|terhubung otomatis ke (shopee|tiktok)/i.test(indexTeks.replace(/tidak terhubung otomatis ke marketplace/i, '')), 'klaim integrasi otomatis/realtime');
+  for (const m of indexTeks.matchAll(/[^.]*pencairan[^.]*\./gi)) truthy(/belum tersedia|menyusul/.test(m[0]), `klaim pencairan dana: "${m[0].trim()}"`);
+  for (const m of indexTeks.matchAll(/[^.]*\bskor\b[^.]*\./gi)) truthy(/bukan skor/.test(m[0]), `skor Profit Confidence: "${m[0].trim()}"`);
+});
+test('W2 angka contoh di halaman depan diberi label fiktif/sintetis dan konsisten satu sama lain', () => {
+  for (const label of ['Data fiktif', 'Contoh sintetis', 'Ilustrasi, data fiktif', 'Ilustrasi dengan data fiktif']) truthy(indexHtml.includes(label), `label "${label}"`);
+  const nota = indexHtml.slice(indexHtml.indexOf('class="pv-nota'), indexHtml.indexOf('class="pv-float'));
+  const baris = [...nota.matchAll(/<dd>([^<]+)<\/dd>/g)].map((m) => rp(m[1]));
+  const laba = rp(nota.match(/class="big">([^<]+)</)[1]);
+  eq(baris.length, 4, 'baris nota'); eq(baris.reduce((a, b) => a + b, 0), laba, 'nota: penjualan − potongan − modal − refund & biaya = laba');
+  const alur = [...indexHtml.slice(indexHtml.indexOf('class="flow"'), indexHtml.indexOf('id="flow-cap"')).matchAll(/<b>([^<]+)<\/b>/g)].map((m) => rp(m[1]));
+  eq(alur.slice(0, 4).reduce((a, b) => a + b, 0), alur[4], 'alur uang: jumlah komponen = laba');
+  eq(alur.join(','), [...baris, laba].join(','), 'alur uang sama dengan nota hero');
+  const seg = (sel) => [...indexHtml.match(new RegExp(`class="segbar ${sel}"[^>]*>([\\s\\S]*?)</div>`))[1].matchAll(/--w:(\d+)%/g)].reduce((a, m) => a + +m[1], 0);
+  eq(seg('pv-seg'), 100, 'batang status hero = 100%'); eq(seg('pc-seg'), 100, 'batang status Profit Confidence = 100%');
+});
+test('W5 status Profit Confidence di halaman depan = 5 status dashboard (label dan urutan sama)', () => {
+  const pc = indexHtml.slice(indexHtml.indexOf('<ul class="pc-legend">'), indexHtml.indexOf('</ul>', indexHtml.indexOf('<ul class="pc-legend">')));
+  const labels = [...pc.matchAll(/<b>([^<]+)<\/b>/g)].map((m) => m[1]);
+  const covLabels = [...daftar('COV').matchAll(/\['\w+', '\w+', '([^']+)'/g)].map((m) => m[1]);
+  eq(labels.join(','), covLabels.join(','), 'label status');
+  truthy(/Perkiraan minimum<\/b><span>Perkiraan konservatif/.test(pc), 'perkiraan minimum dijelaskan sebagai perkiraan konservatif');
+});
+test('W6 batang status: segmen boleh menyusut agar celah tidak memotong status terakhir (dashboard & halaman depan)', () => {
+  truthy(/\.cov-seg \{ flex: 0 1 var\(--w\)/.test(src('app.css')), 'dashboard .cov-seg');
+  truthy(/\.segbar i \{ flex: 0 1 var\(--w\)/.test(src('site.css')), 'halaman depan .segbar i');
+});
+test('W3 tombol daftar tetap "Daftar gratis" (CLAUDE.md §4); "Coba gratis" tidak menuju pendaftaran', () => {
+  const daftar = [...indexHtml.matchAll(/<a [^>]*href="akun\.html\?mode=daftar[^"]*"[^>]*>([^<]*)/g)].map((m) => m[1].trim());
+  truthy(daftar.length >= 4 && daftar.every((t) => t === 'Daftar gratis'), `label tombol daftar: ${daftar}`);
+  for (const m of indexHtml.matchAll(/<a [^>]*href="([^"]+)"[^>]*>Coba gratis/g)) eq(m[1], 'dashboard.html', 'Coba gratis menuju dashboard');
+});
+test('W4 gerak: hanya transform/opacity, tanpa pustaka/scroll listener, isi tampil tanpa JS atau saat kurangi gerakan', () => {
+  const css = src('site.css') + src('base.css');
+  for (const m of css.matchAll(/@keyframes\s+([\w-]+)\s*\{([\s\S]*?\})\s*\}/g)) {
+    const props = [...m[2].matchAll(/([\w-]+)\s*:/g)].map((x) => x[1]);
+    truthy(props.every((p) => p === 'opacity' || p === 'transform'), `@keyframes ${m[1]} menganimasikan ${props}`);
+  }
+  truthy(!/\[data-reveal\][^{]*\{[^}]*opacity:\s*0/.test(css.replace(/\.motion \[data-reveal\][^{]*\{[^}]*\}/g, '')), 'status tersembunyi hanya di bawah .motion');
+  const motion = src('motion.js');
+  truthy(/prefers-reduced-motion: reduce/.test(motion) && /if \(canReveal\) root\.classList\.add\('motion'\)/.test(motion), 'kelas motion hanya bila gerak diizinkan');
+  truthy(/IntersectionObserver/.test(motion) && !/addEventListener\('scroll'/.test(motion + indexHtml), 'IntersectionObserver, bukan event scroll');
+  truthy(!/<script[^>]+src="https?:/.test(indexHtml) && !/eval\(|new Function/.test(motion), 'tanpa skrip eksternal / eval');
+  truthy(/prefers-reduced-motion: reduce\) \{ \*, \*::before, \*::after, ::backdrop \{ transition: none !important; animation: none !important/.test(src('base.css')), 'aturan kurangi gerakan global');
+  truthy(/'assets\/motion\.js'/.test(root('sw.js')), 'motion.js ikut cache offline (sw.js CORE)');
+});
+
 console.log(failed ? `\n${failed} uji GAGAL` : '\nSemua uji lulus');
 process.exitCode = failed ? 1 : 0;

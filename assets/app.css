@@ -606,7 +606,7 @@ body.app .empty p { font-size: var(--fs-body-sm); }
 .kep-main { display: grid; gap: var(--sp-3); justify-items: start; }
 .kep-note { font-size: var(--fs-body-sm); color: var(--ink-2); }
 .cov-bar { display: flex; width: 100%; height: 16px; border-radius: 99px; overflow: hidden; gap: 2px; background: var(--surface-2); }
-.cov-seg { flex: 0 0 var(--w); min-width: 3px; transform-origin: left; animation: cov-in var(--dur-slow) var(--ease) both; }
+.cov-seg { flex: 0 1 var(--w); min-width: 3px; transform-origin: left; animation: cov-in var(--dur-slow) var(--ease) both; }
 .cov-seg + .cov-seg { animation-delay: 40ms; }
 @keyframes cov-in { from { transform: scaleX(0); } to { transform: scaleX(1); } }
 .cov-seg.verified { background: var(--good); } .cov-seg.estimate { background: var(--info); }
@@ -759,3 +759,25 @@ body.app .empty p { font-size: var(--fs-body-sm); }
   .cov-legend li .status { grid-area: s; } .cov-legend li .cov-amt { grid-area: a; grid-column: auto; text-align: right; } .cov-legend li b { grid-area: p; min-width: 52px; }
 }
 @media (max-width: 600px) { .cov-k span { display: none; } }
+
+/* ---------- MOTION-1: gerak dashboard (lebih tenang dari halaman depan) ----------
+ * Hanya saat pindah halaman (.view.enter dipasang oleh go(), dilepas 400 ms kemudian; semua jeda + durasi
+ * di bawah dijaga < 400 ms agar tidak terpotong), jadi
+ * ganti filter atau render ulang tidak memutar animasi lagi. Angka tidak pernah dianimasikan (tanpa count-up).
+ * Semua dimatikan oleh aturan prefers-reduced-motion di base.css. */
+.view.enter > .dash { animation: none; }
+.view.enter .dash > *, .view.enter .dash-hero > * { animation: view-in 260ms var(--ease-out) both; }
+.view.enter .dash > *:nth-child(2) { animation-delay: 30ms; } .view.enter .dash > *:nth-child(3) { animation-delay: 60ms; }
+.view.enter .dash > *:nth-child(4) { animation-delay: 90ms; } .view.enter .dash > *:nth-child(n+5) { animation-delay: 110ms; }
+.view.enter .dash-hero > *:nth-child(2) { animation-delay: 30ms; } .view.enter .dash-hero > *:nth-child(3) { animation-delay: 60ms; } .view.enter .dash-hero > *:nth-child(4) { animation-delay: 90ms; }
+/* grafik tren: batang tumbuh dari garis dasar saat halaman dibuka */
+.tbar .bar { transform-box: fill-box; transform-origin: bottom; }
+.tbar.neg .bar { transform-origin: top; }
+.view.enter .tbar .bar { animation: tbar-in 300ms var(--ease-out) both; animation-delay: 80ms; }
+@keyframes tbar-in { from { transform: scaleY(0); } }
+/* kartu bagian: hanya garis tepi yang menegas saat disorot (kartu besar tidak diangkat) */
+.dash .section-card { transition: border-color var(--dur) var(--ease), box-shadow var(--dur) var(--ease); }
+@media (hover: hover) and (pointer: fine) { .dash .section-card:not(.rincian):hover { border-color: var(--line); box-shadow: var(--shadow-md); } }
+/* laci & lembar memakai kurva keluar yang lebih lembut */
+@media (min-width: 901px) { .dialog.sheet.drawer[open] { animation-timing-function: var(--ease-out); animation-duration: 320ms; } }
+.dialog.sheet[open] { animation-timing-function: var(--ease-out); }
