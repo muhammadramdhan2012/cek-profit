@@ -810,6 +810,40 @@ const Engine = (() => {
       K.baris[st]++; K.penjualan[st] += isOk(sales) ? sales : 0;
       if (st !== 'tidak_diketahui') K.hpp[st] += cost;
     };
+    /*
+     * H2-B3a: cakupan kepastian per PESANAN (metadata; tidak mengubah angka apa pun).
+     * Dasar penjualan = penjualan bersih per pesanan, sama persis dengan totalSales (Shopee: harga + refund + voucher;
+     * TikTok: Total Pendapatan). Setiap pesanan masuk SATU status saja, yaitu status terlemah di antara barisnya,
+     * sehingga jumlah semua status = total dan "tidakDiketahui" = penjualan yang modalnya tidak diketahui (keluar
+     * dari laba). Berbeda dari K.penjualan (per baris produk, tanpa voucher) yang tetap dipertahankan.
+     * Urutan dari terkuat ke terlemah: terverifikasi < estimasi < estimasi_minimum < belum < tidak_diketahui.
+     */
+    const CAKUPAN_URUT = ['terverifikasi', 'estimasi', 'estimasi_minimum', 'belum', 'tidak_diketahui'];
+    const CAKUPAN_KEY = { terverifikasi: 'terverifikasi', estimasi: 'estimasi', estimasi_minimum: 'estimasiMinimum', belum: 'belum', tidak_diketahui: 'tidakDiketahui' };
+    const blankStatus = () => ({ terverifikasi: 0, estimasi: 0, estimasiMinimum: 0, belum: 0, tidakDiketahui: 0 });
+    const blankCakupan = () => ({ penjualan: blankStatus(), jumlahPesanan: blankStatus(),
+      dikeluarkan: { penjualan: 0, danaDiterima: 0, jumlahPesanan: 0, alasan: {} },
+      refundParsialTanpaUnit: { jumlahPesanan: 0, penjualan: 0 } });
+    const CK = { shopee: blankCakupan(), tiktok: blankCakupan() };
+    const weakest = (list) => list.reduce((a, s) => (CAKUPAN_URUT.indexOf(s) > CAKUPAN_URUT.indexOf(a) ? s : a), 'terverifikasi');
+    /**
+     * Catat satu pesanan ke cakupan.
+     * @param reasons  alasan pesanan dikeluarkan dari laba (hanya untuk status tidak_diketahui)
+     * @param partial  true bila laba pesanan ini masih memakai nominal refund parsial sebagai pengganti jumlah unit
+     */
+    function ckAdd(pf, status, sales, settle, reasons, partial) {
+      const c = CK[pf], k = CAKUPAN_KEY[status];
+      c.penjualan[k] += sales; c.jumlahPesanan[k]++;
+      if (status === 'tidak_diketahui') {
+        // Dana diterima bisa negatif (potongan/ongkir retur); dicatat apa adanya, tidak dibulatkan ke 0.
+        c.dikeluarkan.penjualan += sales; c.dikeluarkan.danaDiterima += settle; c.dikeluarkan.jumlahPesanan++;
+        // Satu pesanan bisa punya beberapa alasan, jadi jumlah per alasan bisa lebih besar dari jumlahPesanan.
+        for (const a of new Set(reasons)) c.dikeluarkan.alasan[a] = (c.dikeluarkan.alasan[a] || 0) + 1;
+      }
+      if (partial) { c.refundParsialTanpaUnit.jumlahPesanan++; c.refundParsialTanpaUnit.penjualan += sales; }
+    }
+    // Kandidat refund penuh (Shopee per item, TikTok per pesanan). Kondisi fisiknya dievaluasi setelah kasus retur dibaca.
+    const fullRefunds = [];
     // Ringkasan status Shopee mode modal per produk (H1/H3 Fase 2). Informasi tambahan saja: tidak dipakai
     // menghitung angka lain dan tidak disimpan. Mode harga acuan tidak memakai kuantitas: hanya hpp/metodeHpp terisi.
     //  kuantitas: terverifikasi = jumlah terbukti dari export; belum = tidak ada bukti cukup
@@ -1129,6 +1163,65 @@ const Engine = (() => {
       if (reasons.includes('status_pesanan')) shopeeQty.statusBelumDivalidasi++;
     }
 
+    /**
+     * H2-B3a: status cakupan satu pesanan Shopee + kandidat refund penuh (metadata saja).
+     * estimasi_minimum = pesanan tidak ada di export dan dianggap 1 unit tanpa alasan lain: HPP adalah BATAS BAWAH
+     * (minimal 1 unit), jadi labanya batas atas. Rumus HPP-nya tidak diubah.
+     */
+    function shopeeCakupan(o, modal, notes, net) {
+      if (!isOk(modal)) {
+        const reasons = notes.length
+          ? notes.filter((n) => !isOk(n.cost)).map((n) => (mode === 'acuan' ? 'diskon_pemasok_belum_diisi'
+            : n.qtyBasis === 'tidak_diketahui' ? 'kuantitas_tidak_diketahui'
+              : n.entry && (n.hppReasons || []).includes('identitas_berbeda') ? 'identitas_variasi_berbeda' : 'modal_belum_diisi'))
+          : ['tanpa_rincian_produk'];
+        ckAdd('shopee', 'tidak_diketahui', net, o.total, reasons, false);
+      } else if (!notes.length) {
+        // Tanpa baris produk: modal rata-rata dari nilai pesanan. Refund di sini belum punya dasar unit.
+        ckAdd('shopee', o.refund !== 0 ? 'belum' : 'estimasi', net, o.total, [], o.refund !== 0 && o.harga + o.refund > 0);
+      } else {
+        const st = notes.map((n) => {
+          const s = n.hppStatus === 'terverifikasi_kelompok' ? 'terverifikasi' : (n.hppStatus || 'belum');
+          return s === 'estimasi' && n.qtyBasis === 'estimasi_1' ? 'estimasi_minimum' : s;
+        });
+        // Refund parsial yang HPP-nya masih dikurangi menurut nominal refund (share), bukan menurut unit (buku unit).
+        const partial = notes.some((n) => n.it.refund !== 0 && n.it.harga + n.it.refund > 0 && n.qtyBasis !== 'buku_unit');
+        ckAdd('shopee', weakest(st), net, o.total, [], partial);
+      }
+      for (const n of notes) {
+        if (!(n.it.refund < 0 && !(n.it.harga + n.it.refund > 0))) continue;   // hanya item yang direfund penuh
+        // Unit hanya dianggap diketahui bila jumlahnya terbukti dari export (bukan anggapan 1 unit, bukan nominal).
+        const qtyKnown = n.qtyBasis === 'export' || n.qtyBasis === 'buku_unit';
+        const units = qtyKnown ? n.qty : NaN;
+        const unitCost = n.entry && !(n.hppReasons || []).includes('identitas_berbeda') ? n.unit : NaN;
+        fullRefunds.push({ platform: 'shopee', orderId: o.id, product: n.it.name, skus: null, units,
+          qtySource: qtyKnown ? 'export' : 'tidak_diketahui', value: isOk(units) && isOk(unitCost) ? unitCost * units : NaN,
+          bukuUnit: !!(n.ledger && n.ledger.unitLedgerComplete) });
+      }
+    }
+
+    /** H2-B3a: status cakupan satu pesanan TikTok + kandidat refund penuh (metadata saja). */
+    function tiktokCakupan(r, modal, lines) {
+      const partial = r.preGross > 0 && r.pre > 0 && r.pre < r.preGross;
+      if (!isOk(modal)) {
+        const reason = mode === 'acuan' ? 'diskon_pemasok_belum_diisi' : !lines.length ? 'tanpa_rincian_produk' : 'modal_belum_diisi';
+        ckAdd('tiktok', 'tidak_diketahui', r.sales, r.settle, [reason], false);
+      } else {
+        // Refund parsial: modal masih dikurangi menurut nominal refund, jadi bukan estimasi yang valid → "belum".
+        const st = partial ? 'belum' : mode === 'acuan' ? 'estimasi' : lines.some((l) => l.entry) ? 'belum' : 'estimasi';
+        ckAdd('tiktok', st, r.sales, r.settle, [], partial);
+      }
+      if (r.preGross > 0 && !(r.pre > 0)) {
+        // Refund penuh. "Detail produk terjual" tetap mencantumkan unit yang direfund (audit H2-B3), jadi untuk refund
+        // penuh jumlah unitnya = jumlah di detail. Sumbernya dicatat agar bisa ditinjau.
+        const src = r.lines.length ? r.lines : (m.tiktokLines.get(r.id) || []);
+        const units = src.length ? src.reduce((a, l) => a + l.qty, 0) : NaN;
+        const value = mode !== 'acuan' && lines.length && lines.every((l) => l.entry) ? lines.reduce((a, l) => a + l.entry.cost * l.qty, 0) : NaN;
+        fullRefunds.push({ platform: 'tiktok', orderId: r.id, product: null, skus: src.map((l) => String(l.skuId)), units,
+          qtySource: r.lines.length ? 'detail_produk' : src.length ? 'export' : 'tidak_diketahui', value: isOk(units) ? value : NaN, bukuUnit: false });
+      }
+    }
+
     if (want.has('shopee')) for (const o of m.shopeeOrders.values()) {
       if (!inRange(o.orderDate)) continue;
       shopeeIn.add(o.id);
@@ -1138,6 +1231,7 @@ const Engine = (() => {
       else if (!items.length) kAdd('estimasi', o.harga + o.refund, modal);   // tanpa baris produk: modal rata-rata
       else items.forEach((n) => kAdd(n.hppStatus || 'belum', n.it.harga + n.it.refund, n.cost));
       const net = o.harga + o.refund + o.voucher;
+      shopeeCakupan(o, modal, items, net);
       const counted = o.harga + o.refund > 0;
       const pack = counted ? packing : 0;
       const fee = o.admin + o.proses + o.xtra + o.ams + o.ship + o.lain;
@@ -1210,6 +1304,7 @@ const Engine = (() => {
       // Kepastian TikTok: status HPP per baris belum dievaluasi (belum ada pencocokan seperti Shopee), jadi modal
       // per unit = "belum"; modal rata-rata / harga acuan = "estimasi"; tanpa modal = "tidak_diketahui".
       kAdd(!isOk(modal) ? 'tidak_diketahui' : mode === 'acuan' ? 'estimasi' : lines.some((l) => l.entry) ? 'belum' : 'estimasi', r.sales, modal);
+      tiktokCakupan(r, modal, lines);
       const counted = r.pre > 0;             // terjual (tidak dibatalkan/direfund penuh)
       const pack = counted ? packing : 0;
       const margin = isOk(modal) ? r.settle - modal - pack : NaN;
@@ -1406,6 +1501,105 @@ const Engine = (() => {
      *  laba.final hanya true bila SEMUA syarat terpenuhi; alasan yang belum terpenuhi ada di alasanTidakFinal.
      *  "Modal diketahui" (coverage) ≠ modal terverifikasi: estimasi dan "belum" tetap dipisah di hpp/penjualan.
      */
+    /**
+     * H2-B3a: refund penuh yang kondisi fisik barangnya BELUM diketahui (EXPOSURE/risiko, bukan kerugian; tidak
+     * masuk laba). Kondisi fisik dianggap diketahui HANYA bila seller sudah menandai kasus retur yang cocok sebagai
+     * "kembali" atau "hilang" (sumberKondisi = tanda_seller). Kategori yang dibaca dari teks/alasan marketplace
+     * (mis. "tidak dikirim") hanya INDIKASI, bukan bukti unit tertentu tidak pernah dikirim. Kasus "batal"
+     * (pengajuan dibatalkan/ditolak) tidak menjelaskan nasib barang.
+     *  tanpa_kasus_retur        tidak ada kasus retur yang cocok sama sekali
+     *  retur_item_ambigu        (Shopee) kasus hanya menyebut nama produk, tetapi pesanan punya lebih dari satu
+     *                           kandidat baris/variasi bernama sama → tidak dipakai, tidak memilih salah satu
+     *  kasus_belum_dicek        ada kasus yang belum ditandai seller (tumpang tindih dengan risiko kasus lama)
+     *  kasus_tidak_menjelaskan  ada kasus, tetapi tidak ada tanda seller untuk semua barang (termasuk indikasi saja)
+     */
+    function refundTanpaCatatanFisik() {
+      const st = (c) => (CHECK_CATS.has(c.cat) ? (caseState[c.key] || 'belum') : 'na');
+      const sellerMark = (c) => CHECK_CATS.has(c.cat) && (st(c) === 'kembali' || st(c) === 'hilang');
+      const oid = (x) => String(x).replace(/^'/, '');
+      const keyOf = (pf, orderId, product) => (pf === 'shopee' ? `S|${oid(orderId)}|${norm(product)}` : `T|${oid(orderId)}`);
+      const idx = new Map();
+      for (const c of m.cases.values()) {
+        const k = keyOf(c.platform, c.orderId, c.product);
+        if (!idx.has(k)) idx.set(k, []);
+        idx.get(k).push(c);
+      }
+      /** Shopee: kasus retur bisa dipakai untuk item ini hanya bila kandidatnya tunggal (satu baris laporan bernama
+       *  sama dan paling banyak satu variasi di export). Tidak memilih variasi pertama atau menebak dari urutan. */
+      const shopeeAmbiguous = (orderId, product) => {
+        const nm = norm(product);
+        const rows = (itemsByOrder.get(orderId) || []).filter((it) => norm(it.name) === nm).length;
+        const variants = new Set((m.shopeeLines.get(orderId) || []).filter((l) => norm(l.name) === nm).map((l) => norm(l.variant)));
+        return rows > 1 || variants.size > 1;
+      };
+      const blank = () => ({ jumlahPesanan: 0, jumlahTransaksi: 0, jumlahUnitDiketahui: 0, transaksiUnitTidakDiketahui: 0,
+        nilaiModalDiketahui: 0, kasusModalTidakDiketahui: 0, sumberQty: {}, kondisi: {}, indikasi: {},
+        tumpangTindih: { risikoKasusBelumDicek: 0, bukuUnit: 0 },
+        // Refund penuh yang kondisi fisiknya diketahui (tidak masuk exposure), beserta sumber buktinya.
+        kondisiDiketahui: { jumlahTransaksi: 0, sumberKondisi: {} } });
+      const out = { shopee: blank(), tiktok: blank() };
+      const orders = { shopee: new Set(), tiktok: new Set() };
+      for (const f of fullRefunds) {
+        const o = out[f.platform];
+        const ambiguous = f.platform === 'shopee' && shopeeAmbiguous(f.orderId, f.product);
+        const cs = ambiguous ? [] : (idx.get(keyOf(f.platform, f.orderId, f.product)) || []);
+        const hasCase = !!(idx.get(keyOf(f.platform, f.orderId, f.product)) || []).length;
+        // TikTok: setiap SKU di rincian produk harus punya kasus bertanda seller. Tanpa rincian, satu tanda cukup
+        // hanya bila tidak ada kasus lain yang belum dicek (dicek di bawah).
+        const marked = cs.some(sellerMark) && (!f.skus || !f.skus.length || f.skus.every((s) => cs.some((c) => oid(c.skuId) === s && sellerMark(c))));
+        let kondisi;
+        if (ambiguous && hasCase) kondisi = 'retur_item_ambigu';
+        else if (!cs.length) kondisi = 'tanpa_kasus_retur';
+        else if (cs.some((c) => CHECK_CATS.has(c.cat) && st(c) === 'belum')) kondisi = 'kasus_belum_dicek';
+        else if (marked) {   // kondisi fisik diketahui dari tanda seller → bukan exposure
+          o.kondisiDiketahui.jumlahTransaksi++;
+          o.kondisiDiketahui.sumberKondisi.tanda_seller = (o.kondisiDiketahui.sumberKondisi.tanda_seller || 0) + 1;
+          continue;
+        } else kondisi = 'kasus_tidak_menjelaskan';
+        orders[f.platform].add(f.orderId);
+        o.jumlahTransaksi++;
+        if (isOk(f.units)) o.jumlahUnitDiketahui += f.units; else o.transaksiUnitTidakDiketahui++;
+        if (isOk(f.value)) o.nilaiModalDiketahui += f.value; else o.kasusModalTidakDiketahui++;
+        o.sumberQty[f.qtySource] = (o.sumberQty[f.qtySource] || 0) + 1;
+        o.kondisi[kondisi] = (o.kondisi[kondisi] || 0) + 1;
+        // Indikasi dari teks marketplace dicatat terpisah (tidak mengubah status kondisi fisik).
+        if (cs.some((c) => c.cat === 'tidak_dikirim')) o.indikasi.tidak_dikirim = (o.indikasi.tidak_dikirim || 0) + 1;
+        if (kondisi === 'kasus_belum_dicek') o.tumpangTindih.risikoKasusBelumDicek++;
+        if (f.bukuUnit) o.tumpangTindih.bukuUnit++;
+      }
+      for (const pf of ['shopee', 'tiktok']) out[pf].jumlahPesanan = orders[pf].size;
+      return { kondisiFisikStatus: 'belum_diketahui', ...sumParts(out.shopee, out.tiktok), perMarketplace: out };
+    }
+
+    /** Jumlahkan dua objek bertingkat berisi angka (untuk total Shopee + TikTok). */
+    function sumParts(a, b) {
+      const res = {};
+      for (const k of new Set([...Object.keys(a), ...Object.keys(b)])) {
+        const x = a[k], y = b[k];
+        if (typeof x === 'object' || typeof y === 'object') res[k] = sumParts(x || {}, y || {});
+        else res[k] = (x || 0) + (y || 0);
+      }
+      return res;
+    }
+
+    /** H2-B3a: kepastian.cakupan (lihat ckAdd). Hanya metadata; tidak dipakai menghitung angka lain. */
+    function buildCakupan(r) {
+      const per = {};
+      for (const pf of ['shopee', 'tiktok']) {
+        const c = CK[pf];
+        per[pf] = { ...c, penjualan: { total: Object.values(c.penjualan).reduce((a, v) => a + v, 0), ...c.penjualan } };
+      }
+      const total = sumParts(per.shopee, per.tiktok);
+      // total dihitung ulang dari status (bukan dari r.totalSales) supaya rekonsiliasi di tes bermakna.
+      return {
+        dasar: 'penjualan_bersih_per_pesanan',
+        ...total,
+        labaTerhitung: { nilai: r.totalMargin, dasarPenjualan: r.knownSales },
+        refundTanpaCatatanFisik: refundTanpaCatatanFisik(),
+        perMarketplace: per,
+      };
+    }
+
     function buildKepastian(r) {
       const why = [];
       if (!r.ready) why.push('laba_belum_dapat_dihitung');
@@ -1436,6 +1630,8 @@ const Engine = (() => {
       return {
         laba: { dariDataTersedia: r.totalMargin, final: why.length === 0, alasanTidakFinal: why },
         hpp: { ...K.hpp }, penjualan: { ...K.penjualan }, baris: { ...K.baris },
+        // H2-B3a: cakupan per pesanan (lihat buildCakupan). Penjualan di sini = totalSales, berbeda dari penjualan di atas.
+        cakupan: buildCakupan(r),
         // H2-B1: buku unit Shopee. nilaiUnitBelumDiketahui = modal unit yang direfund tetapi kondisi fisiknya belum
         // diketahui (risiko, BUKAN kerugian; tidak masuk laba). Bisa tumpang tindih dengan risiko kasus "belum dicek".
         bukuUnit: { ...ledgerStats, status: { ...ledgerStats.status } },

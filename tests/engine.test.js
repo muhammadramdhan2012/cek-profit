@@ -860,6 +860,207 @@ test('U15–U18 regresi: reseller, modal rata-rata, Shopee tanpa export tidak me
   eq(tanpa.totalModal, 10000, 'tanpa export: estimasi 1 unit × 0,5 (cara lama)'); eq(bu(tanpa).baris, 0);
 });
 
+/* ===== H2-B3a: kepastian.cakupan + refund penuh tanpa catatan fisik (metadata; angka tidak berubah) ===== */
+/** Laporan penghasilan TikTok SINTETIS (struktur kolom saja; semua isi fiktif). */
+const ttPenghasilan = (rows) => E.parseWorkbook({ name: 'tt-penghasilan-sintetis.xlsx', sheets: {
+  'Detail pesanan': [['ID Pesanan/Penyesuaian', 'Jenis transaksi', 'Waktu pemesanan', 'Waktu pembayaran pesanan', 'Jumlah penyelesaian pembayaran',
+    'Total Pendapatan', 'Subtotal sebelum diskon', 'Total pengembalian dana sebelum diskon', 'Total Biaya', 'Detail produk terjual', 'Sumber pesanan'],
+  ...rows.map((x) => [x.id, 'Pesanan', '2026/01/10', '2026/01/15', x.settle, x.sales, x.sub, x.refund || 0, x.settle - x.sales, x.detail || '', 'TikTok Shop'])],
+  Laporan: [['', 'Jumlah penyelesaian pembayaran', '', '', '', rows.reduce((a, x) => a + x.settle, 0)]] } });
+/** File retur TikTok SINTETIS dengan nomor pesanan & SKU yang bisa diatur. reason 'missing' → tidak dikirim. */
+const ttRetur = (rows) => E.parseWorkbook({ name: 'tt-retur-sintetis.xlsx', sheets: { S: [['Return Order ID', 'Order ID', 'SKU ID', 'Product Name', 'SKU Name',
+  'Return Quantity', 'Return unit price', 'Refund Time', 'Return Type', 'Return Reason', 'Return Logistics Tracking ID', 'Buyer Note', 'Return Status', 'Time Requested'],
+...rows.map((x, i) => [x.id || `TRC${i + 1}`, x.order, x.sku, 'Kaos', 'M', x.qty, 50000, x.refundTime ?? '2026-01-12', x.type || 'Refund only', x.reason || 'Damaged', '', '', 'Completed', '2026-01-10'])] } });
+const ck = (r) => r.kepastian.cakupan;
+const rtf = (r, pf) => (pf ? ck(r).refundTanpaCatatanFisik.perMarketplace[pf] : ck(r).refundTanpaCatatanFisik);
+const STATUS_CK = ['terverifikasi', 'estimasi', 'estimasiMinimum', 'belum', 'tidakDiketahui'];
+/** Rekonsiliasi wajib: tiap pesanan tepat satu status; jumlah status = total = totalSales (toleransi Rp1). */
+const cekRekonsiliasi = (r, label = '') => {
+  const c = ck(r), sum = (o) => STATUS_CK.reduce((a, k) => a + o[k], 0);
+  near(sum(c.penjualan), c.penjualan.total, 1, `${label} jumlah status ≠ total`);
+  near(c.penjualan.total, r.totalSales, 1, `${label} total cakupan ≠ totalSales`);
+  near(c.penjualan.tidakDiketahui, r.totalSales - r.knownSales, 1, `${label} tidak diketahui ≠ penjualan tanpa modal`);
+  near(c.dikeluarkan.penjualan, c.penjualan.tidakDiketahui, 1, `${label} dikeluarkan ≠ tidak diketahui`);
+  eq(c.dikeluarkan.jumlahPesanan, c.jumlahPesanan.tidakDiketahui, `${label} jumlah pesanan dikeluarkan`);
+  near(c.labaTerhitung.dasarPenjualan, r.knownSales, 1, `${label} dasar laba`);
+  truthy(Object.is(c.labaTerhitung.nilai, r.totalMargin) || c.labaTerhitung.nilai === r.totalMargin, `${label} laba terhitung ≠ totalMargin`);
+  for (const k of [...STATUS_CK, 'total']) near(c.perMarketplace.shopee.penjualan[k] + c.perMarketplace.tiktok.penjualan[k], c.penjualan[k], 1, `${label} breakdown ${k}`);
+};
+const kaos1 = (id, harga, refund = 0) => ({ id, items: [{ name: 'Kaos', harga, refund }] });
+
+test('C1 semua transaksi terverifikasi → cakupan terverifikasi = total, tidak ada yang dikeluarkan', () => {
+  const r = hitung([kaos1('SINT-C1', 100000)], [{ order: 'SINT-C1', name: 'Kaos', qty: 2, price: 50000 }], stUnit);
+  eq(r.shopeeQty.hpp.terverifikasi, 1, 'prasyarat: baris terverifikasi');
+  cekRekonsiliasi(r, 'C1');
+  eq(ck(r).penjualan.terverifikasi, 100000); eq(ck(r).jumlahPesanan.terverifikasi, 1);
+  eq(ck(r).dikeluarkan.jumlahPesanan, 0); eq(rtf(r).jumlahPesanan, 0); eq(ck(r).dasar, 'penjualan_bersih_per_pesanan');
+});
+test('C2 HPP estimasi (modal rata-rata) → estimasi; angka HPP tetap', () => {
+  const r = hitung([kaos1('SINT-C2', 100000)], [{ order: 'SINT-C2', name: 'Kaos', qty: 2, price: 50000 }], stRata);
+  cekRekonsiliasi(r, 'C2'); eq(ck(r).penjualan.estimasi, 100000); eq(r.totalModal, 40000);
+});
+test('C3 Shopee tanpa export (anggap 1 unit) → estimasiMinimum; rumus HPP dan metadata lama tidak berubah', () => {
+  const r = hitung([kaos1('SINT-C3', 100000)], null, stUnit);
+  cekRekonsiliasi(r, 'C3');
+  eq(ck(r).penjualan.estimasiMinimum, 100000); eq(ck(r).penjualan.estimasi, 0);
+  eq(r.totalModal, 20000, 'tetap 1 unit'); eq(r.kepastian.penjualan.estimasi, 100000, 'kepastian.penjualan lama tetap "estimasi"');
+  // Refund parsial tanpa export: tidak diklasifikasikan sebagai estimasi valid, ditandai refund parsial tanpa unit.
+  const p = hitung([kaos1('SINT-C3b', 100000, -40000)], null, stUnit);
+  cekRekonsiliasi(p, 'C3b'); eq(ck(p).penjualan.belum, 60000); eq(ck(p).penjualan.estimasiMinimum, 0);
+  eq(ck(p).refundParsialTanpaUnit.jumlahPesanan, 1); eq(p.totalModal, 12000, 'rumus lama (share) tidak diubah');
+});
+test('C4 modal tidak diketahui → tidakDiketahui, dikeluarkan beserta alasan (modal kosong, A1)', () => {
+  const r = hitung([kaos1('SINT-C4', 100000)], null, ST([]));
+  cekRekonsiliasi(r, 'C4');
+  eq(ck(r).penjualan.tidakDiketahui, 100000); eq(ck(r).dikeluarkan.danaDiterima, 100000); eq(ck(r).dikeluarkan.alasan.modal_belum_diisi, 1);
+  truthy(Number.isNaN(ck(r).labaTerhitung.nilai), 'laba belum dapat dihitung → NaN, bukan 0');
+  // A1: pesanan ada di export tetapi baris tidak cocok.
+  const a1 = hitung([kaos1('SINT-C4b', 100000)], [{ order: 'SINT-C4b', name: 'Celana', qty: 1, price: 100000 }], stUnit);
+  cekRekonsiliasi(a1, 'C4b'); eq(ck(a1).dikeluarkan.alasan.kuantitas_tidak_diketahui, 1);
+});
+test('C5 refund penuh dengan tanda seller (Shopee & TikTok) → tidak masuk exposure; angka tetap', () => {
+  const kembali = E.compute([...filesB1(-100000, 2), retKaos(2)], stUnit, { 'S|RT1|Kaos|': 'kembali' });
+  eq(rtf(kembali).jumlahPesanan, 0); eq(kembali.totalModal, 0);
+  // TikTok: setiap SKU di detail punya kasus retur barang yang sudah ditandai seller.
+  const tt = E.compute([ttPenghasilan([{ id: '5801', settle: 0, sales: 0, sub: 100000, refund: -100000, detail: '1234567 * 2;' }]),
+    ttRetur([{ id: 'TRK', order: '5801', sku: '1234567', qty: 2, type: 'Return and refund' }])], ST([cat('', '', 20000, '1234567')]), { 'T|TRK|1234567': 'kembali' });
+  eq(tt.cases[0].cat, 'retur_barang', 'prasyarat kategori'); eq(rtf(tt, 'tiktok').jumlahPesanan, 0);
+  eq(rtf(tt, 'tiktok').kondisiDiketahui.sumberKondisi.tanda_seller, 1);
+});
+test('C6 refund penuh tanpa kondisi fisik → exposure dicatat (bukan kerugian); laba, kerugian, dan risiko lama tetap', () => {
+  const r = E.compute(filesB1(-100000, 2), stUnit);
+  const x = rtf(r, 'shopee');
+  eq(x.jumlahPesanan, 1); eq(x.jumlahUnitDiketahui, 2); eq(x.nilaiModalDiketahui, 40000); eq(x.kasusModalTidakDiketahui, 0);
+  eq(x.sumberQty.export, 1); eq(x.kondisi.tanpa_kasus_retur, 1); eq(x.tumpangTindih.bukuUnit, bu(r).lengkap);
+  eq(r.totalModal, 0); eq(r.lostCertain, 0); eq(r.unknownRisk, 0, 'exposure tidak masuk risiko lama');
+  // Ada kasus retur yang belum dicek → kondisi "kasus_belum_dicek", ditandai tumpang tindih dengan risiko kasus lama.
+  const b = E.compute([...filesB1(-100000, 2), retKaos(2)], stUnit);
+  eq(rtf(b).kondisi.kasus_belum_dicek, 1); eq(rtf(b).tumpangTindih.risikoKasusBelumDicek, 1);
+  // TikTok: unit dari "Detail produk terjual", modal dari daftar modal.
+  const tt = E.compute([ttPenghasilan([{ id: '5802', settle: -5000, sales: 0, sub: 100000, refund: -100000, detail: '1234567 * 2;' }])], ST([cat('', '', 20000, '1234567')]));
+  const t = rtf(tt, 'tiktok');
+  eq(t.jumlahPesanan, 1); eq(t.jumlahUnitDiketahui, 2); eq(t.nilaiModalDiketahui, 40000); eq(t.sumberQty.detail_produk, 1);
+  eq(tt.totalModal, 0, 'HPP penjualan refund penuh tetap 0');
+  // Kasus "batal" (pengajuan dibatalkan/ditolak) tidak menjelaskan nasib barang.
+  const bt = E.compute([ttPenghasilan([{ id: '5802', settle: -5000, sales: 0, sub: 100000, refund: -100000, detail: '1234567 * 2;' }]),
+    ttRetur([{ order: '5802', sku: '1234567', qty: 2, refundTime: '' }])], ST([cat('', '', 20000, '1234567')]));
+  eq(bt.cases[0].cat, 'batal', 'prasyarat kategori'); eq(rtf(bt, 'tiktok').kondisi.kasus_tidak_menjelaskan, 1);
+});
+test('C7 refund penuh tanpa modal / tanpa jumlah unit → kasus modal tidak diketahui (tidak dianggap 0)', () => {
+  const r = hitung([kaos1('SINT-C7', 100000, -100000)], null, ST([]));
+  const x = rtf(r, 'shopee');
+  eq(x.jumlahPesanan, 1); eq(x.kasusModalTidakDiketahui, 1); eq(x.transaksiUnitTidakDiketahui, 1); eq(x.nilaiModalDiketahui, 0);
+  eq(x.sumberQty.tidak_diketahui, 1, 'tanpa export: anggapan 1 unit tidak dihitung sebagai unit diketahui');
+  // Modal ada tetapi unit tidak diketahui (tanpa export) → tetap tidak diketahui.
+  const m1 = hitung([kaos1('SINT-C7b', 100000, -100000)], null, stUnit);
+  eq(rtf(m1).kasusModalTidakDiketahui, 1); eq(rtf(m1).jumlahUnitDiketahui, 0);
+  // Mode reseller/modal rata-rata tidak punya modal per unit → tidak diketahui, bukan nominal × rasio.
+  const ac = E.compute(filesB1(-100000, 2), { modalMode: 'acuan', mitra: 30, periods: [{ start: '', markup: 0, disc: 0 }] });
+  eq(rtf(ac).kasusModalTidakDiketahui, 1); eq(rtf(ac).jumlahUnitDiketahui, 0, 'reseller: catatan baris tidak memuat jumlah');
+});
+test('C8 dana diterima NEGATIF pada transaksi yang dikeluarkan dicatat apa adanya', () => {
+  const r = E.compute([ttPenghasilan([
+    { id: '5803', settle: -15000, sales: 0, sub: 50000, refund: -50000 },   // refund penuh, potongan tetap → dana negatif
+    { id: '5804', settle: 40000, sales: 50000, sub: 50000 }])], ST([]));
+  cekRekonsiliasi(r, 'C8');
+  const d = ck(r).perMarketplace.tiktok.dikeluarkan;
+  eq(d.jumlahPesanan, 2); eq(d.danaDiterima, 25000, 'negatif tidak dibulatkan ke 0'); eq(d.alasan.tanpa_rincian_produk, 2);
+  const neg = E.compute([ttPenghasilan([{ id: '5803', settle: -15000, sales: 0, sub: 50000, refund: -50000 }])], ST([]));
+  eq(ck(neg).dikeluarkan.danaDiterima, -15000);
+});
+test('C9 tidak ada double counting: tiap pesanan satu status, jumlah status = total di semua mode', () => {
+  const files = [E.parseWorkbook(Sint.penghasilan([kaos1('SINT-M1', 100000), kaos1('SINT-M2', 80000), kaos1('SINT-M3', 60000, -60000),
+    { id: 'SINT-M4', items: [{ name: 'Kaos', harga: 50000 }, { name: 'Topi', harga: 30000, refund: -10000 }] }])),
+  E.parseWorkbook(Sint.exportPesanan([{ order: 'SINT-M1', name: 'Kaos', qty: 2, price: 50000 }])),
+  ttPenghasilan([{ id: '5810', settle: 40000, sales: 50000, sub: 50000, detail: '1234567 * 1;' },
+    { id: '5811', settle: 20000, sales: 30000, sub: 60000, refund: -30000, detail: '1234567 * 2;' },
+    { id: '5812', settle: -5000, sales: 0, sub: 50000, refund: -50000 },
+    { id: '5813', settle: 30000, sales: 40000, sub: 40000 }])];
+  const modes = [ST([cat('Kaos', '', 20000), cat('', '', 15000, '1234567')]), ST([]), stRata, ST([cat('Kaos', '', 20000)], { fallbackPct: 30 }),
+    { modalMode: 'acuan', mitra: 30, coret: 100, periods: [{ start: '', markup: 0, disc: 0 }] }, { modalMode: 'acuan', periods: [{ start: '', markup: 0, disc: 0 }] }];
+  for (const [i, s] of modes.entries()) {
+    const r = E.compute(files, s);
+    cekRekonsiliasi(r, `mode ${i}`);
+    eq(STATUS_CK.reduce((a, k) => a + ck(r).jumlahPesanan[k], 0), 4 + 4, `mode ${i}: setiap pesanan tepat sekali`);
+  }
+  // Refund parsial TikTok (5811) di modal rata-rata: angka tetap, tetapi status "belum" + refund parsial tanpa unit.
+  const rata = E.compute(files, stRata);
+  eq(ck(rata).perMarketplace.tiktok.refundParsialTanpaUnit.jumlahPesanan, 1);
+  eq(ck(rata).perMarketplace.tiktok.penjualan.belum, 30000);
+  const lama = E.compute(files, stRata, {}, { platforms: ['tiktok'] }).kepastian.penjualan;
+  eq(lama.estimasi, 120000, 'kepastian.penjualan lama tidak diubah (5811 tetap "estimasi" di sana)'); eq(lama.belum, 0);
+});
+test('C10 breakdown Shopee + TikTok = total; filter platform hanya mengisi platform itu', () => {
+  const files = [E.parseWorkbook(Sint.penghasilan([kaos1('SINT-B1', 100000, -100000), kaos1('SINT-B2', 70000)])),
+    ttPenghasilan([{ id: '5820', settle: -3000, sales: 0, sub: 50000, refund: -50000, detail: '1234567 * 1;' }, { id: '5821', settle: 40000, sales: 50000, sub: 50000 }])];
+  const r = E.compute(files, ST([cat('Kaos', '', 20000)]));
+  const c = ck(r), s = c.perMarketplace.shopee, t = c.perMarketplace.tiktok;
+  cekRekonsiliasi(r, 'C10');
+  near(s.dikeluarkan.danaDiterima + t.dikeluarkan.danaDiterima, c.dikeluarkan.danaDiterima, 1e-9);
+  eq(s.dikeluarkan.jumlahPesanan + t.dikeluarkan.jumlahPesanan, c.dikeluarkan.jumlahPesanan);
+  const f = c.refundTanpaCatatanFisik, fs_ = f.perMarketplace;
+  for (const k of ['jumlahPesanan', 'jumlahTransaksi', 'jumlahUnitDiketahui', 'nilaiModalDiketahui', 'kasusModalTidakDiketahui', 'transaksiUnitTidakDiketahui'])
+    eq(fs_.shopee[k] + fs_.tiktok[k], f[k], `refund fisik ${k}`);
+  eq(fs_.shopee.jumlahPesanan, 1); eq(fs_.tiktok.jumlahPesanan, 1);
+  const hanyaShopee = E.compute(files, ST([cat('Kaos', '', 20000)]), {}, { platforms: ['shopee'] });
+  cekRekonsiliasi(hanyaShopee, 'C10 filter'); eq(ck(hanyaShopee).perMarketplace.tiktok.penjualan.total, 0); eq(rtf(hanyaShopee, 'tiktok').jumlahPesanan, 0);
+});
+test('C11 dua urutan unggah → cakupan identik', () => {
+  const a = [E.parseWorkbook(Sint.penghasilan([kaos1('SINT-K1', 100000, -100000), kaos1('SINT-U2', 50000)])), retKaos(2),
+    E.parseWorkbook(Sint.exportPesanan([{ order: 'SINT-K1', name: 'Kaos', qty: 2, price: 50000, returned: 2, returnStatus: 'Permintaan Disetujui' }])),
+    ttPenghasilan([{ id: '5830', settle: -2000, sales: 0, sub: 40000, refund: -40000, detail: '1234567 * 1;' }])];
+  for (const s of [stUnit, stRata, ST([])]) {
+    const x = E.compute(a, s), y = E.compute([...a].reverse(), s);
+    eq(JSON.stringify(ck(x)), JSON.stringify(ck(y)), 'cakupan bergantung urutan unggah');
+  }
+});
+
+const kaosDuaVariasiRefund = () => [E.parseWorkbook(Sint.penghasilan([{ id: 'SINT-V1', items: [{ name: 'Kaos', harga: 50000, refund: -50000 }, { name: 'Kaos', harga: 60000, refund: -60000 }] }])),
+  E.parseWorkbook(Sint.exportPesanan([{ order: 'SINT-V1', name: 'Kaos', variant: 'M', qty: 1, price: 50000, returned: 1, returnStatus: 'Permintaan Disetujui' },
+    { order: 'SINT-V1', name: 'Kaos', variant: 'L', qty: 1, price: 60000, returned: 1, returnStatus: 'Permintaan Disetujui' }]))];
+test('C12 kategori teks "tidak dikirim" tanpa tanda seller → kondisi fisik tetap belum diketahui; indikasi tercatat', () => {
+  const r = E.compute([...filesB1(-100000, 2), returShopee([{ order: 'SINT-K1', product: 'Kaos', qty: 2, amount: 100000, solusi: 'Pengembalian Dana', alasan: 'Barang tidak lengkap' }])], stUnit);
+  eq(r.cases[0].cat, 'tidak_dikirim', 'prasyarat kategori');
+  const x = rtf(r, 'shopee');
+  eq(x.jumlahPesanan, 1); eq(x.kondisi.kasus_tidak_menjelaskan, 1); eq(x.indikasi.tidak_dikirim, 1);
+  eq(x.kondisiDiketahui.jumlahTransaksi, 0); eq(rtf(r).kondisiFisikStatus, 'belum_diketahui');
+  eq(r.totalModal, 0); eq(r.lostCertain, 0, 'indikasi bukan kerugian');
+  const tt = E.compute([ttPenghasilan([{ id: '5805', settle: 0, sales: 0, sub: 100000, refund: -100000, detail: '1234567 * 2;' }]),
+    ttRetur([{ order: '5805', sku: '1234567', qty: 2, reason: 'Item missing' }])], ST([cat('', '', 20000, '1234567')]));
+  eq(tt.cases[0].cat, 'tidak_dikirim'); eq(rtf(tt, 'tiktok').jumlahPesanan, 1); eq(rtf(tt, 'tiktok').indikasi.tidak_dikirim, 1);
+});
+test('C13 seller menandai "kembali" → kondisi fisik diketahui (sumber: tanda seller)', () => {
+  const r = E.compute([...filesB1(-100000, 2), retKaos(2)], stUnit, { 'S|RT1|Kaos|': 'kembali' });
+  eq(rtf(r).jumlahTransaksi, 0); eq(rtf(r, 'shopee').kondisiDiketahui.jumlahTransaksi, 1); eq(rtf(r, 'shopee').kondisiDiketahui.sumberKondisi.tanda_seller, 1);
+  eq(r.lostCertain, 0);
+});
+test('C14 seller menandai "hilang" → kondisi fisik diketahui; kerugian lama tetap dari alur retur', () => {
+  const r = E.compute([...filesB1(-100000, 2), retKaos(2)], stUnit, { 'S|RT1|Kaos|': 'hilang' });
+  eq(rtf(r).jumlahTransaksi, 0); eq(rtf(r, 'shopee').kondisiDiketahui.sumberKondisi.tanda_seller, 1);
+  eq(r.lostCertain, 40000, 'kerugian = modal 2 unit, tidak berubah oleh metadata');
+});
+test('C15 dua variasi produk sama, kasus retur hanya menyebut nama → ambigu, tidak memilih variasi', () => {
+  const r = E.compute([...kaosDuaVariasiRefund(), returShopee([{ order: 'SINT-V1', product: 'Kaos', qty: 1, amount: 50000 }])],
+    ST([cat('Kaos', 'M', 20000), cat('Kaos', 'L', 25000)]), { 'S|RT1|Kaos|': 'kembali' });
+  const x = rtf(r, 'shopee');
+  eq(x.jumlahTransaksi, 2, 'kedua baris tetap exposure'); eq(x.kondisi.retur_item_ambigu, 2); eq(x.kondisiDiketahui.jumlahTransaksi, 0);
+  eq(x.jumlahPesanan, 1);
+  // Satu baris laporan tetapi export punya dua variasi bernama sama → tetap ambigu.
+  const satuBaris = E.compute([E.parseWorkbook(Sint.penghasilan([kaos1('SINT-V2', 50000, -50000)])),
+    E.parseWorkbook(Sint.exportPesanan([{ order: 'SINT-V2', name: 'Kaos', variant: 'M', qty: 1, price: 50000 }, { order: 'SINT-V2', name: 'Kaos', variant: 'L', qty: 1, price: 50000 }])),
+    returShopee([{ order: 'SINT-V2', product: 'Kaos', qty: 1, amount: 50000 }])], stUnit, { 'S|RT1|Kaos|': 'kembali' });
+  eq(rtf(satuBaris).kondisi.retur_item_ambigu, 1);
+});
+test('C16 pesanan + produk dengan kandidat tunggal → pencocokan retur tetap bekerja', () => {
+  const r = E.compute([...filesB1(-100000, 2, 'baru', 'M'), retKaos(2, 'M')], ST([cat('Kaos', 'M', 20000)]), { 'S|RT1|Kaos|M': 'kembali' });
+  eq(rtf(r).jumlahTransaksi, 0); eq(rtf(r, 'shopee').kondisiDiketahui.jumlahTransaksi, 1);
+  // Produk lain di pesanan yang sama tidak membuat pencocokan ambigu.
+  const dua = E.compute([E.parseWorkbook(Sint.penghasilan([{ id: 'SINT-K1', items: [{ name: 'Kaos', harga: 100000, refund: -100000 }, { name: 'Topi', harga: 30000 }] }])),
+    E.parseWorkbook(Sint.exportPesanan([{ order: 'SINT-K1', name: 'Kaos', qty: 2, price: 50000, returned: 2, returnStatus: 'Permintaan Disetujui' }, { order: 'SINT-K1', name: 'Topi', qty: 1, price: 30000 }])),
+    retKaos(2)], ST([cat('Kaos', '', 20000), cat('Topi', '', 10000)]), { 'S|RT1|Kaos|': 'kembali' });
+  eq(rtf(dua).jumlahTransaksi, 0); eq(rtf(dua, 'shopee').kondisiDiketahui.jumlahTransaksi, 1);
+});
+
 test('angka format Indonesia di CSV', () => {
   eq(E.num('Rp1.234.567'), 1234567); eq(E.num('-1.250'), -1250); eq(E.num('12,5'), 125); eq(E.num('/'), 0);
 });
