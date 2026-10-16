@@ -26,7 +26,7 @@ const returShopee = (rows) => E.parseWorkbook({ name: 'retur-sintetis.xlsx', she
 const penghasilan = (refund = -100000) => E.parseWorkbook(Sint.penghasilan([{ id: 'S1', items: [{ name: 'Kaos', harga: 100000, refund }] },
   { id: 'S2', items: [{ name: 'Topi', harga: 80000 }] }]));
 const stRata = { modalMode: 'produk', catalog: [], fallbackPct: 40 };
-const pdf = (r) => CekReport.html(r, { settings: {}, profile: {}, filter: {}, brand: 'Cek Profit' });
+const pdf = (r) => CekReport.html(r, { settings: {}, profile: {}, filter: {}, brand: 'Cek Untung' });
 /** PDF tidak boleh berisi NaN/Infinity dalam bentuk apa pun (teks maupun style), termasuk teks temuan dari engine. */
 const bersih = (html, label = '') => { truthy(!/NaN|Infinity/.test(html), `${label} PDF berisi NaN/Infinity`); };
 /** "Margin" hanya untuk persen: tidak boleh langsung diikuti nilai rupiah (seluruh PDF, termasuk temuan). */
@@ -205,6 +205,87 @@ test('D7 cakupan 100% + "perlu dicek" 100% tidak tampil sebagai terverifikasi', 
   truthy(/masuk dalam perhitungan laba\.\$\{covCaveat\(c\)\}/.test(dashSrc) && /\$\{covCaveat\(r\.kepastian\.cakupan\)\}/.test(sheetSrc), 'peringatan dipasang di kartu dan laci');
 });
 
+/* ===== UI-3: halaman Laba dan Produk memakai angka engine apa adanya ===== */
+const cut = (from, to) => { const a = appJs.indexOf(from), b = appJs.indexOf(to, a + 1); truthy(a >= 0 && b > a, `bagian kode ${from}`); return appJs.slice(a, b); };
+const labaSrc = cut('/* ---------- laba (UI-3)', '  /* ---------- retur ---------- */');
+const prodSrc = cut('/* ---------- produk (UI-3)', '  /* ---------- laba (UI-3)');
+const notaSrc = cut('  function nota(r) {', '  function facts(r) {');
+test('U1 Laba/Produk/nota tidak membuat margin baru di UI', () => {
+  for (const [nama, kode] of [['laba', labaSrc], ['produk', prodSrc], ['nota', notaSrc]]) {
+    truthy(!/margin\s*\/|\/\s*[\w.]*knownSales|net\s*\/|netProfit\s*\/|total\s*\/\s*r\.totalSales/i.test(kode.replace(/b\.margin \/ b\.known/g, '')), `${nama}: pembagian margin/laba buatan UI`);
+  }
+  truthy(/trendCard\(r, \{ title: 'Tren laba', table: false \}\)/.test(labaSrc), 'halaman Laba tidak memakai tabel bulanan lama (yang memuat margin % buatan UI)');
+  truthy(!/%/.test(cut('  function monthTable(r) {', '  function viewBiaya() {').replace(/style="[^"]*"/g, '')), 'tabel bulanan Laba tanpa persen');
+  truthy(!/p\.\w+\s*[-+*/]\s*[\w(]/.test(cut('  function productSheet(r) {', '  /* ---------- laba (UI-3)')), 'laci produk tanpa hitungan dari field produk');
+});
+test('U2 nota & jejak uang: struktur, nilai belum diketahui, bukan rekonsiliasi pencairan', () => {
+  for (const s of ["'Dana diterima'", "'Modal / HPP'", "'Kerugian retur'", "'Biaya operasional'", "'Laba dari data tersedia'"]) truthy(notaSrc.includes(s), `nota memuat ${s}`);
+  truthy(/\+ \$\{num\(rb\.kerugianTanpaNilai\)\} kasus nilainya belum diketahui\./.test(notaSrc) && /\+ \$\{num\(rb\.kerugianTanpaNilai\)\} kasus nilainya belum diketahui\./.test(labaSrc), '"+ N kasus nilainya belum diketahui."');
+  truthy(/ok\(v\) \? fmt\(v\) : '<span class="unk">Belum diketahui<\/span>'/.test(notaSrc), 'nota: nilai tidak diketahui → "Belum diketahui", bukan Rp0');
+  truthy(labaSrc.includes('Berdasarkan laporan yang diunggah. Belum merupakan rekonsiliasi pencairan dana.'), 'label jejak uang');
+  truthy(!/saldo|terbaik|peringkat/i.test(labaSrc.replace(/\/\*[\s\S]*?\*\//g, '').replace(/rekonsiliasi pencairan dana/g, '')), 'tanpa saldo/pencairan/peringkat platform (di luar komentar)');
+  truthy(/Total refund per platform belum tersedia dari mesin hitung/.test(labaSrc), 'refund per platform dinyatakan belum tersedia, tidak dihitung UI');
+});
+test('U3 Produk: status = warna + simbol + teks; label cari/urutkan; header tabel semantik; tanpa count-up', () => {
+  truthy(/HEALTH = \{ sehat: 'Sehat', tipis: 'Tipis', rugi: 'Rugi', unknown: 'Modal belum ada' \}/.test(prodSrc), 'label teks status');
+  const css = src('app.css');
+  for (const h of ['rugi', 'tipis', 'sehat', 'unknown']) truthy(new RegExp(`\\.chip\\.${h}::before \\{ content: "[^"]+"`).test(css), `simbol status ${h}`);
+  truthy(/<label class="sr-only" for="q">/.test(prodSrc) && /<label for="sort">Urutkan<\/label>/.test(prodSrc), 'label cari & urutkan');
+  truthy(/<th scope="col">Produk<\/th>/.test(prodSrc) && /<th scope="row">/.test(prodSrc), 'th scope col/row');
+  truthy(/role="group" aria-label="Saring menurut status"/.test(prodSrc) && /aria-pressed="\$\{view\.prodFilter === k\}"/.test(prodSrc), 'filter: grup tombol dengan aria-pressed');
+  truthy(!/requestAnimationFrame|countUp|count-up/.test(appJs), 'tanpa animasi angka (count-up)');
+  truthy(/kind === 'kepastian' \|\| kind === 'produk'/.test(appJs), 'laci produk: kanan di desktop, lembar bawah di HP (dialog modal = fokus terkunci)');
+});
+test('U4 skenario engine untuk Laba/Produk: nilai yang dipakai UI tersedia dan bebas NaN', () => {
+  const demo = E.compute(Demo.make().map((wb) => E.parseWorkbook(wb)), Demo.settings());
+  const shopee = E.compute(Demo.make().slice(0, 2).map((wb) => E.parseWorkbook(wb)), Demo.settings());
+  const tiktok = E.compute(Demo.make().slice(2).map((wb) => E.parseWorkbook(wb)), Demo.settings());
+  for (const [nama, r] of [['multi', demo], ['shopee', shopee], ['tiktok', tiktok]]) {
+    for (const v of [r.totalSales, r.totalFees, r.totalReceived, r.totalModal, r.totalMargin, r.netProfit, r.opex, r.coverage]) truthy(Number.isFinite(v), `${nama}: nilai Laba ${v}`);
+    eq(['shopee', 'tiktok'].filter((k) => r.has[k]).join(), nama === 'multi' ? 'shopee,tiktok' : nama, `${nama}: platform`);
+    truthy(r.months.length > 1, `${nama}: banyak bulan`);
+  }
+  for (const h of ['sehat', 'tipis', 'rugi']) truthy(demo.products.some((p) => p.health === h), `contoh punya produk ${h}`);
+  const tanpaModal = E.compute(Demo.make().map((wb) => E.parseWorkbook(wb)), { modalMode: 'produk', catalog: [], periods: [{ start: '', markup: 0, disc: 0 }] });
+  eq(tanpaModal.ready, false, 'tanpa modal: belum siap');
+  truthy(tanpaModal.products.every((p) => p.health === 'unknown' && !Number.isFinite(p.margin)), 'tanpa modal: semua produk "Modal belum ada", laba tidak diketahui (bukan 0)');
+});
+
+/* ===== VISUAL-V2: sistem token & komponen (tampilan saja) ===== */
+const baseCss = src('base.css'), appCss = src('app.css');
+test('V1 token V2 lengkap di tema terang, dan tema gelap menimpa token utamanya', () => {
+  const need = ['--brand-50', '--brand-100', '--brand-500', '--brand-900', '--surface-0', '--surface-1', '--surface-2', '--surface-raised', '--surface-hover', '--text-primary', '--text-secondary', '--text-muted',
+    '--border', '--border-strong', '--success', '--warning', '--danger', '--info', '--unknown', '--shadow-xs', '--shadow-sm', '--shadow-md', '--shadow-lg', '--font-display', '--font-body',
+    '--text-xs', '--text-sm', '--text-base', '--text-lg', '--text-xl', '--text-2xl', '--text-3xl', '--text-hero', '--weight-regular', '--weight-medium', '--weight-semibold', '--weight-bold'];
+  const light = baseCss.slice(baseCss.indexOf(':root {'), baseCss.indexOf('@media (prefers-color-scheme: dark)'));
+  for (const t of need) truthy(new RegExp(`${t}:`).test(light), `token ${t}`);
+  const dark = baseCss.slice(baseCss.indexOf(':root[data-theme="dark"] {'));
+  for (const t of ['--surface-0', '--surface-1', '--text-primary', '--border', '--brand-600', '--shadow-md', '--side-bg']) truthy(new RegExp(`${t}:`).test(dark), `tema gelap menimpa ${t}`);
+  truthy(/--accent: var\(--brand-600\)/.test(light) && /--ink: var\(--text-primary\)/.test(light), 'token lama menjadi alias token V2');
+});
+test('V2 tanpa font/CDN baru; satu keluarga huruf lokal; lapisan V2 tidak memakai warna acak', () => {
+  const faces = [...baseCss.matchAll(/@font-face \{[^}]*\}/g)].map((m) => m[0]);
+  eq(faces.length, 1, '@font-face'); truthy(/fonts\/jakarta\.woff/.test(faces[0]), 'Plus Jakarta Sans lokal');
+  for (const f of ['base.css', 'app.css', 'site.css']) truthy(!/https?:\/\//.test(src(f).replace(/http:\/\/www\.w3\.org\/2000\/svg/g, '')), `${f}: tanpa sumber eksternal`);
+  const v2 = appCss.slice(appCss.indexOf('VISUAL-V2 — lapisan tampilan'));
+  truthy(v2.length > 2000, 'lapisan V2 ada');
+  eq([...new Set(v2.match(/#[0-9a-fA-F]{3,8}\b/g) || [])].join(','), '#fff', 'warna di lapisan V2 memakai token (kecuali putih di atas permukaan merek)');
+});
+test('V3 status & ikon: simbol + teks + warna; segmen Kepastian Profit bisa difokus dan berlabel; ikon KPI hiasan', () => {
+  for (const k of ['verified', 'estimate', 'minimum', 'pending', 'unknown', 'danger']) truthy(new RegExp(`\\.status\\.${k}::before \\{ content: "[^"]+"`).test(appCss), `simbol status ${k}`);
+  truthy(/<button type="button" class="cov-seg \$\{p\.cls\}"[^>]*aria-label="\$\{p\.label\} \$\{pct\(p\.share\)\}\. Buka penjelasan"/.test(appJs), 'segmen = tombol berlabel');
+  truthy(/class="cov-bar" role="group"/.test(appJs), 'batang = grup (bukan gambar) karena segmennya interaktif');
+  truthy(/<span class="m-ic m-ic-\$\{k\}" aria-hidden="true">/.test(appJs), 'ikon KPI aria-hidden');
+  truthy(/\.is-loading/.test(baseCss) && /aria-busy/.test(appJs), 'status memuat tombol');
+  truthy(!/count-?up|requestAnimationFrame/i.test(appJs), 'tanpa animasi angka');
+});
+test('V4 gerak V2 tetap hormat "kurangi gerakan"; motion.js dimuat dashboard & ikut cache offline', () => {
+  truthy(/<script src="assets\/motion\.js(\?v=[0-9a-f]+)?"><\/script>/.test(fs.readFileSync(path.join(__dirname, '..', 'dashboard.html'), 'utf8')), 'dashboard memuat motion.js');
+  truthy(/'assets\/motion\.js'/.test(fs.readFileSync(path.join(__dirname, '..', 'sw.js'), 'utf8')), 'motion.js di CORE sw.js');
+  truthy(/--ease-spring: cubic-bezier\(\.22, 1, \.36, 1\)/.test(baseCss), 'kurva pegas tanpa memantul (nilai akhir tidak melewati 1)');
+  truthy(/body\.app \{ --dur-reveal: 340ms; --reveal-y: 10px;/.test(appCss), 'gerak aplikasi lebih tenang dari halaman depan');
+});
+
 /* ===== WEB-1 / MOTION-1: halaman depan jujur, gerak ringan ===== */
 const root = (f) => fs.readFileSync(path.join(__dirname, '..', f), 'utf8');
 const indexHtml = root('index.html');
@@ -215,19 +296,30 @@ test('W1 halaman depan: tanpa "Laba bersih", tanpa klaim akurasi/realtime/pencai
   truthy(!/\d+\s*%\s*akurat|akurasi\s+\d/i.test(indexTeks), 'klaim "X% akurat"/"akurasi X%"');
   truthy(!/real-?time|sinkron otomatis|terhubung otomatis ke (shopee|tiktok)/i.test(indexTeks.replace(/tidak terhubung otomatis ke marketplace/i, '')), 'klaim integrasi otomatis/realtime');
   for (const m of indexTeks.matchAll(/[^.]*pencairan[^.]*\./gi)) truthy(/belum tersedia|menyusul/.test(m[0]), `klaim pencairan dana: "${m[0].trim()}"`);
-  for (const m of indexTeks.matchAll(/[^.]*\bskor\b[^.]*\./gi)) truthy(/bukan skor/.test(m[0]), `skor Profit Confidence: "${m[0].trim()}"`);
+  for (const m of indexTeks.matchAll(/[^.]*\bskor\b[^.]*\./gi)) truthy(/bukan skor/i.test(m[0]), `skor Profit Confidence: "${m[0].trim()}"`);
 });
 test('W2 angka contoh di halaman depan diberi label fiktif/sintetis dan konsisten satu sama lain', () => {
   for (const label of ['Data fiktif', 'Contoh sintetis', 'Ilustrasi, data fiktif', 'Ilustrasi dengan data fiktif']) truthy(indexHtml.includes(label), `label "${label}"`);
-  const nota = indexHtml.slice(indexHtml.indexOf('class="pv-nota'), indexHtml.indexOf('class="pv-float'));
-  const baris = [...nota.matchAll(/<dd>([^<]+)<\/dd>/g)].map((m) => rp(m[1]));
-  const laba = rp(nota.match(/class="big">([^<]+)</)[1]);
-  eq(baris.length, 4, 'baris nota'); eq(baris.reduce((a, b) => a + b, 0), laba, 'nota: penjualan − potongan − modal − refund & biaya = laba');
-  const alur = [...indexHtml.slice(indexHtml.indexOf('class="flow"'), indexHtml.indexOf('id="flow-cap"')).matchAll(/<b>([^<]+)<\/b>/g)].map((m) => rp(m[1]));
-  eq(alur.slice(0, 4).reduce((a, b) => a + b, 0), alur[4], 'alur uang: jumlah komponen = laba');
-  eq(alur.join(','), [...baris, laba].join(','), 'alur uang sama dengan nota hero');
-  const seg = (sel) => [...indexHtml.match(new RegExp(`class="segbar ${sel}"[^>]*>([\\s\\S]*?)</div>`))[1].matchAll(/--w:(\d+)%/g)].reduce((a, m) => a + +m[1], 0);
-  eq(seg('pv-seg'), 100, 'batang status hero = 100%'); eq(seg('pc-seg'), 100, 'batang status Profit Confidence = 100%');
+  const part = (from, to) => { const a = indexHtml.indexOf(from); truthy(a >= 0, `bagian ${from}`); return indexHtml.slice(a, indexHtml.indexOf(to, a)); };
+  // struk Rp100: penjualan − potongan − HPP − refund & biaya = laba; batang = 100%
+  const r100 = part('id="r100"', 'class="flow3-steps"');
+  const baris = [...r100.matchAll(/<dd>([^<]+)<\/dd>/g)].map((m) => rp(m[1]));
+  eq(baris.length, 4, 'baris struk Rp100'); eq(baris.reduce((x, y) => x + y, 0), rp(r100.match(/class="big">([^<]+)</)[1]), 'struk Rp100 konsisten');
+  const langkah = [...part('class="flow3-steps"', '</ol>').matchAll(/class="fs-n[^"]*">([^<]+)</g)].map((m) => rp(m[1]));
+  eq(langkah.join(','), [...baris, baris.reduce((x, y) => x + y, 0)].join(','), 'langkah alur = struk');
+  const w = (html) => [...html.matchAll(/--w:(\d+)%/g)].reduce((x, m) => x + +m[1], 0);
+  eq(w(r100.slice(r100.indexOf('r100-bar'))), 100, 'batang Rp100 = 100%');
+  // etalase hero dan bagian "Omzet bukan laba" memakai angka yang sama
+  const show = part('class="show-stage"', 'class="show-cap"'), om = part('class="omzet"', 'class="om-cap"');
+  eq(rp(om.match(/om-a"><span>[^<]*<\/span><b>([^<]+)</)[1]), rp(show.match(/<span>Penjualan<\/span><b>([^<]+)</)[1]), 'omzet = penjualan di etalase');
+  eq(rp(om.match(/om-b"><span>[^<]*<\/span><b>([^<]+)</)[1]), rp(show.match(/sb-hero"><span>[^<]*<\/span><b>([^<]+)</)[1]), 'laba = laba di etalase');
+  eq(w(show.slice(show.indexOf('fc-seg'))), 100, 'batang Kepastian Profit etalase = 100%');
+  eq(w(part('class="segbar pc-seg"', '</div>')), 100, 'batang Profit Confidence = 100%');
+  // ringkasan produk: jumlah status = total, batang sebaran sesuai jumlah
+  const sum = part('class="bt-sum', 'class="bt-list"');
+  const n = [...sum.matchAll(/<b>(\d+)<\/b>/g)].map((m) => +m[1]);
+  eq(n[1] + n[2] + n[3], n[0], 'sehat + tipis + rugi = total produk');
+  eq([...sum.matchAll(/--w:(\d+)%/g)].map((m) => +m[1]).join(','), n.slice(1).map((x) => Math.round(x * 100 / n[0])).join(','), 'sebaran status = jumlah ÷ total');
 });
 test('W5 status Profit Confidence di halaman depan = 5 status dashboard (label dan urutan sama)', () => {
   const pc = indexHtml.slice(indexHtml.indexOf('<ul class="pc-legend">'), indexHtml.indexOf('</ul>', indexHtml.indexOf('<ul class="pc-legend">')));

@@ -129,7 +129,7 @@ const CekDemo = (() => {
     fixedCosts: [{ label: 'Gaji admin paruh waktu', amount: 1000000 }, { label: 'Sewa gudang & listrik', amount: 400000 }],
     mitra: null, coret: 100, periods: [{ start: '', markup: 0, disc: 0 }],
   });
-  const profile = () => ({ store: 'Toko Contoh Sejahtera', owner: 'Disusun oleh: Cek Profit', logo: '' });
+  const profile = () => ({ store: 'Toko Contoh Sejahtera', owner: 'Disusun oleh: Cek Untung', logo: '' });
 
   return { make, settings, profile, PRODUCTS };
 })();

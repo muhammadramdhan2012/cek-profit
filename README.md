@@ -1,6 +1,8 @@
-# Cek Profit
+# Cek Untung
 
-Alat web untuk menghitung **laba sebenarnya toko Shopee, TikTok Shop, dan Tokopedia** dari laporan Seller Centre. Hasilnya bisa disusun menjadi laporan PDF yang siap dikirim.
+> Sebelumnya bernama Cek Profit. Repository/internal identifier tertentu masih memakai `cek-profit` / `cekprofit` untuk kompatibilitas dan belum dimigrasikan. Alamat situs dan nama repository belum diubah.
+
+Website untuk menghitung **laba toko Shopee, TikTok Shop, dan Tokopedia dari data yang tersedia** di laporan Seller Centre, lengkap dengan bagian angka yang masih perlu dilengkapi. Hasilnya bisa disusun menjadi laporan PDF yang siap dikirim.
 
 - Situs: https://muhammadramdhan2012.github.io/cek-profit/
 - Aplikasi: https://muhammadramdhan2012.github.io/cek-profit/dashboard.html
@@ -40,7 +42,7 @@ Hal lain yang sudah disiapkan:
 | TikTok: Retur (CSV) | Diuji dengan data asli |
 | Shopee: Export pesanan (jumlah, SKU, variasi) | **Beta**: dibuat dari nama kolom yang umum, belum diuji dengan file asli |
 | TikTok: Export pesanan (CSV, kolom Inggris/Indonesia) | **Beta**: belum diuji dengan file asli |
-| Template modal Cek Profit (`Kode`, `Modal per unit (Rp)`) | Diuji |
+| Template modal Cek Untung (`Kode`, `Modal per unit (Rp)`) | Diuji |
 
 ## Mengatur situs (tanpa coding)
 

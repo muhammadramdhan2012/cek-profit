@@ -3,13 +3,13 @@
  * Setelah disimpan, situs ikut berubah dalam 1–3 menit.
  * ============================================================ */
 window.CEK_CONFIG = {
-  brand: 'Cek Profit',
+  brand: 'Cek Untung',
 
   // Nomor WhatsApp untuk membeli kode akses, format internasional TANPA "+" dan spasi.
   // Contoh: '6281234567890'. Selama kosong, tombol beli menampilkan pesan "nomor belum diatur".
   whatsapp: '',
-  waMessage: 'Halo, saya ingin berlangganan Cek Profit Pro.',
-  waMessageJasa: 'Halo, saya ingin memakai jasa laporan profit toko dari Cek Profit.',
+  waMessage: 'Halo, saya ingin berlangganan Cek Untung Pro.',
+  waMessageJasa: 'Halo, saya ingin memakai jasa laporan profit toko dari Cek Untung.',
 
   // Harga yang tampil di halaman depan (teks bebas). GANTI sebelum dipromosikan.
   prices: {

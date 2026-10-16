@@ -54,6 +54,13 @@
     filter: '<path d="M4 6h16M7 12h10M10 18h4"/>',
     unduh: '<path d="M12 3v12M7 10l5 5 5-5"/><path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/>',
   };
+  /** Ikon kecil kartu angka (hiasan). */
+  const KPI_IC = {
+    sales: '<path d="M4 19V9M10 19V5M16 19v-7M22 19H2"/>',
+    modal: '<path d="M21 8l-9-5-9 5 9 5 9-5z"/><path d="M3 8v8l9 5 9-5V8"/>',
+    fees: '<path d="M19 5L5 19"/><circle cx="7" cy="7" r="2.5"/><circle cx="17" cy="17" r="2.5"/>',
+  };
+  const kpiIc = (k) => (KPI_IC[k] ? `<span class="m-ic m-ic-${k}" aria-hidden="true"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${KPI_IC[k]}</svg></span>` : '');
   const svg = (k, s = 18) => `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICON[k]}</svg>`;
 
   const store = {
@@ -82,7 +89,7 @@
   let demo = false;
   let license = { ok: false };
   let viewName = 'ringkasan';
-  const view = { section: 'unggah', platform: 'all', from: '', to: '', metric: 'margin', q: '', sort: 'margin', showAll: false, onlyCheck: true, costQ: '', costAll: false, compare: null, typeOpen: false };
+  const view = { section: 'unggah', platform: 'all', from: '', to: '', metric: 'margin', q: '', sort: 'margin', showAll: false, onlyCheck: true, costQ: '', costAll: false, compare: null, typeOpen: false, prodFilter: 'all', prodKey: null, platCol: 'total' };
   const sim = { listPrice: null, disc: null, cost: null, feePct: null, feeFixed: null, src: null, plat: null, status: 'nonmall', kat: null, opsi: [], afiliasi: 0 };
   let last = null;
   const cloud = CekCloud.init({ url: C.supabaseUrl, key: C.supabaseAnonKey });
@@ -191,8 +198,8 @@
   /* ================= 4. kerangka ================= */
   const VIEWS = [
     ['ringkasan', 'Ringkasan', 'Laba toko Anda dalam satu nota'],
-    ['produk', 'Produk', 'Laba, margin, status, dan saran harga per produk'],
-    ['biaya', 'Laba', 'Laba per platform dan rincian potongan marketplace'],
+    ['produk', 'Produk', 'Lihat produk mana yang menghasilkan laba dan mana yang perlu diperbaiki'],
+    ['biaya', 'Laba', 'Lihat bagaimana penjualan berubah menjadi laba setelah biaya dan modal yang tercatat'],
     ['retur', 'Retur & refund', 'Barang yang kembali dan yang belum jelas'],
     ['simulator', 'Simulator harga', 'Uji harga dan diskon sebelum dipasang'],
     ['riwayat', 'Laporan & riwayat', 'Unduh laporan, simpan, dan bandingkan periode'],
@@ -236,7 +243,7 @@
     const p = account.profile, u = account.user;
     const pro = isPro();
     const planText = demo ? 'Mode contoh' : CekCloud.isPro(p) ? `Pro sampai ${tgl(p.pro_until)}` : license.ok ? `Pro (kode)${license.exp ? ` sampai ${tgl(license.exp)}` : ''}` : 'Paket gratis';
-    $('#plan-box').innerHTML = pro ? '' : `<div class="upsell"><b>Cek Profit Pro</b><p>Laporan PDF, analisis semua produk, dan saran harga.</p><button class="btn sm primary" type="button" data-upgrade>Lihat paket</button></div>`;
+    $('#plan-box').innerHTML = pro ? `<div class="plan-pro"><span class="badge pro">PRO</span><span>${demo ? 'Mode contoh: semua fitur terbuka' : 'Semua fitur Pro aktif'}</span></div>` : `<div class="upsell"><span class="badge pro">PRO</span><b>Cek Untung Pro</b><p>Laporan PDF, analisis semua produk, dan saran harga.</p><button class="btn sm primary" type="button" data-upgrade>Lihat paket</button></div>`;
     if (!cloud.enabled) {
       $('#account-box').innerHTML = `<div class="acct-box"><div class="avatar" style="background:var(--surface-3);color:var(--ink-2)">${svg('data', 16)}</div><div class="who"><b>${planText}</b><span>Tersimpan di browser ini</span></div></div>`;
       $('#account-sm').innerHTML = pro ? '<span class="badge pro">PRO</span>' : '<button class="btn sm" type="button" data-upgrade>Pro</button>';
@@ -254,7 +261,7 @@
       <span class="who"><b>${esc(name)}</b><span>${account.loading ? 'Memuat akun…' : esc(account.sync && account.sync !== 'Tersimpan di akun' ? account.sync : planText)}</span></span></button></div>`;
     $('#account-sm').innerHTML = `<a href="akun.html" class="avatar" style="width:30px;height:30px;font-size:12px;text-decoration:none" aria-label="Akun">${esc(initials(name))}</a>`;
   }
-  const LOGO = '<svg width="26" height="26" viewBox="0 0 30 30" aria-hidden="true"><rect width="30" height="30" rx="8" fill="var(--accent)"/><path d="M7 20.5l5-5 3.5 3 7.5-8" fill="none" stroke="var(--accent-ink)" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/><circle cx="23" cy="10.5" r="2.4" fill="var(--mark)"/></svg>';
+  const LOGO = '<svg class="logo" width="26" height="26" viewBox="0 0 16 16" aria-hidden="true"><rect class="lg-bg" width="16" height="16" rx="4.5" fill="var(--accent)"/><rect class="lg-b" x="3" y="9" width="2" height="4" rx="1" fill="var(--accent-ink)" opacity=".62"/><rect class="lg-b" x="7" y="7" width="2" height="6" rx="1" fill="var(--accent-ink)" opacity=".85"/><rect class="lg-b" x="11" y="5" width="2" height="8" rx="1" fill="var(--accent-ink)"/><circle class="lg-d" cx="12.6" cy="2.9" r="1.5" fill="var(--mark)"/></svg>';
   /** Kontrol filter & unduhan. Dipakai di bilah atas (desktop) dan di lembar Filter (HP); di lembar memakai
    *  data-filter/data-act agar id tidak ganda. */
   function topControls(r, inSheet) {
@@ -276,15 +283,18 @@
       download: canExport ? `<details class="dd"><summary class="btn sm">${svg('unduh', 16)}<span>Unduh</span></summary><div class="dd-menu" role="menu">${actions.join('')}</div></details>` : '',
       any: !!(filters || canExport) };
   }
+  // Tampilan Data berisi tiga bagian; judul bilah atas mengikuti bagian yang dipilih dari menu.
+  const DATA_SEC = { unggah: ['Unggah data', 'Unggah laporan marketplace dan periksa file yang terbaca'], modal: ['Modal & HPP', 'Isi harga beli atau HPP agar laba bisa dihitung'], pengaturan: ['Pengaturan', 'Biaya lain, target, dan identitas laporan'] };
   function renderTop() {
-    const meta = VIEWS.find((v) => v[0] === viewName);
+    const base = VIEWS.find((v) => v[0] === viewName);
+    const meta = viewName === 'data' ? [base[0], ...(DATA_SEC[view.section] || DATA_SEC.unggah)] : base;
     const r = last && last.r;
     const sub = r ? `${demo ? 'Data contoh, ' : ''}${prof().store ? `${esc(prof().store)}, ` : ''}${tgl(r.first)} sampai ${tgl(r.last)}` : meta[2];
     const short = r ? `${tgl(r.first)} – ${tgl(r.last)}${view.platform !== 'all' ? `, ${PNAME[view.platform]}` : ''}${view.from || view.to ? ', difilter' : ''}` : meta[2];
     const c = topControls(r, false);
     const extra = viewName === 'data' && !demo && !files.length ? '<button class="btn sm" type="button" data-demo>Lihat dengan data contoh</button>'
       : viewName === 'data' && demo ? '<button class="btn sm" type="button" id="exit-demo">Keluar dari mode contoh</button>' : '';
-    $('#main-top').innerHTML = `<div class="top-title"><a class="m-brand" href="./" aria-label="Cek Profit, halaman depan">${LOGO}</a>
+    $('#main-top').innerHTML = `<div class="top-title"><a class="m-brand" href="./" aria-label="Cek Untung, halaman depan">${LOGO}</a>
         <div class="top-text"><h1>${meta[1]}</h1><p class="sub"><span class="sub-long">${sub}</span><span class="sub-short">${short}</span></p></div></div>
       <div class="top-tools">${c.filters}${c.filters && c.download ? '<span class="divider" aria-hidden="true"></span>' : ''}${c.download}</div>
       ${extra ? `<div class="top-extra">${extra}</div>` : ''}
@@ -309,10 +319,11 @@
           <div><dt>Kualitas dasar perhitungan</dt><dd>${covParts(r).filter((p) => p.v > 0).map((p) => `${p.label} ${pct(p.share)}`).join(', ') || '—'}.${covCaveat(r.kepastian.cakupan)}</dd></div>
         </dl>
         <ul class="attn-list kd-list">${items.map(attnItem).join('')}
-          ${why.includes('periode_belum_divalidasi') ? `<li class="attn-item info"><span class="status estimate" aria-hidden="true"></span><div class="attn-body"><b>Kelengkapan periode belum dicek</b><p>Cek Profit belum bisa memastikan laporan mencakup bulan penuh. Pastikan rentang tanggal unduhan sama di semua laporan.</p></div><div class="attn-cta">${ctaBtn({ label: 'Lihat file', go: 'data', section: 'unggah' })}</div></li>` : ''}</ul>
+          ${why.includes('periode_belum_divalidasi') ? `<li class="attn-item info"><span class="status estimate" aria-hidden="true"></span><div class="attn-body"><b>Kelengkapan periode belum dicek</b><p>Cek Untung belum bisa memastikan laporan mencakup bulan penuh. Pastikan rentang tanggal unduhan sama di semua laporan.</p></div><div class="attn-cta">${ctaBtn({ label: 'Lihat file', go: 'data', section: 'unggah' })}</div></li>` : ''}</ul>
         <p class="tiny faint">Profit Confidence menunjukkan seberapa kuat dan lengkap data di balik laba, bukan peluang angka laba benar. Cakupan dan kualitas ditampilkan terpisah; tidak digabung menjadi satu skor.</p></div>`;
       return;
     }
+    if (sheetKind === 'produk') { d.innerHTML = productSheet(r); return; }
     if (sheetKind === 'filter') {
       d.innerHTML = `${head('Filter & unduh')}<div class="d-body">${topControls(r, true) || '<p class="small muted">Belum ada data untuk difilter.</p>'}</div>`;
     } else {
@@ -327,9 +338,16 @@
   function openSheet(kind) {
     sheetKind = kind;
     const d = $('#sheet');
-    d.classList.toggle('drawer', kind === 'kepastian');   // desktop: laci kanan; HP: lembar bawah
+    d.classList.toggle('drawer', kind === 'kepastian' || kind === 'produk');   // desktop: laci kanan; HP: lembar bawah
     renderSheet();
     if (!d.open) d.showModal();
+  }
+  /** Tombol sedang memproses: nonaktif + spinner (teks tetap terbaca pembaca layar). */
+  const busy = (b, on) => { b.disabled = on; b.classList.toggle('is-loading', on); if (on) b.setAttribute('aria-busy', 'true'); else b.removeAttribute('aria-busy'); };
+  function openProduct(key) {
+    view.prodKey = key;
+    document.querySelectorAll('tr[data-prod]').forEach((tr) => tr.classList.toggle('is-selected', tr.dataset.prod === key));
+    openSheet('produk');
   }
   const reducedMotion = () => window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   /** Tutup lembar dengan animasi singkat (langsung bila pengguna memilih kurangi gerakan). */
@@ -362,7 +380,8 @@
     afterRender();
   }
   function afterRender() {
-    if (viewName === 'ringkasan') bindTrend($('#monthly'));
+    if (window.CekMotion) { window.CekMotion.reveal($('#view')); window.CekMotion.spotlight($('#view')); }
+    if (viewName === 'ringkasan' || viewName === 'biaya') bindTrend($('#monthly'));
     if (viewName === 'produk') renderProducts();
     if (viewName === 'simulator') renderSimOut();
     if (viewName === 'data') { renderFiles(); renderCostTable(); }
@@ -387,7 +406,7 @@
   /* ================= 5. tampilan ================= */
   const emptyView = () => `<div class="panel empty"><span class="ic">${svg('data', 24)}</span><h2>Mulai dari laporan penghasilan</h2>
     <p>Unggah Laporan Penghasilan Shopee atau TikTok Shop. Hitungan terjadi di browser Anda; file tidak dikirim ke mana pun.</p>
-    <div class="row-actions" style="justify-content:center"><button class="btn primary" type="button" data-go="data">Unggah laporan</button><button class="btn" type="button" data-demo>Lihat dengan data contoh</button></div></div>`;
+    <button class="btn primary" type="button" data-go="data">Unggah laporan</button><button class="btn link" type="button" data-demo>atau lihat dengan data contoh</button></div>`;
 
   /* ---------- ringkasan ---------- */
   /* ---------- ringkasan (UI-2): semua angka diambil apa adanya dari engine ---------- */
@@ -487,49 +506,66 @@
     const finalBadge = K.laba.final ? '<span class="status verified">Final</span>'
       : `<button type="button" class="status pending final-badge" data-sheet="kepastian" aria-haspopup="dialog" aria-label="Status laba: belum final. Lihat alasannya">Belum final</button>`;
     const hppMixed = r.ready && (c.penjualan.estimasi || c.penjualan.estimasiMinimum || c.penjualan.belum);
-    const kpi = (label, value, note, cls = '', extra = '') => `<div class="metric-card ${cls}"><span class="m-label">${label}</span><span class="m-value ${typeof value === 'number' && value < 0 ? 'neg' : ''}">${typeof value === 'number' ? fmt(value) : value}</span>${extra}<span class="m-note">${note}</span></div>`;
-    return `<div class="dash">
-      <section class="dash-hero" aria-label="Angka utama">
-        ${kpi(`Laba dari data tersedia${qi('laba_bersih', 'Laba dari data tersedia')}`, r.ready ? laba : '<span class="faint">Belum dihitung</span>',
-          r.ready ? `${opex ? 'setelah biaya operasional yang tercatat. ' : ''}${pct(r.coverage, 0)} penjualan masuk dalam perhitungan` : 'isi modal produk agar laba bisa dihitung',
-          'is-hero', `<div class="m-status">${finalBadge}</div>`)}
-        ${kpi(`Penjualan${qi('penjualan', 'Penjualan')}`, r.totalSales, `${num(r.orders)} pesanan terjual`)}
+    const kpi = (label, value, note, cls = '', extra = '', kind = '') => `<div class="metric-card ${cls}" ${kind ? `data-kpi="${kind}"` : ''}><span class="m-label">${kpiIc(kind)}${label}</span><span class="m-value ${typeof value === 'number' && value < 0 ? 'neg' : ''}">${typeof value === 'number' ? fmt(value) : value}</span>${extra}<span class="m-note">${note}</span></div>`;
+    // Garis tren kecil di kartu laba: bentuk dari nilai bulanan engine (r.months), hanya untuk gambar, tanpa angka baru.
+    const sk = opex ? 'net' : 'margin';
+    const sv = r.ready ? r.months.map((m) => m.total[sk]).filter(ok) : [];
+    const spark = (() => {
+      if (sv.length < 2) return '';
+      const lo = Math.min(...sv), hi = Math.max(...sv), span = hi - lo || 1, W = 220, H = 56;
+      const pts = sv.map((v, i) => `${(i * W / (sv.length - 1)).toFixed(1)},${(H - 4 - (v - lo) * (H - 8) / span).toFixed(1)}`);
+      return `<figure class="ph-spark" aria-hidden="true"><svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none"><path class="area" d="M0,${H} L${pts.join(' L')} L${W},${H} Z"/><path class="line" d="M${pts.join(' L')}"/></svg>
+        <figcaption>${opex ? 'Laba dari data tersedia' : 'Laba setelah modal'} per bulan, ${num(sv.length)} bulan</figcaption></figure>`;
+    })();
+    const kpiTiles = `<section class="d3-tiles" aria-label="Angka pendukung">
+        ${kpi(`Penjualan${qi('penjualan', 'Penjualan')}`, r.totalSales, `${num(r.orders)} pesanan terjual`, '', '', 'sales')}
         ${kpi(`Modal / HPP${qi('modal', 'Modal')}`, r.ready ? r.totalModal : '<span class="faint">—</span>', r.ready ? 'dari penjualan yang modalnya diketahui' : 'modal belum diisi', '',
-          hppMixed ? '<div class="m-status"><span class="status estimate">Sebagian perkiraan</span></div>' : r.ready && c.penjualan.terverifikasi > 0 ? '<div class="m-status"><span class="status verified">Terverifikasi</span></div>' : '')}
-        ${kpi(`Potongan marketplace${qi('potongan', 'Potongan marketplace')}`, -r.totalFees, 'dipotong dari penjualan oleh marketplace')}
-      </section>
+          hppMixed ? '<div class="m-status"><span class="status estimate">Sebagian perkiraan</span></div>' : r.ready && c.penjualan.terverifikasi > 0 ? '<div class="m-status"><span class="status verified">Terverifikasi</span></div>' : '', 'modal')}
+        ${kpi(`Potongan marketplace${qi('potongan', 'Potongan marketplace')}`, -r.totalFees, 'dipotong dari penjualan oleh marketplace', '', '', 'fees')}
+      </section>`;
+    return `<div class="dash d3">
+      <div class="d3-top">
+        <section class="dash-hero d3-profit" aria-label="Laba">
+          ${kpi(`Laba dari data tersedia${qi('laba_bersih', 'Laba dari data tersedia')}`, r.ready ? laba : '<span class="faint">Belum dihitung</span>',
+            r.ready ? `${opex ? 'setelah biaya operasional yang tercatat. ' : ''}${pct(r.coverage, 0)} penjualan masuk dalam perhitungan` : 'isi modal produk agar laba bisa dihitung',
+            'is-hero', `<div class="m-status">${finalBadge}</div>${spark}<div class="ph-cta">${r.ready ? '<button type="button" class="btn sm ph-btn" data-go="biaya">Lihat rincian laba<svg class="arr" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg></button>' : '<button type="button" class="btn sm ph-btn" data-go="data" data-section="modal">Isi modal</button>'}</div>`)}
+        </section>
 
-      <section class="section-card kep" aria-labelledby="kep-t">
-        <div class="kep-head">
-          <div><h2 id="kep-t" class="kep-title">Kepastian Profit</h2><p class="kep-sub">Seberapa kuat data yang mendasari perhitungan laba Anda</p></div>
-          <div class="kep-state">${finalBadge}</div>
-        </div>
-        <div class="kep-body">
-          <div class="kep-main">
-            ${barOk ? `<div class="cov-bar" role="img" aria-label="Kualitas dasar perhitungan, porsi penjualan per status: ${parts.filter((p) => p.v > 0).map((p) => `${p.label} ${pct(p.share)}`).join(', ')}">
-              ${parts.filter((p) => p.v > 0).map((p) => `<span class="cov-seg ${p.cls}" style="--w:${(p.share * 100).toFixed(3)}%" title="${p.label}: ${pct(p.share)}"></span>`).join('')}</div>`
-              : '<p class="small muted">Sebagian penjualan bernilai minus (refund atau potongan), jadi porsinya tidak digambar sebagai batang. Rinciannya ada di daftar.</p>'}
-            <p class="kep-note">${r.ready ? `<b>${pct(r.coverage, 0)}</b> penjualan (${fmt(c.labaTerhitung.dasarPenjualan)}) masuk dalam perhitungan laba.${covCaveat(c)}` : 'Laba belum bisa dihitung karena modal belum diisi.'}
-              ${cert.length ? `<b>${num(cert.length)}</b> hal perlu dilengkapi.` : ''}</p>
-            <button type="button" class="btn sm" data-sheet="kepastian" aria-haspopup="dialog">Lihat detail kepastian</button>
+        <section class="section-card kep d3-conf" aria-labelledby="kep-t" data-spotlight>
+          <div class="kep-head">
+            <div><h2 id="kep-t" class="kep-title">Kepastian Profit</h2><p class="kep-sub">Seberapa kuat data yang mendasari perhitungan laba Anda</p></div>
+            <div class="kep-state">${finalBadge}</div>
           </div>
-          <div class="cov-side"><p class="cov-k">Kualitas dasar perhitungan <span>porsi penjualan per status</span></p><ul class="cov-legend">${parts.map((p) => `<li class="${p.v ? '' : 'is-zero'}"><span class="status ${p.cls}">${p.label}</span><b>${ok(p.share) ? pct(p.share) : '—'}</b><span class="cov-amt">${fmt(p.v)} · ${num(p.n)} pesanan</span></li>`).join('')}</ul></div>
-        </div>
-      </section>
-
-      <div class="dash-row">
-        <section class="section-card trend" id="monthly" aria-labelledby="trend-t">${trendCard(r)}</section>
-        <section class="section-card attn" aria-labelledby="attn-t">
-          <div class="card-header"><h3 id="attn-t">Perlu perhatian</h3><p>${attn.length ? `${num(attn.length)} hal, diurutkan dari yang paling berdampak` : 'Tidak ada'}</p></div>
-          ${attn.length ? `<ul class="attn-list">${attn.slice(0, 5).map(attnItem).join('')}</ul>
-            ${attn.length > 5 ? `<details class="disclose"><summary>${num(attn.length - 5)} hal lainnya</summary><ul class="attn-list">${attn.slice(5).map(attnItem).join('')}</ul></details>` : ''}`
-            : '<div class="mini-empty"><span class="status verified">Tidak ada yang perlu ditindaklanjuti</span><p class="small muted">Data yang diunggah tidak menunjukkan masalah yang perlu dilengkapi.</p></div>'}
-          ${!pro && r.insights.length > FREE ? `<p class="tiny faint">${num(r.insights.length - FREE)} temuan lain tersedia di Pro. <button class="btn link" type="button" data-upgrade>Lihat paket</button></p>` : ''}
+          <div class="kep-body">
+            <div class="kep-main">
+              ${barOk ? `<div class="cov-bar" role="group" aria-label="Kualitas dasar perhitungan, porsi penjualan per status: ${parts.filter((p) => p.v > 0).map((p) => `${p.label} ${pct(p.share)}`).join(', ')}">
+                ${parts.filter((p) => p.v > 0).map((p) => `<button type="button" class="cov-seg ${p.cls}" style="--w:${(p.share * 100).toFixed(3)}%" data-sheet="kepastian" aria-haspopup="dialog" data-tip="${p.label} · ${pct(p.share)}" aria-label="${p.label} ${pct(p.share)}. Buka penjelasan"></button>`).join('')}</div>`
+                : '<p class="small muted">Sebagian penjualan bernilai minus (refund atau potongan), jadi porsinya tidak digambar sebagai batang. Rinciannya ada di daftar.</p>'}
+              <p class="kep-note">${r.ready ? `<b>${pct(r.coverage, 0)}</b> penjualan (${fmt(c.labaTerhitung.dasarPenjualan)}) masuk dalam perhitungan laba.${covCaveat(c)}` : 'Laba belum bisa dihitung karena modal belum diisi.'}</p>
+              <div class="kep-actions">${cert.length ? `<button type="button" class="kep-count" data-sheet="kepastian" aria-haspopup="dialog"><b>${num(cert.length)}</b><span>hal perlu dilengkapi</span></button>` : '<span class="status verified">Tidak ada yang perlu dilengkapi</span>'}
+                <button type="button" class="btn sm" data-sheet="kepastian" aria-haspopup="dialog">Lihat detail kepastian</button></div>
+            </div>
+            <div class="cov-side"><p class="cov-k">Kualitas dasar perhitungan <span>porsi penjualan per status</span></p><ul class="cov-legend">${parts.map((p) => `<li class="${p.v ? '' : 'is-zero'}"><span class="status ${p.cls}">${p.label}</span><b>${ok(p.share) ? pct(p.share) : '—'}</b><span class="cov-amt">${fmt(p.v)} · ${num(p.n)} pesanan</span></li>`).join('')}</ul></div>
+          </div>
         </section>
       </div>
 
-      <section class="section-card money" aria-labelledby="money-t">${moneyCard(r)}</section>
-      <section class="section-card prod-prev" aria-labelledby="prod-t">${productPreview(r)}</section>
+      ${kpiTiles}
+
+      <section class="section-card trend d3-trend" id="monthly" aria-labelledby="trend-t">${trendCard(r)}</section>
+
+      <section class="section-card attn d3-attn" aria-labelledby="attn-t">
+        <div class="card-header"><h3 id="attn-t">Perlu perhatian</h3><p>${attn.length ? `${num(attn.length)} hal, diurutkan dari yang paling berdampak` : 'Tidak ada'}</p></div>
+        ${attn.length ? `<ul class="attn-list attn-rail">${attn.slice(0, 6).map(attnItem).join('')}</ul>
+          ${attn.length > 6 ? `<details class="disclose"><summary>${num(attn.length - 6)} hal lainnya</summary><ul class="attn-list">${attn.slice(6).map(attnItem).join('')}</ul></details>` : ''}`
+          : '<div class="mini-empty"><span class="status verified">Tidak ada yang perlu ditindaklanjuti</span><p class="small muted">Data yang diunggah tidak menunjukkan masalah yang perlu dilengkapi.</p></div>'}
+        ${!pro && r.insights.length > FREE ? `<p class="tiny faint">${num(r.insights.length - FREE)} temuan lain tersedia di Pro. <button class="btn link" type="button" data-upgrade>Lihat paket</button></p>` : ''}
+      </section>
+
+      <div class="d3-pair">
+        <section class="section-card money" aria-labelledby="money-t">${moneyCard(r)}</section>
+        <section class="section-card prod-prev" aria-labelledby="prod-t">${productPreview(r)}</section>
+      </div>
 
       ${others.length ? `<section class="section-card dash-ins" aria-labelledby="ins-t"><div class="card-header"><h3 id="ins-t">Temuan lain</h3><p>Dibuat otomatis dari data Anda</p></div>
         <ul class="insights">${others.map(insightItem).join('')}</ul></section>` : ''}
@@ -542,10 +578,11 @@
   }
 
   /** Grafik tren bulanan: total per bulan dari r.months (tidak ada angka baru). Bisa disorot, diketuk, dan difokus keyboard. */
-  function trendCard(r) {
+  /** opt.title dan opt.table: halaman Laba memakai judul sendiri dan tabel bulanannya sendiri (tanpa margin % buatan UI). */
+  function trendCard(r, opt = {}) {
     const key = view.metric === 'sales' || !r.ready ? 'sales' : 'margin';
     const ms = r.months;
-    const head = `<div class="card-header"><h3 id="trend-t">Tren bisnis</h3>
+    const head = `<div class="card-header"><h3 id="trend-t">${opt.title || 'Tren bisnis'}</h3>
       <div class="seg" role="group" aria-label="Ukuran tren">${[['margin', 'Laba'], ['sales', 'Penjualan']].filter(([k]) => k !== 'margin' || r.ready).map(([k, l]) => `<button type="button" data-metric="${k}" aria-pressed="${key === k}">${l}</button>`).join('')}</div></div>`;
     if (!ms.length) return `${head}<div class="mini-empty"><p class="small muted">Belum ada data per bulan.</p></div>`;
     const last1 = ms[ms.length - 1];
@@ -572,14 +609,14 @@
     });
     const best = r.insights.find((x) => /^Laba tertinggi di /.test(x.title));
     return `${head}
-      <div class="tchart"><svg viewBox="0 0 ${W} ${H}" role="list" aria-label="${label} per bulan. Gunakan Tab untuk membaca tiap bulan.">${g}</svg><div class="tip" hidden></div></div>
+      <div class="tchart"><svg viewBox="0 0 ${W} ${H}" role="list" aria-label="${label} per bulan. Gunakan Tab untuk membaca tiap bulan."><defs aria-hidden="true"><linearGradient id="tg-pos" x1="0" y1="0" x2="0" y2="1"><stop offset="0" class="tg-a"/><stop offset="1" class="tg-b"/></linearGradient><linearGradient id="tg-neg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" class="tg-c"/><stop offset="1" class="tg-d"/></linearGradient></defs>${g}</svg><div class="tip" hidden></div></div>
       <p class="tiny faint">${ms.length < 2 ? 'Tren butuh minimal 2 bulan data. ' : ''}${running ? '* Bulan berjalan: datanya belum lengkap. ' : ''}${key === 'margin' ? 'Laba setelah modal, dari pesanan yang modalnya diketahui.' : 'Penjualan per bulan pesanan.'}</p>
       ${best && key === 'margin' ? `<p class="trend-sum small"><span class="status estimate" aria-hidden="true"></span>${esc(best.title)}. ${esc(best.detail)}</p>` : ''}
-      <details class="disclose"><summary>Lihat tabel per bulan</summary>
+      ${opt.table === false ? '' : `<details class="disclose"><summary>Lihat tabel per bulan</summary>
         <div class="tablewrap"><table class="data"><thead><tr><th>Bulan</th><th>Pesanan</th><th>Penjualan</th><th>Potongan</th><th>Laba setelah modal</th><th>Margin %</th>${r.fixedMonthly ? '<th>Laba dari data tersedia</th>' : ''}</tr></thead>
         <tbody>${ms.map((m) => `<tr><td>${monthLong(m.month)}</td><td>${num(m.total.orders)}</td><td>${fmt(m.total.sales)}</td><td class="neg">${fmt(m.total.fees)}</td>
           <td class="${m.total.margin < 0 ? 'neg' : ''}">${r.ready ? fmt(m.total.margin) : '—'}</td><td>${r.ready && m.total.knownSales ? pct(m.total.margin / m.total.knownSales) : '—'}</td>
-          ${r.fixedMonthly ? `<td class="${m.total.net < 0 ? 'neg' : ''}">${r.ready ? fmt(m.total.net) : '—'}</td>` : ''}</tr>`).join('')}</tbody></table></div></details>`;
+          ${r.fixedMonthly ? `<td class="${m.total.net < 0 ? 'neg' : ''}">${r.ready ? fmt(m.total.net) : '—'}</td>` : ''}</tr>`).join('')}</tbody></table></div></details>`}`;
   }
   function bindTrend(box) {
     if (!box) return;
@@ -607,6 +644,7 @@
     const rows = [
       { label: 'Penjualan', v: r.totalSales, cls: 'base', note: `${num(r.orders)} pesanan terjual` },
       { label: 'Potongan marketplace', v: -r.totalFees, cls: 'cost', note: 'admin, ongkir, komisi, dan biaya lain dari laporan' },
+      ...(ok(r.totalReceived) ? [{ label: 'Dana diterima', v: r.totalReceived, cls: 'base sub', note: 'menurut laporan penghasilan' }] : []),
       ...(r.ready ? [{ label: 'Modal / HPP', v: r.totalModal, cls: 'cost', note: 'dari penjualan yang modalnya diketahui' }] : [{ label: 'Modal / HPP', v: NaN, cls: 'unknown', note: 'modal belum diisi' }]),
       ...(r.knownPacking ? [{ label: typeOf(st()) === 'dropship' ? 'Biaya dropship' : 'Packing', v: r.knownPacking, cls: 'cost', note: 'biaya per pesanan yang Anda isi' }] : []),
       ...(r.lostCertain || rb.kerugianTanpaNilai ? [{ label: 'Kerugian barang retur', v: r.lostCertain || NaN, cls: 'cost', note: rb.kerugianTanpaNilai ? `${num(rb.kerugianTanpaNilai)} kasus tanpa nilai belum dikurangkan` : 'barang yang Anda tandai tidak kembali' }] : []),
@@ -619,7 +657,7 @@
       <ul class="flow">${rows.map((x) => `<li class="flow-row ${x.cls} ${ok(x.v) && x.v < 0 ? 'is-neg' : ''}"><div class="flow-lbl"><b>${x.label}</b><span>${esc(x.note)}</span></div>
         <div class="flow-track" aria-hidden="true">${ok(x.v) ? `<i style="--w:${((Math.abs(x.v) / max) * 100).toFixed(2)}%"></i>` : ''}</div>
         <span class="flow-val ${ok(x.v) && x.v < 0 ? 'neg' : ''}">${ok(x.v) ? fmt(x.cls === 'cost' ? -x.v : x.v) : 'Belum diketahui'}</span></li>`).join('')}</ul>
-      <p class="tiny faint">Komponen tidak dijumlahkan menjadi 100%: sebagian penjualan belum dihitung dan tiap laporan punya definisi sendiri. Ini bukan pencocokan dana yang dicairkan ke rekening.</p>`;
+      <p class="tiny faint">Komponen tidak dijumlahkan menjadi 100%: sebagian penjualan belum dihitung dan tiap laporan punya definisi sendiri. Berdasarkan laporan yang diunggah. Belum merupakan rekonsiliasi pencairan dana.</p>`;
   }
 
   /** Cuplikan produk: urutan dari angka engine (laba produk, status), tanpa status kepastian baru. */
@@ -638,32 +676,42 @@
       <p class="tiny faint">Laba produk dan margin (laba ÷ penjualan produk) dari perhitungan per produk.</p>`;
   }
 
+  /**
+   * Nota laba: Penjualan − potongan = dana diterima − modal − packing − kerugian retur (− biaya operasional) = laba.
+   * Semua nilai dari engine. Nilai yang belum diketahui ditulis "Belum diketahui", tidak pernah Rp0.
+   * Tanda "=" hanya dipakai bila angka engine memang cocok; bila laporan memuat komponen lain, tanda tidak dipaksakan.
+   */
   function nota(r) {
     const lines = [];
-    const L = (label, v, cls = '', note = '', key = '') => lines.push(`<div class="ln ${cls}"><dt>${label}${key ? qi(key, label) : ''}${note ? `<small>${note}</small>` : ''}</dt><dd>${fmt(v)}</dd></div>`);
+    const L = (op, label, v, cls = '', note = '', key = '') => lines.push(`<div class="ln ${cls}"><dt>${op ? `<span class="op" aria-hidden="true">${op}</span>` : ''}<span class="lbl-t">${label}${key ? qi(key, label) : ''}</span>${note ? `<small>${note}</small>` : ''}</dt><dd>${ok(v) ? fmt(v) : '<span class="unk">Belum diketahui</span>'}</dd></div>`);
     const isDrop = typeOf(st()) === 'dropship';
-    L('Penjualan', r.totalSales, '', `${num(r.orders)} pesanan terjual`, 'penjualan');
-    L('Potongan marketplace', r.totalFees, 'minus', `${pct(-r.totalFees / r.totalSales)} dari penjualan`, 'potongan');
-    const rb = r.kepastian.risikoBarang;
+    const rb = r.kepastian.risikoBarang, opex = r.fixedMonthly > 0;
+    // Pengecekan kecocokan hanya memilih tanda "=", tidak menghasilkan angka baru.
+    const near = (a, b) => ok(a) && ok(b) && Math.abs(a - b) < 1;
+    L('', 'Penjualan', r.totalSales, '', `${num(r.orders)} pesanan terjual`, 'penjualan');
+    L('−', 'Potongan marketplace', r.totalFees, 'minus', `${pct(-r.totalFees / r.totalSales)} dari penjualan`, 'potongan');
+    L(near(r.totalSales + r.totalFees, r.totalReceived) ? '=' : '', 'Dana diterima', r.totalReceived, 'sub', near(r.totalSales + r.totalFees, r.totalReceived) ? '' : 'menurut laporan; ada komponen lain di luar penjualan dan potongan', 'dana_diterima');
     if (r.ready) {
       // Dana dari pesanan yang dikeluarkan dari laba (modal tidak diketahui), langsung dari engine. Bisa negatif.
       const unknown = r.kepastian.cakupan.dikeluarkan.danaDiterima;
-      if (Math.abs(unknown) >= 1) L('Dana dari pesanan tanpa modal', -unknown, 'muted', 'tidak dihitung sampai modalnya diisi', 'tanpa_modal');
-      L('Modal barang', -r.totalModal, 'minus', '', 'modal');
-      if (r.knownPacking) L(isDrop ? 'Biaya dropship' : 'Packing', -r.knownPacking, 'minus', '', isDrop ? 'dropship_fee' : 'packing');
+      if (Math.abs(unknown) >= 1) L('−', 'Dana dari pesanan tanpa modal', -unknown, 'muted', 'tidak dihitung sampai modalnya diisi', 'tanpa_modal');
+      L('−', 'Modal / HPP', -r.totalModal, 'minus', '', 'modal');
+      if (r.knownPacking) L('−', isDrop ? 'Biaya dropship' : 'Packing', -r.knownPacking, 'minus', '', isDrop ? 'dropship_fee' : 'packing');
       // Kasus "tidak kembali" tanpa nilai tidak dikurangkan dan tidak ditampilkan sebagai Rp0.
-      if (r.lostCertain || rb.kerugianTanpaNilai) L('Retur yang tidak kembali', r.lostCertain ? -r.lostCertain : NaN, 'minus', rb.kerugianTanpaNilai ? `${num(rb.kerugianTanpaNilai)} kasus tanpa nilai belum dikurangkan` : '', 'retur_hilang');
-      if (r.fixedMonthly > 0) { L('Laba setelah modal', r.totalMargin, 'sub', '', 'margin_kotor'); L('Biaya operasional', -r.opex, 'minus', `${fmt(r.fixedMonthly)} per bulan`, 'opex'); }
-    } else L('Dana diterima', r.totalReceived, 'sub', '', 'dana_diterima');
-    const total = r.fixedMonthly > 0 ? r.netProfit : r.totalMargin;
-    const label = r.fixedMonthly > 0 ? 'Laba dari data tersedia' : 'Laba setelah modal';
-    const labelKey = r.fixedMonthly > 0 ? 'laba_bersih' : 'margin_total';
+      if (r.lostCertain || rb.kerugianTanpaNilai) L('−', 'Kerugian retur', r.lostCertain ? -r.lostCertain : NaN, 'minus', rb.kerugianTanpaNilai ? `+ ${num(rb.kerugianTanpaNilai)} kasus nilainya belum diketahui.` : 'barang yang Anda tandai tidak kembali', 'retur_hilang');
+      if (opex) { L('=', 'Laba setelah modal', r.totalMargin, 'sub', '', 'margin_kotor'); L('−', 'Biaya operasional', -r.opex, 'minus', `${fmt(r.fixedMonthly)} per bulan yang Anda isi`, 'opex'); }
+    } else L('−', 'Modal / HPP', NaN, 'minus', 'modal produk belum diisi', 'modal');
+    const total = opex ? r.netProfit : r.totalMargin;
+    const label = 'Laba dari data tersedia';
+    const notes = [opex ? 'Setelah biaya operasional yang tercatat.' : 'Biaya operasional belum dicatat.',
+      r.coverage < 0.995 ? `Dari ${pct(r.coverage, 0)} penjualan yang masuk dalam perhitungan.` : '',
+      r.unknownRisk > 0 ? `Bisa turun ${fmt(r.unknownRisk)} bila retur yang belum dicek tidak kembali.` : '',
+      rb.risikoTanpaNilai ? `${num(rb.risikoTanpaNilai)} kasus retur yang belum dicek belum punya nilai, jadi risikonya belum bisa dihitung.` : ''].filter(Boolean).join(' ');
     return `<section class="nota" aria-label="Nota laba">
       <div class="nota-head"><b>Nota laba</b><span>${tgl(r.first)} sampai ${tgl(r.last)}<br>${['shopee', 'tiktok'].filter((k) => r.has[k]).map((k) => PNAME[k]).join(' dan ')}</span></div>
       <dl>${lines.join('')}</dl>
-      <div class="nota-total"><span class="lbl">${label}${qi(labelKey, label)}</span>
-        ${r.ready ? `<span class="big ${total < 0 ? 'neg' : ''}">${fmt(total)}</span>
-          <span class="note">${r.fixedMonthly > 0 ? 'Setelah biaya operasional yang tercatat. ' : ''}${r.coverage < 0.98 ? `Dari ${pct(r.coverage, 0)} penjualan yang modalnya diketahui.` : `${pct(total / r.totalSales)} dari seluruh penjualan.`}${r.unknownRisk > 0 ? ` Bisa turun ${fmt(r.unknownRisk)} bila retur yang belum dicek tidak kembali.` : ''}${rb.risikoTanpaNilai ? ` ${num(rb.risikoTanpaNilai)} kasus retur yang belum dicek belum punya nilai, jadi risikonya belum bisa dihitung.` : ''}</span>`
+      <div class="nota-total"><span class="lbl"><span class="op" aria-hidden="true">=</span>${label}${qi(opex ? 'laba_bersih' : 'margin_total', label)}</span>
+        ${r.ready ? `<span class="big ${total < 0 ? 'neg' : ''}">${fmt(total)}</span><span class="note">${notes}</span>`
           : '<span class="big faint">Belum dihitung</span><span class="note">Isi modal produk agar laba bisa dihitung.</span><button class="btn sm primary" type="button" data-go="data" data-section="modal" style="justify-self:start;margin-top:6px">Isi modal</button>'}
       </div></section>`;
   }
@@ -690,17 +738,33 @@
     <button class="btn sm primary" type="button" data-upgrade>Buka dengan Pro</button></div></div>`;
 
   function niceStep(x) { const p = 10 ** Math.floor(Math.log10(x || 1)); const n = x / p; return (n <= 1 ? 1 : n <= 2 ? 2 : n <= 5 ? 5 : 10) * p; }
-  /* ---------- produk ---------- */
+  /* ---------- produk (UI-3): angka per produk dari engine; UI hanya menyaring, mengurutkan, dan menampilkan ---------- */
+  const HEALTH = { sehat: 'Sehat', tipis: 'Tipis', rugi: 'Rugi', unknown: 'Modal belum ada' };
+  const healthChip = (h) => `<span class="chip ${HEALTH[h] ? h : 'unknown'}">${HEALTH[h] || HEALTH.unknown}</span>`;
+  const healthWhy = (p, r) => ({
+    sehat: `Laba positif dan margin mencapai target ${pct(r.target, 0)}.`,
+    tipis: `Masih untung, tetapi margin di bawah target ${pct(r.target, 0)}.`,
+    rugi: 'Laba produk negatif, atau harga rata-rata di bawah harga impas.',
+  })[p.health] || 'Modal produk belum diketahui, jadi laba produk belum dihitung (bukan dianggap nol).';
+  const SORTS = [['margin', 'Laba terbesar'], ['margin-asc', 'Laba terkecil'], ['sales', 'Penjualan terbesar'], ['qty', 'Terjual terbanyak'], ['pct-asc', 'Margin terendah']];
+  const sold = (p) => (p.qtyKnown ? num(p.qty) : `${num(p.rows)}×`);
+  const money = (v, unknownText = 'Belum diketahui') => (ok(v) ? `<span class="${v < 0 ? 'neg' : ''}">${fmt(v)}</span>` : `<span class="unk">${unknownText}</span>`);
   function viewProduk() {
     const { r } = last;
     if (!r.products.length) return `<div class="panel empty"><span class="ic">${svg('produk', 24)}</span><h2>Belum ada rincian produk</h2><p>Laporan penghasilan TikTok sering tidak mencantumkan produk. Unggah export pesanan TikTok atau laporan Shopee untuk melihat analisis per produk.</p><button class="btn primary" type="button" data-go="data">Unggah file</button></div>`;
-    return `<section class="panel">
-      <div class="chips" style="margin-bottom:14px">${['rugi', 'tipis', 'sehat', 'unknown'].map((h) => { const n = r.products.filter((p) => p.health === h).length; return n ? `<span class="chip ${h}">${{ rugi: 'Rugi', tipis: `Di bawah target ${pct(r.target, 0)}`, sehat: 'Sehat', unknown: 'Modal belum ada' }[h]}: ${n}</span>` : ''; }).join('')}</div>
-      <div class="searchrow"><input class="plain" id="q" type="search" placeholder="Cari produk atau SKU" value="${esc(view.q)}" aria-label="Cari produk">
-        <select class="compact" id="sort" aria-label="Urutkan">${[['margin', 'Laba terbesar'], ['margin-asc', 'Laba terkecil atau rugi'], ['pct-asc', 'Margin paling tipis'], ['sales', 'Penjualan terbesar'], ['qty', 'Paling laku']].map(([k, l]) => `<option value="${k}" ${view.sort === k ? 'selected' : ''}>${l}</option>`).join('')}</select></div>
-      <div id="product-table"></div></section>`;
+    return `<section class="section-card prod-card" aria-label="Daftar produk">
+      <div class="prod-toolbar">
+        <div class="prod-search"><label class="sr-only" for="q">Cari produk atau SKU</label>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>
+          <input class="plain" id="q" type="search" placeholder="Cari produk atau SKU" value="${esc(view.q)}" autocomplete="off"></div>
+        <div class="prod-sort"><label for="sort">Urutkan</label><select class="compact" id="sort">${SORTS.map(([k, l]) => `<option value="${k}" ${view.sort === k ? 'selected' : ''}>${l}</option>`).join('')}</select></div>
+      </div>
+      <div class="prod-filters" id="prod-filters" role="group" aria-label="Saring menurut status"></div>
+      <p class="sr-only" id="prod-count" aria-live="polite"></p>
+      <div id="product-table" class="prod-list"></div>
+    </section>`;
   }
-  function renderProducts() {
+  function renderProducts(animate = false) {
     const box = $('#product-table');
     if (!box || !last) return;
     const { r } = last;
@@ -708,77 +772,249 @@
     const val = (x) => (ok(x) ? x : -Infinity);
     const sorters = { margin: (a, b) => val(b.margin) - val(a.margin), 'margin-asc': (a, b) => (ok(a.margin) ? a.margin : Infinity) - (ok(b.margin) ? b.margin : Infinity),
       'pct-asc': (a, b) => (ok(a.pct) ? a.pct : Infinity) - (ok(b.pct) ? b.pct : Infinity), sales: (a, b) => b.sales - a.sales, qty: (a, b) => b.qty - a.qty };
-    let list = r.products.filter((p) => !q || Engine.norm(`${p.name} ${p.sku} ${p.code}`).includes(q));
+    // Saringan status hanya menampilkan status yang memang ada di data.
+    const counts = {}; r.products.forEach((p) => { const h = HEALTH[p.health] ? p.health : 'unknown'; counts[h] = (counts[h] || 0) + 1; });
+    if (view.prodFilter !== 'all' && !counts[view.prodFilter]) view.prodFilter = 'all';
+    const fbox = $('#prod-filters');
+    if (fbox) fbox.innerHTML = [['all', 'Semua', r.products.length], ...['sehat', 'tipis', 'rugi', 'unknown'].filter((h) => counts[h]).map((h) => [h, HEALTH[h], counts[h]])]
+      .map(([k, l, n]) => `<button type="button" class="fchip psum ${k}" data-pfilter="${k}" aria-pressed="${view.prodFilter === k}"><b class="n">${num(n)}</b><span class="pl">${k === 'all' ? '' : `<i class="fdot ${k}" aria-hidden="true"></i>`}${k === 'all' ? 'Semua produk' : l}</span></button>`).join('')
+      // sebaran status (lebar = jumlah produk per status; gambar saja)
+      + `<div class="ps-dist" aria-hidden="true">${['sehat', 'tipis', 'rugi', 'unknown'].filter((h) => counts[h]).map((h) => `<i class="${h}" style="flex:${counts[h]}"></i>`).join('')}</div>`;
+    let list = r.products.filter((p) => (!q || Engine.norm(`${p.name} ${p.sku} ${p.code}`).includes(q)) && (view.prodFilter === 'all' || (HEALTH[p.health] ? p.health : 'unknown') === view.prodFilter));
     if (view.sort === 'pct-asc') list = list.filter((p) => p.rows >= 3);
     list.sort(sorters[view.sort] || sorters.margin);
     const pro = isPro(), FREE = 5;
     const shown = !pro ? list.slice(0, FREE) : view.showAll ? list : list.slice(0, 20);
-    const HL = { rugi: 'Rugi', tipis: 'Tipis', sehat: 'Sehat' };
-    const row = (p) => `<tr><td><i class="sw" style="background:var(--${p.platform})"></i> ${esc(p.name)}${p.variant && p.variant !== 'Default' ? ` <span class="faint">${esc(p.variant)}</span>` : ''}</td>
-      <td>${p.qtyKnown ? num(p.qty) : `${p.rows}×`}</td><td>${fmt(p.sales)}</td><td class="${p.margin < 0 ? 'neg' : ''}">${fmt(p.margin)}</td><td class="${p.pct < 0 ? 'neg' : ''}">${pct(p.pct)}</td>
-      <td>${fmt(p.avgPrice)}</td><td>${fmt(p.breakEven)}</td><td><b>${fmt(p.targetPrice)}</b></td><td>${HL[p.health] ? `<span class="chip ${p.health}">${HL[p.health]}</span>` : '<span class="faint">—</span>'}</td></tr>`;
-    const head = `<thead><tr><th>Produk</th><th>Terjual${qi('terjual')}</th><th>Penjualan</th><th>Laba${qi('margin_produk')}</th><th>Margin${qi('margin_pct')}</th><th>Harga rata-rata${qi('harga_rata')}</th><th>Harga impas${qi('harga_impas')}</th><th>Harga target${qi('harga_target')}</th><th>Status${qi('status')}</th></tr></thead>`;
-    box.innerHTML = `<div class="tablewrap"><table class="data">${head}<tbody>${shown.map(row).join('') || '<tr><td colspan="9" class="muted">Tidak ada produk yang cocok.</td></tr>'}</tbody></table></div>
-      ${!pro && list.length > FREE ? `<div class="locked" style="min-height:200px"><div class="tablewrap blur"><table class="data"><tbody>${list.slice(FREE, FREE + 4).map(row).join('')}</tbody></table></div>${lockVeil(`${num(list.length - FREE)} produk lainnya`, 'Lihat semua produk, status rugi atau tipis, dan harga yang disarankan.')}</div>` : ''}
+    const nameCell = (p) => `<button type="button" class="prod-open" data-prod="${esc(p.key)}">${PLAT_DOT(p.platform)}<span class="pn">${esc(p.name)}</span></button>${p.variant && p.variant !== 'Default' ? `<span class="pv">${esc(p.variant)}</span>` : ''}<span class="sr-only">, ${PNAME[p.platform]}</span>`;
+    const row = (p, i) => `<tr data-prod="${esc(p.key)}" style="--i:${Math.min(i, 12)}" class="h-${HEALTH[p.health] ? p.health : 'unknown'} ${p.key === view.prodKey && sheetKind === 'produk' ? 'is-selected' : ''}"><th scope="row">${nameCell(p)}</th><td>${sold(p)}</td><td>${fmt(p.sales)}</td><td>${p.modalKnown ? fmt(p.modal) : '<span class="unk">Belum diketahui</span>'}</td>
+      <td>${money(p.margin)}</td><td>${ok(p.pct) ? `<span class="mcell"><span class="${p.pct < 0 ? 'neg' : ''}">${pct(p.pct)}</span><span class="mbar" aria-hidden="true"><i style="--m:${Math.max(2, Math.min(100, Math.abs(p.pct) * 200)).toFixed(0)}%"></i></span></span>` : '<span class="faint">—</span>'}</td><td>${ok(p.breakEven) ? fmt(p.breakEven) : '<span class="faint">—</span>'}</td><td>${healthChip(p.health)}</td><td class="row-go" aria-hidden="true"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg></td></tr>`;
+    const card = (p, i) => `<li style="--i:${Math.min(i, 12)}"><button type="button" class="pcard" data-prod="${esc(p.key)}" aria-label="${esc(p.name)}, ${PNAME[p.platform]}. Laba ${ok(p.margin) ? fmt(p.margin) : 'belum diketahui'}. Status ${HEALTH[p.health] || HEALTH.unknown}. Buka detail.">
+      <span class="pc-top"><span class="pc-name">${PLAT_DOT(p.platform)}${esc(p.name)}</span>${healthChip(p.health)}</span>
+      <span class="pc-meta"><span class="pc-plat">${PNAME[p.platform]}</span>${sold(p)} terjual${p.variant && p.variant !== 'Default' ? ` · ${esc(p.variant)}` : ''}</span>
+      <span class="pc-nums"><span><small>Laba</small>${money(p.margin)}</span><span><small>Margin</small>${ok(p.pct) ? pct(p.pct) : '—'}</span><span><small>Penjualan</small>${fmt(p.sales)}</span></span></button></li>`;
+    const head = `<thead><tr><th scope="col">Produk</th><th scope="col">Terjual${qi('terjual')}</th><th scope="col">Penjualan</th><th scope="col">HPP / Modal${qi('modal')}</th><th scope="col">Laba${qi('margin_produk')}</th><th scope="col">Margin${qi('margin_pct')}</th><th scope="col">Harga impas${qi('harga_impas')}</th><th scope="col">Status${qi('status')}</th><th scope="col" class="row-go"><span class="sr-only">Detail</span></th></tr></thead>`;
+    const empty = `<div class="mini-empty"><p class="small muted">Tidak ada produk yang cocok${view.q ? ` dengan “${esc(view.q)}”` : ''}.</p></div>`;
+    box.innerHTML = `${shown.length ? `<div class="tablewrap prod-table"><table class="data">${head}<tbody>${shown.map(row).join('')}</tbody></table></div>
+      <ul class="pcards">${shown.map(card).join('')}</ul>` : empty}
+      ${!pro && list.length > FREE ? `<div class="locked" style="min-height:200px"><div class="tablewrap blur" aria-hidden="true"><table class="data"><tbody>${list.slice(FREE, FREE + 4).map(row).join('')}</tbody></table></div>${lockVeil(`${num(list.length - FREE)} produk lainnya`, 'Lihat semua produk, status rugi atau tipis, dan harga yang disarankan.')}</div>` : ''}
       ${pro && list.length > 20 ? `<button class="btn quiet" type="button" id="show-all" style="margin-top:8px">${view.showAll ? 'Tampilkan lebih sedikit' : `Tampilkan semua ${num(list.length)} produk`}</button>` : ''}
-      <p class="tiny faint" style="margin-top:10px">Harga impas: harga minimum agar tidak rugi. Harga target: harga agar margin mencapai ${pct(r.target, 0)}. Tanda × berarti jumlah baris, karena jumlah barang tidak tercatat.</p>`;
+      <p class="tiny faint prod-foot">${num(list.length)} produk${list.length !== r.products.length ? ` dari ${num(r.products.length)}` : ''}. Harga impas: harga minimum agar tidak rugi. Tanda × berarti jumlah baris, karena jumlah barang tidak tercatat.${view.sort === 'pct-asc' ? ' Urutan margin terendah hanya memuat produk dengan minimal 3 baris pesanan.' : ''} Ketuk produk untuk melihat detail dan harga target.</p>`;
+    const live = $('#prod-count'); if (live) live.textContent = `${num(list.length)} produk ditampilkan.`;
+    if (animate) { box.classList.remove('swap'); void box.offsetWidth; box.classList.add('swap'); }
+  }
+  /** Laci detail produk: hanya angka engine untuk produk itu. */
+  function productSheet(r) {
+    const p = r && r.products.find((x) => x.key === view.prodKey);
+    const head = (t) => `<div class="d-head"><h2 id="sheet-t">${t}</h2><button class="x" type="button" data-sheet-close aria-label="Tutup">×</button></div>`;
+    if (!p) return `${head('Produk')}<div class="d-body"><p class="small muted">Produk tidak ditemukan pada filter saat ini.</p></div>`;
+    const item = (k, v, sub = '') => `<div><dt>${k}</dt><dd>${v}${sub ? `<small>${sub}</small>` : ''}</dd></div>`;
+    const ids = [p.sku && `SKU ${esc(p.sku)}`, p.code && p.code !== p.sku && `Kode ${esc(p.code)}`, p.variant && p.variant !== 'Default' && `Variasi ${esc(p.variant)}`].filter(Boolean);
+    return `${head(esc(p.name))}<div class="d-body pd">
+      <div class="pd-meta"><span class="pd-plat">${PLAT_DOT(p.platform)}${PNAME[p.platform]}</span>${ids.map((x) => `<span>${x}</span>`).join('')}</div>
+      <div class="pd-status">${healthChip(p.health)}<p class="small muted">${healthWhy(p, r)}</p></div>
+      <h3 class="pd-sec">Angka produk</h3>
+      <dl class="pd-grid">
+        ${item('Laba', money(p.margin), ok(p.margin) ? 'setelah potongan, modal, dan packing produk ini' : '')}
+        ${item('Margin', ok(p.pct) ? pct(p.pct) : '<span class="unk">Belum diketahui</span>', ok(p.pct) ? 'laba ÷ penjualan produk' : '')}
+        ${item('Terjual', p.qtyKnown ? `${num(p.qty)} barang` : `${num(p.rows)} baris pesanan`, p.qtyKnown ? `${num(p.rows)} baris pesanan` : 'jumlah barang tidak tercatat')}
+        ${item('Penjualan', fmt(p.sales))}
+        ${item('Potongan marketplace', money(p.fees))}
+        ${item('Modal / HPP', p.modalKnown ? fmt(p.modal) : '<span class="unk">Belum diketahui</span>', ok(p.unitCost) ? `${fmt(p.unitCost)} per unit` : 'modal per unit belum diisi')}
+        ${ok(p.packing) && p.packing ? item('Packing', fmt(p.packing)) : ''}
+      </dl>
+      <h3 class="pd-sec">Harga</h3>
+      <div class="pd-prices">
+        <div><span>Harga rata-rata</span><b>${ok(p.avgPrice) ? fmt(p.avgPrice) : '—'}</b></div>
+        <div><span>Harga impas</span><b>${ok(p.breakEven) ? fmt(p.breakEven) : '—'}</b></div>
+        <div class="tgt"><span>Harga target <small>margin ${pct(r.target, 0)}</small></span><b>${ok(p.targetPrice) ? fmt(p.targetPrice) : '—'}</b></div>
+      </div>
+      <div class="pd-cta">
+        <button class="btn primary" type="button" data-sim-prod="${esc(p.key)}">Buka simulator harga</button>
+        ${demo ? '' : `<button class="btn" type="button" data-fix-modal="${esc(p.key)}">${p.modalKnown ? 'Perbaiki modal' : 'Isi modal'}</button>`}
+      </div>
+      <p class="tiny faint">Angka dari perhitungan per produk di Cek Untung. Simulator diisi harga rata-rata${ok(p.unitCost) ? ' dan modal per unit' : ''} produk ini.</p>
+    </div>`;
   }
 
-  /* ---------- biaya ---------- */
+  /* ---------- laba (UI-3): semua angka dari engine; UI hanya menyusun dan memberi label ---------- */
   const barRows = (rows, total) => {
     const max = Math.max(...rows.map((x) => Math.abs(x.v)), 1);
     return rows.map((x) => `<div class="barrow"><span>${esc(x.label)}${x.k ? qi(x.k, x.label) : ''}</span><div class="track"><i style="width:${(Math.abs(x.v) / max) * 100}%"></i></div><span class="num">${fmt(x.v)} <span class="faint">${pct(Math.abs(x.v) / total)}</span></span></div>`).join('');
   };
+  const PLAT_DOT = (k) => `<i class="sw" style="background:var(--${k})" aria-hidden="true"></i>`;
+  /** Status laba & modal: dipakai kartu angka utama halaman Laba (sama dengan Ringkasan). */
+  function labaKpis(r) {
+    const K = r.kepastian, c = K.cakupan, opex = r.fixedMonthly > 0;
+    const finalBadge = K.laba.final ? '<span class="status verified">Final</span>'
+      : '<button type="button" class="status pending final-badge" data-sheet="kepastian" aria-haspopup="dialog" aria-label="Status laba: belum final. Lihat alasannya">Belum final</button>';
+    const hppMixed = r.ready && (c.penjualan.estimasi || c.penjualan.estimasiMinimum || c.penjualan.belum);
+    const card = (label, value, note, cls = '', extra = '', kind = '') => `<div class="metric-card ${cls}" ${kind ? `data-kpi="${kind}"` : ''}><span class="m-label">${kpiIc(kind)}${label}</span><span class="m-value ${typeof value === 'number' && value < 0 ? 'neg' : ''}">${typeof value === 'number' ? fmt(value) : value}</span>${extra}<span class="m-note">${note}</span></div>`;
+    return `<section class="dash-hero laba-kpis" aria-label="Angka utama">
+      ${card(`Laba dari data tersedia${qi(opex ? 'laba_bersih' : 'margin_total', 'Laba dari data tersedia')}`, r.ready ? (opex ? r.netProfit : r.totalMargin) : '<span class="faint">Belum dihitung</span>',
+        r.ready ? `${opex ? 'setelah biaya operasional yang tercatat' : 'biaya operasional belum dicatat'}. ${pct(r.coverage, 0)} penjualan masuk dalam perhitungan` : 'isi modal produk agar laba bisa dihitung', 'is-hero', `<div class="m-status">${finalBadge}</div>`)}
+      ${card(`Penjualan${qi('penjualan', 'Penjualan')}`, r.totalSales, `${num(r.orders)} pesanan terjual`, '', '', 'sales')}
+      ${card(`Modal / HPP${qi('modal', 'Modal')}`, r.ready ? r.totalModal : '<span class="faint">Belum diketahui</span>', r.ready ? 'dari penjualan yang modalnya diketahui' : 'modal belum diisi', '',
+        hppMixed ? '<div class="m-status"><span class="status estimate">Sebagian perkiraan</span></div>' : r.ready && c.penjualan.terverifikasi > 0 ? '<div class="m-status"><span class="status verified">Terverifikasi</span></div>' : !r.ready ? '<div class="m-status"><span class="status unknown">Belum diketahui</span></div>' : '', 'modal')}
+      ${card(`Potongan marketplace${qi('potongan', 'Potongan marketplace')}`, -r.totalFees, 'dipotong dari penjualan oleh marketplace', '', '', 'fees')}
+    </section>`;
+  }
+  /** Jejak uang (agregat): tahapan dari penjualan sampai laba. Bukan pencocokan pencairan dana. */
+  function moneyTrace(r) {
+    const opex = r.fixedMonthly > 0, rb = r.kepastian.risikoBarang, isDrop = typeOf(st()) === 'dropship';
+    const out = r.kepastian.cakupan.dikeluarkan;
+    const others = [
+      ...(r.ready && r.knownPacking ? [[isDrop ? 'Biaya dropship' : 'Packing', -r.knownPacking]] : []),
+      ...(r.ready && (r.lostCertain || rb.kerugianTanpaNilai) ? [['Kerugian retur', r.lostCertain ? -r.lostCertain : NaN, rb.kerugianTanpaNilai ? `+ ${num(rb.kerugianTanpaNilai)} kasus nilainya belum diketahui.` : '']] : []),
+      ...(r.ready && opex ? [['Biaya operasional', -r.opex]] : []),
+    ];
+    const val = (v, cls = '') => `<b class="tr-v ${cls} ${ok(v) && v < 0 ? 'neg' : ''}">${ok(v) ? fmt(v) : 'Belum diketahui'}</b>`;
+    const step = (n, title, body, cls = '') => `<li class="tr-step ${cls}"><span class="tr-n" aria-hidden="true">${n}</span><div class="tr-body"><span class="tr-k">${title}</span>${body}</div></li>`;
+    return `<div class="card-header"><h3 id="trace-t">Jejak uang</h3><p>Agregat dari laporan dan isian Anda</p></div>
+      <ol class="trace">
+        ${step(1, 'Penjualan', `${val(r.totalSales)}<span class="tr-note">${num(r.orders)} pesanan</span>`)}
+        ${step(2, 'Potongan marketplace', `${val(r.totalFees)}<span class="tr-note">admin, komisi, ongkir, dan program</span>`)}
+        ${step(3, 'Dana diterima', `${val(r.totalReceived)}${r.ready && Math.abs(out.danaDiterima) >= 1 ? `<span class="tr-note">${fmt(out.danaDiterima)} dari ${num(out.jumlahPesanan)} pesanan tanpa modal tidak dihitung</span>` : '<span class="tr-note">menurut laporan penghasilan</span>'}`)}
+        ${step(4, 'Modal / HPP', `${val(r.ready ? -r.totalModal : NaN)}<span class="tr-note">${r.ready ? 'dari modal yang Anda isi' : 'modal belum diisi'}</span>`, r.ready ? '' : 'is-unknown')}
+        ${step(5, 'Biaya lain', others.length ? `<ul class="tr-list">${others.map(([l, v, n]) => `<li><span>${l}${n ? `<small>${n}</small>` : ''}</span>${val(v)}</li>`).join('')}</ul>` : '<span class="tr-note">Tidak ada biaya lain yang tercatat</span>')}
+        ${step(6, 'Laba dari data tersedia', `${val(r.ready ? (opex ? r.netProfit : r.totalMargin) : NaN)}<span class="tr-note">${r.ready ? `${pct(r.coverage, 0)} penjualan masuk dalam perhitungan` : 'belum bisa dihitung'}</span>`, 'is-result')}
+      </ol>
+      <p class="tiny faint">Berdasarkan laporan yang diunggah. Belum merupakan rekonsiliasi pencairan dana.</p>`;
+  }
+  /** Satu baris rincian biaya: label, nilai, arti singkat, dan sumbernya (teks dari penjelasan.js). */
+  function costRow(label, v, key, src, share) {
+    const info = key && CekInfo.get(key, null);
+    return `<li class="cb-row"><div class="cb-l"><b>${esc(label)}</b>${info ? `<span>${esc(info.a)}</span>` : ''}${src ? `<span class="cb-src">Sumber: ${esc(src)}</span>` : ''}</div>
+      <div class="cb-v"><b class="${ok(v) && v < 0 ? 'neg' : ''}">${ok(v) ? fmt(v) : 'Belum diketahui'}</b>${ok(share) ? `<span class="faint">${pct(share)} dari penjualan</span>` : ''}</div></li>`;
+  }
+  function costGroup(title, total, rows, open = false, note = '') {
+    return `<details class="cost-group" ${open ? 'open' : ''}><summary><span class="cg-t">${title}</span><span class="cg-v ${ok(total) && total < 0 ? 'neg' : ''}">${ok(total) ? fmt(total) : 'Belum diketahui'}</span><span class="cg-chev" aria-hidden="true"></span></summary>
+      <div class="cg-body">${rows.length ? `<ul class="cb-list">${rows.join('')}</ul>` : ''}${note ? `<p class="tiny faint">${note}</p>` : ''}</div></details>`;
+  }
+  function costBreakdown(r) {
+    const S = r.shopee, T = r.tiktok, rb = r.kepastian.risikoBarang, isDrop = typeOf(st()) === 'dropship';
+    const fee = (P, list, src) => list.filter(([, v]) => Math.abs(v) >= 1).sort((a, b) => a[1] - b[1]).map(([l, v, k]) => costRow(l, v, k, src, Math.abs(v) / P.sales));
+    const groups = [];
+    if (r.has.shopee) groups.push(costGroup(`${PLAT_DOT('shopee')}Potongan Shopee`, S.feeTotal, fee(S, [['Biaya administrasi', S.fees.admin, 'fee_admin'], ['Gratis Ongkir XTRA dan program', S.fees.xtra, 'fee_xtra'], ['Biaya proses pesanan', S.fees.proses, 'fee_proses'],
+      ['Komisi AMS (afiliasi)', S.fees.ams, 'fee_ams'], ['Ongkir ditanggung penjual', S.fees.ship, 'fee_ship'], ['Biaya lain', S.fees.lain, 'fee_lain']], 'Laporan Penghasilan Shopee'), true));
+    if (r.has.tiktok) groups.push(costGroup(`${PLAT_DOT('tiktok')}Potongan TikTok Shop`, T.feeTotal, fee(T, [['Komisi platform', T.fees.platform, 'fee_platform'], ['Komisi dinamis', T.fees.dinamis, 'fee_dinamis'], ['Biaya pemrosesan', T.fees.proses, 'fee_tt_proses'],
+      ['Ongkir', T.fees.ongkir, 'fee_ongkir'], ['Komisi afiliasi', T.fees.afiliasi, 'fee_afiliasi'], ['Biaya lain', T.fees.lain, 'fee_lain']], 'Laporan Penghasilan TikTok Shop'), !r.has.shopee));
+    const plats = ['shopee', 'tiktok'].filter((k) => r.has[k]);
+    if (r.totalPacking) groups.push(costGroup(isDrop ? 'Biaya dropship' : 'Packing', r.ready ? -r.knownPacking : NaN,
+      plats.map((k) => costRow(PNAME[k], r.ready ? -r[k].knownPacking : NaN, isDrop ? 'dropship_fee' : 'packing', 'isian Anda di Pengaturan')), false, r.ready ? 'Hanya pesanan yang modalnya diketahui.' : 'Packing dihitung setelah modal produk diisi.'));
+    const retur = [];
+    if (r.lostCertain || rb.kerugianTanpaNilai) retur.push(costRow('Kerugian retur (tidak kembali)', r.lostCertain ? -r.lostCertain : NaN, 'retur_hilang', 'file retur dan tanda dari Anda'));
+    if (r.unknownRisk > 0) retur.push(costRow('Risiko retur yang belum dicek', -r.unknownRisk, '', 'file retur; belum dikurangkan dari laba'));
+    if (r.cases.length || r.lostCertain) groups.push(costGroup('Refund & retur', r.lostCertain || rb.kerugianTanpaNilai ? (r.lostCertain ? -r.lostCertain : NaN) : 0, retur, false,
+      [rb.kerugianTanpaNilai ? `+ ${num(rb.kerugianTanpaNilai)} kasus nilainya belum diketahui.` : '', rb.risikoTanpaNilai ? `${num(rb.risikoTanpaNilai)} kasus yang belum dicek belum punya nilai.` : '',
+        'Total refund per platform belum tersedia dari mesin hitung, jadi tidak ditampilkan terpisah.'].filter(Boolean).join(' ')));
+    if (r.fixedMonthly > 0) {
+      const fc = (st().fixedCosts || []).filter((x) => ok(x.amount) && x.amount > 0);
+      groups.push(costGroup('Biaya operasional', r.ready ? -r.opex : NaN, fc.map((x) => `<li class="cb-row"><div class="cb-l"><b>${esc(x.label || 'Tanpa nama')}</b><span class="cb-src">Sumber: isian Anda</span></div><div class="cb-v"><b>${fmt(x.amount)}</b><span class="faint">per bulan</span></div></li>`), false,
+        `${fmt(r.fixedMonthly)} per bulan × ${(Math.round(r.monthsSpan * 10) / 10).toLocaleString('id-ID')} bulan data, dihitung mesin hitung.`));
+    }
+    // Komposisi biaya: lebar batang = besar tiap kelompok dari engine (gambar saja, tanpa persen buatan UI).
+    const comp = [['Potongan Shopee', r.has.shopee ? S.feeTotal : 0, 'c-sh'], ['Potongan TikTok Shop', r.has.tiktok ? T.feeTotal : 0, 'c-tt'],
+      [isDrop ? 'Biaya dropship' : 'Packing', r.ready ? -r.knownPacking : 0, 'c-pk'], ['Kerugian retur', r.ready ? -r.lostCertain : 0, 'c-rt'], ['Biaya operasional', r.ready && r.fixedMonthly > 0 ? -r.opex : 0, 'c-op']]
+      .filter(([, v]) => ok(v) && Math.abs(v) >= 1);
+    const compBar = comp.length > 1 ? `<div class="cost-comp" role="img" aria-label="Komposisi biaya: ${comp.map(([l, v]) => `${l} ${fmt(v)}`).join(', ')}">
+        <div class="cc-bar">${comp.map(([, v, c]) => `<i class="${c}" style="flex:${Math.abs(v).toFixed(0)}"></i>`).join('')}</div>
+        <ul class="cc-leg">${comp.map(([l, v, c]) => `<li><i class="${c}" aria-hidden="true"></i>${l}<b>${fmt(v)}</b></li>`).join('')}</ul></div>` : '';
+    return `<div class="card-header"><h3 id="cost-t">Rincian biaya</h3><p>Ketuk untuk membuka rincian</p></div>${compBar}<div class="cost-groups">${groups.join('')}</div>
+      ${r.adjustments ? `<p class="small muted">Kompensasi atau penyesuaian dari platform ${fmt(r.adjustments)} ditampilkan terpisah dan belum dihitung dalam laba.</p>` : ''}`;
+  }
+  /** Perbandingan per platform: nilai engine per platform berdampingan. Tidak ada peringkat "platform terbaik". */
+  function platformCompare(r) {
+    const plats = ['shopee', 'tiktok'].filter((k) => r.has[k]);
+    const cols = plats.length > 1 ? [['total', 'Total'], ...plats.map((k) => [k, PNAME[k]])] : plats.map((k) => [k, PNAME[k]]);
+    const sel = cols.some(([k]) => k === view.platCol) ? view.platCol : cols[0][0];
+    const cell = (k, f) => f(k === 'total' ? null : r[k], k);
+    const unk = '<span class="unk">Belum diketahui</span>';
+    const rows = [
+      ['Pesanan terjual', (P) => num(P ? P.orders : r.orders)],
+      ['Penjualan', (P) => fmt(P ? P.sales : r.totalSales)],
+      [`Potongan marketplace${qi('potongan')}`, (P) => `<span class="neg">${fmt(P ? P.feeTotal : r.totalFees)}</span>`],
+      [`Dana diterima${qi('dana_diterima')}`, (P) => fmt(P ? P.received : r.totalReceived)],
+      ['Modal / HPP', (P) => (r.ready ? `<span class="neg">${fmt(-(P ? P.modal : r.totalModal))}</span>` : unk)],
+      ...(r.totalPacking ? [['Packing', (P) => (r.ready ? `<span class="neg">${fmt(-(P ? P.knownPacking : r.knownPacking))}</span>` : unk)]] : []),
+      ['Laba setelah modal', (P) => { const v = P ? P.margin : r.totalMargin; return r.ready ? `<b class="${v < 0 ? 'neg' : ''}">${fmt(v)}</b>` : unk; }, 'total'],
+      [`Tarif efektif${qi('tarif_efektif')}`, (P, k) => { const f = P && r.feeModel[k]; return f ? `${pct(f.pct)} + ${fmt(f.fixed)}<span class="faint tiny"> /pesanan</span>` : '<span class="faint">—</span>'; }],
+      ['Modal diketahui', (P) => `<span class="faint">${pct(P ? P.coverage : r.coverage, 0)}</span>`],
+    ];
+    return `<div class="card-header"><h3 id="plat-t">Per platform</h3>
+        ${cols.length > 1 ? `<div class="seg plat-seg" role="group" aria-label="Kolom yang ditampilkan di layar kecil">${cols.map(([k, l]) => `<button type="button" data-plat-col="${k}" aria-pressed="${k === sel}">${l}</button>`).join('')}</div>` : ''}</div>
+      <div class="tablewrap"><table class="data plat-table show-${sel}"><thead><tr><th scope="col"><span class="sr-only">Komponen</span></th>${cols.map(([k, l]) => `<th scope="col" class="c-${k}">${k === 'total' ? l : `${PLAT_DOT(k)} ${l}`}</th>`).join('')}</tr></thead>
+        <tbody>${rows.map(([label, f, cls]) => `<tr class="${cls || ''}"><th scope="row">${label}</th>${cols.map(([k]) => `<td class="c-${k}">${cell(k, f)}</td>`).join('')}</tr>`).join('')}</tbody></table></div>
+      <div class="row-actions">${plats.filter((k) => r.feeModel[k]).map((k) => `<button class="btn sm" type="button" data-sim-use="${k}">Simulasikan harga dengan tarif ${PNAME[k]}</button>`).join('')}</div>
+      ${r.has.tiktok ? `<p class="small muted">TikTok: diskon toko rata-rata ${pct(r.tiktok.discount)}. ${Object.entries(r.tiktok.bySource).map(([k, v]) => `${esc(k)} ${num(v.orders)} pesanan${r.ready ? ` dengan laba ${fmt(v.margin)}` : ''}`).join('; ')}.</p>` : ''}`;
+  }
+  /** Tabel bulanan: nilai per bulan dari engine (r.months). Tanpa margin bulanan buatan UI. */
+  function monthTable(r) {
+    if (!r.months.length) return '';
+    const opex = r.fixedMonthly > 0;
+    const lastM = r.months[r.months.length - 1];
+    const running = r.last && r.last < new Date(+lastM.month.slice(0, 4), +lastM.month.slice(5), 0).toLocaleDateString('sv-SE');
+    const lab = (v) => (r.ready ? `<span class="${v < 0 ? 'neg' : ''}">${fmt(v)}</span>` : '<span class="faint">—</span>');
+    return `<details class="disclose month-table" ${view.monthOpen ? 'open' : ''} id="month-table"><summary>Tabel per bulan (${num(r.months.length)} bulan)</summary>
+      <div class="tablewrap"><table class="data"><thead><tr><th scope="col">Bulan</th><th scope="col">Pesanan</th><th scope="col">Penjualan</th><th scope="col">Potongan</th><th scope="col">Dana diterima</th><th scope="col">Laba setelah modal</th>${opex ? '<th scope="col">Laba dari data tersedia</th>' : ''}</tr></thead>
+      <tbody>${r.months.map((m, i) => `<tr><th scope="row">${monthLong(m.month)}${running && i === r.months.length - 1 ? ' <span class="faint tiny">(berjalan)</span>' : ''}</th><td>${num(m.total.orders)}</td><td>${fmt(m.total.sales)}</td><td class="neg">${fmt(m.total.fees)}</td><td>${fmt(m.total.received)}</td><td>${lab(m.total.margin)}</td>${opex ? `<td>${lab(m.total.net)}</td>` : ''}</tr>`).join('')}</tbody></table></div>
+      ${r.ready ? '' : '<p class="tiny faint">Laba per bulan muncul setelah modal produk diisi.</p>'}</details>`;
+  }
   function viewBiaya() {
     const { r } = last;
-    const plats = ['shopee', 'tiktok'].filter((k) => r.has[k]);
-    const S = r.shopee, T = r.tiktok;
-    // Di halaman Laba, nota laba menjadi elemen utama (di Ringkasan nota dipindah ke "Rincian laba").
-    return `<div class="laba-nota">${nota(r)}</div><div class="grid-2">
-      <section class="panel"><div class="panel-head"><h3>Per platform</h3></div>
-        <div class="tablewrap"><table class="data"><thead><tr><th></th>${plats.map((k) => `<th>${PNAME[k]}</th>`).join('')}</tr></thead><tbody>
-          <tr><td>Pesanan terjual</td>${plats.map((k) => `<td>${num(r[k].orders)}</td>`).join('')}</tr>
-          <tr><td>Penjualan</td>${plats.map((k) => `<td>${fmt(r[k].sales)}</td>`).join('')}</tr>
-          <tr><td>Potongan marketplace${qi('potongan')}</td>${plats.map((k) => `<td class="neg">${fmt(r[k].feeTotal)} <span class="faint">${pct(-r[k].feeTotal / r[k].sales)}</span></td>`).join('')}</tr>
-          <tr><td>Dana diterima${qi('dana_diterima')}</td>${plats.map((k) => `<td>${fmt(r[k].received)}</td>`).join('')}</tr>
-          <tr><td>Modal</td>${plats.map((k) => `<td class="neg">${r.ready ? fmt(-r[k].modal) : '—'}</td>`).join('')}</tr>
-          ${r.totalPacking ? `<tr><td>Packing</td>${plats.map((k) => `<td class="neg">${fmt(-r[k].knownPacking)}</td>`).join('')}</tr>` : ''}
-          <tr class="total"><td>Laba setelah modal</td>${plats.map((k) => `<td class="${r[k].margin < 0 ? 'neg' : ''}">${fmt(r[k].margin)} <span class="faint">${ok(r[k].margin) && r[k].knownSales ? pct(r[k].margin / r[k].knownSales) : ''}</span></td>`).join('')}</tr>
-          <tr><td>Tarif efektif${qi('tarif_efektif')}</td>${plats.map((k) => { const f = r.feeModel[k]; return `<td>${f ? `${pct(f.pct)} + ${fmt(f.fixed)}<span class="faint tiny"> /pesanan</span>` : '—'}</td>`; }).join('')}</tr>
-          <tr><td class="small faint">Modal diketahui</td>${plats.map((k) => `<td class="small faint">${pct(r[k].coverage, 0)}</td>`).join('')}</tr>
-        </tbody></table></div>
-        <div class="row-actions" style="margin-top:12px">${plats.filter((k) => r.feeModel[k]).map((k) => `<button class="btn sm" type="button" data-sim-use="${k}">Simulasikan harga dengan tarif ${PNAME[k]}</button>`).join('')}</div>
-        ${r.has.tiktok ? `<p class="small muted" style="margin-top:12px">TikTok: diskon toko rata-rata ${pct(T.discount)}. ${Object.entries(T.bySource).map(([k, v]) => `${esc(k)} ${num(v.orders)} pesanan${r.ready ? ` dengan laba ${fmt(v.margin)}` : ''}`).join('; ')}.</p>` : ''}
-        ${r.adjustments ? `<p class="small muted" style="margin-top:6px">Kompensasi dari platform ${fmt(r.adjustments)} ditampilkan terpisah dan tidak ditambahkan ke margin.</p>` : ''}
-      </section>
-      <section class="panel"><div class="panel-head"><h3>Rincian potongan</h3><p>Persen dari penjualan</p></div>
-        ${r.has.shopee ? `<p class="small" style="font-weight:700;margin-bottom:4px"><i class="sw" style="background:var(--shopee)"></i> Shopee</p>${barRows([
-          { label: 'Biaya administrasi', v: S.fees.admin, k: 'fee_admin' }, { label: 'Gratis Ongkir XTRA', v: S.fees.xtra, k: 'fee_xtra' }, { label: 'Biaya proses pesanan', v: S.fees.proses, k: 'fee_proses' },
-          { label: 'Komisi AMS (afiliasi)', v: S.fees.ams, k: 'fee_ams' }, { label: 'Ongkir ditanggung penjual', v: S.fees.ship, k: 'fee_ship' }, { label: 'Biaya lain', v: S.fees.lain, k: 'fee_lain' }].filter((x) => Math.abs(x.v) >= 1).sort((a, b) => a.v - b.v), S.sales)}` : ''}
-        ${r.has.tiktok ? `<p class="small" style="font-weight:700;margin:14px 0 4px"><i class="sw" style="background:var(--tiktok)"></i> TikTok Shop</p>${barRows([
-          { label: 'Komisi platform', v: T.fees.platform, k: 'fee_platform' }, { label: 'Komisi dinamis', v: T.fees.dinamis, k: 'fee_dinamis' }, { label: 'Biaya pemrosesan', v: T.fees.proses, k: 'fee_tt_proses' },
-          { label: 'Ongkir', v: T.fees.ongkir, k: 'fee_ongkir' }, { label: 'Komisi afiliasi', v: T.fees.afiliasi, k: 'fee_afiliasi' }, { label: 'Biaya lain', v: T.fees.lain, k: 'fee_lain' }].filter((x) => Math.abs(x.v) >= 1).sort((a, b) => a.v - b.v), T.sales)}` : ''}
-      </section></div>
-      ${r.buckets.length > 1 ? `<section class="panel"><div class="panel-head"><h3>Potongan menurut nilai pesanan${qi('potongan_nilai')}</h3><p>Biaya tetap per pesanan membuat pesanan kecil terpotong lebih besar</p></div>
-        ${r.buckets.map((b) => { const p = -b.fees / b.value; const maxp = Math.max(...r.buckets.map((x) => -x.fees / x.value));
-          return `<div class="barrow"><span>${esc(b.label)} <span class="faint tiny">${num(b.orders)} pesanan${r.ready && b.known ? `, laba ${fmt(b.margin / b.known)} per pesanan` : ''}</span></span><div class="track"><i style="width:${(p / maxp) * 100}%"></i></div><span class="num">${pct(p)}</span></div>`; }).join('')}
-      </section>` : ''}`;
+    return `<div class="laba-page">
+      ${labaKpis(r)}
+      <div class="laba-main">
+        <div class="laba-nota">${nota(r)}</div>
+        <section class="section-card trace-card" aria-labelledby="trace-t" data-reveal="fade">${moneyTrace(r)}</section>
+      </div>
+      <section class="section-card cost-card" aria-labelledby="cost-t">${costBreakdown(r)}</section>
+      <section class="section-card plat-card" aria-labelledby="plat-t">${platformCompare(r)}</section>
+      <section class="section-card trend" id="monthly" aria-labelledby="trend-t">${trendCard(r, { title: 'Tren laba', table: false })}${monthTable(r)}</section>
+      ${r.buckets.length > 1 ? `<section class="section-card"><div class="card-header"><h3>Potongan menurut nilai pesanan${qi('potongan_nilai')}</h3><p>Biaya tetap per pesanan membuat pesanan kecil terpotong lebih besar</p></div>
+        <div>${r.buckets.map((b) => { const p = -b.fees / b.value; const maxp = Math.max(...r.buckets.map((x) => -x.fees / x.value));
+          return `<div class="barrow"><span>${esc(b.label)} <span class="faint tiny">${num(b.orders)} pesanan${r.ready && b.known ? `, laba ${fmt(b.margin / b.known)} per pesanan` : ''}</span></span><div class="track"><i style="width:${(p / maxp) * 100}%"></i></div><span class="num">${pct(p)}</span></div>`; }).join('')}</div>
+      </section>` : ''}
+    </div>`;
   }
 
   /* ---------- retur ---------- */
+  /* Status barang retur: kunci engine (c.state) → kelas, label. */
+  const CASE_ST = { belum: ['pending', 'Belum dicek'], kembali: ['verified', 'Sudah kembali'], hilang: ['danger', 'Tidak kembali'] };
   function viewRetur() {
     const { r } = last;
     if (!r.cases.length) return `<div class="panel empty"><span class="ic">${svg('retur', 24)}</span><h2>Belum ada file retur</h2><p>Unggah file pengembalian Shopee atau retur TikTok untuk menandai barang yang tidak kembali. Tanpa data retur, kondisi barang setelah refund mungkin belum dapat dipastikan.</p><button class="btn primary" type="button" data-go="data">Unggah file retur</button></div>`;
-    return `<section class="panel">
-      <div class="chips">${r.catSummary.sort((a, b) => b.count - a.count).map((c) => `<span class="chip"><i class="sw" style="background:var(--${c.platform})"></i>${esc(catLabel(c.cat))}: ${c.count}</span>`).join('')}</div>
-      <p class="small muted" style="margin-block:14px">Untuk retur dan paket bermasalah, pilih <b>Tidak kembali</b> bila barangnya tidak Anda terima lagi; modalnya akan dikurangkan dari laba. Beberapa refund terindikasi tidak dikirim menurut alasan di marketplace. Kondisi barangnya tetap perlu dipastikan.${r.unknownRisk > 0 ? ` Kasus yang belum dicek berisiko ${fmt(r.unknownRisk)}${r.kepastian.risikoBarang.risikoTanpaNilai ? `, ditambah ${num(r.kepastian.risikoBarang.risikoTanpaNilai)} kasus yang nilainya belum diketahui` : ''}.` : r.kepastian.risikoBarang.risikoTanpaNilai ? ` ${num(r.kepastian.risikoBarang.risikoTanpaNilai)} kasus yang belum dicek nilainya belum diketahui.` : ''}</p>
-      <div class="row-actions" style="margin-bottom:8px">${r.cases.some((c) => !c.needsCheck) ? `<button class="btn sm quiet" type="button" id="only-check">${view.onlyCheck ? 'Tampilkan semua kasus' : 'Hanya yang perlu dicek'}</button>` : ''}</div>
-      <div class="tablewrap"><table class="data"><thead><tr><th>Produk dan alasan</th><th>Resi retur</th><th>Perkiraan modal${qi('perkiraan_modal')}</th><th>Status barang${qi('status_barang')}</th></tr></thead><tbody>
-      ${r.cases.filter((c) => !view.onlyCheck || c.needsCheck).sort((a, b) => (b.needsCheck - a.needsCheck) || ((b.estModal || 0) - (a.estModal || 0))).slice(0, 300).map((c) => `<tr>
-        <td><i class="sw" style="background:var(--${c.platform})"></i> <b>${esc(c.product || '-')}</b>${c.variant && !/^(Default|Not Specified)$/.test(c.variant) ? ` <span class="faint">${esc(c.variant)}</span>` : ''}<br><span class="tiny faint">${esc(catLabel(c.cat))}${c.note ? `: “${esc(c.note.slice(0, 70))}”` : ''}</span></td>
-        <td>${esc(c.resi || '–')}</td><td>${ok(c.estModal) ? fmt(c.estModal) : '<span class="faint small">Nilai belum diketahui</span>'}</td>
-        <td>${c.needsCheck ? `<select class="compact" data-case="${esc(c.key)}" aria-label="Status barang" ${demo ? 'disabled' : ''}>${[['belum', 'Belum dicek'], ['kembali', 'Sudah kembali'], ['hilang', 'Tidak kembali']].map(([v, l]) => `<option value="${v}" ${c.state === v ? 'selected' : ''}>${l}</option>`).join('')}</select>` : `<span class="faint small">${c.cat === 'tidak_dikirim' ? 'Belum bisa ditandai' : 'Pengajuan batal'}</span>`}</td></tr>`).join('') || '<tr><td colspan="4" class="muted">Tidak ada kasus yang perlu dicek.</td></tr>'}
-      </tbody></table></div></section>`;
+    const rb = r.kepastian.risikoBarang;
+    // Hanya menghitung jumlah kasus per status untuk tampilan; nilai rupiah diambil apa adanya dari engine.
+    const chk = r.cases.filter((c) => c.needsCheck);
+    const by = (st) => chk.filter((c) => c.state === st).length;
+    const noVal = chk.filter((c) => !ok(c.estModal)).length;
+    const tile = (cls, k, v, note) => `<div class="rt-tile ${cls}"><span class="rt-k">${k}</span><b>${v}</b>${note ? `<small>${note}</small>` : ''}</div>`;
+    const lossV = r.lostCertain ? fmt(-r.lostCertain) : rb.kerugianTanpaNilai ? 'Belum diketahui' : fmt(0);
+    const riskV = r.unknownRisk > 0 ? fmt(r.unknownRisk) : rb.risikoTanpaNilai ? 'Belum diketahui' : fmt(0);
+    const list = r.cases.filter((c) => !view.onlyCheck || c.needsCheck).sort((a, b) => (b.needsCheck - a.needsCheck) || ((b.estModal || 0) - (a.estModal || 0))).slice(0, 300);
+    const row = (c) => {
+      const [cls, lbl] = c.needsCheck ? CASE_ST[c.state] || CASE_ST.belum : ['none', c.cat === 'tidak_dikirim' ? 'Belum bisa ditandai' : 'Pengajuan batal'];
+      return `<li class="rt-case st-${cls}">
+        <div class="rt-main"><span class="rt-plat"><i class="sw" style="background:var(--${c.platform})"></i>${PNAME[c.platform]}</span>
+          <b>${esc(c.product || '-')}${c.variant && !/^(Default|Not Specified)$/.test(c.variant) ? ` <span class="faint">${esc(c.variant)}</span>` : ''}</b>
+          <span class="rt-why">${esc(catLabel(c.cat))}${c.note ? `: “${esc(c.note.slice(0, 70))}”` : ''}</span></div>
+        <div class="rt-meta"><span class="rt-k">Resi retur</span><span>${esc(c.resi || '–')}</span></div>
+        <div class="rt-meta"><span class="rt-k">Perkiraan modal${qi('perkiraan_modal')}</span>${ok(c.estModal) ? `<b class="num">${fmt(c.estModal)}</b>` : '<span class="unk-v">Nilai belum diketahui</span>'}</div>
+        <div class="rt-state"><span class="status ${cls}" aria-hidden="true"></span>${c.needsCheck ? `<select class="compact" data-case="${esc(c.key)}" aria-label="Status barang ${esc(c.product || '')}" ${demo ? 'disabled' : ''}>${[['belum', 'Belum dicek'], ['kembali', 'Sudah kembali'], ['hilang', 'Tidak kembali']].map(([v, l]) => `<option value="${v}" ${c.state === v ? 'selected' : ''}>${l}</option>`).join('')}</select>` : `<span class="faint small">${lbl}</span>`}</div></li>`;
+    };
+    return `<section class="rt-sum" aria-label="Ringkasan retur dan refund">
+        ${tile('rt-all', 'Kasus retur & refund', num(r.cases.length), `${num(chk.length)} perlu ditandai`)}
+        ${tile(by('belum') ? 'rt-warn' : 'rt-ok', 'Belum dicek', num(by('belum')), by('belum') ? 'tandai kembali atau tidak' : 'semua sudah ditandai')}
+        ${tile('rt-risk', `Risiko, belum kerugian${qi('perkiraan_modal')}`, riskV, `Perkiraan modal kasus yang belum dicek. Baru menjadi kerugian bila barangnya Anda tandai Tidak kembali.${rb.risikoTanpaNilai ? ` + ${num(rb.risikoTanpaNilai)} kasus nilainya belum diketahui.` : ''}`)}
+        ${tile('rt-loss', 'Kerugian retur (tidak kembali)', lossV, `Hanya barang yang Anda tandai Tidak kembali; sudah dikurangkan dari laba.${rb.kerugianTanpaNilai ? ` + ${num(rb.kerugianTanpaNilai)} kasus nilainya belum diketahui.` : ''}`)}
+      </section>
+      <section class="panel rt-panel">
+        <div class="rt-head"><div class="rt-dist" aria-label="Status kasus">${['belum', 'kembali', 'hilang'].map((k) => `<span class="rt-pill st-${CASE_ST[k][0]}"><span class="status ${CASE_ST[k][0]}" aria-hidden="true"></span>${CASE_ST[k][1]} <b>${num(by(k))}</b></span>`).join('')}${noVal ? `<span class="rt-pill st-unknown"><span class="status unknown" aria-hidden="true"></span>Nilai belum diketahui <b>${num(noVal)}</b></span>` : ''}</div>
+          ${r.cases.some((c) => !c.needsCheck) ? `<button class="btn sm quiet" type="button" id="only-check">${view.onlyCheck ? 'Tampilkan semua kasus' : 'Hanya yang perlu dicek'}</button>` : ''}</div>
+        <div class="chips rt-cats">${r.catSummary.sort((a, b) => b.count - a.count).map((c) => `<span class="chip"><i class="sw" style="background:var(--${c.platform})"></i>${esc(catLabel(c.cat))}: ${c.count}</span>`).join('')}</div>
+        <p class="note-box rt-note">Pilih <b>Tidak kembali</b> bila barangnya tidak Anda terima lagi; modalnya akan dikurangkan dari laba. Beberapa refund terindikasi tidak dikirim menurut alasan di marketplace. Kondisi barangnya tetap perlu dipastikan.${r.unknownRisk > 0 ? ` Kasus yang belum dicek berisiko ${fmt(r.unknownRisk)} (belum dihitung sebagai kerugian)${rb.risikoTanpaNilai ? `, ditambah ${num(rb.risikoTanpaNilai)} kasus yang nilainya belum diketahui` : ''}.` : rb.risikoTanpaNilai ? ` ${num(rb.risikoTanpaNilai)} kasus yang belum dicek nilainya belum diketahui.` : ''}</p>
+        <ul class="rt-list">${list.map(row).join('') || '<li class="muted small">Tidak ada kasus yang perlu dicek.</li>'}</ul>
+      </section>`;
   }
 
   /* ---------- simulator ---------- */
@@ -817,15 +1053,17 @@
           <div class="seg" role="group" aria-label="Marketplace">${(f.src === 'laporan' ? f.avail : CekTarif.PLATFORMS).map((k) => `<button type="button" data-sim-plat="${k}" aria-pressed="${f.plat === k}">${f.src === 'umum' ? esc(CekTarif.DATA[k].nama) : PNAME[k]}</button>`).join('')}</div>
           ${umum}
         </div>
-        <div class="fields two align">
+        <fieldset class="sim-grp"><legend><span class="sg-n">1</span>Harga</legend><div class="fields two align">
           ${field('listPrice', 'Harga jual normal', 'Rp', sim.listPrice ?? 100000)}
-          ${field('disc', 'Diskon toko', '%', sim.disc ?? 0)}
+          ${field('disc', 'Diskon toko', '%', sim.disc ?? 0)}</div></fieldset>
+        <fieldset class="sim-grp"><legend><span class="sg-n">2</span>Modal &amp; biaya</legend><div class="fields two align">
           ${field('cost', `${(TYPES[typeOf(s)] || { cost: 'Modal' }).cost} per unit`, 'Rp', sim.cost ?? 60000, 'modal')}
-          ${field('packing', typeOf(s) === 'dropship' ? 'Biaya dropship per pesanan' : 'Packing per pesanan', 'Rp', ok(sim.packing) ? sim.packing : (ok(s.packing) ? s.packing : 0), typeOf(s) === 'dropship' ? 'dropship_fee' : 'packing_in')}
+          ${field('packing', typeOf(s) === 'dropship' ? 'Biaya dropship per pesanan' : 'Packing per pesanan', 'Rp', ok(sim.packing) ? sim.packing : (ok(s.packing) ? s.packing : 0), typeOf(s) === 'dropship' ? 'dropship_fee' : 'packing_in')}</div></fieldset>
+        <fieldset class="sim-grp"><legend><span class="sg-n">3</span>Potongan marketplace</legend><div class="fields two align">
           ${field('feePct', 'Potongan persen', '%', ok(sim.feePct) ? sim.feePct : f.pct, '', 'Terisi dari sumber di atas; boleh diubah.')}
           ${field('feeFixed', 'Biaya tetap per pesanan', 'Rp', ok(sim.feeFixed) ? sim.feeFixed : f.fixed, '', 'Biaya proses pesanan dan sejenisnya.')}
-        </div>
-      </div><div class="sim-out" id="sim-out"></div></div></section>`;
+        </div></fieldset>
+      </div><div class="sim-out" id="sim-out" aria-live="polite"></div></div></section>`;
   }
   function renderSimOut() {
     const box = $('#sim-out');
@@ -836,12 +1074,13 @@
     const res = Engine.simulate({ listPrice: g('listPrice', 100000), disc: g('disc', 0), cost: g('cost', 60000), feePct: g('feePct', f.pct),
       feeFixed: g('feeFixed', f.fixed), packing: g('packing', ok(s.packing) ? s.packing : 0), target });
     if (!(res.price > 0)) { box.innerHTML = '<p class="muted small">Isi harga dan diskon yang masuk akal.</p>'; return; }
-    const parts = [['Modal', res.cost, 'var(--ink-2)'], ['Potongan', res.fees, 'var(--cost)'], [typeOf(s) === 'dropship' ? 'Dropship' : 'Packing', res.packing, 'var(--mark)'], ['Laba', Math.max(res.margin, 0), 'var(--accent)']].filter((p) => p[1] > 0);
+    // Warna di atas kartu hijau gelap: dibuat terang agar tiap bagian terbaca.
+    const parts = [['Modal', res.cost, 'rgb(255 255 255 / 52%)'], ['Potongan', res.fees, '#ff9a82'], [typeOf(s) === 'dropship' ? 'Dropship' : 'Packing', res.packing, 'var(--mark)'], ['Laba', Math.max(res.margin, 0), '#5fe0b3']].filter((p) => p[1] > 0);
     const tot = parts.reduce((a, p) => a + p[1], 0);
-    box.innerHTML = `<span class="small muted">Laba per unit${qi('sim_margin')}</span>
-      <span class="sim-big ${res.margin < 0 ? 'neg' : ''}">${fmt(res.margin)} <span class="small faint">${pct(res.marginPct)}</span></span>
-      <div class="bar-stack" role="img" aria-label="Pembagian harga jual">${parts.map(([l, v, c]) => `<div title="${l}: ${fmt(v)}" style="flex:${v / tot};background:${c}"></div>`).join('')}</div>
-      <div class="legend">${parts.map(([l, v, c]) => `<span><i class="sw" style="background:${c}"></i>${l} ${fmt(v)}</span>`).join('')}</div>
+    box.innerHTML = `<div class="sim-hero ${res.margin < 0 ? 'is-neg' : ''}"><span class="sh-k">Laba per unit · simulasi${qi('sim_margin')}</span>
+      <span class="sim-big ${res.margin < 0 ? 'neg' : ''}">${fmt(res.margin)}</span><span class="sh-m">margin <b>${pct(res.marginPct)}</b> dari harga dibayar pembeli</span>
+      <div class="bar-stack" role="img" aria-label="Pembagian harga jual: ${parts.map(([l, v]) => `${l} ${fmt(v)}`).join(', ')}">${parts.map(([l, v, c]) => `<div title="${l}: ${fmt(v)}" style="flex:${v / tot};background:${c}"></div>`).join('')}</div>
+      <div class="legend">${parts.map(([l, v, c]) => `<span><i class="sw" style="background:${c}"></i>${l} ${fmt(v)}</span>`).join('')}</div></div>
       <div class="facts" style="margin-top:4px"><div class="fact"><span>Harga impas${qi('harga_impas')}</span><b>${fmt(res.breakEvenPrice)}</b><small>di bawah ini rugi</small></div>
         <div class="fact"><span>Harga untuk target ${target}%${qi('harga_target')}</span><b>${fmt(res.targetPrice)}</b><small>dibayar pembeli</small></div>
         <div class="fact"><span>Dibayar pembeli${qi('sim_dibayar')}</span><b>${fmt(res.price)}</b><small>setelah diskon</small></div>
@@ -859,13 +1098,14 @@
   function viewRiwayat() {
     if (!cloud.enabled) return `<div class="panel empty"><span class="ic">${svg('riwayat', 24)}</span><h2>Riwayat butuh akun</h2><p>Fitur akun belum diaktifkan di situs ini. Sementara itu, gunakan Laporan PDF atau Excel untuk menyimpan hasil.</p></div>`;
     if (!account.user) return `<div class="panel empty"><span class="ic">${svg('riwayat', 24)}</span><h2>Simpan hasil tiap bulan, bandingkan kapan saja</h2><p>Dengan akun gratis, ringkasan angka toko Anda tersimpan dan bisa dibandingkan antarperiode dari perangkat mana pun. File laporan tetap tidak diunggah.</p>
+      <ol class="empty-steps"><li><b>1</b>Simpan ringkasan periode ini</li><li><b>2</b>Unggah laporan bulan berikutnya</li><li><b>3</b>Bandingkan penjualan dan laba antarperiode</li></ol>
       <div class="row-actions" style="justify-content:center"><a class="btn primary" href="akun.html?mode=daftar&next=dashboard.html%23riwayat">Daftar gratis</a><a class="btn" href="akun.html?next=dashboard.html%23riwayat">Masuk</a></div></div>`;
-    if (!account.reports) return '<p class="muted">Memuat riwayat…</p>';
+    if (!account.reports) return '<div class="skel-list" aria-busy="true"><span class="sr-only">Memuat riwayat…</span><i class="skeleton"></i><i class="skeleton"></i><i class="skeleton"></i></div>';
     const reps = account.reports;
     const cur = last && last.r && !demo ? snapshot(last.r) : null;
     const cmp = view.compare && reps.find((x) => x.id === view.compare);
     if (!reps.length) return `<div class="panel empty"><span class="ic">${svg('riwayat', 24)}</span><h2>Belum ada riwayat</h2><p>Setelah melihat hasil, klik <b>Simpan ke riwayat</b> di bagian atas. Simpan setiap bulan untuk melihat perkembangan toko.</p>${cur ? '<button class="btn primary" type="button" id="save-hist">Simpan hasil sekarang</button>' : '<button class="btn primary" type="button" data-go="data">Unggah laporan</button>'}</div>`;
-    return `<div class="hist">${reps.map((x) => { const s = x.summary || {}; return `<div class="hist-row">
+    return `<div class="hist tl">${reps.map((x) => { const s = x.summary || {}; return `<div class="hist-row">
         <div><b>${esc(x.title || 'Tanpa judul')}</b><span class="k">${tgl(s.first)} sampai ${tgl(s.last)}, disimpan ${tgl(x.created_at)}</span></div>
         <div><span class="k">Penjualan</span><b>${fmt(s.sales)}</b></div><div><span class="k">Laba setelah modal</span><b class="${s.margin < 0 ? 'neg' : ''}">${fmt(s.margin)}</b></div>
         <div><span class="k">Laba dari data tersedia</span><b class="${s.net < 0 ? 'neg' : ''}">${s.opex ? fmt(s.net) : '—'}</b></div>
@@ -898,22 +1138,30 @@
     const dis = demo ? 'disabled' : '';
     const type = demo ? 'stok' : typeOf(s);
     const isDrop = type === 'dropship';
+    // Langkah persiapan: status diambil dari isian dan hasil engine yang sudah ada (tanpa perhitungan baru).
+    const hasIncome = !!(r && r.totalSales);
+    const steps = [['Jenis usaha', !!type, 'cara modal dihitung'], ['Laporan penghasilan', hasIncome || demo, 'wajib, dari Seller Centre'],
+      ['Modal & HPP', !!(r && r.totalSales && r.coverage >= 0.98), r && r.totalSales ? `${pct(r.coverage, 0)} penjualan punya modal` : 'agar laba bisa dihitung'], ['Biaya & target', !!((s.fixedCosts || []).length || ok(s.packing)), 'opsional']];
+    const sec = view.section || 'unggah';
+    const SUP = [['Wajib', 'req', [['shopee', 'Shopee', 'Laporan Penghasilan', 'Keuangan › Penghasilan Saya › tab Sudah Dilepas › Unduh'], ['tiktok', 'TikTok Shop', 'Laporan Penghasilan', 'Keuangan › Transaksi › Unduh (pesanan Tokopedia ikut di sini)']]],
+      ['Disarankan', 'rec', [['shopee', 'Shopee', 'Export pesanan', 'Pesanan Saya › Export, untuk jumlah barang dan SKU'], ['tiktok', 'TikTok Shop', 'Export pesanan', 'Pesanan › Kelola pesanan › Ekspor']]],
+      ['Opsional', 'opt', [['', 'Shopee / TikTok', 'File retur atau pengembalian', 'untuk menandai barang yang tidak kembali'], ['modal', 'Cek Untung', 'Template modal terisi', 'diunduh dari bagian Modal & HPP']]]];
     return `
       ${demo ? '<p class="note-box warn">Mode contoh memakai data dan modal Toko Contoh Sejahtera. Unggah file Anda untuk mulai; data contoh akan diganti.</p>' : ''}
+      <ol class="setup-steps" aria-label="Langkah persiapan">${steps.map(([t, done, d], i) => `<li class="${done ? 'done' : ''}"><span class="ss-n" aria-hidden="true">${done ? '✓' : i + 1}</span><span><b>${t}</b><small>${done ? 'selesai' : d}</small></span><span class="sr-only">${done ? 'selesai' : 'belum'}</span></li>`).join('')}</ol>
+      <nav class="sec-tabs" aria-label="Bagian halaman data">${[['unggah', 'Unggah data'], ['modal', 'Modal & HPP'], ['pengaturan', 'Pengaturan']].map(([k, l]) => `<button type="button" data-go="data" data-section="${k}" ${sec === k ? 'aria-current="true"' : ''}>${l}</button>`).join('')}</nav>
       ${!demo && (!type || view.typeOpen) ? typePicker(type) : ''}
-      <div class="grid-2" style="align-items:start">
+      <div class="grid-2 data-grid" style="align-items:start">
         <section class="stack" id="sec-unggah" aria-label="Unggah data">
-          <div class="drop" id="drop"><span class="ic">${svg('data', 22)}</span><strong>Tarik file laporan ke sini</strong>
+          <div class="drop" id="drop"><span class="ic">${svg('data', 24)}</span><strong>Tarik file laporan ke sini</strong>
+            <span class="small muted drop-sub">atau pilih dari komputer / HP Anda. File dibaca di browser ini, tidak dikirim ke server.</span>
             <label class="btn primary" for="file-input">Pilih file</label><input id="file-input" type="file" multiple accept=".xlsx,.xls,.csv" hidden>
-            <span class="tiny faint">.xlsx, .xls, atau .csv. Boleh banyak sekaligus; file yang sama tidak dihitung dua kali.</span></div>
+            <span class="drop-fmt"><span>.xlsx</span><span>.xls</span><span>.csv</span><span class="faint">boleh banyak sekaligus; file yang sama tidak dihitung dua kali</span></span></div>
           <ul class="files" id="file-list"></ul>
-          ${files.length ? '<div><button class="btn sm quiet" type="button" id="clear-btn">Hapus semua file</button></div>' : ''}
-          <details class="panel" ${files.length ? '' : 'open'}><summary style="cursor:pointer;font-weight:700">File apa yang perlu diunduh?</summary>
-            <div style="display:grid;gap:12px;margin-top:12px" class="small">
-              <p><b>Wajib.</b> Laporan Penghasilan. Shopee: Keuangan, Penghasilan Saya, tab Sudah Dilepas, Unduh. TikTok Shop: Keuangan, Transaksi, Unduh (pesanan Tokopedia ikut di sini).</p>
-              <p><b>Disarankan.</b> Export pesanan untuk jumlah barang dan SKU. Shopee: Pesanan Saya, Export. TikTok: Pesanan, Kelola pesanan, Ekspor.</p>
-              <p><b>Opsional.</b> File retur atau pengembalian, dan template modal yang sudah diisi.</p>
-              <p class="faint">Unduh untuk periode yang sama di semua laporan. Nama menu bisa sedikit berubah dari waktu ke waktu.</p></div></details>
+          ${files.length ? '<div><button class="btn sm quiet danger" type="button" id="clear-btn">Hapus semua file</button></div>' : ''}
+          <section class="panel sup" aria-labelledby="sup-h"><div class="panel-head" style="margin:0 0 4px"><h3 id="sup-h">Laporan yang didukung</h3><p>Unduh untuk periode yang sama di semua laporan</p></div>
+            ${SUP.map(([lvl, cls, items]) => `<div class="sup-g ${cls}"><span class="sup-lvl">${lvl}</span><ul>${items.map(([p, pl, t, how]) => `<li><span class="sup-plat">${p ? `<i class="sw" style="background:var(--${p === 'modal' ? 'accent' : p})"></i>` : ''}${pl}</span><b>${t}</b><small>${how}</small></li>`).join('')}</ul></div>`).join('')}
+            <p class="tiny faint">Jenis file dikenali dari nama sheet dan kolom di dalamnya, bukan dari nama file. Nama menu di Seller Centre bisa sedikit berubah dari waktu ke waktu.</p></section>
         </section>
         <section class="panel modal-panel" id="sec-modal" aria-label="Modal dan HPP">
           <div class="panel-head" style="margin:0"><h3>${type === 'produsen' ? 'Modal produksi (HPP)' : 'Modal barang'}${qi('modal')}</h3>${r && r.totalSales ? `<span class="badge ${r.coverage >= 0.98 ? 'ok' : 'todo'}">${r.coverage >= 0.98 ? 'Lengkap' : `${pct(r.coverage, 0)} penjualan`}</span>` : ''}</div>
@@ -977,7 +1225,7 @@
         <div class="progress" aria-hidden="true"><i style="width:${Math.round(r.coverage * 100)}%"></i></div>
         ${r.ttNoDetail && !r.hasOrderExport.tiktok ? `<p class="tiny faint">${num(r.ttNoDetail)} pesanan TikTok tidak mencantumkan produk. Unggah export pesanan TikTok, atau isi modal rata-rata.</p>` : ''}
         ${r.qtyAssumed && !r.hasOrderExport.shopee ? '<p class="tiny faint">Jumlah barang Shopee dianggap 1 per produk per pesanan. Unggah export pesanan Shopee agar tepat.</p>' : ''}</div>` : ''}
-      ${hasData ? `<details ${missing && missing <= 40 ? 'open' : ''}><summary class="small" style="cursor:pointer;font-weight:700">Isi ${lower(word)} per unit langsung di sini</summary>
+      ${hasData ? `<details ${(missing && missing <= 40) || view.costQ ? 'open' : ''}><summary class="small" style="cursor:pointer;font-weight:700">Isi ${lower(word)} per unit langsung di sini</summary>
         <div class="searchrow" style="margin-top:10px"><input class="plain" id="cost-q" type="search" placeholder="Cari produk" value="${esc(view.costQ)}" aria-label="Cari produk"></div><div id="cost-table"></div></details>` : ''}`;
   }
   const lower = (w) => (w === 'HPP' ? w : w.toLowerCase());
@@ -1080,8 +1328,8 @@
       ['1. Isi kolom "Modal per unit (Rp)": harga beli atau produksi satu unit, tanpa ongkir ke pembeli.'],
       ['2. Jangan ubah kolom "Kode"; kolom ini dipakai untuk mencocokkan dengan laporan marketplace.'],
       ['3. Boleh menambah baris: isi Kode (SKU) atau Nama produk, lalu Modal per unit.'],
-      ['4. Simpan, lalu unggah file ini di Cek Profit, halaman Data & modal.']]), 'Petunjuk');
-    XLSX.writeFile(wb, 'template-modal-cekprofit.xlsx');
+      ['4. Simpan, lalu unggah file ini di Cek Untung, halaman Data & modal.']]), 'Petunjuk');
+    XLSX.writeFile(wb, 'template-modal-cekuntung.xlsx');
     track('unduh-template');
   }
 
@@ -1135,7 +1383,11 @@
     const list = demo ? CekDemo.make().map((wb) => ({ name: wb.name, demo: true, kind: Engine.detect(wb) })) : files;
     el.innerHTML = list.map((f, i) => {
       const [cls, label] = KIND[f.kind] || KIND.unknown;
-      return `<li class="file"><i class="dot ${cls}"></i><div><div class="name">${esc(f.name)}</div><div class="muted">${label}${f.demo ? ', data contoh' : `. ${fileStatus(f)}`}</div></div>
+      const [plat, ...rest] = label.split(', ');
+      const st = f.demo ? 'ok' : f.error || f.kind === 'unknown' ? 'bad' : f.kind === 'shopee_balance' ? 'warn' : /class="warn"/.test(fileStatus(f)) ? 'warn' : 'ok';
+      return `<li class="file fs-${st}"><span class="file-ic ${cls}" aria-hidden="true">${svg('laporan', 18)}</span><div class="file-body"><div class="name">${esc(f.name)}</div>
+        <div class="file-tags"><span class="ftag ${cls}">${esc(plat)}</span>${rest.length ? `<span class="ftag">${esc(rest.join(', '))}</span>` : ''}<span class="ftag st ${st}">${st === 'ok' ? '✓ Terbaca' : st === 'warn' ? '! Periksa' : '✕ Tidak terbaca'}</span></div>
+        <div class="muted file-st">${f.demo ? 'Data contoh' : fileStatus(f)}</div></div>
         ${f.demo ? '<span></span>' : `<button class="x" type="button" data-rm="${i}" aria-label="Hapus ${esc(f.name)}">×</button>`}</li>`;
     }).join('');
     const drop = $('#drop');
@@ -1146,7 +1398,7 @@
       drop.addEventListener('drop', (e) => addFiles(e.dataTransfer.files));
     }
   }
-  const resetView = () => Object.assign(view, { platform: 'all', from: '', to: '', showAll: false, q: '', costQ: '', costAll: false, compare: null });
+  const resetView = () => Object.assign(view, { platform: 'all', from: '', to: '', showAll: false, q: '', costQ: '', costAll: false, compare: null, prodFilter: 'all', prodKey: null, platCol: 'total' });
 
   /* ---------- penjelasan angka (tombol ?) ---------- */
   function infoPop() {
@@ -1207,7 +1459,7 @@
       else if (cloud.enabled && !account.user) action = '<a class="btn primary" href="akun.html?mode=daftar&next=dashboard.html%23upgrade">Daftar atau masuk untuk berlangganan</a>';
       else if (cloud.enabled) action = '<button class="btn primary" type="button" id="req-upgrade">Lanjut ke pembayaran</button><p class="tiny faint">Kami catat permintaan Anda, lalu Anda membayar lewat transfer atau QRIS melalui WhatsApp. Pro aktif di akun ini setelah dikonfirmasi.</p>';
       else action = C.whatsapp ? `<a class="btn primary" href="${esc(waLink(C.waMessage))}" target="_blank" rel="noopener" data-track="beli-wa">Pesan lewat WhatsApp</a>` : '<p class="small warn">Kontak pembelian belum diatur.</p>';
-      d.innerHTML = `${dHead('Cek Profit Pro', 'Untuk keputusan harga dan produk yang berbasis angka.')}
+      d.innerHTML = `${dHead('Cek Untung Pro', 'Untuk keputusan harga dan produk yang berbasis angka.')}
         <div class="d-body"><ul class="benefits"><li>Laporan PDF siap kirim, dengan nama dan logo toko</li><li>Semua produk dengan status rugi, tipis, atau sehat</li><li>Harga impas dan harga target per produk</li><li>Semua temuan, ekspor Excel, riwayat tanpa batas</li></ul>
         ${pending ? '' : `<div class="plans">${PLANS().map(([k, l, pr], i) => `<label class="plan-opt"><input type="radio" name="plan" value="${k}" ${i === 0 ? 'checked' : ''}><span><b>${l}</b></span><span class="p">${esc(pr)}</span></label>`).join('')}</div>`}
         ${action}${codeBlock}</div>`;
@@ -1237,7 +1489,7 @@
     const R = (v) => (ok(v) ? Math.round(v) : '');
     const plats = ['shopee', 'tiktok'].filter((k) => r.has[k]);
     const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([['Cek Profit', prof().store || ''], ['Periode data', `${r.first} s.d. ${r.last}`], [], ['Komponen', ...plats.map((k) => PNAME[k]), 'Total'],
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([['Cek Untung', prof().store || ''], ['Periode data', `${r.first} s.d. ${r.last}`], [], ['Komponen', ...plats.map((k) => PNAME[k]), 'Total'],
       ['Pesanan terjual', ...plats.map((k) => r[k].orders), r.orders], ['Penjualan', ...plats.map((k) => R(r[k].sales)), R(r.totalSales)],
       ['Potongan marketplace', ...plats.map((k) => R(r[k].feeTotal)), R(r.totalFees)], ['Dana diterima', ...plats.map((k) => R(r[k].received)), R(r.totalReceived)],
       ['Modal', ...plats.map((k) => R(-r[k].modal)), R(-r.totalModal)], ['Packing', ...plats.map((k) => R(-r[k].knownPacking)), R(-r.knownPacking)],
@@ -1253,12 +1505,12 @@
     if (r.insights.length) XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([['Tingkat', 'Temuan', 'Rincian', 'Saran'], ...r.insights.map((i) => [i.level, i.title, i.detail, i.action])]), 'Temuan');
     if (r.cases.length) XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([['Platform', 'No. pesanan', 'Produk', 'Kategori', 'Alasan', 'Resi retur', 'Nilai refund', 'Perkiraan modal', 'Status barang'],
       ...r.cases.map((c) => [PNAME[c.platform], c.orderId, c.product, Engine.CAT_LABEL[c.cat], c.reason, c.resi, R(c.amount), R(c.estModal), c.needsCheck ? c.state : 'tidak perlu'])]), 'Retur');
-    XLSX.writeFile(wb, `cek-profit-${(prof().store || 'toko').replace(/[^\w-]+/g, '-')}-${r.first || ''}-${r.last || ''}.xlsx`);
+    XLSX.writeFile(wb, `cek-untung-${(prof().store || 'toko').replace(/[^\w-]+/g, '-')}-${r.first || ''}-${r.last || ''}.xlsx`);
     track('unduh-excel');
   }
   function buildReport() {
     if (!last) return false;
-    $('#report').innerHTML = CekReport.html(last.r, { settings: last.st, profile: prof(), demo, filter: { ...view }, brand: C.brand || 'Cek Profit' });
+    $('#report').innerHTML = CekReport.html(last.r, { settings: last.st, profile: prof(), demo, filter: { ...view }, brand: C.brand || 'Cek Untung' });
     return true;
   }
   function openReport() {
@@ -1313,7 +1565,7 @@
     if (t.dataset.case) { caseState[t.dataset.case] = t.value; store.set(KEYS.cases, caseState); render(); }
     else if (t.id === 'from' || t.dataset.filter === 'from') { view.from = t.value; render(); }
     else if (t.id === 'to' || t.dataset.filter === 'to') { view.to = t.value; render(); }
-    else if (t.id === 'sort') { view.sort = t.value; renderProducts(); }
+    else if (t.id === 'sort') { view.sort = t.value; renderProducts(true); }
     else if (t.id === 'simx-status' || t.id === 'simx-kat') { sim[t.id.slice(5)] = t.value; resetSimFee(); render(); }
     else if (t.id === 'simx-aff') { sim.afiliasi = Math.min(50, Math.max(0, +t.value || 0)); resetSimFee(); render(); }
     else if (t.dataset.simOpsi) { const k = t.dataset.simOpsi; sim.opsi = t.checked ? [...new Set([...sim.opsi, k])] : sim.opsi.filter((x) => x !== k); resetSimFee(); render(); }
@@ -1335,10 +1587,22 @@
     if (qb) { e.preventDefault(); showInfo(qb); return; }
     if (e.target.closest('[data-info-close]') || !e.target.closest('#info-pop')) hideInfo();
     if (e.target.closest('#info-pop')) return;
+    const prow = e.target.closest('tr[data-prod]');
+    if (prow && !e.target.closest('button, a, select, input')) { openProduct(prow.dataset.prod); return; }
     const t = e.target.closest('button, a[data-track]');
     if (!t) { if (account.menu && !e.target.closest('.menu')) { account.menu = false; renderAccount(); } return; }
     if (t.dataset.track) { track(t.dataset.track); return; }
     if (t.dataset.sheet) { openSheet(t.dataset.sheet); return; }
+    if (t.dataset.prod) { openProduct(t.dataset.prod); return; }
+    if (t.dataset.pfilter) { view.prodFilter = t.dataset.pfilter; view.showAll = false; renderProducts(true); return; }
+    if (t.dataset.platCol) { view.platCol = t.dataset.platCol; const tb = $('.plat-table'); if (tb) { tb.className = `data plat-table show-${view.platCol}`; } document.querySelectorAll('[data-plat-col]').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.platCol === view.platCol))); return; }
+    if (t.dataset.simProd) {
+      // Simulator diisi angka produk dari engine (harga rata-rata, modal per unit); tidak ada hitungan baru di sini.
+      const p = last && last.r.products.find((x) => x.key === t.dataset.simProd);
+      if (p) { sim.listPrice = ok(p.avgPrice) ? Math.round(p.avgPrice) : null; sim.disc = 0; if (ok(p.unitCost)) sim.cost = Math.round(p.unitCost); sim.src = last.r.feeModel[p.platform] ? 'laporan' : 'umum'; sim.plat = p.platform; sim.kat = null; resetSimFee(); }
+      closeSheet(); go('simulator'); return;
+    }
+    if (t.dataset.fixModal) { const p = last && last.r.products.find((x) => x.key === t.dataset.fixModal); view.costQ = p ? p.name : ''; closeSheet(); go('data', true, 'modal'); return; }
     if (t.hasAttribute('data-sheet-close')) { closeSheet(); return; }
     if (t.dataset.go) { closeSheet(); go(t.dataset.go, true, t.dataset.section); return; }
     // Tombol di lembar Filter & unduh memakai fungsi yang sama dengan menu Unduh di bilah atas.
@@ -1348,7 +1612,9 @@
     if (t.id === 'acct-toggle') { account.menu = !account.menu; renderAccount(); return; }
     if (t.id === 'logout') { await cloud.auth.signOut(); account.user = null; account.profile = null; account.reports = null; account.menu = false; toast('Anda sudah keluar.'); render(); return; }
     if (t.id === 'code-apply') {
+      busy(t, true);
       const res = await checkLicense($('#code-input').value, false);
+      busy(t, false);
       if (res.ok) { dlg().close(); toast(`Pro aktif${res.name ? ` atas nama ${res.name}` : ''}.`); track('kode-aktif'); render(); }
       else $('#code-msg').innerHTML = `<span class="bad">${esc(res.reason)}</span>`;
       return;
@@ -1356,23 +1622,23 @@
     if (t.id === 'code-remove') { store.del(KEYS.license); license = { ok: false }; dlg().close(); render(); return; }
     if (t.id === 'req-upgrade') {
       const plan = (document.querySelector('input[name="plan"]:checked') || {}).value || 'pro_bulanan';
-      t.disabled = true;
+      busy(t, true);
       try {
         await cloud.db.requestUpgrade(plan, '');
         track('minta-upgrade');
         if (C.whatsapp) window.open(waLink(`${C.waMessage} Email akun: ${account.user.email}. Paket: ${plan === 'pro_tahunan' ? 'Pro tahunan' : 'Pro bulanan'}.`), '_blank', 'noopener');
         openUpgrade();
-      } catch (err) { toast(err.message); t.disabled = false; }
+      } catch (err) { toast(err.message); busy(t, false); }
       return;
     }
     if (t.id === 'hist-confirm') {
-      t.disabled = true;
+      busy(t, true);
       try {
         const r = last.r;
         const row = await cloud.db.addReport({ title: $('#hist-title').value.trim() || 'Tanpa judul', period_from: r.first || null, period_to: r.last || null, summary: snapshot(r) });
         account.reports = [row, ...(account.reports || [])];
         markDone('saved'); dlg().close(); toast('Tersimpan di riwayat.'); track('simpan-riwayat'); render();
-      } catch (err) { toast(err.message); t.disabled = false; }
+      } catch (err) { toast(err.message); busy(t, false); }
       return;
     }
     if (t.dataset.compare) { view.compare = view.compare === t.dataset.compare ? null : t.dataset.compare; $('#view').innerHTML = viewRiwayat(); return; }
@@ -1433,7 +1699,11 @@
     }
   });
   // Ingat apakah "Rincian laba" sedang dibuka, agar tidak tertutup saat halaman dirender ulang (mis. ganti filter).
-  document.addEventListener('toggle', (e) => { if (e.target.classList && e.target.classList.contains('rincian')) view.rincian = e.target.open; }, true);
+  // Baris produk terpilih hanya ditandai selama lacinya terbuka.
+  $('#sheet').addEventListener('close', () => document.querySelectorAll('tr.is-selected').forEach((tr) => tr.classList.remove('is-selected')));
+  // Bilah judul: garis bawah & bayangan tipis muncul setelah halaman digulir (penanda di atas halaman, bukan event scroll).
+  if ('IntersectionObserver' in window && $('#top-sentinel')) new IntersectionObserver(([en]) => $('#main-top').classList.toggle('is-stuck', !en.isIntersecting)).observe($('#top-sentinel'));
+  document.addEventListener('toggle', (e) => { if (!e.target.classList) return; if (e.target.classList.contains('rincian')) view.rincian = e.target.open; if (e.target.id === 'month-table') view.monthOpen = e.target.open; }, true);
   document.addEventListener('keydown', (e) => {
     if (e.key !== 'Escape') return;
     hideInfo();

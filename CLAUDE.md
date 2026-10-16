@@ -1,8 +1,8 @@
-# CLAUDE.md — Pedoman kerja projek Cek Profit
+# CLAUDE.md — Pedoman kerja projek Cek Untung
 
 File ini dibaca Claude di setiap sesi. Isinya visi produk, aturan yang tidak boleh dilanggar, dan cara kerja yang diharapkan pemilik projek. Bila ada yang berubah, perbarui file ini dalam commit yang sama.
 
-Peran Claude: Lead Software Engineer dan Financial Systems Engineer untuk Cek Profit. Pemilik projek adalah pengambil keputusan akhir.
+Peran Claude: Lead Software Engineer dan Financial Systems Engineer untuk Cek Untung (sebelumnya Cek Profit). Repository/internal identifier tertentu masih memakai `cek-profit` / `cekprofit` untuk kompatibilitas dan belum dimigrasikan. Jangan mengganti identifier internal tersebut tanpa tugas migrasi yang disetujui pemilik. Pemilik projek adalah pengambil keputusan akhir.
 
 Bila dua aturan bertentangan, prioritasnya: keamanan & privasi → kebenaran angka → persetujuan pemilik → visi produk → arsitektur → desain.
 
@@ -18,7 +18,7 @@ Bila dokumen rujukan bertentangan dengan file ini, file ini yang berlaku. Lapork
 
 ## 1. Visi produk
 
-- **Identitas:** Cek Profit adalah **Marketplace Financial Intelligence Platform** untuk seller Indonesia. Seller Shopee, TikTok Shop, dan Tokopedia mengunggah laporan Seller Centre, lalu melihat **perhitungan laba berdasarkan data yang tersedia, disertai transparansi atas komponen yang belum diketahui** (gambaran umum: penjualan − potongan marketplace − modal − packing − biaya operasional; ini bukan definisi resmi, lihat `docs/KAMUS_ANGKA.md`), serta apa yang perlu dilakukan. Hindari klaim kepastian ketika data belum terverifikasi.
+- **Identitas:** Cek Untung adalah **Marketplace Financial Intelligence Platform** untuk seller Indonesia. Seller Shopee, TikTok Shop, dan Tokopedia mengunggah laporan Seller Centre, lalu melihat **perhitungan laba berdasarkan data yang tersedia, disertai transparansi atas komponen yang belum diketahui** (gambaran umum: penjualan − potongan marketplace − modal − packing − biaya operasional; ini bukan definisi resmi, lihat `docs/KAMUS_ANGKA.md`), serta apa yang perlu dilakukan. Hindari klaim kepastian ketika data belum terverifikasi.
 - **Untuk siapa:** pemilik toko online kecil–menengah di Indonesia yang tidak paham akuntansi atau Excel rumit. Mereka sibuk dan membuka website dari laptop maupun HP.
 - **Masalah yang dijawab:** "Omzet saya besar, tapi uangnya ke mana?" Potongan admin, ongkir, retur, dan modal yang tidak tercatat membuat seller merasa untung padahal rugi.
 - **Empat pilar.** Setiap pengembangan harus memperkuat minimal satu pilar:
@@ -94,7 +94,7 @@ Bila dokumen rujukan bertentangan dengan file ini, file ini yang berlaku. Lapork
 ## 4. Bahasa dan wording
 
 - Semua teks untuk pengguna memakai **Bahasa Indonesia** yang sederhana dan sopan (sapaan "Anda"), tanpa jargon akuntansi atau teknis.
-- Sebut **"website"** atau **"dashboard"**, jangan "aplikasi". Pengguna memakai Cek Profit di browser, tidak menginstal apa pun.
+- Sebut **"website"** atau **"dashboard"**, jangan "aplikasi". Pengguna memakai Cek Untung di browser, tidak menginstal apa pun.
 - Tombol pendaftaran: **"Daftar gratis"**. Tombol untuk pengguna yang sudah login: **"Buka dashboard"**.
 - Angka rupiah memakai format `Rp1.234.567`; nilai minus ditulis `−Rp…` dengan warna biaya. Estimasi diberi label "perkiraan".
 

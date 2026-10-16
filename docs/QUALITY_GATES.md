@@ -1,4 +1,4 @@
-# Quality Gates Cek Profit
+# Quality Gates Cek Untung
 
 Pemeriksaan wajib sebelum meminta izin commit. Aturan persetujuan tetap mengikuti `CLAUDE.md` §3: lulus quality
 gate **tidak** berarti boleh commit atau push tanpa izin pemilik.

@@ -1,4 +1,4 @@
-# Kamus Angka Cek Profit
+# Kamus Angka Cek Untung
 
 Dokumen ini memisahkan tiga hal yang sering tercampur:
 
@@ -152,7 +152,7 @@ pesanan. Menunjukkan sumbangan penjualan sebelum biaya tetap.
 Status: **DIUSULKAN — BELUM DISETUJUI**
 
 Penjualan bersih − HPP − kerugian barang retur. Dalam laporan laba rugi, potongan marketplace disajikan sebagai beban
-di bawah laba kotor. Hanya dipakai bila Cek Profit menampilkan format laba rugi lengkap.
+di bawah laba kotor. Hanya dipakai bila Cek Untung menampilkan format laba rugi lengkap.
 
 ### A.13 Laba operasional
 Status: **DIUSULKAN — BELUM DISETUJUI**
@@ -163,7 +163,7 @@ dipotong dari Laporan Penghasilan.
 ### A.14 Laba bersih
 Status: **DIUSULKAN — BELUM DISETUJUI**
 
-Laba operasional − beban di luar operasional (bunga, pajak penghasilan). Cek Profit saat ini **tidak** menghitung
+Laba operasional − beban di luar operasional (bunga, pajak penghasilan). Cek Untung saat ini **tidak** menghitung
 bunga dan pajak. Selama itu belum ada, angka paling bawah yang ditampilkan sebaiknya disebut **laba operasional**,
 bukan laba bersih (lihat B, catatan nama).
 
@@ -307,7 +307,7 @@ Status: **DITETAPKAN pemilik (14 Okt 2026)**
 
 #### A.19.6 SKU opsional dan kunci modal
 Status:
-- **Prinsip DITETAPKAN pemilik (14 Okt 2026):** SKU **opsional**. Cek Profit harus tetap bekerja untuk seller yang tidak
+- **Prinsip DITETAPKAN pemilik (14 Okt 2026):** SKU **opsional**. Cek Untung harus tetap bekerja untuk seller yang tidak
   mengisi SKU, dan untuk seller dengan struktur modal dan diskon yang berbeda-beda.
 - **Urutan kunci di bawah: DIUSULKAN — BELUM DISETUJUI.**
 

@@ -67,7 +67,7 @@ Untuk memperpanjang, klik **+1 bln** atau **+1 thn** di daftar pengguna. Masa be
   1. Authentication → Providers → Google, lalu ikuti petunjuk Supabase untuk membuat OAuth Client di Google Cloud.
   2. Setelah aktif, ubah `googleLogin: true` di `config.js`.
 - **Email dari domain sendiri**: email bawaan Supabase dibatasi beberapa email per jam. Saat pengguna mulai banyak, atur SMTP sendiri di Authentication → Emails → SMTP Settings. Layanan gratis seperti Brevo atau Resend bisa dipakai.
-- **Template email bahasa Indonesia**: Authentication → Emails → Templates. Ubah teks "Confirm your signup" dan "Reset password".
+- **Template email bahasa Indonesia**: Authentication → Emails → Templates. Ubah teks "Confirm your signup" dan "Reset password", dan pakai nama produk **Cek Untung** di judul dan isi email. Nama project Supabase (`cek-profit`) dan alamat situs tidak perlu diubah.
 
 ## Uji lokal (untuk pengembang)
 

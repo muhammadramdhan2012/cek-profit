@@ -22,7 +22,7 @@
   function render() {
     const card = $('#card');
     if (!cloud.enabled) {
-      card.innerHTML = `<h1>Akun belum aktif</h1><p class="muted">Pemilik situs belum menghubungkan layanan akun. Anda tetap bisa memakai Cek Profit tanpa login; modal dan pengaturan tersimpan di browser ini.</p>
+      card.innerHTML = `<h1>Akun belum aktif</h1><p class="muted">Pemilik situs belum menghubungkan layanan akun. Anda tetap bisa memakai Cek Untung tanpa login; modal dan pengaturan tersimpan di browser ini.</p>
         <a class="btn primary" href="dashboard.html">Mulai hitung</a>`;
       return;
     }

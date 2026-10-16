@@ -10,6 +10,8 @@
  *   data-stagger="80"      pada induk: anak [data-reveal] yang masuk bersamaan muncul bergiliran
  *   data-spotlight         sorotan halus mengikuti kursor (hanya mouse/trackpad)
  *   data-tilt="1.5"        kemiringan maksimal (derajat) mengikuti kursor (hanya mouse/trackpad)
+ *   data-parallax          lapisan anak bergeser beberapa piksel mengikuti kursor (--px, --py)
+ *   data-scrollvis         porsi elemen yang terlihat (0–1) sebagai --sv, untuk gerak gulir yang sangat ringan
  *
  * Hanya transform dan opacity yang dianimasikan. Isi tidak pernah disembunyikan dari pembaca layar
  * (opacity, bukan display/visibility), dan setiap elemen hanya beranimasi sekali.
@@ -90,7 +92,30 @@
     });
   }
 
-  function init() { reveal(); spotlight(); tilt(); }
+  /** Paralaks kursor: lapisan [style="--depth:n"] di dalam [data-parallax] bergeser maks. ±depth px. Hanya mouse/trackpad. */
+  function parallax(scope = document) {
+    if (!finePointer || reduce) return;
+    scope.querySelectorAll('[data-parallax]').forEach((el) => {
+      let raf = 0, x = 0, y = 0;
+      const set = () => { raf = 0; el.style.setProperty('--px', x.toFixed(3)); el.style.setProperty('--py', y.toFixed(3)); };
+      el.addEventListener('pointermove', (e) => {
+        const r = el.getBoundingClientRect();
+        x = Math.max(-1, Math.min(1, ((e.clientX - r.left) / r.width - 0.5) * 2)); y = Math.max(-1, Math.min(1, ((e.clientY - r.top) / r.height - 0.5) * 2));
+        if (!raf) raf = requestAnimationFrame(set);
+      });
+      el.addEventListener('pointerleave', () => { x = 0; y = 0; if (!raf) raf = requestAnimationFrame(set); });
+    });
+  }
+
+  /** Seberapa banyak elemen terlihat (0–1) → --sv, dari IntersectionObserver bertingkat (bukan event scroll). */
+  function scrollvis(scope = document) {
+    if (reduce || !('IntersectionObserver' in window)) return;
+    const th = Array.from({ length: 21 }, (_, i) => i / 20);
+    const vio = new IntersectionObserver((es) => es.forEach((en) => en.target.style.setProperty('--sv', en.intersectionRatio.toFixed(2))), { threshold: th });
+    scope.querySelectorAll('[data-scrollvis]').forEach((el) => vio.observe(el));
+  }
+
+  function init() { reveal(); spotlight(); tilt(); parallax(); scrollvis(); }
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init); else init();
-  window.CekMotion = { reveal, spotlight, tilt, enabled: canReveal };
+  window.CekMotion = { reveal, spotlight, tilt, parallax, scrollvis, enabled: canReveal };
 })();

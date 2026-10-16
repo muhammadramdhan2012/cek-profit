@@ -1,4 +1,4 @@
-# Known Issues — Cek Profit
+# Known Issues — Cek Untung
 
 Daftar masalah yang diketahui beserta statusnya. Dokumen ini juga **sumber utama status implementasi pilar produk**.
 Sumber awal: audit menyeluruh 14 Okt 2026 (read-only), ditambah analisis penghitungan ganda di

@@ -25,14 +25,14 @@ const CekInfo = (() => {
       t: 'Potongan marketplace',
       a: 'Semua biaya yang dipotong Shopee atau TikTok dari penjualan Anda: biaya admin/komisi, program gratis ongkir, biaya proses per pesanan, komisi afiliasi, dan ongkir yang ditanggung penjual.',
       h: 'Dijumlahkan dari kolom biaya di Laporan Penghasilan, per pesanan. Karena diambil dari laporan, angka ini sudah mengikuti tarif terbaru yang berlaku saat pesanan terjadi.',
-      b: 'Umumnya 12–20% dari penjualan. Di atas 20% berarti banyak biaya program atau pesanan bernilai kecil. Rincian ada di halaman Biaya & potongan.',
+      b: 'Umumnya 12–20% dari penjualan. Di atas 20% berarti banyak biaya program atau pesanan bernilai kecil. Rinciannya ada di bagian Rincian biaya pada halaman Laba.',
       d: (r) => (r && r.totalSales ? `Di data ini: ${pc(-r.totalFees / r.totalSales)} dari penjualan, rata-rata ${rp(-r.totalFees / Math.max(r.orders, 1))} per pesanan.` : ''),
     },
     tanpa_modal: {
       t: 'Dana dari pesanan tanpa modal',
       a: 'Uang yang Anda terima dari pesanan yang modal barangnya belum diisi.',
       h: 'Pesanan ini sengaja tidak dihitung dalam laba. Menganggap modalnya nol akan membuat laba terlihat lebih besar dari kenyataan.',
-      b: 'Isi modal produk di Data & modal agar pesanan ini ikut dihitung dalam laba.',
+      b: 'Isi modal produk di menu Modal & HPP agar pesanan ini ikut dihitung dalam laba.',
     },
     modal: {
       t: 'Modal barang',
@@ -138,7 +138,7 @@ const CekInfo = (() => {
     harga_target: {
       t: 'Harga target',
       a: 'Harga yang dibayar pembeli agar margin produk mencapai target Anda.',
-      h: '(modal + packing per unit) ÷ (1 − persen potongan − target margin). Target margin diatur di Data & modal.',
+      h: '(modal + packing per unit) ÷ (1 − persen potongan − target margin). Target margin diatur di menu Pengaturan.',
     },
     status: {
       t: 'Status produk',
@@ -181,7 +181,7 @@ const CekInfo = (() => {
     status_barang: { t: 'Status barang', a: 'Apakah barang retur sudah kembali ke gudang Anda.', h: 'Pilih Tidak kembali bila barang hilang atau rusak; modalnya akan dikurangkan dari laba. Kasus yang terindikasi tidak dikirim (menurut alasan di marketplace) belum bisa ditandai di sini; kondisi barangnya tetap perlu dipastikan.' },
 
     /* ---------- simulator ---------- */
-    sim_margin: { t: 'Laba per unit', a: 'Perkiraan laba dari satu penjualan dengan harga dan diskon yang Anda isi. Persen di sebelahnya adalah margin.', h: 'Harga dibayar pembeli − potongan marketplace (persen + biaya tetap) − modal − packing.' },
+    sim_margin: { t: 'Laba per unit', a: 'Perkiraan laba dari satu penjualan dengan harga dan diskon yang Anda isi. Persen di bawahnya adalah margin terhadap harga yang dibayar pembeli.', h: 'Harga dibayar pembeli − potongan marketplace (persen + biaya tetap) − modal − packing.' },
     sim_potongan: {
       t: 'Potongan marketplace di simulator',
       a: 'Perkiraan potongan untuk satu pesanan: bagian persen dari harga dan bagian tetap per pesanan.',
