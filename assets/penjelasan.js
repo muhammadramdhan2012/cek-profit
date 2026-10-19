@@ -147,6 +147,12 @@ const CekInfo = (() => {
     },
 
     /* ---------- biaya ---------- */
+    sumber_pesanan: {
+      t: 'Sumber pesanan',
+      a: 'Asal pesanan di Laporan Penghasilan TikTok Shop: dari aplikasi TikTok Shop atau dari Tokopedia. Pesanan Tokopedia sudah termasuk total TikTok Shop, bukan penjualan tambahan.',
+      h: 'Diambil dari kolom "Sumber pesanan" di laporan. Penjualan = Total Pendapatan. Baris pesanan dihitung per baris laporan, tanpa pesanan batal atau direfund penuh.',
+      b: 'Porsi penjualan bukan porsi laba. Laba, modal, dan potongan per sumber belum ditampilkan.',
+    },
     dana_diterima: {
       t: 'Dana diterima',
       a: 'Uang yang menjadi bagian Anda setelah potongan marketplace, menurut Laporan Penghasilan. Pencairan ke rekening belum dicocokkan.',

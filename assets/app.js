@@ -989,7 +989,32 @@
       <div class="tablewrap"><table class="data plat-table show-${sel}"><thead><tr><th scope="col"><span class="sr-only">Komponen</span></th>${cols.map(([k, l]) => `<th scope="col" class="c-${k}">${k === 'total' ? l : `${PLAT_DOT(k)} ${l}`}</th>`).join('')}</tr></thead>
         <tbody>${rows.map(([label, f, cls]) => `<tr class="${cls || ''}"><th scope="row">${label}</th>${cols.map(([k]) => `<td class="c-${k}">${cell(k, f)}</td>`).join('')}</tr>`).join('')}</tbody></table></div>
       <div class="row-actions">${plats.filter((k) => r.feeModel[k]).map((k) => `<button class="btn sm" type="button" data-sim-use="${k}">Simulasikan harga dengan tarif ${PNAME[k]}</button>`).join('')}</div>
-      ${r.has.tiktok ? `<p class="small muted">TikTok: diskon toko rata-rata ${pct(r.tiktok.discount)}. ${Object.entries(r.tiktok.bySource).map(([k, v]) => `${esc(k)} ${num(v.orders)} pesanan${r.ready ? ` dengan laba ${fmt(v.margin)}` : ''}`).join('; ')}.</p>` : ''}`;
+      ${r.has.tiktok ? `<p class="small muted">TikTok: diskon toko rata-rata ${pct(r.tiktok.discount)}.</p>${sourceBlock(r)}` : ''}`;
+  }
+  // Label sumber pesanan TikTok. Engine memakai "Lainnya" bila kolom "Sumber pesanan" kosong: tidak ditebak.
+  const srcLabel = (k) => (k === 'Lainnya' ? 'Tanpa keterangan sumber' : k);
+  /**
+   * V1A: penjualan TikTok Shop menurut "Sumber pesanan" (data engine r.tiktok.bySource, sudah mengikuti filter).
+   * Hanya penjualan dan jumlah baris pesanan; laba, modal, potongan, dan dana per sumber TIDAK ditampilkan karena
+   * engine tidak mencatat kelengkapannya per sumber. Rincian disembunyikan bila jumlahnya tidak cocok dengan total.
+   */
+  function sourceBlock(r) {
+    const all = Object.entries(r.tiktok.bySource || {});
+    if (!all.length) return '';
+    const known = all.filter(([k]) => k !== 'Lainnya');
+    const sum = all.reduce((a, [, v]) => a + v.sales, 0);
+    if (Math.abs(sum - r.tiktok.sales) > 1) return '<p class="small muted">Rincian penjualan per sumber pesanan tidak ditampilkan karena jumlahnya tidak cocok dengan total TikTok Shop.</p>';
+    const noDetail = ((r.kepastian.cakupan.perMarketplace.tiktok || {}).dikeluarkan || { alasan: {} }).alasan.tanpa_rincian_produk || 0;
+    const NOTE_INC = 'Pesanan Tokopedia dalam bagian ini sudah termasuk total Laporan Penghasilan TikTok Shop, bukan penjualan tambahan.';
+    if (all.length === 1) {
+      // Satu sumber: tidak perlu tabel. Bila sumbernya Tokopedia, tetap dijelaskan agar tidak diunggah ulang.
+      return known.length && known[0][0] === 'Tokopedia' ? `<p class="small muted">Semua pesanan TikTok Shop pada periode ini bersumber Tokopedia. ${NOTE_INC}</p>` : '';
+    }
+    const tot = r.tiktok.sales;
+    return `<section class="src-block" aria-labelledby="src-t"><h4 id="src-t">Penjualan TikTok Shop menurut sumber pesanan${qi('sumber_pesanan', 'Sumber pesanan')}</h4>
+      <div class="tablewrap"><table class="data src-table"><thead><tr><th scope="col">Sumber</th><th scope="col">Baris pesanan</th><th scope="col">Penjualan</th><th scope="col"><span title="Porsi terhadap penjualan TikTok Shop">Porsi</span></th></tr></thead>
+      <tbody>${all.sort((a, b) => b[1].sales - a[1].sales).map(([k, v]) => `<tr><th scope="row">${esc(srcLabel(k))}</th><td>${num(v.orders)}</td><td>${fmt(v.sales)}</td><td>${tot > 0 ? pct(v.sales / tot) : '—'}</td></tr>`).join('')}</tbody></table></div>
+      <p class="tiny faint">${NOTE_INC} Laba dan modal per sumber belum ditampilkan karena data belum cukup untuk memastikan kelengkapannya.${all.some(([k]) => k === 'Lainnya') ? ' Sebagian baris tidak punya keterangan sumber di laporan dan tidak dimasukkan ke sumber mana pun.' : ''}${noDetail ? ` ${num(noDetail)} pesanan TikTok Shop tidak mencantumkan produk, jadi modalnya belum lengkap.` : ''} Baris pesanan dihitung per baris laporan (tanpa pesanan batal atau direfund penuh); satu nomor pesanan bisa muncul di lebih dari satu baris.</p></section>`;
   }
   /** Tabel bulanan: nilai per bulan dari engine (r.months). Tanpa margin bulanan buatan UI. */
   function monthTable(r) {
@@ -1462,7 +1487,10 @@
     const bad = files.length - ok1.length;
     const r = last && last.all;
     const plat = ['shopee', 'tiktok'].filter((k) => [...kinds].some((x) => x.startsWith(k)));
-    const rows = plat.map((k) => `<li><span class="ftag ${k}">${PNAME[k]}</span>${kinds.has(`${k}_income`) ? '<span class="ok">Laporan Penghasilan ada</span>' : '<span class="warn">Laporan Penghasilan belum ada</span>'}${kinds.has(`${k}_orders`) ? ' · export pesanan' : ''}${kinds.has(`${k}_return`) ? ' · file retur' : ''}</li>`).join('');
+    // Pesanan bersumber Tokopedia sudah ada di Laporan Penghasilan TikTok Shop (kolom "Sumber pesanan").
+    const toko = r && r.tiktok && r.tiktok.bySource && r.tiktok.bySource.Tokopedia;
+    const tokoNote = (k) => (k === 'tiktok' && kinds.has('tiktok_income') && toko ? `<span class="tiny faint up-st-toko">Termasuk ${num(toko.orders)} baris pesanan bersumber Tokopedia. Tidak perlu mengunggah laporan Tokopedia terpisah untuk pesanan yang sama.</span>` : '');
+    const rows = plat.map((k) => `<li><span class="ftag ${k}">${PNAME[k]}</span>${kinds.has(`${k}_income`) ? '<span class="ok">Laporan Penghasilan ada</span>' : '<span class="warn">Laporan Penghasilan belum ada</span>'}${kinds.has(`${k}_orders`) ? ' · export pesanan' : ''}${kinds.has(`${k}_return`) ? ' · file retur' : ''}${tokoNote(k)}</li>`).join('');
     const MODAL = '<button class="btn" type="button" data-go="data" data-section="modal">Isi modal barang</button>';
     const HASIL = '<button class="btn primary" type="button" data-go="ringkasan">Lihat hasil analisis</button>';
     let cls, title, body, ctas;

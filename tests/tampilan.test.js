@@ -549,5 +549,47 @@ test('Formulir: contoh bukan nilai, nilai bawaan yang memengaruhi modal disebut 
   truthy(/Memakai nilai bawaan: harga coret = harga acuan, harga jual Shopee = harga acuan\. Nilai ini ikut menentukan perkiraan modal\./.test(a), 'reseller: nilai bawaan diungkap');
   truthy(/\(nilai bawaan\)/.test(a), 'target margin bawaan ditandai');
 });
+/* ===== V1A: sumber pesanan Tokopedia di Laporan Penghasilan TikTok (data engine apa adanya; data SINTETIS) ===== */
+/** rows: [id, sumber, tanggal pesanan, penjualan, detail] */
+const ttSumber = (rows) => E.parseWorkbook({ name: 'tt-sumber-sintetis.xlsx', sheets: {
+  'Detail pesanan': [['ID Pesanan/Penyesuaian', 'Jenis transaksi', 'Waktu pemesanan', 'Waktu pembayaran pesanan', 'Jumlah penyelesaian pembayaran',
+    'Total Pendapatan', 'Subtotal sebelum diskon', 'Total pengembalian dana sebelum diskon', 'Total Biaya', 'Detail produk terjual', 'Sumber pesanan'],
+  ...rows.map(([id, src, d, sales, det, pay]) => [id, 'Pesanan', d, pay || d, sales - 10000, sales, sales, 0, -10000, det ?? '5550009 * 1;', src])],
+  Laporan: [['', 'Jumlah penyelesaian pembayaran', '', '', '', rows.reduce((a, x) => a + x[3] - 10000, 0)]] } });
+const bsSum = (r) => Object.values(r.tiktok.bySource).reduce((a, v) => a + v.sales, 0);
+const tanpaBs = (r) => JSON.stringify(r, (k, v) => (k === 'bySource' ? undefined : typeof v === 'number' && !isFinite(v) ? String(v) : v));
+test('V1A sumber: Tokopedia + TikTok / hanya Tokopedia / hanya TikTok / kosong; total TikTok tidak berubah', () => {
+  const st0 = katalog([['', 20000, '5550009']]);
+  const dua = E.compute([ttSumber([['9101', 'TikTok Shop', '2026/01/10', 100000], ['9102', 'Tokopedia', '2026/01/11', 300000]])], st0);
+  eq(Object.keys(dua.tiktok.bySource).sort().join(), 'TikTok Shop,Tokopedia'); eq(bsSum(dua), dua.tiktok.sales); eq(dua.tiktok.sales, 400000, 'Tokopedia bukan penjualan tambahan');
+  eq(dua.tiktok.bySource.Tokopedia.sales, 300000); eq(dua.tiktok.bySource.Tokopedia.orders, 1);
+  // Kolom sumber dikosongkan: total keuangan identik (sumber hanya pengelompokan).
+  const kosong = E.compute([ttSumber([['9101', '', '2026/01/10', 100000], ['9102', '', '2026/01/11', 300000]])], st0);
+  eq(Object.keys(kosong.tiktok.bySource).join(), 'Lainnya', 'sumber kosong tidak ditebak'); eq(tanpaBs(kosong.tiktok), tanpaBs(dua.tiktok), 'angka TikTok identik');
+  eq(Object.keys(E.compute([ttSumber([['9103', 'Tokopedia', '2026/01/10', 100000]])], st0).tiktok.bySource).join(), 'Tokopedia');
+  eq(Object.keys(E.compute([ttSumber([['9104', 'TikTok Shop', '2026/01/10', 100000]])], st0).tiktok.bySource).join(), 'TikTok Shop');
+});
+test('V1A sumber: filter periode, baris dengan nomor pesanan sama, HPP tidak diketahui/perkiraan', () => {
+  const f = ttSumber([['9201', 'Tokopedia', '2026/01/10', 100000], ['9202', 'TikTok Shop', '2026/02/10', 200000], ['9203', 'Tokopedia', '2026/02/12', 50000]]);
+  const feb = E.compute([f], katalog([['', 20000, '5550009']]), {}, { from: '2026-02', to: '2026-02' });
+  eq(bsSum(feb), feb.tiktok.sales, 'mengikuti filter'); eq(feb.tiktok.bySource.Tokopedia.sales, 50000);
+  // Nomor pesanan sama di dua baris (tanggal dana berbeda): dihitung sebagai 2 BARIS pesanan, bukan pesanan unik.
+  const dup = E.compute([ttSumber([['9301', 'Tokopedia', '2026/01/10', 100000, undefined, '2026/01/15'], ['9301', 'Tokopedia', '2026/01/10', 100000, undefined, '2026/01/20']])], katalog([['', 20000, '5550009']]));
+  eq(dup.tiktok.bySource.Tokopedia.orders, 2, 'definisi: baris pesanan'); eq(dup.tiktok.orders, 2, 'sama dengan definisi "Pesanan terjual" TikTok');
+  // HPP tidak diketahui / perkiraan tidak mengubah penjualan per sumber.
+  const unk = E.compute([f], katalog([])), est = E.compute([f], { modalMode: 'produk', catalog: [], fallbackPct: 40 });
+  eq(JSON.stringify(Object.entries(unk.tiktok.bySource).map(([k, v]) => [k, v.sales, v.orders])), JSON.stringify(Object.entries(est.tiktok.bySource).map(([k, v]) => [k, v.sales, v.orders])));
+});
+test('V1A tampilan: tanpa laba/modal per sumber, keterangan wajib, aturan sembunyi', () => {
+  const a = src('app.js'), fn = a.slice(a.indexOf('function sourceBlock'), a.indexOf('/** Tabel bulanan'));
+  truthy(!/v\.margin|dengan laba|\.modal|feeTotal|received/.test(fn), 'tidak ada laba/modal/potongan/dana per sumber');
+  truthy(!/\$\{num\(v\.orders\)\} pesanan\$\{r\.ready \? ` dengan laba/.test(a), 'kalimat laba per sumber lama sudah dihapus');
+  truthy(fn.includes('Pesanan Tokopedia dalam bagian ini sudah termasuk total Laporan Penghasilan TikTok Shop, bukan penjualan tambahan.'), 'keterangan termasuk');
+  truthy(fn.includes('Laba dan modal per sumber belum ditampilkan karena data belum cukup untuk memastikan kelengkapannya.'), 'keterangan laba');
+  truthy(/Math\.abs\(sum - r\.tiktok\.sales\) > 1\) return '<p class="small muted">Rincian penjualan per sumber pesanan tidak ditampilkan/.test(fn), 'tidak cocok → disembunyikan');
+  truthy(/if \(all\.length === 1\)/.test(fn) && /'Tanpa keterangan sumber'/.test(a), 'satu sumber tanpa tabel; sumber kosong tidak ditebak');
+  truthy(/<th scope="col">Baris pesanan<\/th>/.test(fn), 'label jujur: baris pesanan');
+  truthy(/Tidak perlu mengunggah laporan Tokopedia terpisah untuk pesanan yang sama\./.test(a) && !/Tokopedia (sudah )?didukung/i.test(a), 'status unggah; tanpa klaim Tokopedia mandiri');
+});
 console.log(failed ? `\n${failed} uji GAGAL` : '\nSemua uji lulus');
 process.exitCode = failed ? 1 : 0;

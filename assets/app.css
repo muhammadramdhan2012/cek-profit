@@ -1551,3 +1551,12 @@ body.app :is(button, a, input, select, summary, [tabindex]) { scroll-margin-top:
 .opt-sec.sub .opt-body { padding: 0 14px 14px; }
 @media (prefers-reduced-motion: reduce) { .opt-sec > summary::after { transition: none; } }
 .opt-t .badge { justify-self: start; }
+/* V1A: penjualan TikTok Shop menurut sumber pesanan (Tokopedia sudah termasuk). */
+.src-block { display: grid; gap: 8px; margin-top: 4px; }
+.src-block h4 { margin: 0; font-size: 14px; }
+.src-block .tiny { margin: 0; line-height: 1.5; }
+.src-table td { white-space: nowrap; }
+.src-table thead th { white-space: normal; }
+table.data.src-table th:first-child { min-width: 0; }
+@media (max-width: 600px) { .src-table th, .src-table td { padding-inline: 6px; font-size: 13px; } }
+.up-st-toko { flex-basis: 100%; }
