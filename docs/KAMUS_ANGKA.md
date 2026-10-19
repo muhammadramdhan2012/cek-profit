@@ -94,6 +94,7 @@ Tidak termasuk ongkir ke pembeli.
 - Barang yang direfund tetapi **tidak kembali** tetap keluar dari stok. Dicatat sebagai **kerugian barang retur**
   (A.7), bukan dihapus.
 - HPP yang tidak diketahui tidak dianggap nol (A.1).
+- Jumlah unit untuk HPP **tidak boleh** diturunkan dari nominal refund (aturan resmi, A.19.1).
 
 ### A.7 Kerugian barang retur
 Status: **DIUSULKAN — BELUM DISETUJUI**
@@ -125,6 +126,8 @@ Konsekuensinya:
 - Satu unit tidak boleh hilang dari keduanya padahal barangnya keluar dari stok.
 - Refund yang tercatat di luar baris pesanan (misalnya sebagai penyesuaian setelah dana dilepas) harus dicocokkan ke
   pesanannya sebelum aturan ini diterapkan.
+- Unit yang direfund ditentukan dari field jumlah (export pesanan/file retur), bukan dari nominal refund (A.19.1). Bila
+  unitnya tidak diketahui, kondisi unit belum bisa dipilih, sehingga HPP pesanan itu belum terselesaikan.
 
 ### A.10 Penyesuaian
 Status:
@@ -237,6 +240,29 @@ Keputusan refund pemilik (14 Okt 2026):
 - Refund uang, barang kembali ke stok, dan barang tidak kembali **dibedakan**.
 - Refund penuh atau nilai penjualan bersih nol **tidak membuktikan** bahwa kuantitas barang nol atau HPP nol.
   Ada refund **tidak berarti** barang kembali.
+
+Aturan resmi pemilik (19 Okt 2026, H2-B3b). Status: **DITETAPKAN pemilik**
+
+> **Nominal refund tidak boleh digunakan untuk menentukan jumlah unit HPP.**
+
+1. Jumlah unit yang direfund **diketahui** → HPP memakai unit itu (modal per unit × unit terjual bersih).
+2. Jumlah unit **tidak diketahui** → HPP dan laba pesanan itu **belum terselesaikan**: pesanan tidak dihitung dalam laba,
+   tidak dianggap 0, tidak dihitung pro-rata menurut nominal, dan tidak dianggap 1 unit.
+3. Penjualan dan refund (uang) tetap mengikuti laporan marketplace; aturan ini hanya menyangkut HPP.
+4. Kondisi fisik barang (kembali, tidak kembali, belum diketahui) tetap konsep terpisah (A.7, A.9).
+
+Penerapan yang diterima pemilik (19 Okt 2026):
+- Berlaku sama untuk **ketiga mode modal**: modal per produk, harga acuan (reseller), dan modal rata-rata. Harga acuan dan
+  modal rata-rata dihitung dari nilai penjualan, bukan per unit, jadi pesanan refund parsial di kedua mode itu selalu
+  belum terselesaikan, walaupun unitnya diketahui.
+- Refund penuh tetap memakai perilaku lama (HPP penjualan 0, risiko kondisi fisik dicatat terpisah). Refund penuh tidak
+  memerlukan konversi nominal ke unit.
+- TikTok: unit refund hanya dianggap terbukti bila **setiap** SKU di rincian pesanan punya kasus retur (bukan "batal")
+  dengan jumlah yang valid, semua kasus menunjuk SKU yang ada di rincian, dan totalnya lebih kecil dari seluruh unit.
+  SKU yang tidak muncul di file retur **tidak** dianggap 0 unit refund.
+- Bila sumber unit menyebut **seluruh** unit direfund, padahal laporan penghasilan menunjukkan refund parsial (masih ada
+  nilai tersisa), kedua sumber bertentangan. Pesanan ditandai **perlu dicek** dan HPP-nya tidak pernah dianggap
+  terverifikasi.
 
 #### A.19.2 Jenis kuantitas yang harus dibedakan
 Status: **DIUSULKAN — BELUM DISETUJUI**
@@ -352,8 +378,10 @@ penilaian hanya memakai:
 ### B.1 Analisis penghitungan ganda HPP dan kerugian retur (kode saat ini)
 
 **Aliran saat ini:**
-- **Pesanan dengan refund yang tercatat di baris pesanan:** modal dikurangi sebesar porsi refund
-  (`share = (harga + refund) / harga`, `assets/engine.js:456`). Refund penuh membuat modal pesanan menjadi 0.
+- **Pesanan dengan refund yang tercatat di baris pesanan:** refund penuh membuat modal pesanan menjadi 0 (rumus lama
+  `share`). **Sejak H2-B3b (19 Okt 2026)** refund parsial tidak lagi memakai `share`: modal = modal per unit × unit
+  terjual bersih bila unitnya terbukti (buku unit Shopee, file retur TikTok); selain itu HPP tidak diketahui dan
+  pesanan dikeluarkan dari laba dengan alasan `refund_parsial_unit_tidak_diketahui`.
 - **Kasus retur yang ditandai "Tidak kembali":** perkiraan modalnya **ditambahkan** sebagai kerugian
   (`lostCertain`, `assets/engine.js:601-613`).
 
@@ -362,17 +390,32 @@ penilaian hanya memakai:
 | Skenario | Hasil kode saat ini | Penilaian |
 |---|---|---|
 | Refund tercatat di baris pesanan + kasus ditandai "Tidak kembali" | Modal dikurangi, lalu kerugian ditambahkan, sehingga biaya unit dihitung sekali | Sejalan dengan usulan A.9, belum disetujui |
-| Refund tercatat di baris pesanan, **file retur tidak diunggah** | Modal dikurangi, kerugian tidak pernah ditambahkan, sehingga biaya unit **hilang** dan laba terlalu besar | Tidak sejalan dengan usulan (KNOWN_ISSUES H2) |
+| Refund tercatat di baris pesanan, **file retur tidak diunggah** | Refund penuh: modal 0, kerugian tidak pernah ditambahkan; risikonya diungkap sebagai refund tanpa catatan fisik (H2-B3a). Refund parsial tanpa unit: sejak H2-B3b pesanan dikeluarkan dari laba, bukan dipotong menurut nominal | Refund penuh: diungkap sebagai risiko, belum terselesaikan (KNOWN_ISSUES H2). Refund parsial: sejalan dengan aturan resmi A.19.1 |
 | Refund tercatat di baris pesanan, kasus "Belum dicek" | Biaya unit hilang, hanya ditampilkan sebagai risiko | Tidak sejalan dengan usulan, tetapi diungkap sebagai risiko |
 | **Refund tidak tercatat di baris pesanan** (misalnya refund setelah dana dilepas, tercatat sebagai penyesuaian) + kasus ditandai "Tidak kembali" | Modal pesanan tetap penuh **dan** kerugian ditambahkan, sehingga **HPP dihitung dua kali**. Refundnya sendiri dikeluarkan dari laba lewat penyesuaian, jadi penjualan terlalu besar. | Potensi penghitungan ganda (KNOWN_ISSUES P10) |
 | Kasus retur untuk pesanan yang **tidak ada** di laporan penghasilan yang diunggah (periode lain) | Kerugian tetap dikurangkan dari periode ini tanpa penjualannya | Tidak sejalan dengan usulan; salah periode (KNOWN_ISSUES M1, P10) |
-| Jumlah unit di kasus retur ≠ porsi refund di pesanan (refund parsial nominal, bukan per unit) | Kerugian memakai qty kasus, modal dikurangi porsi nominal, sehingga bisa lebih atau kurang | Perlu verifikasi (C.5) |
+| Jumlah unit di kasus retur ≠ porsi refund di pesanan (refund parsial nominal, bukan per unit) | Sejak H2-B3b: modal memakai unit dari field jumlah, bukan porsi nominal. Bila bukti unit menyebut seluruh unit direfund padahal refund parsial, pesanan ditandai konflik dan dikeluarkan dari laba | Sejalan dengan aturan resmi A.19.1 |
 
 **Kesimpulan untuk pemilik:**
 - Tidak ada penghitungan ganda pada alur normal.
 - Ada **satu jalur penghitungan ganda yang mungkin terjadi** (refund setelah dana dilepas).
 - Ada **satu jalur kehilangan biaya yang sudah terbukti** (refund tanpa file retur).
 - Keduanya dicatat di `KNOWN_ISSUES.md`.
+
+### B.1a Metadata refund parsial (`kepastian.cakupan`, H2-B3b)
+
+Tiga hitungan yang berbeda arti. Semuanya hanya metadata (tidak dipakai menghitung angka lain), per marketplace dan
+gabungan.
+
+| Simbol | Field | Arti |
+|---|---|---|
+| A | `refundParsialDitemukan` | Semua pesanan refund parsial yang **ditemukan** (ada refund, nilai tersisa > 0), apa pun perlakuannya |
+| B | `refundParsialTanpaUnit` | Pesanan yang labanya **masih memakai porsi nominal refund** sebagai pengganti unit. Nama field dipertahankan untuk kompatibilitas. Sejak H2-B3b nilainya diharapkan **0**; angka > 0 berarti ada jalur yang lolos dari aturan A.19.1 |
+| C | `dikeluarkan.refundParsial` | Pesanan yang **dikeluarkan dari laba** karena unit refund parsial tidak diketahui. `konflik`/`penjualanKonflik` = bagian dari C yang bukti unitnya bertentangan dengan laporan penghasilan |
+
+Hubungannya: A = B + C + pesanan yang dihitung dengan unit yang terbukti + pesanan yang dikeluarkan karena alasan lain
+(misalnya modal belum diisi atau laporan tidak mencantumkan produk). Diuji di `tests/engine.test.js` (B3b-13 s.d.
+B3b-16).
 
 ### B.2 Catatan nama
 
@@ -391,7 +434,7 @@ Mengganti nama di UI adalah perubahan perilaku fitur utama dan perlu persetujuan
 | C.2 | Arti dan tanda kolom Shopee "Diskon Produk dari Shopee" (saat ini dijumlahkan sebagai voucher) | Bisa membuat penjualan terlalu besar atau terlalu kecil | Bandingkan beberapa pesanan di Seller Centre | Pemilik |
 | C.3 | Baris "Sku" di Laporan Penghasilan Shopee per produk atau per variasi | Menentukan perbaikan H3 | **Terjawab untuk file yang diuji (14 Okt 2026): per variasi**, tanpa nama variasi; ID produk sama untuk semua variasi. Masih perlu konfirmasi di bulan/toko lain. | Claude Code (dengan file asli) |
 | C.4 | Jenis penyesuaian yang muncul dan substansinya | Dasar tabel klasifikasi A.10 | Ditemukan pada data uji pemilik: jenis TikTok "Penggantian Biaya Logistik" dan "Kompensasi asuransi pengiriman", serta penyesuaian Shopee; yang ditemukan bersifat positif | Pemilik |
-| C.5 | Refund parsial: per unit atau per nominal? | Aturan A.9 untuk unit yang direfund sebagian | Sebagian terjawab: pada file yang diuji, nominal refund = unit direfund × harga setelah diskon, dan semua kasusnya barang tidak dikirim. Refund untuk barang yang sudah dikirim lalu diretur belum ada di data uji. Nominal tetap tidak diubah otomatis menjadi unit (A.19.1). | Claude Code |
+| C.5 | Refund parsial: per unit atau per nominal? | Aturan A.9 untuk unit yang direfund sebagian | **Diputuskan untuk HPP (19 Okt 2026):** nominal refund tidak boleh dipakai menentukan jumlah unit HPP (aturan resmi A.19.1). Yang masih terbuka hanya pengamatan data: refund untuk barang yang sudah dikirim lalu diretur belum ada di data uji. | Pemilik (diputuskan) / Claude Code (pengamatan) |
 | C.6 | Apakah refund setelah dana dilepas tercatat sebagai penyesuaian atau di baris pesanan | Menentukan apakah P10 terjadi di data nyata | Cari kasus retur "Tidak kembali" yang pesanannya tidak punya refund di baris pesanan | Claude Code (dengan file asli) |
 | C.7 | Batas hari untuk "bulan lengkap" (A.17) | Bulan tidak lengkap salah dibaca sebagai bulan buruk | Distribusi jeda pesanan → dana dilepas di beberapa toko | Pemilik |
 | C.8 | Definisi "Penjualan" untuk Tokopedia lama (sebelum digabung TikTok) | Saat ini hanya pesanan Tokopedia yang tercatat di laporan TikTok yang didukung | Perlu contoh file | Pemilik |

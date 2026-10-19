@@ -147,7 +147,8 @@ Sumber awal: audit menyeluruh 14 Okt 2026 (read-only), ditambah analisis penghit
   - **H2 ↔ M10:** jumlah retur Shopee.
 
 ### H2 · Refund tanpa file retur menghapus biaya barang
-- **Status:** Terbuka · **Pilar:** Profit Reporting · **Kompleksitas:** M (2–3 hari)
+- **Status:** Dikerjakan: bagian **refund parsial** sudah diperbaiki (H2-B3b, 19 Okt 2026); bagian **refund penuh**
+  tanpa catatan kondisi barang masih terbuka · **Pilar:** Profit Reporting · **Kompleksitas:** M (2–3 hari)
 - **Lokasi:** `assets/engine.js:456` (`share`), `assets/engine.js:458`, `assets/app.js:476` (diungkap hanya di halaman Retur)
 - **Bukti:** modal pesanan dikurangi sebesar porsi refund. Kerugian barang yang tidak kembali hanya ditambahkan bila
   file retur diunggah **dan** kasusnya ditandai "Tidak kembali". Lihat `docs/KAMUS_ANGKA.md` §B.1.
@@ -158,6 +159,25 @@ Sumber awal: audit menyeluruh 14 Okt 2026 (read-only), ditambah analisis penghit
 - **Rekomendasi (audit):** bila ada refund tetapi status barang tidak diketahui, tampilkan rentang laba ("laba Rp X
   sampai Rp Y") atau skenario konservatif sebagai default di Profit Confidence.
 - **Bukti untuk menutup:** tes refund parsial/penuh, dengan dan tanpa file retur, sesuai A.9 (setelah disetujui).
+- **Aturan resmi pemilik (19 Okt 2026):** nominal refund tidak boleh digunakan untuk menentukan jumlah unit HPP
+  (`docs/KAMUS_ANGKA.md` A.19.1).
+- **H2-B3b, refund parsial (19 Okt 2026):**
+  - Sebelumnya modal pesanan refund parsial dipotong menurut porsi nominal refund, sehingga HPP bisa terlalu kecil
+    atau terlalu besar tanpa dasar jumlah unit.
+  - Sekarang: unit refund terbukti dari field jumlah (buku unit Shopee, file retur TikTok) → modal × unit terjual
+    bersih. Unit tidak terbukti, atau buktinya bertentangan (seluruh unit direfund padahal refund parsial) → HPP tidak
+    diketahui dan pesanan tidak dihitung dalam laba, dengan alasan tersendiri di Kepastian Profit. Berlaku untuk ketiga
+    mode modal.
+  - Total sumber marketplace (penjualan, potongan, dana diterima, penyesuaian) pada data uji pemilik tidak berubah;
+    yang berubah hanya HPP, cakupan, dan status kepastian.
+  - Bukti: `node tests/engine.test.js` (B3b-1 s.d. B3b-16, serta tes lama H3, H9, H16, U7, U9, U12–U13, U15–U18, C3b,
+    C9 yang disesuaikan) dan `node tests/tampilan.test.js` ("B3b UI"), semua lulus, 19 Okt 2026, commit
+    `fix: prevent nominal refunds from determining HPP (H2-B3b)`.
+- **Masih terbuka:**
+  - refund penuh tanpa file retur/kondisi barang: modal tetap 0 (rumus lama); risikonya hanya diungkap sebagai refund
+    tanpa catatan fisik, belum masuk laba sebagai skenario konservatif;
+  - refund penuh yang menurut sumber unit hanya sebagian unit direfund belum ditandai konflik;
+  - kompensasi atas barang hilang (H2-B2) belum dikerjakan.
 
 ### H3 · Variasi produk dengan modal berbeda tergabung salah
 - **Status:** Terbuka · **Pilar:** Profit Reporting, Profit Optimization · **Kompleksitas:** M–L (3–5 hari, perlu
@@ -357,7 +377,8 @@ Sumber awal: audit menyeluruh 14 Okt 2026 (read-only), ditambah analisis penghit
    Redirect URL.
 2. Apakah skema di produksi sama persis dengan `supabase/schema.sql`.
 3. Kesetaraan definisi penjualan Shopee dan TikTok (`docs/KAMUS_ANGKA.md` C.1, C.2).
-4. Parser export pesanan Shopee/TikTok (Beta; belum ada file export Shopee asli).
+4. Parser export pesanan Shopee/TikTok (Beta). Export Shopee baru dicocokkan dengan satu file asli dari data uji
+   pemilik (19 Okt 2026); export TikTok asli belum diuji. Label Beta dipertahankan karena format export bisa berubah.
 5. Hasil PDF lewat `window.print()` di Safari iOS dan Android.
 6. Mode offline nyata di HTTPS (service worker hanya aktif di HTTPS).
 7. Ketepatan tarif umum di `assets/tarif.js` (sumber sekunder, dicek 14 Okt 2026).
@@ -371,3 +392,5 @@ Sumber awal: audit menyeluruh 14 Okt 2026 (read-only), ditambah analisis penghit
   Shopee) ditambahkan. Belum ada masalah yang diperbaiki.
 - 14 Okt 2026: hasil validasi export pesanan Shopee (tanpa angka bisnis); temuan penghitungan ganda variasi (H1/H3,
   High); aturan SKU opsional; acceptance criteria seller tanpa SKU; ketergantungan H1/H2/H3 diperbarui.
+- 19 Okt 2026: H2 diperbarui setelah H2-B3b (refund parsial tidak lagi memakai nominal untuk HPP); aturan resmi
+  pemilik dicatat; status parser export pesanan (Beta) diperbarui. Tanpa angka bisnis asli.

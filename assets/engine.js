@@ -758,6 +758,17 @@ const Engine = (() => {
     };
   }
 
+  /*
+   * H2-B3b: refund PARSIAL = ada refund, tetapi nilai yang tersisa masih > 0. Nominal refund TIDAK menunjukkan jumlah
+   * unit yang direfund (refund 20% bukan berarti 20% barang), jadi HPP tidak boleh dikurangi menurut porsi nominal.
+   * Tanpa bukti unit, HPP baris/pesanan itu TIDAK DIKETAHUI (keluar dari laba), bukan pro-rata, bukan 1 unit, bukan 0.
+   * Refund PENUH tidak termasuk di sini (perilaku lama tetap: HPP penjualan 0, kondisi fisik dicatat terpisah).
+   */
+  const REFUND_PARSIAL = 'refund_parsial_unit_tidak_diketahui';
+  // H2-B3b: bukti unit menyebut SELURUH unit direfund, padahal laporan penghasilan masih menyisakan nilai (refund
+  // parsial). Kedua sumber bertentangan, jadi HPP tidak boleh dianggap terverifikasi; selalu bersama REFUND_PARSIAL.
+  const REFUND_KONFLIK = 'unit_retur_bertentangan_dengan_refund_parsial';
+  const isPartialRefund = (net, gross, refund) => refund !== 0 && gross > 0 && net > 0 && net < gross;
   const monthOf = (d) => (d ? d.slice(0, 7) : '');
   const daysBetween = (a, b) => (!a || !b ? 0 : Math.round((Date.parse(b) - Date.parse(a)) / 86400000) + 1);
   const fixedPerMonth = (s) => (s.fixedCosts || []).reduce((a, c) => a + (isOk(c.amount) ? c.amount : 0), 0);
@@ -822,16 +833,26 @@ const Engine = (() => {
     const CAKUPAN_KEY = { terverifikasi: 'terverifikasi', estimasi: 'estimasi', estimasi_minimum: 'estimasiMinimum', belum: 'belum', tidak_diketahui: 'tidakDiketahui' };
     const blankStatus = () => ({ terverifikasi: 0, estimasi: 0, estimasiMinimum: 0, belum: 0, tidakDiketahui: 0 });
     const blankCakupan = () => ({ penjualan: blankStatus(), jumlahPesanan: blankStatus(),
-      dikeluarkan: { penjualan: 0, danaDiterima: 0, jumlahPesanan: 0, alasan: {} },
+      dikeluarkan: { penjualan: 0, danaDiterima: 0, jumlahPesanan: 0, alasan: {},
+        // H2-B3b (C): bagian dari dikeluarkan yang alasannya refund parsial tanpa bukti unit yang sah.
+        // konflik = bagian dari C yang bukti unitnya bertentangan dengan laporan penghasilan (perlu dicek).
+        refundParsial: { jumlahPesanan: 0, penjualan: 0, danaDiterima: 0, konflik: 0, penjualanKonflik: 0 } },
+      // H2-B3b (A): semua pesanan refund parsial yang DITEMUKAN (nilai pesanan berkurang tetapi masih > 0), apa pun
+      // perlakuannya: dikeluarkan (C), dihitung dengan unit yang terbukti, atau (B) masih memakai porsi nominal.
+      refundParsialDitemukan: { jumlahPesanan: 0, penjualan: 0 },
+      // H2-B3b (B): pesanan yang LABANYA MASIH MEMAKAI porsi nominal refund sebagai pengganti jumlah unit. Nama field
+      // dipertahankan untuk kompatibilitas. Sejak H2-B3b nominal tidak dipakai lagi, jadi nilainya diharapkan 0;
+      // angka > 0 berarti ada jalur yang lolos dari aturan dan harus diperiksa.
       refundParsialTanpaUnit: { jumlahPesanan: 0, penjualan: 0 } });
     const CK = { shopee: blankCakupan(), tiktok: blankCakupan() };
     const weakest = (list) => list.reduce((a, s) => (CAKUPAN_URUT.indexOf(s) > CAKUPAN_URUT.indexOf(a) ? s : a), 'terverifikasi');
     /**
      * Catat satu pesanan ke cakupan.
      * @param reasons  alasan pesanan dikeluarkan dari laba (hanya untuk status tidak_diketahui)
-     * @param partial  true bila laba pesanan ini masih memakai nominal refund parsial sebagai pengganti jumlah unit
+     * @param partial  (B) true bila laba pesanan ini masih memakai nominal refund parsial sebagai pengganti jumlah unit
+     * @param found    (A) true bila pesanan ini refund parsial (apa pun perlakuannya)
      */
-    function ckAdd(pf, status, sales, settle, reasons, partial) {
+    function ckAdd(pf, status, sales, settle, reasons, partial, found) {
       const c = CK[pf], k = CAKUPAN_KEY[status];
       c.penjualan[k] += sales; c.jumlahPesanan[k]++;
       if (status === 'tidak_diketahui') {
@@ -839,7 +860,12 @@ const Engine = (() => {
         c.dikeluarkan.penjualan += sales; c.dikeluarkan.danaDiterima += settle; c.dikeluarkan.jumlahPesanan++;
         // Satu pesanan bisa punya beberapa alasan, jadi jumlah per alasan bisa lebih besar dari jumlahPesanan.
         for (const a of new Set(reasons)) c.dikeluarkan.alasan[a] = (c.dikeluarkan.alasan[a] || 0) + 1;
+        if (reasons.includes(REFUND_PARSIAL)) {
+          const x = c.dikeluarkan.refundParsial; x.jumlahPesanan++; x.penjualan += sales; x.danaDiterima += settle;
+          if (reasons.includes(REFUND_KONFLIK)) { x.konflik++; x.penjualanKonflik += sales; }
+        }
       }
+      if (found) { c.refundParsialDitemukan.jumlahPesanan++; c.refundParsialDitemukan.penjualan += sales; }
       if (partial) { c.refundParsialTanpaUnit.jumlahPesanan++; c.refundParsialTanpaUnit.penjualan += sales; }
     }
     // Kandidat refund penuh (Shopee per item, TikTok per pesanan). Kondisi fisiknya dievaluasi setelah kasus retur dibaca.
@@ -880,15 +906,20 @@ const Engine = (() => {
         // ditaksir dari harga jual, jadi HPP selalu ESTIMASI; refund (rumus lama, tidak diubah) → "belum".
         // Status hanya metadata; angka modal tidak berubah.
         const r = shopeeRatio(settings, o.orderDate);
-        return { modal: gross * r, items: items.map((it) => {
-          const cost = (it.harga + it.refund) * r;
-          const reasons = isOk(cost) ? ['harga_acuan', ...(it.refund !== 0 || !(it.harga + it.refund > 0) ? ['refund'] : [])] : [];
+        // H2-B3b: refund parsial → modal tidak diketahui (harga acuan tidak bisa dipotong menurut nominal refund).
+        const notes = items.map((it) => {
+          const partial = isOk(r) && isPartialRefund(it.harga + it.refund, it.harga, it.refund);
+          const cost = partial ? NaN : (it.harga + it.refund) * r;
+          const reasons = partial ? ['harga_acuan', 'refund', REFUND_PARSIAL]
+            : isOk(cost) ? ['harga_acuan', ...(it.refund !== 0 || !(it.harga + it.refund > 0) ? ['refund'] : [])] : [];
           const hppStatus = !isOk(cost) ? 'tidak_diketahui' : reasons.includes('refund') ? 'belum' : 'estimasi';
           shopeeQty.baris++; shopeeQty.hpp[hppStatus]++;
           if (isOk(cost)) shopeeQty.metodeHpp.harga_acuan++;
           if (reasons.includes('refund')) shopeeQty.refundBelumJelas++;
           return { it, qty: null, cost, unit: NaN, entry: null, hppMethod: isOk(cost) ? 'harga_acuan' : null, hppStatus, hppReasons: reasons };
-        }) };
+        });
+        const orderPartial = !items.length && isPartialRefund(gross, o.harga, o.refund);
+        return { modal: notes.some((n) => n.hppReasons.includes(REFUND_PARSIAL)) || orderPartial ? NaN : gross * r, items: notes, refundParsial: orderPartial };
       }
       const exp = m.shopeeLines.get(o.id) || [];
       // H1/H3 Fase 2: pasangkan baris laporan ↔ baris export dengan aturan M0–M2 (lihat matchShopeeOrder).
@@ -935,6 +966,9 @@ const Engine = (() => {
         const lines = group ? group.lineIdx : r.lineIdx;   // baris export yang terbukti milik item ini (bisa kosong)
         // Rumus refund LAMA (H2) sengaja tidak diubah: modal dikali porsi yang tidak direfund.
         const share = it.harga > 0 ? clamp01((it.harga + it.refund) / it.harga) : 0;
+        // H2-B3b: refund parsial di item ini (atau di salah satu item kelompok variasi ambigu).
+        const partialOf = (k) => isPartialRefund(items[k].harga + items[k].refund, items[k].harga, items[k].refund);
+        const partial = group ? group.itemIdx.some(partialOf) : partialOf(i);
         let entry = null, key = null, cost, qty = r.qty, ledger = null;
         // Dasar jumlah barang untuk HPP: 'export' (terbukti), 'kelompok' (hanya total kelompok yang terbukti),
         // 'estimasi_1' (dianggap 1 unit), 'tidak_diketahui' (A1), atau null bila HPP tidak memakai jumlah barang
@@ -944,7 +978,8 @@ const Engine = (() => {
           const g = groupCost[r.groupId];
           if (g.known) {
             // Nilai baris laporan dalam kelompok sama persis, jadi total kelompok dibagi rata per baris laporan.
-            cost = (g.base / group.itemIdx.length) * share;
+            // Refund parsial dalam kelompok: unit refund per variasi tidak terbukti → HPP tidak diketahui (H2-B3b).
+            cost = partial ? NaN : (g.base / group.itemIdx.length) * share;
             entry = g.costs[0].entry; key = g.variantCost ? 'variasi' : 'produk_legacy';
             qtyBasis = r.qtyStatus === 'terverifikasi' ? 'export' : 'kelompok';
           }
@@ -961,7 +996,8 @@ const Engine = (() => {
             }
           }
           if (entry && ledger && ledger.unitLedgerComplete) { cost = entry.cost * ledger.qtySold; qtyBasis = 'buku_unit'; }
-          else if (entry) { cost = entry.cost * qty * share; qtyBasis = 'export'; }
+          // Tanpa buku unit: refund penuh tetap rumus lama (share 0); refund parsial → HPP tidak diketahui (H2-B3b).
+          else if (entry) { cost = partial ? NaN : entry.cost * qty * share; qtyBasis = 'export'; }
         } else {
           ({ entry, key } = shopeeCostOf(it, null));
           if (entry && exp.length) {
@@ -974,13 +1010,15 @@ const Engine = (() => {
             // Pesanan TIDAK ada di export sama sekali: estimasi minimal 1 unit (cara lama, A.19.1) tetap dipakai agar
             // kompatibel, dengan pencarian modal tanpa variasi. Statusnya "estimasi", bukan terverifikasi. Bila item
             // direfund penuh, share = 0 sehingga modalnya 0 menurut rumus refund lama; itu juga bukan HPP pasti.
-            cost = entry.cost * 1 * share; qtyAssumed++; qtyBasis = 'estimasi_1';
+            cost = partial ? NaN : entry.cost * 1 * share; qtyAssumed++; qtyBasis = 'estimasi_1';
           }
         }
         if (!entry) {
-          if (isOk(fallback)) cost = (it.harga + it.refund) * fallback;
+          if (isOk(fallback)) cost = partial ? NaN : (it.harga + it.refund) * fallback;   // H2-B3b: bukan persen dari nilai setelah refund parsial
           else { cost = NaN; ok = false; linesWithoutCost++; }
         }
+        const unresolvedPartial = partial && !isOk(cost) && (entry || isOk(fallback));
+        if (unresolvedPartial) ok = false;
         // Konflik IDENTITAS (SKU variasi berbeda antar export, finansial sama): jumlah barang tetap terbukti, tetapi
         // modal per unit yang benar tidak bisa dipastikan → HPP tidak diketahui. Modal rata-rata (persen dari nilai
         // penjualan) tidak bergantung pada SKU, jadi tetap dipakai dengan status "belum".
@@ -993,6 +1031,8 @@ const Engine = (() => {
         if (!group && r.qtyStatus !== 'terverifikasi') reasons.push('kuantitas');
         if (qtyBasis === 'estimasi_1') reasons.push('estimasi_satu_unit');
         if (conflict) reasons.push('export_berbeda');
+        if (unresolvedPartial) reasons.push(REFUND_PARSIAL);
+        if (unresolvedPartial && ledger && ledger.unitReasons.includes(REFUND_KONFLIK)) reasons.push(REFUND_KONFLIK);
         if (entry && key === 'produk_legacy' && lines.length) reasons.push('modal_tingkat_produk'); // belum terbukti berlaku untuk variasi ini
         // Refund di SATU baris kelompok membuat pembagian kelompok tidak pasti, jadi seluruh kelompok ikut "belum" (D1).
         const refunded = (k) => items[k].refund !== 0 || !(items[k].harga + items[k].refund > 0);
@@ -1032,8 +1072,10 @@ const Engine = (() => {
       });
       // Unit terverifikasi dari kelompok dihitung sekali per kelompok (bukan per baris laporan).
       for (const g of match.groups) shopeeQty.unitTerverifikasi += g.qtyTotal;
-      if (!items.length) { if (isOk(fallback)) modal = gross * fallback; else ok = false; }
-      return { modal: ok ? modal : NaN, items: notes };
+      // Pesanan tanpa baris produk: modal rata-rata dari nilai pesanan, kecuali refund parsial (H2-B3b).
+      const orderPartial = !items.length && isPartialRefund(gross, o.harga, o.refund);
+      if (!items.length) { if (isOk(fallback) && !orderPartial) modal = gross * fallback; else ok = false; }
+      return { modal: ok ? modal : NaN, items: notes, refundParsial: orderPartial && isOk(fallback) };
     }
 
     /* H2-B1: kasus retur Shopee per nomor pesanan, untuk buku unit. */
@@ -1091,6 +1133,11 @@ const Engine = (() => {
       // belum mencatat refund apa pun untuk baris ini (mis. refund baru muncul di laporan berikutnya). Mengeluarkan
       // unit dari HPP saat pendapatan masih penuh akan membuat laba terlalu besar → rumus lama dipakai, ditandai.
       if (isOk(qtyRefunded) && qtyRefunded > 0 && it.refund === 0) { reasons.push('unit_refund_tanpa_refund_di_laporan_penghasilan'); qtyRefunded = NaN; }
+      // H2-B3b: sumber unit menyebut seluruh unit direfund, tetapi laporan penghasilan menunjukkan refund parsial
+      // (nilai tersisa > 0). Bertentangan → unit tidak dipakai, HPP tidak diketahui (bukan 0, bukan terverifikasi).
+      if (isOk(qtyRefunded) && qtyRefunded >= qtyOrdered && isPartialRefund(it.harga + it.refund, it.harga, it.refund)) {
+        reasons.push(REFUND_KONFLIK); qtyRefunded = NaN;
+      }
 
       const L = { qtyOrdered, qtyRefunded, qtySold: NaN, qtyNotShipped: 0, qtyReturnedGood: 0, qtyReturnedDamaged: 0,
         qtyLost: 0, qtyUnknown: NaN, unitLedgerComplete: false, unitStatus, unitReasons: reasons, unitSources: sources };
@@ -1168,17 +1215,22 @@ const Engine = (() => {
      * estimasi_minimum = pesanan tidak ada di export dan dianggap 1 unit tanpa alasan lain: HPP adalah BATAS BAWAH
      * (minimal 1 unit), jadi labanya batas atas. Rumus HPP-nya tidak diubah.
      */
-    function shopeeCakupan(o, modal, notes, net) {
+    function shopeeCakupan(o, modal, notes, net, orderPartial) {
+      // (A) refund parsial ditemukan: di salah satu item, atau di pesanan tanpa baris produk. Tidak bergantung modal.
+      const found = notes.length ? notes.some((n) => isPartialRefund(n.it.harga + n.it.refund, n.it.harga, n.it.refund))
+        : isPartialRefund(o.harga + o.refund, o.harga, o.refund);
       if (!isOk(modal)) {
-        const reasons = notes.length
-          ? notes.filter((n) => !isOk(n.cost)).map((n) => (mode === 'acuan' ? 'diskon_pemasok_belum_diisi'
-            : n.qtyBasis === 'tidak_diketahui' ? 'kuantitas_tidak_diketahui'
-              : n.entry && (n.hppReasons || []).includes('identitas_berbeda') ? 'identitas_variasi_berbeda' : 'modal_belum_diisi'))
+        const reasons = orderPartial ? [REFUND_PARSIAL] : notes.length
+          ? notes.filter((n) => !isOk(n.cost)).flatMap((n) => ((n.hppReasons || []).includes(REFUND_PARSIAL)
+            ? [REFUND_PARSIAL, ...((n.hppReasons || []).includes(REFUND_KONFLIK) ? [REFUND_KONFLIK] : [])]
+            : [mode === 'acuan' ? 'diskon_pemasok_belum_diisi'
+              : n.qtyBasis === 'tidak_diketahui' ? 'kuantitas_tidak_diketahui'
+                : n.entry && (n.hppReasons || []).includes('identitas_berbeda') ? 'identitas_variasi_berbeda' : 'modal_belum_diisi']))
           : ['tanpa_rincian_produk'];
-        ckAdd('shopee', 'tidak_diketahui', net, o.total, reasons, false);
+        ckAdd('shopee', 'tidak_diketahui', net, o.total, reasons, false, found);
       } else if (!notes.length) {
         // Tanpa baris produk: modal rata-rata dari nilai pesanan. Refund di sini belum punya dasar unit.
-        ckAdd('shopee', o.refund !== 0 ? 'belum' : 'estimasi', net, o.total, [], o.refund !== 0 && o.harga + o.refund > 0);
+        ckAdd('shopee', o.refund !== 0 ? 'belum' : 'estimasi', net, o.total, [], o.refund !== 0 && o.harga + o.refund > 0, found);
       } else {
         const st = notes.map((n) => {
           const s = n.hppStatus === 'terverifikasi_kelompok' ? 'terverifikasi' : (n.hppStatus || 'belum');
@@ -1186,7 +1238,7 @@ const Engine = (() => {
         });
         // Refund parsial yang HPP-nya masih dikurangi menurut nominal refund (share), bukan menurut unit (buku unit).
         const partial = notes.some((n) => n.it.refund !== 0 && n.it.harga + n.it.refund > 0 && n.qtyBasis !== 'buku_unit');
-        ckAdd('shopee', weakest(st), net, o.total, [], partial);
+        ckAdd('shopee', weakest(st), net, o.total, [], partial, found);
       }
       for (const n of notes) {
         if (!(n.it.refund < 0 && !(n.it.harga + n.it.refund > 0))) continue;   // hanya item yang direfund penuh
@@ -1201,15 +1253,19 @@ const Engine = (() => {
     }
 
     /** H2-B3a: status cakupan satu pesanan TikTok + kandidat refund penuh (metadata saja). */
-    function tiktokCakupan(r, modal, lines) {
+    function tiktokCakupan(r, modal, lines, refundParsial) {
       const partial = r.preGross > 0 && r.pre > 0 && r.pre < r.preGross;
       if (!isOk(modal)) {
-        const reason = mode === 'acuan' ? 'diskon_pemasok_belum_diisi' : !lines.length ? 'tanpa_rincian_produk' : 'modal_belum_diisi';
-        ckAdd('tiktok', 'tidak_diketahui', r.sales, r.settle, [reason], false);
+        // H2-B3b: refund parsial tanpa bukti unit punya alasan sendiri (modalnya ada, unit terjualnya yang tidak diketahui).
+        const reasons = refundParsial === 'konflik' ? [REFUND_PARSIAL, REFUND_KONFLIK]
+          : refundParsial === 'unit_tidak_diketahui' ? [REFUND_PARSIAL]
+            : [mode === 'acuan' ? 'diskon_pemasok_belum_diisi' : !lines.length ? 'tanpa_rincian_produk' : 'modal_belum_diisi'];
+        ckAdd('tiktok', 'tidak_diketahui', r.sales, r.settle, reasons, false, partial);
       } else {
-        // Refund parsial: modal masih dikurangi menurut nominal refund, jadi bukan estimasi yang valid → "belum".
+        // Refund parsial dengan unit dari file retur (satu sumber) → "belum". Nominal refund tidak dipakai lagi,
+        // jadi tidak ada lagi pesanan yang lababnya memakai porsi nominal (refundParsialTanpaUnit tetap 0).
         const st = partial ? 'belum' : mode === 'acuan' ? 'estimasi' : lines.some((l) => l.entry) ? 'belum' : 'estimasi';
-        ckAdd('tiktok', st, r.sales, r.settle, [], partial);
+        ckAdd('tiktok', st, r.sales, r.settle, [], false, partial);
       }
       if (r.preGross > 0 && !(r.pre > 0)) {
         // Refund penuh. "Detail produk terjual" tetap mencantumkan unit yang direfund (audit H2-B3), jadi untuk refund
@@ -1225,13 +1281,13 @@ const Engine = (() => {
     if (want.has('shopee')) for (const o of m.shopeeOrders.values()) {
       if (!inRange(o.orderDate)) continue;
       shopeeIn.add(o.id);
-      const { modal, items } = shopeeOrderModal(o);
+      const { modal, items, refundParsial: orderPartial } = shopeeOrderModal(o);
       // Kepastian: pesanan yang modalnya tidak diketahui tidak masuk laba, jadi semua barisnya "tidak_diketahui".
       if (!isOk(modal)) { if (items.length) items.forEach((n) => kAdd('tidak_diketahui', n.it.harga + n.it.refund, 0)); else kAdd('tidak_diketahui', o.harga + o.refund, 0); }
       else if (!items.length) kAdd('estimasi', o.harga + o.refund, modal);   // tanpa baris produk: modal rata-rata
       else items.forEach((n) => kAdd(n.hppStatus || 'belum', n.it.harga + n.it.refund, n.cost));
       const net = o.harga + o.refund + o.voucher;
-      shopeeCakupan(o, modal, items, net);
+      shopeeCakupan(o, modal, items, net, orderPartial);
       const counted = o.harga + o.refund > 0;
       const pack = counted ? packing : 0;
       const fee = o.admin + o.proses + o.xtra + o.ams + o.ship + o.lain;
@@ -1254,7 +1310,8 @@ const Engine = (() => {
         p.rows += 1; p.sales += n.it.harga + n.it.refund; p.received += o.total * share;
         // H2-B1: baris dengan buku unit memakai unit terjual bersih (bilangan bulat); baris lain tetap cara lama.
         if (n.ledger && n.ledger.unitLedgerComplete) p.qty += n.ledger.qtySold;
-        else if (n.qty === null) p.qtyKnown = false; else p.qty += n.qty * clamp01(n.it.harga > 0 ? (n.it.harga + n.it.refund) / n.it.harga : 0);
+        else if (n.qty === null || (n.hppReasons || []).includes(REFUND_PARSIAL)) p.qtyKnown = false;   // H2-B3b: unit terjual tidak diketahui
+        else p.qty += n.qty * clamp01(n.it.harga > 0 ? (n.it.harga + n.it.refund) / n.it.harga : 0);
         if (isOk(n.cost)) p.modal += n.cost; else p.modalKnown = false;
         if (isOk(n.unit)) { p.unitCost = n.unit; p.baseCost = n.base; }
         p.packing = (p.packing || 0) + pack * share;
@@ -1276,35 +1333,75 @@ const Engine = (() => {
       adj: 0, pre: 0, first: '', last: '', bySource: {}, knownSales: 0, knownReceived: 0, knownPacking: 0, margin: 0 };
     const ttOrderPrice = new Map();
     const ttUnitCost = new Map();   // skuId → modal per unit (untuk estimasi retur)
+    /**
+     * H2-B3b: unit yang direfund untuk pesanan TikTok refund parsial, HANYA dari field jumlah di file retur
+     * (Return Quantity, SKU yang sama). Nominal refund tidak pernah dipakai. Bukti dianggap ada hanya bila:
+     * setiap SKU di rincian punya kasus retur (bukan "batal") dengan jumlah valid, semua kasus menunjuk SKU yang ada
+     * di rincian, tidak ada versi kasus yang berbeda, unit per SKU ≤ jumlah terjual, dan total unit refund > 0 serta
+     * < total unit (konsisten dengan refund parsial). Selain itu → units null (unit tidak diketahui).
+     * Bukti yang sah tetapi menyebut SELURUH unit direfund bertentangan dengan refund parsial → konflik: true
+     * (unit tetap tidak diketahui; tidak pernah menghasilkan HPP terverifikasi).
+     * @returns {{units: Map<string, number>|null, konflik: boolean}} skuId → unit direfund
+     */
+    function tiktokRefundUnits(orderId, lines) {
+      const none = { units: null, konflik: false };
+      const oid = (x) => String(x).replace(/^'/, '');
+      const cs = [...m.cases.values()].filter((c) => c.platform === 'tiktok' && oid(c.orderId) === oid(orderId) && c.cat !== 'batal');
+      if (!cs.length || cs.some((c) => c.versiBerbeda || !isOk(c.qty))) return none;
+      const skus = new Set(lines.map((l) => String(l.skuId)));
+      if (cs.some((c) => !skus.has(oid(c.skuId)))) return none;
+      const units = new Map();
+      for (const l of lines) {
+        const u = cs.filter((c) => oid(c.skuId) === String(l.skuId)).reduce((a, c) => a + c.qty, 0);
+        if (!cs.some((c) => oid(c.skuId) === String(l.skuId)) || u > l.qty) return none;
+        units.set(String(l.skuId), u);
+      }
+      const total = [...units.values()].reduce((a, v) => a + v, 0), qtyAll = lines.reduce((a, l) => a + l.qty, 0);
+      if (total > 0 && total >= qtyAll) return { units: null, konflik: true };
+      return total > 0 ? { units, konflik: false } : none;
+    }
     function tiktokRowModal(r) {
-      if (mode === 'acuan') return { modal: r.pre * ttRatio, lines: [] };
+      // H2-B3b: refund parsial (sebagian nilai pesanan direfund, sisa > 0).
+      const partial = isPartialRefund(r.pre, r.preGross, r.pre - r.preGross);
+      if (mode === 'acuan') return partial && isOk(ttRatio) ? { modal: NaN, lines: [], refundParsial: 'unit_tidak_diketahui' } : { modal: r.pre * ttRatio, lines: [], refundParsial: null };
       const exp = m.tiktokLines.get(r.id) || [];
       const lines = r.lines.length ? r.lines.map((l) => ({ ...l, ...(exp.find((e) => e.skuId === l.skuId) || {}), qty: l.qty })) : exp;
+      // Rumus lama hanya untuk refund PENUH (share 0) dan tanpa refund (share 1). Refund parsial tidak memakai share.
       const share = r.preGross > 0 ? clamp01(r.pre / r.preGross) : (r.sales > 0 ? 1 : 0);
-      if (!lines.length) { if (r.pre > 0) { ttNoDetail++; ttNoDetailSales += r.sales; } return { modal: isOk(fallback) ? Math.max(r.sales, 0) * fallback : NaN, lines: [] }; }
-      let modal = 0, ok = true;
+      if (!lines.length) {
+        if (r.pre > 0) { ttNoDetail++; ttNoDetailSales += r.sales; }
+        if (partial && isOk(fallback)) return { modal: NaN, lines: [], refundParsial: 'unit_tidak_diketahui' };
+        return { modal: isOk(fallback) ? Math.max(r.sales, 0) * fallback : NaN, lines: [], refundParsial: null };
+      }
+      const bukti = partial ? tiktokRefundUnits(r.id, lines) : { units: null, konflik: false };
+      const refunded = bukti.units;
+      let modal = 0, ok = true, unresolved = false;
       const totalQty = lines.reduce((a, l) => a + l.qty, 0) || 1;
       const notes = lines.map((l) => {
         const entry = catalog.find([l.skuId, l.sellerSku], l.name, l.variant);
+        // Unit terjual bersih: tanpa refund = qty; refund penuh = 0 (perilaku lama); refund parsial = qty − unit
+        // refund yang terbukti, atau tidak diketahui (NaN).
+        const qtyNet = !partial ? l.qty * share : refunded ? l.qty - refunded.get(String(l.skuId)) : NaN;
         let cost;
-        if (entry) { cost = entry.cost * l.qty * share; ttUnitCost.set(l.skuId, entry.cost); }
-        else if (isOk(fallback)) cost = Math.max(r.sales, 0) * fallback * (l.qty / totalQty);
+        if (entry) { cost = entry.cost * qtyNet; ttUnitCost.set(l.skuId, entry.cost); }
+        else if (isOk(fallback)) cost = partial ? NaN : Math.max(r.sales, 0) * fallback * (l.qty / totalQty);
         else { cost = NaN; ok = false; linesWithoutCost++; }
+        if (partial && !isOk(cost) && (entry || isOk(fallback))) { ok = false; unresolved = true; }
         modal += isOk(cost) ? cost : 0;
-        return { ...l, cost, unit: entry ? entry.cost : NaN, base: entry ? entry.baseCost : NaN, entry, share };
+        return { ...l, cost, unit: entry ? entry.cost : NaN, base: entry ? entry.baseCost : NaN, entry, share, qtyNet };
       });
-      return { modal: ok ? modal : NaN, lines: notes };
+      return { modal: ok ? modal : NaN, lines: notes, refundParsial: !partial ? null : unresolved ? (bukti.konflik ? 'konflik' : 'unit_tidak_diketahui') : refunded ? 'unit_diketahui' : null };
     }
     if (want.has('tiktok')) for (const r of m.tiktok.values()) {
       if (!r.isOrder) { if (inRange(r.payDate)) T.adj += r.settle; continue; }
       if (!inRange(r.orderDate)) continue;
       if (r.payDate && (!T.first || r.payDate < T.first)) T.first = r.payDate;
       if (r.payDate && r.payDate > T.last) T.last = r.payDate;
-      const { modal, lines } = tiktokRowModal(r);
+      const { modal, lines, refundParsial } = tiktokRowModal(r);
       // Kepastian TikTok: status HPP per baris belum dievaluasi (belum ada pencocokan seperti Shopee), jadi modal
       // per unit = "belum"; modal rata-rata / harga acuan = "estimasi"; tanpa modal = "tidak_diketahui".
       kAdd(!isOk(modal) ? 'tidak_diketahui' : mode === 'acuan' ? 'estimasi' : lines.some((l) => l.entry) ? 'belum' : 'estimasi', r.sales, modal);
-      tiktokCakupan(r, modal, lines);
+      tiktokCakupan(r, modal, lines, refundParsial);
       const counted = r.pre > 0;             // terjual (tidak dibatalkan/direfund penuh)
       const pack = counted ? packing : 0;
       const margin = isOk(modal) ? r.settle - modal - pack : NaN;
@@ -1327,7 +1424,8 @@ const Engine = (() => {
         const w = subTotal > 0 ? (l.subtotal || 0) / subTotal : l.qty / (qtyTotal || 1);
         const p = touchProduct(`tiktok|${l.skuId || norm(l.name)}`, { platform: 'tiktok', code: l.skuId || '', sku: l.sellerSku || '', name: '', variant: l.variant || '' });
         if (l.name) p.name = l.name; else if (!p.name && l.entry && l.entry.nama) p.name = l.entry.nama;
-        p.rows += 1; p.sales += r.sales * w; p.received += r.settle * w; p.qty += l.qty * (l.share ?? 1);
+        p.rows += 1; p.sales += r.sales * w; p.received += r.settle * w;
+        if (isOk(l.qtyNet)) p.qty += l.qtyNet; else if (l.qtyNet === undefined) p.qty += l.qty * (l.share ?? 1); else p.qtyKnown = false;   // H2-B3b
         if (isOk(l.cost)) p.modal += l.cost; else p.modalKnown = false;
         if (isOk(l.unit)) { p.unitCost = l.unit; p.baseCost = l.base; }
         p.packing = (p.packing || 0) + pack * w;
@@ -1613,6 +1711,7 @@ const Engine = (() => {
       if (lostNoValue) why.push('kerugian_retur_tanpa_nilai');
       if (lostProvisional) why.push('kerugian_retur_sementara');
       if (ledgerStats.unitBelumDiketahui) why.push('kondisi_fisik_unit_refund_belum_diketahui');
+      if (CK.shopee.dikeluarkan.refundParsial.jumlahPesanan + CK.tiktok.dikeluarkan.refundParsial.jumlahPesanan) why.push(REFUND_PARSIAL);
       if (r.adjustments) why.push('penyesuaian_belum_diklasifikasikan');
       // Total tiap Laporan Penghasilan harus cocok dengan ringkasan resmi (toleransi Rp1, sama seperti dashboard).
       for (const p of parsed) {

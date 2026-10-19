@@ -28,6 +28,8 @@
     tiktok_income: ['tiktok', 'TikTok, laporan penghasilan'], tiktok_return: ['tiktok', 'TikTok, retur'], tiktok_orders: ['tiktok', 'TikTok, export pesanan'],
     modal_template: ['modal', 'Template modal'], shopee_balance: ['', 'Shopee, saldo (tidak diperlukan)'], unknown: ['bad', 'Belum dikenali'],
   };
+  // Export pesanan Shopee/TikTok: parser belum diuji dengan semua format file asli (CLAUDE.md §2.5).
+  const BETA_NOTE = 'Format export marketplace dapat berubah. Hasil pencocokan ditandai bila belum dapat diverifikasi.';
   const track = (e) => { try { window.cekTrack && window.cekTrack(e); } catch (err) { /* abaikan */ } };
   /* Pengumuman: #toast selalu ada di halaman sebagai area status (role=status). Isi dikosongkan dulu lalu diisi,
    * agar pesan yang sama tetap dibacakan pembaca layar; tampilannya hanya dimunculkan/disembunyikan lewat kelas. */
@@ -438,12 +440,26 @@
     const out = [];
     const add = (cls, title, desc, cta, prio, impact = '') => out.push({ cls, title, desc, cta, prio, impact });
     const MODAL = { label: 'Lengkapi modal', go: 'data', section: 'modal' }, UNGGAH = { label: 'Unggah data', go: 'data', section: 'unggah' }, RETUR = { label: 'Periksa retur', go: 'retur' };
-    if (!r.ready) add('unknown', 'Laba belum bisa dihitung', 'Modal produk belum diisi, jadi baru penjualan dan potongan yang terlihat.', MODAL, 100);
-    else if (c.penjualan.tidakDiketahui > 0 && why.includes('modal_tidak_diketahui')) {
-      const u = sh('tidakDiketahui'), al = c.dikeluarkan.alasan;
+    // H2-B3b: pesanan refund parsial tanpa jumlah unit dikeluarkan dengan alasannya sendiri (bukan "modal belum diketahui").
+    const rpx = c.dikeluarkan.refundParsial || { jumlahPesanan: 0, penjualan: 0 };
+    if (!r.ready) add('unknown', 'Laba belum bisa dihitung', rpx.jumlahPesanan && rpx.jumlahPesanan === c.dikeluarkan.jumlahPesanan
+      ? 'Pesanan yang ada direfund sebagian tanpa jumlah barang yang tercatat, jadi modalnya belum dapat dihitung.' : 'Modal produk belum diisi, jadi baru penjualan dan potongan yang terlihat.',
+      rpx.jumlahPesanan && rpx.jumlahPesanan === c.dikeluarkan.jumlahPesanan ? UNGGAH : MODAL, 100);
+    else if (c.penjualan.tidakDiketahui - rpx.penjualan > 0.5 && c.dikeluarkan.jumlahPesanan > rpx.jumlahPesanan && why.includes('modal_tidak_diketahui')) {
+      const al = c.dikeluarkan.alasan, n = c.dikeluarkan.jumlahPesanan - rpx.jumlahPesanan, sales = c.dikeluarkan.penjualan - rpx.penjualan;
       const noDetail = al.tanpa_rincian_produk || 0;
-      add('unknown', 'Modal belum diketahui', `${pct(u.share)} penjualan (${num(u.n)} pesanan) belum punya modal yang cukup, jadi tidak dihitung dalam laba.${noDetail ? ` ${num(noDetail)} pesanan tidak mencantumkan produk di laporan.` : ''}`,
-        noDetail > (c.dikeluarkan.jumlahPesanan / 2) ? { label: 'Unggah export pesanan', go: 'data', section: 'unggah' } : MODAL, 90, `${fmt(c.dikeluarkan.penjualan)} penjualan tidak dihitung`);
+      add('unknown', 'Modal belum diketahui', `${pct(c.penjualan.total > 0 ? sales / c.penjualan.total : NaN)} penjualan (${num(n)} pesanan) belum punya modal yang cukup, jadi tidak dihitung dalam laba.${noDetail ? ` ${num(noDetail)} pesanan tidak mencantumkan produk di laporan.` : ''}`,
+        noDetail > (n / 2) ? { label: 'Unggah export pesanan', go: 'data', section: 'unggah' } : MODAL, 90, `${fmt(sales)} penjualan tidak dihitung`);
+    }
+    // H2-B3b: refund parsial tanpa bukti unit (C). Bagian yang bukti unitnya bertentangan ditampilkan terpisah.
+    const rpKonflik = rpx.konflik || 0, rpBiasa = rpx.jumlahPesanan - rpKonflik;
+    if (rpBiasa > 0) {
+      add('pending', 'Refund parsial: jumlah unit belum diketahui', `Sebagian penjualan tidak masuk dalam perhitungan laba karena jumlah unit pada refund parsial belum dapat diverifikasi. ${num(rpBiasa)} pesanan direfund sebagian tanpa jumlah barang yang tercatat. Nilai refund tidak dipakai untuk menebak jumlah barang.`,
+        { label: 'Unggah file retur', go: 'data', section: 'unggah' }, 85, `${fmt(rpx.penjualan - (rpx.penjualanKonflik || 0))} penjualan tidak dihitung`);
+    }
+    if (rpKonflik > 0) {
+      add('pending', 'Data refund perlu dicek', `${num(rpKonflik)} pesanan: file retur menyebut semua barang direfund, tetapi laporan penghasilan menunjukkan refund sebagian. Pesanan ini tidak masuk dalam perhitungan laba sampai datanya dicek di Seller Centre.`,
+        RETUR, 86, `${fmt(rpx.penjualanKonflik || 0)} penjualan tidak dihitung`);
     }
     if (c.penjualan.estimasiMinimum > 0) {
       const m = sh('estimasiMinimum');
@@ -649,7 +665,7 @@
       ...(r.knownPacking ? [{ label: typeOf(st()) === 'dropship' ? 'Biaya dropship' : 'Packing', v: r.knownPacking, cls: 'cost', note: 'biaya per pesanan yang Anda isi' }] : []),
       ...(r.lostCertain || rb.kerugianTanpaNilai ? [{ label: 'Kerugian barang retur', v: r.lostCertain || NaN, cls: 'cost', note: rb.kerugianTanpaNilai ? `${num(rb.kerugianTanpaNilai)} kasus tanpa nilai belum dikurangkan` : 'barang yang Anda tandai tidak kembali' }] : []),
       ...(opex ? [{ label: 'Biaya operasional', v: r.opex, cls: 'cost', note: `${fmt(r.fixedMonthly)} per bulan yang Anda isi` }] : []),
-      ...(Math.abs(c.dikeluarkan.danaDiterima) >= 1 ? [{ label: 'Tidak dihitung', v: c.dikeluarkan.danaDiterima, cls: 'unknown', note: `dana dari ${num(c.dikeluarkan.jumlahPesanan)} pesanan yang modalnya belum diketahui` }] : []),
+      ...(Math.abs(c.dikeluarkan.danaDiterima) >= 1 ? [{ label: 'Tidak dihitung', v: c.dikeluarkan.danaDiterima, cls: 'unknown', note: `dana dari ${num(c.dikeluarkan.jumlahPesanan)} pesanan yang HPP-nya belum dapat dihitung` }] : []),
       ...(r.ready ? [{ label: 'Laba dari data tersedia', v: opex ? r.netProfit : r.totalMargin, cls: 'profit', note: opex ? 'setelah biaya operasional yang tercatat' : 'setelah modal dan biaya yang tercatat' }] : []),
     ];
     const max = Math.max(...rows.filter((x) => ok(x.v)).map((x) => Math.abs(x.v)), 1);
@@ -694,7 +710,7 @@
     if (r.ready) {
       // Dana dari pesanan yang dikeluarkan dari laba (modal tidak diketahui), langsung dari engine. Bisa negatif.
       const unknown = r.kepastian.cakupan.dikeluarkan.danaDiterima;
-      if (Math.abs(unknown) >= 1) L('−', 'Dana dari pesanan tanpa modal', -unknown, 'muted', 'tidak dihitung sampai modalnya diisi', 'tanpa_modal');
+      if (Math.abs(unknown) >= 1) L('−', 'Dana dari pesanan yang HPP-nya belum diketahui', -unknown, 'muted', 'tidak dihitung sampai modal atau jumlah unitnya diketahui', 'tanpa_modal');
       L('−', 'Modal / HPP', -r.totalModal, 'minus', '', 'modal');
       if (r.knownPacking) L('−', isDrop ? 'Biaya dropship' : 'Packing', -r.knownPacking, 'minus', '', isDrop ? 'dropship_fee' : 'packing');
       // Kasus "tidak kembali" tanpa nilai tidak dikurangkan dan tidak ditampilkan sebagai Rp0.
@@ -873,7 +889,7 @@
       <ol class="trace">
         ${step(1, 'Penjualan', `${val(r.totalSales)}<span class="tr-note">${num(r.orders)} pesanan</span>`)}
         ${step(2, 'Potongan marketplace', `${val(r.totalFees)}<span class="tr-note">admin, komisi, ongkir, dan program</span>`)}
-        ${step(3, 'Dana diterima', `${val(r.totalReceived)}${r.ready && Math.abs(out.danaDiterima) >= 1 ? `<span class="tr-note">${fmt(out.danaDiterima)} dari ${num(out.jumlahPesanan)} pesanan tanpa modal tidak dihitung</span>` : '<span class="tr-note">menurut laporan penghasilan</span>'}`)}
+        ${step(3, 'Dana diterima', `${val(r.totalReceived)}${r.ready && Math.abs(out.danaDiterima) >= 1 ? `<span class="tr-note">${fmt(out.danaDiterima)} dari ${num(out.jumlahPesanan)} pesanan yang HPP-nya belum diketahui tidak dihitung</span>` : '<span class="tr-note">menurut laporan penghasilan</span>'}`)}
         ${step(4, 'Modal / HPP', `${val(r.ready ? -r.totalModal : NaN)}<span class="tr-note">${r.ready ? 'dari modal yang Anda isi' : 'modal belum diisi'}</span>`, r.ready ? '' : 'is-unknown')}
         ${step(5, 'Biaya lain', others.length ? `<ul class="tr-list">${others.map(([l, v, n]) => `<li><span>${l}${n ? `<small>${n}</small>` : ''}</span>${val(v)}</li>`).join('')}</ul>` : '<span class="tr-note">Tidak ada biaya lain yang tercatat</span>')}
         ${step(6, 'Laba dari data tersedia', `${val(r.ready ? (opex ? r.netProfit : r.totalMargin) : NaN)}<span class="tr-note">${r.ready ? `${pct(r.coverage, 0)} penjualan masuk dalam perhitungan` : 'belum bisa dihitung'}</span>`, 'is-result')}
@@ -1144,7 +1160,7 @@
       ['Modal & HPP', !!(r && r.totalSales && r.coverage >= 0.98), r && r.totalSales ? `${pct(r.coverage, 0)} penjualan punya modal` : 'agar laba bisa dihitung'], ['Biaya & target', !!((s.fixedCosts || []).length || ok(s.packing)), 'opsional']];
     const sec = view.section || 'unggah';
     const SUP = [['Wajib', 'req', [['shopee', 'Shopee', 'Laporan Penghasilan', 'Keuangan › Penghasilan Saya › tab Sudah Dilepas › Unduh'], ['tiktok', 'TikTok Shop', 'Laporan Penghasilan', 'Keuangan › Transaksi › Unduh (pesanan Tokopedia ikut di sini)']]],
-      ['Disarankan', 'rec', [['shopee', 'Shopee', 'Export pesanan', 'Pesanan Saya › Export, untuk jumlah barang dan SKU'], ['tiktok', 'TikTok Shop', 'Export pesanan', 'Pesanan › Kelola pesanan › Ekspor']]],
+      ['Disarankan', 'rec', [['shopee', 'Shopee', 'Export pesanan', 'Pesanan Saya › Export, untuk jumlah barang dan SKU', true], ['tiktok', 'TikTok Shop', 'Export pesanan', 'Pesanan › Kelola pesanan › Ekspor', true]]],
       ['Opsional', 'opt', [['', 'Shopee / TikTok', 'File retur atau pengembalian', 'untuk menandai barang yang tidak kembali'], ['modal', 'Cek Untung', 'Template modal terisi', 'diunduh dari bagian Modal & HPP']]]];
     return `
       ${demo ? '<p class="note-box warn">Mode contoh memakai data dan modal Toko Contoh Sejahtera. Unggah file Anda untuk mulai; data contoh akan diganti.</p>' : ''}
@@ -1160,7 +1176,7 @@
           <ul class="files" id="file-list"></ul>
           ${files.length ? '<div><button class="btn sm quiet danger" type="button" id="clear-btn">Hapus semua file</button></div>' : ''}
           <section class="panel sup" aria-labelledby="sup-h"><div class="panel-head" style="margin:0 0 4px"><h3 id="sup-h">Laporan yang didukung</h3><p>Unduh untuk periode yang sama di semua laporan</p></div>
-            ${SUP.map(([lvl, cls, items]) => `<div class="sup-g ${cls}"><span class="sup-lvl">${lvl}</span><ul>${items.map(([p, pl, t, how]) => `<li><span class="sup-plat">${p ? `<i class="sw" style="background:var(--${p === 'modal' ? 'accent' : p})"></i>` : ''}${pl}</span><b>${t}</b><small>${how}</small></li>`).join('')}</ul></div>`).join('')}
+            ${SUP.map(([lvl, cls, items]) => `<div class="sup-g ${cls}"><span class="sup-lvl">${lvl}</span><ul>${items.map(([p, pl, t, how, beta]) => `<li><span class="sup-plat">${p ? `<i class="sw" style="background:var(--${p === 'modal' ? 'accent' : p})"></i>` : ''}${pl}</span><b>${t}${beta ? ' <span class="beta-tag" title="Belum diuji dengan semua format file asli">Beta</span>' : ''}</b><small>${how}</small></li>`).join('')}${cls === 'rec' ? '<li class="beta-note">Format export marketplace dapat berubah. Hasil pencocokan ditandai bila belum dapat diverifikasi.</li>' : ''}</ul></div>`).join('')}
             <p class="tiny faint">Jenis file dikenali dari nama sheet dan kolom di dalamnya, bukan dari nama file. Nama menu di Seller Centre bisa sedikit berubah dari waktu ke waktu.</p></section>
         </section>
         <section class="panel modal-panel" id="sec-modal" aria-label="Modal dan HPP">
@@ -1386,7 +1402,7 @@
       const [plat, ...rest] = label.split(', ');
       const st = f.demo ? 'ok' : f.error || f.kind === 'unknown' ? 'bad' : f.kind === 'shopee_balance' ? 'warn' : /class="warn"/.test(fileStatus(f)) ? 'warn' : 'ok';
       return `<li class="file fs-${st}"><span class="file-ic ${cls}" aria-hidden="true">${svg('laporan', 18)}</span><div class="file-body"><div class="name">${esc(f.name)}</div>
-        <div class="file-tags"><span class="ftag ${cls}">${esc(plat)}</span>${rest.length ? `<span class="ftag">${esc(rest.join(', '))}</span>` : ''}<span class="ftag st ${st}">${st === 'ok' ? '✓ Terbaca' : st === 'warn' ? '! Periksa' : '✕ Tidak terbaca'}</span></div>
+        <div class="file-tags"><span class="ftag ${cls}">${esc(plat)}</span>${rest.length ? `<span class="ftag">${esc(rest.join(', '))}</span>` : ''}${f.kind === 'shopee_orders' || f.kind === 'tiktok_orders' ? `<span class="ftag beta-tag" title="${BETA_NOTE}">Beta</span>` : ''}<span class="ftag st ${st}">${st === 'ok' ? '✓ Terbaca' : st === 'warn' ? '! Periksa' : '✕ Tidak terbaca'}</span></div>
         <div class="muted file-st">${f.demo ? 'Data contoh' : fileStatus(f)}</div></div>
         ${f.demo ? '<span></span>' : `<button class="x" type="button" data-rm="${i}" aria-label="Hapus ${esc(f.name)}">×</button>`}</li>`;
     }).join('');

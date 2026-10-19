@@ -145,7 +145,8 @@ const kasus = {
   terverifikasi: () => [E.parseWorkbook(Sint.penghasilan([{ id: 'SA1', items: [{ name: 'Kaos', harga: 100000 }] }])), E.parseWorkbook(Sint.exportPesanan([{ order: 'SA1', name: 'Kaos', qty: 2, price: 50000 }]))],
   campuran: () => [E.parseWorkbook(Sint.penghasilan([{ id: 'SB1', items: [{ name: 'Kaos', harga: 100000 }] }, { id: 'SB2', items: [{ name: 'Topi', harga: 60000 }] }, { id: 'SB3', items: [{ name: 'Kaos', harga: 50000 }] },
     { id: 'SB4', items: [{ name: 'Kaos', harga: 100000, refund: -40000 }] }, { id: 'SB5', items: [{ name: 'Kaos', harga: 70000 }] }, { id: 'SB6', items: [{ name: 'Kaos', harga: 50000, refund: -50000 }] }])),
-  E.parseWorkbook(Sint.exportPesanan([{ order: 'SB1', name: 'Kaos', qty: 2, price: 50000 }, { order: 'SB5', name: 'Celana', qty: 1, price: 70000 }]))],
+  // H2-B3b: SB4 (refund parsial) diberi jumlah unit refund di export; tanpa itu HPP-nya tidak diketahui (bukan lagi "belum").
+  E.parseWorkbook(Sint.exportPesanan([{ order: 'SB1', name: 'Kaos', qty: 2, price: 50000 }, { order: 'SB4', name: 'Kaos', qty: 2, price: 50000, returned: 1, returnStatus: 'Permintaan Disetujui' }, { order: 'SB5', name: 'Celana', qty: 1, price: 70000 }]))],
 };
 const stKaos = { modalMode: 'produk', catalog: [{ kode: '', nama: 'Kaos', variasi: '', cost: 20000 }], fallbackPct: 40, periods: [{ start: '', markup: 0, disc: 0 }] };
 test('D1 status di kartu Kepastian Profit = semua status cakupan engine (tidak ada status buatan UI)', () => {
@@ -352,5 +353,17 @@ test('W4 gerak: hanya transform/opacity, tanpa pustaka/scroll listener, isi tamp
   truthy(/'assets\/motion\.js'/.test(root('sw.js')), 'motion.js ikut cache offline (sw.js CORE)');
 });
 
+test('B3b UI: label Beta export pesanan + alasan refund parsial tampil (bukan Rp0 untuk HPP tidak diketahui)', () => {
+  const note = 'Format export marketplace dapat berubah. Hasil pencocokan ditandai bila belum dapat diverifikasi.';
+  truthy(appJs.includes(note), 'helper Beta di dashboard');
+  truthy(/f\.kind === 'shopee_orders' \|\| f\.kind === 'tiktok_orders' \? `<span class="ftag beta-tag"/.test(appJs), 'tag Beta pada file export pesanan');
+  truthy(/Export pesanan', '[^']+', true\]/.test(appJs), 'daftar laporan didukung: export pesanan bertanda Beta');
+  truthy(/export pesanan \(Beta\)/.test(src('../index.html')), 'FAQ halaman depan menyebut Beta');
+  truthy(/'Refund parsial: jumlah unit belum diketahui'/.test(appJs), 'item kepastian refund parsial');
+  truthy(appJs.includes('Sebagian penjualan tidak masuk dalam perhitungan laba karena jumlah unit pada refund parsial belum dapat diverifikasi.'), 'teks refund parsial sesuai keputusan pemilik');
+  truthy(/'Data refund perlu dicek'/.test(appJs) && /rpx\.konflik/.test(appJs), 'item terpisah untuk bukti unit yang bertentangan');
+  truthy(!/laba (akan )?naik|menaikkan laba/i.test(appJs + src('penjelasan.js')), 'tidak ada klaim "laba naik"');
+  truthy(!/Laporan Penghasilan[^'`]*Beta/.test(appJs), 'Laporan Penghasilan tidak diberi label Beta');
+});
 console.log(failed ? `\n${failed} uji GAGAL` : '\nSemua uji lulus');
 process.exitCode = failed ? 1 : 0;

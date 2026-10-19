@@ -652,7 +652,9 @@ test('H3 refund 1 unit tetapi file retur 2 unit → konflik, kerugian tidak dihi
   const r = E.compute([...filesKaos(-50000, 1), returShopee([{ order: 'SINT-K1', product: 'Kaos', qty: 2, amount: 50000 }])], stUnit, { [ksKaos]: 'hilang' });
   const c = r.cases[0];
   eq(c.unitStatus, 'konflik'); truthy(Number.isNaN(c.estModal), 'bukan min/maks, tidak dipaksakan');
-  eq(r.lostCertain, 0); eq(r.kepastian.risikoBarang.kerugianTanpaNilai, 1); eq(r.totalModal, 20000, 'HPP penjualan tidak berubah (share lama)');
+  eq(r.lostCertain, 0); eq(r.kepastian.risikoBarang.kerugianTanpaNilai, 1);
+  // H2-B3b: refund parsial tanpa unit yang bisa dipastikan → HPP tidak diketahui (bukan share lama 20.000), pesanan keluar dari laba.
+  eq(r.totalModal, 0); eq(ck(r).dikeluarkan.alasan['refund_parsial_unit_tidak_diketahui'], 1); truthy(r.kepastian.laba.alasanTidakFinal.includes('refund_parsial_unit_tidak_diketahui'), 'alasan refund parsial');
   eq(r.kepastian.laba.final, false); truthy(r.kepastian.laba.alasanTidakFinal.includes('kerugian_retur_tanpa_nilai'), 'alasan tercatat');
 });
 test('H4 refund 2 unit, barang hilang: 2 unit hanya bila file retur & export sama; satu sumber tetap dihitung tetapi bukan terverifikasi', () => {
@@ -696,10 +698,12 @@ test('H8 kasus retur sama di dua file dengan isi berbeda → hasil identik untuk
 test('H9 status HPP: estimasi 1 unit + refund → belum; reseller → harga_acuan estimasi; angka tidak berubah', () => {
   const o = [{ id: 'SINT-E', items: [{ name: 'Topi', harga: 50000, refund: -10000 }, { name: 'Kaos', harga: 50000 }] }];
   const unit = hitungFmt(o, [], ST([cat('Topi', '', 20000), cat('Kaos', '', 20000)]));
-  eq(unit.shopeeQty.hpp.belum, 1); eq(unit.shopeeQty.hpp.estimasi, 1); eq(unit.totalModal, 20000 * 0.8 + 20000);
+  // H2-B3b: Topi direfund parsial tanpa bukti unit → HPP tidak diketahui → seluruh pesanan keluar dari laba (bukan 20.000 × 0,8).
+  eq(unit.shopeeQty.hpp.tidak_diketahui, 1); eq(unit.shopeeQty.hpp.estimasi, 1); eq(unit.totalModal, 0); eq(unit.coverage, 0);
   const acuan = hitungFmt(o, [], { modalMode: 'acuan', mitra: 60, periods: [{ start: '', markup: 0, disc: 0 }] });
-  eq(acuan.shopeeQty.metodeHpp.harga_acuan, 2); eq(acuan.shopeeQty.hpp.estimasi, 1); eq(acuan.shopeeQty.hpp.belum, 1, 'baris dengan refund');
-  eq(acuan.totalModal, 0.4 * 90000);
+  // H2-B3b: reseller juga tidak memotong harga acuan menurut nominal refund parsial.
+  eq(acuan.shopeeQty.metodeHpp.harga_acuan, 1); eq(acuan.shopeeQty.hpp.estimasi, 1); eq(acuan.shopeeQty.hpp.tidak_diketahui, 1, 'baris refund parsial');
+  eq(acuan.totalModal, 0); eq(ck(acuan).dikeluarkan.alasan['refund_parsial_unit_tidak_diketahui'], 1);
 });
 test('H10 kepastian: HPP per status = total modal; modal diketahui ≠ terverifikasi; laba tidak pernah final selama periode belum divalidasi', () => {
   const r = hitungFmt(satu, [[[bs]]], ST([cat('Kaos', 'M', 20000)]));
@@ -780,9 +784,11 @@ test('H15 kepastian kerugian: 2 sumber cocok → terverifikasi; 1 sumber → sem
 });
 test('H16 KETERBATASAN (H2-B): hitung ganda tanpa export tetap mungkin → kerugian sementara, laba tidak final', () => {
   // Refund 50.000 (setara 1 unit) tetapi file retur menyebut 2 unit hilang; tanpa export tidak ada pembanding unit.
-  // HPP terjual (estimasi 1 unit × porsi tidak direfund) 10.000 + kerugian 2 unit 40.000 = 50.000, padahal 2 kaos = 40.000.
+  // Sebelum H2-B3b: HPP terjual (1 unit × porsi nominal) 10.000 + kerugian 2 unit 40.000 = 50.000 > modal 2 kaos.
+  // H2-B3b: refund parsial tanpa bukti unit → HPP penjualan tidak diketahui (pesanan keluar dari laba), sehingga beban
+  // yang tersisa hanya kerugian barang 40.000 = modal 2 kaos. Hitung ganda yang terdokumentasi tidak terjadi lagi.
   const r = E.compute([...filesKaos(-50000, 0, false), returShopee([{ order: 'SINT-K1', product: 'Kaos', qty: 2, amount: 50000 }])], stUnit, { [ksKaos]: 'hilang' });
-  eq(r.totalModal + r.lostCertain, 50000, 'beban total melebihi modal 2 kaos (hitung ganda terdokumentasi)');
+  eq(r.totalModal, 0, 'HPP refund parsial tidak dihitung menurut nominal'); eq(r.totalModal + r.lostCertain, 40000, 'tidak melebihi modal 2 kaos');
   eq(r.cases[0].lossCertainty, 'sementara'); eq(r.kepastian.risikoBarang.kerugianTerverifikasi, 0);
   eq(r.kepastian.laba.final, false); truthy(r.kepastian.laba.alasanTidakFinal.includes('kerugian_retur_sementara'), 'alasan');
 });
@@ -816,7 +822,9 @@ test('U3–U6 refund 1 dari 2 unit: HPP = 1 unit terjual; hilang/kembali/belum d
 });
 test('U7 export 1 unit vs file retur 2 unit → konflik → buku unit tidak dipakai (rumus lama), ditandai', () => {
   const r = E.compute([...filesB1(-50000, 1), retKaos(2)], stUnit, { [ksKaos]: 'hilang' });
-  eq(bu(r).status.konflik, 1); eq(bu(r).lengkap, 0); eq(r.totalModal, 20000, 'rumus lama 2 × 20.000 × 0,5'); eq(r.lostCertain, 0, 'kerugian konflik tidak dihitung (H2-A)');
+  eq(bu(r).status.konflik, 1); eq(bu(r).lengkap, 0); eq(r.lostCertain, 0, 'kerugian konflik tidak dihitung (H2-A)');
+  // H2-B3b: sumber unit berbeda → unit refund tidak diketahui → HPP tidak diketahui, bukan 2 × 20.000 × 0,5.
+  eq(r.totalModal, 0); eq(ck(r).dikeluarkan.alasan['refund_parsial_unit_tidak_diketahui'], 1);
 });
 test('U8 hanya satu sumber (export) → buku unit dipakai dengan status satu_sumber', () => {
   const r = E.compute(filesB1(-50000, 1), stUnit);
@@ -827,7 +835,8 @@ test('U8 hanya satu sumber (export) → buku unit dipakai dengan status satu_sum
 });
 test('U9 jumlah refund kosong di semua sumber → tidak diketahui → rumus lama', () => {
   const r = E.compute([...filesB1(-50000, 0, 'lama'), retKaos('')], stUnit);
-  eq(bu(r).status.tidak_diketahui, 1); eq(bu(r).lengkap, 0); eq(r.totalModal, 20000, 'rumus lama, ditandai');
+  eq(bu(r).status.tidak_diketahui, 1); eq(bu(r).lengkap, 0);
+  eq(r.totalModal, 0, 'H2-B3b: HPP tidak diketahui, bukan rumus lama'); eq(ck(r).dikeluarkan.alasan['refund_parsial_unit_tidak_diketahui'], 1);
 });
 test('U10 kasus retur variasi lain tidak dipakai untuk baris variasi ini', () => {
   const r = E.compute([...filesB1(-50000, 1, 'baru', 'Merah'), retKaos(2, 'Biru')], ST([cat('Kaos', 'Merah', 20000)]));
@@ -842,7 +851,7 @@ test('U12–U13 tanpa sumber unit: refund Rp0 TIDAK berarti 0 unit; refund posit
   const nol = E.compute(filesB1(0, 0, 'lama'), stUnit);
   eq(bu(nol).status.tidak_diketahui, 1, 'bukan qtyRefunded = 0'); eq(bu(nol).lengkap, 0); eq(nol.totalModal, 40000);
   const pos = E.compute(filesB1(-50000, 0, 'lama'), stUnit);
-  eq(bu(pos).status.tidak_diketahui, 1); eq(pos.totalModal, 20000, 'rumus lama, bukan unit dari nominal');
+  eq(bu(pos).status.tidak_diketahui, 1); eq(pos.totalModal, 0, 'H2-B3b: nominal tidak menentukan HPP'); eq(ck(pos).dikeluarkan.alasan['refund_parsial_unit_tidak_diketahui'], 1);
   // Export menyebut 1 unit direfund, tetapi Laporan Penghasilan belum mencatat refund → tidak dipakai (laba tak dibesarkan).
   const beda = E.compute(filesB1(0, 1), stUnit);
   eq(bu(beda).lengkap, 0); eq(beda.totalModal, 40000);
@@ -853,11 +862,12 @@ test('U14 tabel produk: unit terjual bilangan bulat untuk baris buku unit', () =
 });
 test('U15–U18 regresi: reseller, modal rata-rata, Shopee tanpa export tidak memakai buku unit', () => {
   const acuan = E.compute(filesB1(-50000, 1), { modalMode: 'acuan', mitra: 60, periods: [{ start: '', markup: 0, disc: 0 }] });
-  eq(acuan.totalModal, 0.4 * 50000, 'reseller: (harga + refund) × rasio, tidak berubah'); eq(bu(acuan).baris, 0);
+  // H2-B3b: reseller dan modal rata-rata juga tidak memakai nilai setelah refund parsial → HPP tidak diketahui.
+  eq(acuan.totalModal, 0, 'reseller: bukan (harga + refund) × rasio'); eq(bu(acuan).baris, 0); eq(ck(acuan).dikeluarkan.alasan['refund_parsial_unit_tidak_diketahui'], 1);
   const rata = E.compute(filesB1(-50000, 1), stRata);
-  eq(rata.totalModal, 0.4 * 50000, 'modal rata-rata tidak berubah'); eq(bu(rata).baris, 0);
+  eq(rata.totalModal, 0, 'modal rata-rata: bukan persen dari nilai setelah refund parsial'); eq(bu(rata).baris, 0);
   const tanpa = E.compute([E.parseWorkbook(Sint.penghasilan([{ id: 'SINT-K1', items: [{ name: 'Kaos', harga: 100000, refund: -50000 }] }]))], stUnit);
-  eq(tanpa.totalModal, 10000, 'tanpa export: estimasi 1 unit × 0,5 (cara lama)'); eq(bu(tanpa).baris, 0);
+  eq(tanpa.totalModal, 0, 'H2-B3b: tanpa export dan refund parsial → tidak diketahui, bukan 1 unit × 0,5'); eq(bu(tanpa).baris, 0);
 });
 
 /* ===== H2-B3a: kepastian.cakupan + refund penuh tanpa catatan fisik (metadata; angka tidak berubah) ===== */
@@ -871,7 +881,7 @@ const ttPenghasilan = (rows) => E.parseWorkbook({ name: 'tt-penghasilan-sintetis
 const ttRetur = (rows) => E.parseWorkbook({ name: 'tt-retur-sintetis.xlsx', sheets: { S: [['Return Order ID', 'Order ID', 'SKU ID', 'Product Name', 'SKU Name',
   'Return Quantity', 'Return unit price', 'Refund Time', 'Return Type', 'Return Reason', 'Return Logistics Tracking ID', 'Buyer Note', 'Return Status', 'Time Requested'],
 ...rows.map((x, i) => [x.id || `TRC${i + 1}`, x.order, x.sku, 'Kaos', 'M', x.qty, 50000, x.refundTime ?? '2026-01-12', x.type || 'Refund only', x.reason || 'Damaged', '', '', 'Completed', '2026-01-10'])] } });
-const ck = (r) => r.kepastian.cakupan;
+function ck(r) { return r.kepastian.cakupan; }   // deklarasi fungsi (ter-hoist) agar bisa dipakai uji H2-A/H2-B1 di atas
 const rtf = (r, pf) => (pf ? ck(r).refundTanpaCatatanFisik.perMarketplace[pf] : ck(r).refundTanpaCatatanFisik);
 const STATUS_CK = ['terverifikasi', 'estimasi', 'estimasiMinimum', 'belum', 'tidakDiketahui'];
 /** Rekonsiliasi wajib: tiap pesanan tepat satu status; jumlah status = total = totalSales (toleransi Rp1). */
@@ -904,10 +914,11 @@ test('C3 Shopee tanpa export (anggap 1 unit) → estimasiMinimum; rumus HPP dan 
   cekRekonsiliasi(r, 'C3');
   eq(ck(r).penjualan.estimasiMinimum, 100000); eq(ck(r).penjualan.estimasi, 0);
   eq(r.totalModal, 20000, 'tetap 1 unit'); eq(r.kepastian.penjualan.estimasi, 100000, 'kepastian.penjualan lama tetap "estimasi"');
-  // Refund parsial tanpa export: tidak diklasifikasikan sebagai estimasi valid, ditandai refund parsial tanpa unit.
+  // H2-B3b: refund parsial tanpa export → HPP tidak diketahui; pesanan dikeluarkan dengan alasan refund parsial.
   const p = hitung([kaos1('SINT-C3b', 100000, -40000)], null, stUnit);
-  cekRekonsiliasi(p, 'C3b'); eq(ck(p).penjualan.belum, 60000); eq(ck(p).penjualan.estimasiMinimum, 0);
-  eq(ck(p).refundParsialTanpaUnit.jumlahPesanan, 1); eq(p.totalModal, 12000, 'rumus lama (share) tidak diubah');
+  cekRekonsiliasi(p, 'C3b'); eq(ck(p).penjualan.tidakDiketahui, 60000); eq(ck(p).penjualan.belum, 0); eq(ck(p).penjualan.estimasiMinimum, 0);
+  eq(ck(p).dikeluarkan.alasan['refund_parsial_unit_tidak_diketahui'], 1); eq(ck(p).dikeluarkan.refundParsial.jumlahPesanan, 1); eq(ck(p).dikeluarkan.refundParsial.penjualan, 60000);
+  eq(ck(p).refundParsialTanpaUnit.jumlahPesanan, 0, 'tidak ada lagi laba yang memakai porsi nominal'); eq(p.totalModal, 0);
 });
 test('C4 modal tidak diketahui → tidakDiketahui, dikeluarkan beserta alasan (modal kosong, A1)', () => {
   const r = hitung([kaos1('SINT-C4', 100000)], null, ST([]));
@@ -983,12 +994,12 @@ test('C9 tidak ada double counting: tiap pesanan satu status, jumlah status = to
     cekRekonsiliasi(r, `mode ${i}`);
     eq(STATUS_CK.reduce((a, k) => a + ck(r).jumlahPesanan[k], 0), 4 + 4, `mode ${i}: setiap pesanan tepat sekali`);
   }
-  // Refund parsial TikTok (5811) di modal rata-rata: angka tetap, tetapi status "belum" + refund parsial tanpa unit.
+  // H2-B3b: refund parsial TikTok (5811) tanpa bukti unit → tidak diketahui (dikeluarkan), bukan persen dari nilai setelah refund.
   const rata = E.compute(files, stRata);
-  eq(ck(rata).perMarketplace.tiktok.refundParsialTanpaUnit.jumlahPesanan, 1);
-  eq(ck(rata).perMarketplace.tiktok.penjualan.belum, 30000);
+  eq(ck(rata).perMarketplace.tiktok.refundParsialTanpaUnit.jumlahPesanan, 0);
+  eq(ck(rata).perMarketplace.tiktok.penjualan.tidakDiketahui, 30000); eq(ck(rata).perMarketplace.tiktok.dikeluarkan.alasan['refund_parsial_unit_tidak_diketahui'], 1);
   const lama = E.compute(files, stRata, {}, { platforms: ['tiktok'] }).kepastian.penjualan;
-  eq(lama.estimasi, 120000, 'kepastian.penjualan lama tidak diubah (5811 tetap "estimasi" di sana)'); eq(lama.belum, 0);
+  eq(lama.estimasi, 90000, 'kepastian.penjualan: 5811 pindah ke tidak_diketahui'); eq(lama.tidak_diketahui, 30000); eq(lama.belum, 0);
 });
 test('C10 breakdown Shopee + TikTok = total; filter platform hanya mengisi platform itu', () => {
   const files = [E.parseWorkbook(Sint.penghasilan([kaos1('SINT-B1', 100000, -100000), kaos1('SINT-B2', 70000)])),
@@ -1111,6 +1122,176 @@ test('I7 insight biaya operasional memakai istilah laba (level, skor, dan nilai 
 
 test('angka format Indonesia di CSV', () => {
   eq(E.num('Rp1.234.567'), 1234567); eq(E.num('-1.250'), -1250); eq(E.num('12,5'), 125); eq(E.num('/'), 0);
+});
+/* ===== H2-B3b: refund parsial — nominal refund TIDAK menentukan unit/HPP (data SINTETIS) =====
+ * Definisi: refund parsial = ada refund dan sisa nilai pesanan > 0. HPP baris itu = modal × unit terjual bersih,
+ * HANYA bila unit yang direfund terbukti dari field jumlah (export/file retur). Tanpa bukti → HPP tidak diketahui:
+ * pesanan keluar dari laba (alasan refund_parsial_unit_tidak_diketahui), bukan pro-rata, bukan 1 unit, bukan 0. */
+const RP = 'refund_parsial_unit_tidak_diketahui';
+const SKU = '1234567', stTT = ST([cat('', '', 20000, SKU)]);
+/** Pesanan TikTok 2 unit @50.000; refund = nominal refund (negatif). */
+const ttOrder = (id, refund, detail = `${SKU} * 2;`) => ({ id, settle: 100000 + refund - 10000, sales: 100000 + refund, sub: 100000, refund, detail });
+const normalTT = { id: '5999', settle: 90000, sales: 100000, sub: 100000, detail: `${SKU} * 2;` };
+test('B3b-1 refund parsial + unit diketahui (file retur) → HPP = modal × unit terjual bersih; status belum', () => {
+  const r = E.compute([ttPenghasilan([ttOrder('5901', -50000)]), ttRetur([{ order: '5901', sku: SKU, qty: 1 }])], stTT);
+  cekRekonsiliasi(r, 'B3b-1');
+  eq(r.totalModal, 20000, '2 unit − 1 unit direfund = 1 × 20.000'); eq(r.coverage, 1);
+  eq(ck(r).penjualan.belum, 50000); eq(ck(r).dikeluarkan.refundParsial.jumlahPesanan, 0);
+  eq(r.products[0].qty, 1); truthy(Number.isInteger(r.products[0].qty), 'unit bulat, bukan 1,0 dari nominal');
+  // Shopee: unit dari export (buku unit) tetap dipakai, sama seperti H2-B1.
+  eq(E.compute(filesB1(-50000, 1), stUnit).totalModal, 20000);
+});
+test('B3b-2 refund parsial + unit TIDAK diketahui → HPP tidak diketahui, pesanan keluar dari laba, laba tidak final', () => {
+  const kecil = E.compute([ttPenghasilan([ttOrder('5902', -20000), normalTT])], stTT);
+  const besar = E.compute([ttPenghasilan([ttOrder('5902', -70000), normalTT])], stTT);
+  cekRekonsiliasi(kecil, 'B3b-2a'); cekRekonsiliasi(besar, 'B3b-2b');
+  // Nominal refund (20% vs 70%) tidak mengubah HPP maupun laba yang dihitung: keduanya hanya berisi pesanan normal.
+  eq(kecil.totalModal, 40000); eq(besar.totalModal, 40000, 'hanya pesanan normal 2 × 20.000');
+  eq(kecil.totalMargin, besar.totalMargin, 'laba tidak bergantung nominal refund parsial'); eq(kecil.totalMargin, 90000 - 40000);
+  const d = ck(kecil).dikeluarkan;
+  eq(d.alasan[RP], 1); eq(d.refundParsial.jumlahPesanan, 1); eq(d.refundParsial.penjualan, 80000); eq(d.refundParsial.danaDiterima, 70000);
+  eq(kecil.kepastian.laba.final, false); truthy(kecil.kepastian.laba.alasanTidakFinal.includes(RP), 'alasan tercatat');
+  truthy(kecil.coverage < 1, 'tidak tampil 100% terhitung');
+  const p = kecil.products.find((x) => x.code === SKU); eq(p.qtyKnown, false, 'unit terjual produk tidak diketahui, bukan pecahan'); eq(p.modalKnown, false);
+  // Hanya pesanan refund parsial → laba belum dapat dihitung (NaN), bukan 0.
+  const sendiri = E.compute([ttPenghasilan([ttOrder('5902', -20000)])], stTT);
+  truthy(Number.isNaN(sendiri.totalMargin), 'laba NaN, bukan 0'); eq(sendiri.ready, false);
+  // Bukti unit tidak sah → tetap tidak diketahui: kasus SKU lain, kasus "batal", unit = seluruh pesanan (bertentangan).
+  for (const [lbl, ret] of [['SKU lain', [{ order: '5902', sku: '7654321', qty: 1 }]], ['batal', [{ order: '5902', sku: SKU, qty: 1, refundTime: '' }]], ['semua unit', [{ order: '5902', sku: SKU, qty: 2 }]], ['jumlah kosong', [{ order: '5902', sku: SKU, qty: '' }]]]) {
+    const x = E.compute([ttPenghasilan([ttOrder('5902', -20000)]), ttRetur(ret)], stTT);
+    eq(ck(x).dikeluarkan.alasan[RP], 1, `${lbl}: tetap tidak diketahui`); eq(x.totalModal, 0, lbl);
+  }
+  // Mode reseller dan modal rata-rata: juga tidak dipotong menurut nominal.
+  const acuan = E.compute([ttPenghasilan([ttOrder('5902', -20000)])], { modalMode: 'acuan', mitra: 30, coret: 100, periods: [{ start: '', markup: 0, disc: 0 }] });
+  eq(ck(acuan).dikeluarkan.alasan[RP], 1); eq(acuan.totalModal, 0);
+  const rata = E.compute([ttPenghasilan([ttOrder('5902', -20000, '')])], stRata);
+  eq(ck(rata).dikeluarkan.alasan[RP], 1, 'tanpa rincian + modal rata-rata'); eq(rata.totalModal, 0);
+});
+test('B3b-3 refund penuh → perilaku lama tetap (HPP penjualan 0, exposure fisik dicatat), bukan alasan refund parsial', () => {
+  const r = E.compute([ttPenghasilan([{ id: '5903', settle: -5000, sales: 0, sub: 100000, refund: -100000, detail: `${SKU} * 2;` }])], stTT);
+  eq(r.totalModal, 0); eq(ck(r).dikeluarkan.refundParsial.jumlahPesanan, 0); eq(ck(r).dikeluarkan.alasan[RP], undefined);
+  eq(rtf(r, 'tiktok').jumlahPesanan, 1, 'kondisi fisik tetap terpisah (exposure)'); eq(r.lostCertain, 0);
+  const s = E.compute(filesB1(-100000, 2), stUnit); eq(s.totalModal, 0); eq(ck(s).dikeluarkan.refundParsial.jumlahPesanan, 0);
+});
+test('B3b-4/5 tanpa refund dan refund nominal 0 → HPP penuh, tidak dianggap refund parsial', () => {
+  const r = E.compute([ttPenghasilan([normalTT])], stTT); eq(r.totalModal, 40000); eq(ck(r).dikeluarkan.jumlahPesanan, 0);
+  const nol = E.compute([ttPenghasilan([ttOrder('5905', 0)])], stTT); eq(nol.totalModal, 40000); eq(ck(nol).dikeluarkan.jumlahPesanan, 0);
+  const s = E.compute(filesB1(0, 0, 'lama'), stUnit); eq(s.totalModal, 40000);
+});
+test('B3b-6 nilai refund di file retur tidak diketahui → bukan 0; unit tetap dari field jumlah', () => {
+  const r = E.compute([...filesB1(-50000, 1), returShopee([{ order: 'SINT-K1', product: 'Kaos', qty: 1, amount: '' }])], stUnit);
+  truthy(Number.isNaN(r.cases[0].amount), 'nilai refund NaN'); truthy(Number.isNaN(r.catSummary[0].amount), 'total kategori tidak tampil Rp0');
+  eq(r.totalModal, 20000, 'unit dari export + file retur (sama-sama 1)'); eq(bu(r).status.terverifikasi, 1);
+});
+test('B3b-7/8/9 kondisi fisik: belum diketahui = risiko; kembali = tanpa kerugian; hilang = kerugian tanpa hitung ganda', () => {
+  const files = [ttPenghasilan([ttOrder('5907', -50000)]), ttRetur([{ id: 'TR7', order: '5907', sku: SKU, qty: 1 }])];
+  const k = `T|TR7|${SKU}`;
+  const belum = E.compute(files, stTT);
+  eq(belum.lostCertain, 0, 'kondisi belum diketahui ≠ kerugian'); eq(belum.unknownRisk, 20000); eq(belum.totalModal, 20000);
+  const kembali = E.compute(files, stTT, { [k]: 'kembali' });
+  eq(kembali.lostCertain, 0); eq(kembali.unknownRisk, 0); eq(kembali.totalModal, 20000);
+  const hilang = E.compute(files, stTT, { [k]: 'hilang' });
+  eq(hilang.lostCertain, 20000); eq(hilang.totalModal, 20000);
+  eq(hilang.totalModal + hilang.lostCertain, 40000, 'HPP 1 unit terjual + 1 unit hilang = modal 2 unit, tidak lebih');
+  eq(hilang.totalMargin, 40000 - 20000 - 20000, 'dana diterima − HPP − kerugian');
+});
+test('B3b-10 file retur diunggah dua kali → unit refund dan HPP sama', () => {
+  const ret = ttRetur([{ order: '5910', sku: SKU, qty: 1 }]);
+  const a = E.compute([ttPenghasilan([ttOrder('5910', -50000)]), ret], stTT), b = E.compute([ttPenghasilan([ttOrder('5910', -50000)]), ret, ret], stTT);
+  eq(JSON.stringify([a.totalModal, a.cases.length, ck(a).penjualan]), JSON.stringify([b.totalModal, b.cases.length, ck(b).penjualan]));
+  eq(b.totalModal, 20000, 'unit tidak terhitung dua kali');
+});
+test('B3b-11 laporan penghasilan TikTok tumpang tindih → tidak dihitung ganda; status refund parsial tetap', () => {
+  const f1 = ttPenghasilan([ttOrder('5911', -20000), normalTT]), f2 = ttPenghasilan([normalTT]);
+  const a = E.compute([f1], stTT), b = E.compute([f1, f2, f1], stTT);
+  eq(b.dupes, 3, 'f2 (1 baris) + f1 kedua (2 baris)'); eq(b.totalSales, a.totalSales); eq(b.totalModal, a.totalModal); eq(ck(b).dikeluarkan.refundParsial.jumlahPesanan, 1);
+});
+test('B3b-12 HPP tidak diketahui karena modal kosong → alasan modal, bukan refund parsial; tidak dianggap 0', () => {
+  const r = E.compute([ttPenghasilan([ttOrder('5912', -20000), normalTT])], ST([]));
+  eq(ck(r).dikeluarkan.alasan.modal_belum_diisi, 2); eq(ck(r).dikeluarkan.alasan[RP], undefined);
+  truthy(Number.isNaN(r.totalMargin), 'laba belum dapat dihitung, bukan 0');
+});
+/* Ketiga mode modal (per produk, harga acuan/reseller, modal rata-rata) memakai prinsip yang sama: refund parsial tanpa
+ * unit yang sah → HPP tidak diketahui. Harga acuan dan modal rata-rata dihitung dari NILAI penjualan, bukan per unit, jadi
+ * bukti unit pun tidak bisa dipakai di dua mode itu: refund parsial selalu dikeluarkan (keputusan H2-B3b). */
+const MODE_B3B = { produk: stTT, acuan: { modalMode: 'acuan', mitra: 30, coret: 100, periods: [{ start: '', markup: 0, disc: 0 }] }, rata: null };
+test('B3b-13 tiga mode modal × dua marketplace: nominal refund tidak pernah menentukan HPP', () => {
+  MODE_B3B.rata = stRata;
+  for (const [mode, s] of Object.entries(MODE_B3B)) {
+    // TikTok tanpa bukti unit: 20% vs 70% → sama-sama dikeluarkan; HPP/laba hanya dari pesanan normal.
+    const kecil = E.compute([ttPenghasilan([ttOrder('5913', -20000), normalTT])], s);
+    const besar = E.compute([ttPenghasilan([ttOrder('5913', -70000), normalTT])], s);
+    for (const x of [kecil, besar]) {
+      cekRekonsiliasi(x, `B3b-13 ${mode}`);
+      eq(ck(x).dikeluarkan.alasan[RP], 1, `${mode}: alasan refund parsial`); eq(ck(x).dikeluarkan.refundParsial.jumlahPesanan, 1, mode);
+      eq(ck(x).refundParsialTanpaUnit.jumlahPesanan, 0, `${mode}: tidak ada laba yang memakai porsi nominal`);
+      eq(x.kepastian.laba.final, false, mode);
+    }
+    eq(kecil.totalModal, besar.totalModal, `${mode}: HPP tidak bergantung nominal refund`);
+    eq(kecil.totalMargin, besar.totalMargin, `${mode}: laba tidak bergantung nominal refund`);
+    // Shopee: refund parsial tanpa sumber unit.
+    const sh = (refund) => E.compute([E.parseWorkbook(Sint.penghasilan([{ id: 'SINT-K1', items: [{ name: 'Kaos', harga: 100000, refund }] }]))], s.modalMode === 'acuan' ? s : s === stRata ? stRata : stUnit);
+    const a = sh(-20000), b = sh(-70000);
+    eq(a.totalModal, 0, `${mode} Shopee`); eq(b.totalModal, 0, `${mode} Shopee`);
+    eq(ck(a).dikeluarkan.alasan[RP], 1, `${mode} Shopee: alasan refund parsial`); eq(ck(a).refundParsialTanpaUnit.jumlahPesanan, 0);
+  }
+  // Dengan bukti unit yang sah: hanya mode per produk yang bisa memakainya (modal × unit terjual bersih).
+  const files = [ttPenghasilan([ttOrder('5913', -50000)]), ttRetur([{ order: '5913', sku: SKU, qty: 1 }])];
+  eq(E.compute(files, MODE_B3B.produk).totalModal, 20000, 'per produk: 1 unit terjual × 20.000');
+  for (const mode of ['acuan', 'rata']) {
+    const x = E.compute(files, MODE_B3B[mode]);
+    eq(x.totalModal, 0, `${mode}: modal dari nilai penjualan tidak bisa dipotong per unit`); eq(ck(x).dikeluarkan.alasan[RP], 1, mode);
+  }
+  eq(E.compute(filesB1(-50000, 1), stUnit).totalModal, 20000, 'Shopee per produk + buku unit');
+  for (const s of [MODE_B3B.acuan, stRata]) eq(ck(E.compute(filesB1(-50000, 1), s)).dikeluarkan.alasan[RP], 1, 'Shopee acuan/rata: dikeluarkan');
+});
+const SKU2 = '7654321', stTT2 = ST([cat('', '', 20000, SKU), cat('', '', 10000, SKU2)]);
+test('B3b-14 multi-SKU: bukti unit harus ada untuk SETIAP SKU (SKU yang tidak muncul di file retur ≠ 0 unit)', () => {
+  const ord = ttOrder('5914', -30000, `${SKU} * 2;${SKU2} * 1;`);
+  const satu = E.compute([ttPenghasilan([ord]), ttRetur([{ order: '5914', sku: SKU, qty: 1 }])], stTT2);
+  eq(satu.totalModal, 0, 'hanya SKU pertama punya kasus → unit SKU kedua tidak diketahui'); eq(ck(satu).dikeluarkan.alasan[RP], 1);
+  eq(ck(satu).dikeluarkan.refundParsial.konflik, 0, 'bukan konflik, hanya bukti tidak lengkap');
+  const dua = E.compute([ttPenghasilan([ord]), ttRetur([{ order: '5914', sku: SKU, qty: 1 }, { order: '5914', sku: SKU2, qty: 1 }])], stTT2);
+  eq(dua.totalModal, 20000, 'SKU1: 2−1 unit × 20.000; SKU2: 1−1 unit × 10.000'); eq(ck(dua).dikeluarkan.jumlahPesanan, 0);
+  eq(ck(dua).penjualan.belum, ord.sales, 'unit dari satu sumber → belum, bukan terverifikasi');
+});
+test('B3b-15 konflik: file retur menyebut SELURUH unit direfund, laporan penghasilan refund parsial → perlu dicek, HPP tidak terverifikasi', () => {
+  const tt = E.compute([ttPenghasilan([ttOrder('5915', -20000), normalTT]), ttRetur([{ order: '5915', sku: SKU, qty: 2 }])], stTT);
+  cekRekonsiliasi(tt, 'B3b-15');
+  const d = ck(tt).dikeluarkan;
+  eq(d.alasan[RP], 1); eq(d.alasan.unit_retur_bertentangan_dengan_refund_parsial, 1); eq(d.refundParsial.konflik, 1); eq(d.refundParsial.penjualanKonflik, 80000);
+  eq(tt.totalModal, 40000, 'hanya pesanan normal; pesanan konflik bukan HPP 0 dan bukan 2 × 20.000');
+  eq(ck(tt).penjualan.terverifikasi, 0); eq(tt.kepastian.laba.final, false);
+  // Multi-SKU: semua SKU direfund seluruhnya menurut file retur → konflik juga.
+  const multi = E.compute([ttPenghasilan([ttOrder('5915', -30000, `${SKU} * 2;${SKU2} * 1;`)]),
+    ttRetur([{ order: '5915', sku: SKU, qty: 2 }, { order: '5915', sku: SKU2, qty: 1 }])], stTT2);
+  eq(ck(multi).dikeluarkan.refundParsial.konflik, 1); eq(multi.totalModal, 0);
+  // Shopee: export (dan file retur) menyebut 2 dari 2 unit direfund, laporan penghasilan refund parsial.
+  for (const [lbl, files] of [['export saja', filesB1(-50000, 2)], ['export + file retur', [...filesB1(-50000, 2), retKaos(2)]]]) {
+    const s = E.compute(files, stUnit);
+    eq(bu(s).lengkap, 0, `${lbl}: buku unit tidak dipakai`); eq(s.totalModal, 0, `${lbl}: bukan HPP 0 yang terverifikasi`);
+    eq(ck(s).dikeluarkan.refundParsial.konflik, 1, lbl); eq(ck(s).dikeluarkan.alasan[RP], 1, lbl);
+    eq(ck(s).penjualan.terverifikasi, 0, lbl); truthy(Number.isNaN(s.totalMargin), `${lbl}: laba belum dapat dihitung, bukan dari HPP 0`);
+  }
+});
+test('B3b-16 semantik metadata: A ditemukan = B (laba memakai nominal) + C (dikeluarkan) + unit terbukti + alasan lain', () => {
+  const files = [ttPenghasilan([ttOrder('5916', -50000), ttOrder('5917', -20000), ttOrder('5918', -20000), normalTT,
+    { id: '5919', settle: -5000, sales: 0, sub: 100000, refund: -100000, detail: `${SKU} * 2;` }]),
+  ttRetur([{ order: '5916', sku: SKU, qty: 1 }, { order: '5918', sku: SKU, qty: 2 }])];
+  const r = E.compute(files, stTT), c = ck(r);
+  cekRekonsiliasi(r, 'B3b-16');
+  const A = c.refundParsialDitemukan.jumlahPesanan, B = c.refundParsialTanpaUnit.jumlahPesanan, C = c.dikeluarkan.refundParsial.jumlahPesanan;
+  eq(A, 3, 'A: 5916 (unit terbukti), 5917 (tanpa bukti), 5918 (konflik); refund penuh dan normal bukan refund parsial');
+  eq(B, 0, 'B: tidak ada lagi laba yang memakai porsi nominal');
+  eq(C, 2, 'C: 5917 + 5918'); eq(c.dikeluarkan.refundParsial.konflik, 1);
+  eq(A - B - C, 1, 'sisanya dihitung dengan unit yang terbukti'); eq(c.refundParsialDitemukan.penjualan, 50000 + 80000 + 80000);
+  // Gabungan dan per marketplace konsisten.
+  eq(c.perMarketplace.tiktok.refundParsialDitemukan.jumlahPesanan, 3); eq(c.perMarketplace.shopee.refundParsialDitemukan.jumlahPesanan, 0);
+  const s = ck(E.compute([...filesB1(-50000, 1), E.parseWorkbook(Sint.penghasilan([{ id: 'SINT-K2', items: [{ name: 'Kaos', harga: 100000, refund: -20000 }] }]))], stUnit));
+  eq(s.refundParsialDitemukan.jumlahPesanan, 2); eq(s.dikeluarkan.refundParsial.jumlahPesanan, 1); eq(s.refundParsialTanpaUnit.jumlahPesanan, 0);
+  // Refund parsial tanpa rincian produk dan tanpa modal rata-rata: ditemukan (A), dikeluarkan karena alasan lain (bukan C).
+  const lain = ck(E.compute([ttPenghasilan([ttOrder('5920', -20000, '')])], stTT));
+  eq(lain.refundParsialDitemukan.jumlahPesanan, 1); eq(lain.dikeluarkan.refundParsial.jumlahPesanan, 0); eq(lain.dikeluarkan.alasan.tanpa_rincian_produk, 1);
 });
 test('tanggal dd/mm/yyyy dan serial Excel', () => { eq(E.date('05/06/2026'), '2026-06-05'); eq(E.date(46023), '2026-01-01'); });
 

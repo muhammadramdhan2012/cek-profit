@@ -29,10 +29,10 @@ const CekInfo = (() => {
       d: (r) => (r && r.totalSales ? `Di data ini: ${pc(-r.totalFees / r.totalSales)} dari penjualan, rata-rata ${rp(-r.totalFees / Math.max(r.orders, 1))} per pesanan.` : ''),
     },
     tanpa_modal: {
-      t: 'Dana dari pesanan tanpa modal',
-      a: 'Uang yang Anda terima dari pesanan yang modal barangnya belum diisi.',
-      h: 'Pesanan ini sengaja tidak dihitung dalam laba. Menganggap modalnya nol akan membuat laba terlihat lebih besar dari kenyataan.',
-      b: 'Isi modal produk di menu Modal & HPP agar pesanan ini ikut dihitung dalam laba.',
+      t: 'Dana dari pesanan yang HPP-nya belum diketahui',
+      a: 'Uang yang Anda terima dari pesanan yang modal barangnya belum diisi, atau yang direfund sebagian tetapi jumlah barang yang direfund tidak tercatat.',
+      h: 'Pesanan ini sengaja tidak dihitung dalam laba. Menganggap modalnya nol, atau memotong modal menurut nominal refund, bisa membuat laba terlihat lebih besar atau lebih kecil dari kenyataan.',
+      b: 'Isi modal produk di menu Modal & HPP. Untuk refund sebagian, unggah file retur atau export pesanan yang mencatat jumlah barang yang direfund.',
     },
     modal: {
       t: 'Modal barang',
