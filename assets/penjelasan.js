@@ -153,6 +153,12 @@ const CekInfo = (() => {
       h: 'Diambil dari kolom "Sumber pesanan" di laporan. Penjualan = Total Pendapatan. Baris pesanan dihitung per baris laporan, tanpa pesanan batal atau direfund penuh.',
       b: 'Porsi penjualan bukan porsi laba. Laba, modal, dan potongan per sumber belum ditampilkan.',
     },
+    jejak_uang: {
+      t: 'Jejak uang',
+      a: 'Alur uang dari penjualan, potongan marketplace, sampai dana pesanan yang dilepas marketplace, lalu ke laba dari data yang tersedia.',
+      h: 'Penjualan sudah termasuk refund (refund sudah dikurangkan oleh marketplace), jadi refund hanya ditampilkan sebagai rincian dan tidak dikurangkan lagi. Penyesuaian dicatat terpisah dan belum masuk laba. Pencairan ke rekening belum dianalisis.',
+      b: 'Status "Sesuai laporan dan terekonsiliasi" berarti jumlah baris setiap file cocok dengan ringkasan resmi di file itu dan dengan angka yang ditampilkan. "Berdasarkan laporan" berarti angkanya dari laporan tetapi belum bisa dicocokkan penuh, misalnya karena filter bulan aktif. "Perlu dicek" berarti ada selisih dengan ringkasan resmi.',
+    },
     dana_diterima: {
       t: 'Dana diterima',
       a: 'Uang yang menjadi bagian Anda setelah potongan marketplace, menurut Laporan Penghasilan. Pencairan ke rekening belum dicocokkan.',

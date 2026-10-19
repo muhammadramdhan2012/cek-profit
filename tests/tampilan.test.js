@@ -224,9 +224,23 @@ test('U2 nota & jejak uang: struktur, nilai belum diketahui, bukan rekonsiliasi 
   for (const s of ["'Dana diterima'", "'Modal / HPP'", "'Kerugian retur'", "'Biaya operasional'", "'Laba dari data tersedia'"]) truthy(notaSrc.includes(s), `nota memuat ${s}`);
   truthy(/\+ \$\{num\(rb\.kerugianTanpaNilai\)\} kasus nilainya belum diketahui\./.test(notaSrc) && /\+ \$\{num\(rb\.kerugianTanpaNilai\)\} kasus nilainya belum diketahui\./.test(labaSrc), '"+ N kasus nilainya belum diketahui."');
   truthy(/ok\(v\) \? fmt\(v\) : '<span class="unk">Belum diketahui<\/span>'/.test(notaSrc), 'nota: nilai tidak diketahui → "Belum diketahui", bukan Rp0');
-  truthy(labaSrc.includes('Berdasarkan laporan yang diunggah. Belum merupakan rekonsiliasi pencairan dana.'), 'label jejak uang');
-  truthy(!/saldo|terbaik|peringkat/i.test(labaSrc.replace(/\/\*[\s\S]*?\*\//g, '').replace(/rekonsiliasi pencairan dana/g, '')), 'tanpa saldo/pencairan/peringkat platform (di luar komentar)');
-  truthy(/Total refund per platform belum tersedia dari mesin hitung/.test(labaSrc), 'refund per platform dinyatakan belum tersedia, tidak dihitung UI');
+  truthy(labaSrc.includes('Berdasarkan laporan yang diunggah. Dana dilepas belum tentu sama dengan dana yang sudah masuk rekening.'), 'label jejak uang');
+  truthy(!/saldo|terbaik|peringkat/i.test(labaSrc.replace(/\/\*[\s\S]*?\*\//g, '')), 'tanpa saldo/peringkat platform (di luar komentar)');
+  truthy(/Refund ke pembeli sudah termasuk dalam penjualan, jadi tidak dikurangkan lagi di sini/.test(labaSrc), 'rincian biaya: refund tidak dikurangkan lagi');
+});
+test('MT-A1 jejak uang: status provenance, refund hanya rincian, pencairan tanpa Rp0, angka dari engine', () => {
+  const tr = labaSrc.slice(labaSrc.indexOf('const TR_ST'), labaSrc.indexOf('/** Satu baris rincian biaya'));
+  truthy(tr.length > 500, 'blok jejak uang ditemukan');
+  for (const l of ["'Sesuai laporan dan terekonsiliasi'", "'Berdasarkan laporan, belum sepenuhnya terekonsiliasi'", "'Belum tersedia'", "'Perlu dicek'"]) truthy(tr.includes(l), `label status ${l}`);
+  truthy(tr.includes('Data pencairan belum tersedia dalam analisis ini.'), 'teks pencairan persis');
+  truthy(!/fmt\(J\.pencairan|val\(J\.pencairan/.test(tr), 'pencairan tidak pernah ditampilkan sebagai angka');
+  truthy(/Refund tidak dikurangkan lagi\./.test(tr), 'refund dinyatakan sudah termasuk penjualan');
+  // Langkah 1–3 memakai angka engine yang sama seperti sebelumnya; UI tidak menjumlah/mengurangi nilai Jejak Uang.
+  for (const v of ['val(r.totalSales)', 'val(r.totalFees)', 'val(r.totalReceived)']) truthy(tr.includes(v), v);
+  truthy(!/\.nilai\s*[-+*/]|[-+*/]\s*[A-Za-z.]*\.nilai\b/.test(tr), 'tanpa aritmetika atas nilai Jejak Uang di UI');
+  truthy(/Basis tanggal:/.test(tr) && /tidak semua angka di atas memakai basis tanggal yang sama/.test(tr), 'basis tanggal per angka + peringatan basis berbeda');
+  truthy(/esc\(why\.join/.test(tr) && /esc\(src\)/.test(tr), 'teks alasan & sumber di-escape');
+  const pj = src('penjelasan.js'); truthy(/jejak_uang: \{/.test(pj), 'penjelasan jejak_uang ada');
 });
 test('U3 Produk: status = warna + simbol + teks; label cari/urutkan; header tabel semantik; tanpa count-up', () => {
   truthy(/HEALTH = \{ sehat: 'Sehat', tipis: 'Tipis', rugi: 'Rugi', unknown: 'Modal belum ada' \}/.test(prodSrc), 'label teks status');

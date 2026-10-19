@@ -901,9 +901,60 @@
     </section>`;
   }
   /** Jejak uang (agregat): tahapan dari penjualan sampai laba. Bukan pencocokan pencairan dana. */
+  /* ---------- Jejak uang (Money Trace A1) ----------
+   * Angka langkah 1–3 dan penyesuaian = angka engine yang sama (r.totalSales, r.totalFees, r.totalReceived,
+   * r.adjustments). Yang baru hanya rincian refund dan status rekonsiliasi dari r.jejakUang; UI tidak menghitung apa pun. */
+  const TR_ST = { terekonsiliasi: ['verified', 'Sesuai laporan dan terekonsiliasi'], berdasarkan_laporan: ['estimate', 'Berdasarkan laporan, belum sepenuhnya terekonsiliasi'],
+    belum_tersedia: ['unknown', 'Belum tersedia'], perlu_dicek: ['pending', 'Perlu dicek'] };
+  const trStatus = (s) => { const [c, l] = TR_ST[s] || TR_ST.belum_tersedia; return `<span class="status ${c} tr-st">${l}</span>`; };
+  const TR_WHY = {
+    tidak_cocok_ringkasan: 'jumlah baris tidak cocok dengan ringkasan resmi di file',
+    gabungan_tidak_cocok: 'jumlah gabungan file tidak cocok dengan angka yang ditampilkan',
+    tanda_refund_tidak_wajar: 'ada refund bernilai positif, tidak sesuai pola laporan',
+    identitas_refund_tidak_cocok: 'di sebagian baris, subtotal setelah diskon + refund tidak sama dengan Total Pendapatan',
+    kolom_tidak_ada: 'kolom yang dibutuhkan tidak ada di laporan yang diunggah',
+    ringkasan_resmi_tidak_ada: 'ringkasan resmi untuk angka ini tidak ada di file',
+    sheet_penyesuaian_tidak_ada: 'sheet Adjustment tidak ada di file',
+    filter_tanggal: 'filter bulan sedang aktif, sedangkan ringkasan resmi mencakup seluruh periode file',
+    file_tumpang_tindih: 'beberapa file memuat pesanan yang sama; pesanan dihitung sekali',
+    baris_non_pesanan: 'ringkasan file ikut memuat baris non-pesanan',
+    hubungan_refund_belum_terbukti: 'kolom subtotal setelah diskon tidak ada, jadi hubungan refund dengan penjualan belum bisa dibuktikan',
+  };
+  // Sumber dan basis tanggal per komponen (teks tetap; angka tetap dari engine).
+  const TR_SRC = {
+    shopee: {
+      penjualan: ['Penjualan', 'Sheet Penghasilan: Harga Produk + Jumlah Pengembalian Dana ke Pembeli + voucher penjual. Dicocokkan dengan "1. Total Pendapatan" di sheet Summary.', 'tanggal pesanan dibuat'],
+      refund: ['Refund (sudah termasuk penjualan)', 'Kolom "Jumlah Pengembalian Dana ke Pembeli". Dicocokkan dengan baris yang sama di sheet Summary.', 'tanggal pesanan dibuat'],
+      potongan: ['Potongan marketplace', 'Kolom biaya di sheet Penghasilan. Dicocokkan dengan "2. Total Pengeluaran".', 'tanggal pesanan dibuat'],
+      dana: ['Dana pesanan dilepas', 'Kolom "Total Penghasilan". Dicocokkan dengan "3. Total yang Dilepas".', 'tanggal pesanan dibuat'],
+      penyesuaian: ['Penyesuaian', 'Sheet Adjustment, kolom "Biaya Penyesuaian". Dicocokkan dengan "Total Penyesuaian".', 'tanggal penyesuaian dibuat'],
+    },
+    tiktok: {
+      penjualan: ['Penjualan', 'Sheet Detail pesanan, kolom "Total Pendapatan" baris pesanan. Dicocokkan dengan sheet Laporan.', 'waktu pemesanan'],
+      refund: ['Refund (sudah termasuk penjualan)', 'Kolom "Total pengembalian dana setelah diskon". Subtotal setelah diskon + refund = Total Pendapatan.', 'waktu pemesanan'],
+      potongan: ['Potongan marketplace', 'Kolom "Total Biaya". Dicocokkan dengan sheet Laporan.', 'waktu pemesanan'],
+      dana: ['Dana pesanan dilepas', 'Kolom "Jumlah penyelesaian pembayaran" baris pesanan. Dana pesanan + penyesuaian dicocokkan dengan sheet Laporan.', 'waktu pemesanan'],
+      penyesuaian: ['Penyesuaian', 'Baris selain "Pesanan" di sheet Detail pesanan.', 'waktu pembayaran'],
+    },
+  };
+  function traceSources(J) {
+    const rows = (pf, x) => Object.entries(TR_SRC[pf]).map(([k, [label, src, basis]]) => {
+      const c = x[k], why = (c.alasan || []).map((w) => TR_WHY[w]).filter(Boolean);
+      const extra = k === 'refund' && ok(c.nilai) && c.jumlahPesanan ? ` ${num(c.jumlahPesanan)} pesanan (${num(c.penuh)} penuh, ${num(c.parsial)} sebagian).` : k === 'penyesuaian' ? ` ${num(c.jumlah)} transaksi; belum masuk laba.` : '';
+      // Sheet Adjustment tidak ada → bukan "Rp0", melainkan tidak tercatat di file.
+      const noSheet = k === 'penyesuaian' && !c.jumlah && (c.alasan || []).includes('sheet_penyesuaian_tidak_ada');
+      return `<li><div class="ts-h"><b>${label}</b><span class="tr-v ${ok(c.nilai) && c.nilai < 0 ? 'neg' : ''}">${noSheet ? 'Tidak tercatat' : ok(c.nilai) ? fmt(c.nilai) : 'Belum tersedia'}</span></div>
+        <p>${esc(src)}${extra} Basis tanggal: ${basis}.</p><div class="ts-st">${trStatus(c.status)}${why.length ? `<span>Alasan: ${esc(why.join('; '))}.</span>` : ''}</div></li>`;
+    }).join('');
+    const mp = Object.entries(J.marketplace).filter(([, x]) => x);
+    return `<details class="tr-src"><summary>Sumber, tanggal, dan status per marketplace</summary>
+      ${mp.map(([pf, x]) => `<p class="ts-pf">${PLAT_DOT(pf)}${PNAME[pf]} · ${num(x.file.jumlah)} Laporan Penghasilan${x.file.identik ? ` (+${num(x.file.identik)} file sama diabaikan)` : ''}</p><ul class="ts-list">${rows(pf, x)}</ul>`).join('')}
+      <p class="tiny faint">Angka pesanan dikelompokkan menurut tanggal pesanan, sedangkan periode Laporan Penghasilan mengikuti tanggal dana dilepas atau dibayar. Penyesuaian memakai tanggalnya sendiri. Jadi tidak semua angka di atas memakai basis tanggal yang sama.</p></details>`;
+  }
   function moneyTrace(r) {
     const opex = r.fixedMonthly > 0, rb = r.kepastian.risikoBarang, isDrop = typeOf(st()) === 'dropship';
     const out = r.kepastian.cakupan.dikeluarkan;
+    const J = r.jejakUang, JT = J.total;
     const others = [
       ...(r.ready && r.knownPacking ? [[isDrop ? 'Biaya dropship' : 'Packing', -r.knownPacking]] : []),
       ...(r.ready && (r.lostCertain || rb.kerugianTanpaNilai) ? [['Kerugian retur', r.lostCertain ? -r.lostCertain : NaN, rb.kerugianTanpaNilai ? `+ ${num(rb.kerugianTanpaNilai)} kasus nilainya belum diketahui.` : '']] : []),
@@ -911,16 +962,30 @@
     ];
     const val = (v, cls = '') => `<b class="tr-v ${cls} ${ok(v) && v < 0 ? 'neg' : ''}">${ok(v) ? fmt(v) : 'Belum diketahui'}</b>`;
     const step = (n, title, body, cls = '') => `<li class="tr-step ${cls}"><span class="tr-n" aria-hidden="true">${n}</span><div class="tr-body"><span class="tr-k">${title}</span>${body}</div></li>`;
-    return `<div class="card-header"><h3 id="trace-t">Jejak uang</h3><p>Agregat dari laporan dan isian Anda</p></div>
+    const rf = JT.refund;
+    // Refund hanya rincian: sudah termasuk di penjualan, tidak pernah dikurangkan lagi.
+    const rfSome = Object.values(J.marketplace).some((x) => x && ok(x.refund.nilai));
+    const refundLine = !ok(rf.nilai) ? `<span class="tr-sub">Rincian refund belum tersedia${rfSome ? ' untuk sebagian marketplace' : ''}; penjualan tetap sesuai laporan. ${trStatus(rf.status)}</span>`
+      : `<span class="tr-sub">${rf.nilai ? `Sudah termasuk refund <b class="neg">${fmt(rf.nilai)}</b> dari ${num(rf.jumlahPesanan)} pesanan. Refund tidak dikurangkan lagi.` : 'Refund menurut laporan: Rp0.'} ${trStatus(rf.status)}</span>`;
+    const adj = JT.penyesuaian;
+    return `<div class="card-header"><h3 id="trace-t">Jejak uang ${qi('jejak_uang', 'jejak uang')}</h3><p>Agregat dari laporan dan isian Anda</p></div>
       <ol class="trace">
-        ${step(1, 'Penjualan', `${val(r.totalSales)}<span class="tr-note">${num(r.orders)} pesanan</span>`)}
-        ${step(2, 'Potongan marketplace', `${val(r.totalFees)}<span class="tr-note">admin, komisi, ongkir, dan program</span>`)}
-        ${step(3, 'Dana diterima', `${val(r.totalReceived)}${r.ready && Math.abs(out.danaDiterima) >= 1 ? `<span class="tr-note">${fmt(out.danaDiterima)} dari ${num(out.jumlahPesanan)} pesanan yang HPP-nya belum diketahui tidak dihitung</span>` : '<span class="tr-note">menurut laporan penghasilan</span>'}`)}
+        ${step(1, 'Penjualan sesuai laporan', `${val(r.totalSales)}<span class="tr-note">${num(r.orders)} pesanan ${trStatus(JT.penjualan.status)}</span>${refundLine}`)}
+        ${step(2, 'Potongan marketplace', `${val(r.totalFees)}<span class="tr-note">admin, komisi, ongkir, dan program ${trStatus(JT.potongan.status)}</span>`)}
+        ${step(3, 'Dana pesanan dilepas', `${val(r.totalReceived)}<span class="tr-note">${r.ready && Math.abs(out.danaDiterima) >= 1 ? `${fmt(out.danaDiterima)} dari ${num(out.jumlahPesanan)} pesanan yang HPP-nya belum diketahui tidak dihitung dalam laba` : 'menurut Laporan Penghasilan'} ${trStatus(JT.dana.status)}</span>`)}
         ${step(4, 'Modal / HPP', `${val(r.ready ? -r.totalModal : NaN)}<span class="tr-note">${r.ready ? 'dari modal yang Anda isi' : 'modal belum diisi'}</span>`, r.ready ? '' : 'is-unknown')}
         ${step(5, 'Biaya lain', others.length ? `<ul class="tr-list">${others.map(([l, v, n]) => `<li><span>${l}${n ? `<small>${n}</small>` : ''}</span>${val(v)}</li>`).join('')}</ul>` : '<span class="tr-note">Tidak ada biaya lain yang tercatat</span>')}
         ${step(6, 'Laba dari data tersedia', `${val(r.ready ? (opex ? r.netProfit : r.totalMargin) : NaN)}<span class="tr-note">${r.ready ? `${pct(r.coverage, 0)} penjualan masuk dalam perhitungan` : 'belum bisa dihitung'}</span>`, 'is-result')}
       </ol>
-      <p class="tiny faint">Berdasarkan laporan yang diunggah. Belum merupakan rekonsiliasi pencairan dana.</p>`;
+      <div class="tr-after">
+        <p class="tr-after-k">Di luar perhitungan laba</p>
+        <ul class="tr-list">
+          <li><span>Penyesuaian dari marketplace${adj.jumlah ? `<small>${num(adj.jumlah)} transaksi, dicatat terpisah</small>` : '<small>Tidak ada penyesuaian tercatat di laporan</small>'}${trStatus(adj.status)}</span>${adj.jumlah ? val(adj.nilai) : ''}</li>
+          <li><span>Pencairan dana ke rekening<small>Data pencairan belum tersedia dalam analisis ini.</small>${trStatus(J.pencairan.status)}</span></li>
+        </ul>
+      </div>
+      ${traceSources(J)}
+      <p class="tiny faint">Berdasarkan laporan yang diunggah. Dana dilepas belum tentu sama dengan dana yang sudah masuk rekening.</p>`;
   }
   /** Satu baris rincian biaya: label, nilai, arti singkat, dan sumbernya (teks dari penjelasan.js). */
   function costRow(label, v, key, src, share) {
@@ -948,7 +1013,7 @@
     if (r.unknownRisk > 0) retur.push(costRow('Risiko retur yang belum dicek', -r.unknownRisk, '', 'file retur; belum dikurangkan dari laba'));
     if (r.cases.length || r.lostCertain) groups.push(costGroup('Refund & retur', r.lostCertain || rb.kerugianTanpaNilai ? (r.lostCertain ? -r.lostCertain : NaN) : 0, retur, false,
       [rb.kerugianTanpaNilai ? `+ ${num(rb.kerugianTanpaNilai)} kasus nilainya belum diketahui.` : '', rb.risikoTanpaNilai ? `${num(rb.risikoTanpaNilai)} kasus yang belum dicek belum punya nilai.` : '',
-        'Total refund per platform belum tersedia dari mesin hitung, jadi tidak ditampilkan terpisah.'].filter(Boolean).join(' ')));
+        'Refund ke pembeli sudah termasuk dalam penjualan, jadi tidak dikurangkan lagi di sini. Rinciannya ada di Jejak uang.'].filter(Boolean).join(' ')));
     if (r.fixedMonthly > 0) {
       const fc = (st().fixedCosts || []).filter((x) => ok(x.amount) && x.amount > 0);
       groups.push(costGroup('Biaya operasional', r.ready ? -r.opex : NaN, fc.map((x) => `<li class="cb-row"><div class="cb-l"><b>${esc(x.label || 'Tanpa nama')}</b><span class="cb-src">Sumber: isian Anda</span></div><div class="cb-v"><b>${fmt(x.amount)}</b><span class="faint">per bulan</span></div></li>`), false,

@@ -420,6 +420,45 @@ Hubungannya: A = B + C + pesanan yang dihitung dengan unit yang terbukti + pesan
 (misalnya modal belum diisi atau laporan tidak mencantumkan produk). Diuji di `tests/engine.test.js` (B3b-13 s.d.
 B3b-16).
 
+### B.1b Jejak uang / Money Trace A1 (`r.jejakUang`, 20 Okt 2026)
+
+Status: **implementasi kode saat ini** (bukan definisi yang disetujui; A.2–A.5 tetap DIUSULKAN). A1 tidak menambah
+rumus penjualan, potongan, dana, HPP, atau laba. Yang baru hanya agregat refund sebagai **rincian** dan status
+rekonsiliasi tiap angka. Semua field berikut metadata.
+
+| Komponen | Shopee (Laporan Penghasilan) | TikTok Shop (Laporan Penghasilan) | Basis tanggal |
+|---|---|---|---|
+| Penjualan sesuai laporan | `Harga Produk + Jumlah Pengembalian Dana ke Pembeli + voucher penjual` = `S.sales`; dicocokkan dengan "1. Total Pendapatan" (Summary) | `Total Pendapatan` baris pesanan = `T.sales`; dicocokkan dengan sheet Laporan | tanggal pesanan |
+| Refund (rincian) | kolom `Jumlah Pengembalian Dana ke Pembeli` (≤ 0); dicocokkan dengan baris yang sama di Summary | kolom `Total pengembalian dana setelah diskon` (≤ 0); identitas per baris: `Subtotal setelah diskon penjual + refund = Total Pendapatan` | tanggal pesanan |
+| Potongan marketplace | jumlah kolom biaya (termasuk sisa "biaya lain") = `S.feeTotal`; dicocokkan dengan "2. Total Pengeluaran" | `Total Biaya` = `T.feeTotal`; dicocokkan dengan sheet Laporan | tanggal pesanan |
+| Dana pesanan dilepas | `Total Penghasilan` = `S.received`; dicocokkan dengan "3. Total yang Dilepas" | `Jumlah penyelesaian pembayaran` baris pesanan = `T.received`; dana pesanan + penyesuaian dicocokkan dengan sheet Laporan | tanggal pesanan |
+| Penyesuaian (terpisah, tidak masuk laba) | sheet Adjustment, `Biaya Penyesuaian` = `S.adj`; dicocokkan dengan "Total Penyesuaian" | baris selain "Pesanan" = `T.adj` | Shopee: tanggal penyesuaian; TikTok: waktu pembayaran |
+| Pencairan ke rekening | belum diproses | belum diproses | — |
+
+**Refund tidak dihitung dua kali.** Di kedua marketplace refund sudah termasuk di penjualan (dibuktikan pada data uji
+pemilik, agregat saja: Shopee Σ refund = baris Summary dan Summary "Subtotal Pesanan" = Σ(harga + refund); TikTok
+identitas per baris berlaku 100% di 4 file dan Σ refund = sheet Laporan). Karena itu refund hanya ditampilkan sebagai
+rincian "sudah termasuk penjualan" dan tidak pernah dikurangkan lagi. Jumlah pesanan refund dibagi penuh (pesanan
+tidak terhitung terjual, sama dengan dasar `orders`) dan sebagian.
+
+**Status** (dari terlemah, per komponen per marketplace; gabungan = status terlemah):
+
+| Status | Arti |
+|---|---|
+| `perlu_dicek` | ringkasan resmi ada tetapi tidak cocok (toleransi Rp1 per file), jumlah gabungan file ≠ angka yang ditampilkan, refund bernilai positif, atau identitas refund TikTok tidak berlaku |
+| `belum_tersedia` | kolom tidak ada → nilai NaN (bukan Rp0). Pencairan selalu di status ini pada A1 |
+| `berdasarkan_laporan` | angka dari laporan tetapi belum bisa dicocokkan penuh: ringkasan resmi tidak ada, filter bulan aktif, beberapa file memuat pesanan yang sama, baris non-pesanan TikTok ikut dalam ringkasan, atau kolom subtotal setelah diskon TikTok tidak ada |
+| `terekonsiliasi` | setiap file cocok dengan ringkasannya **dan** jumlah gabungan file = angka yang ditampilkan |
+
+File yang isinya identik dengan file sebelumnya (unggah ulang) diabaikan dalam pemeriksaan. Status bukan skor
+keyakinan dan bukan bukti bahwa laba benar.
+
+**Keterbatasan A1:** pencairan dana dan saldo marketplace belum dibaca (laporan saldo dan riwayat penarikan tidak
+diproses); dana dilepas ≠ dana masuk rekening; filter bulan selalu menurunkan status karena ringkasan resmi mencakup
+seluruh periode file; periode Laporan Penghasilan mengikuti tanggal dana dilepas/dibayar sedangkan angka dikelompokkan
+menurut tanggal pesanan; voucher Shopee bernilai bukan nol belum ada di data uji (C.2); penyesuaian tetap di luar laba
+(A.10, KNOWN_ISSUES P3). Diuji di `tests/engine.test.js` (MT-A1) dan `tests/tampilan.test.js` (MT-A1).
+
 ### B.2 Catatan nama
 
 UI menyebut `totalMargin` sebagai "Margin kotor" atau "Margin setelah modal", dan `netProfit` sebagai "Laba bersih".

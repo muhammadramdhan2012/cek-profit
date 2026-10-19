@@ -58,9 +58,9 @@ Sumber awal: audit menyeluruh 14 Okt 2026 (read-only), ditambah analisis penghit
 | Profit Reporting | Berjalan, dengan masalah akurasi terbuka | H1, H2, H3, M1, M10, M11, P3, P10 |
 | Profit Optimization | Sebagian | Simulator harga, harga impas/target, batas harga aman. Belum ada skenario tingkat toko. |
 | Financial Analytics | Sebagian | Tren per bulan, temuan otomatis. **Arus kas belum ada** (`docs/KAMUS_ANGKA.md` A.15). |
-| Financial Control | Awal | Hanya pencocokan total per file dengan ringkasan resmi. **Saldo dan pencairan belum dibaca:** laporan saldo Shopee dikenali tetapi diabaikan (`assets/app.js:833`). |
+| Financial Control | Awal | Pencocokan total per file dan, sejak Money Trace A1, per komponen (penjualan, refund, potongan, dana dilepas, penyesuaian) dengan ringkasan resmi. **Saldo dan pencairan belum dibaca:** laporan saldo Shopee dikenali tetapi diabaikan; rekonsiliasi pencairan **belum ada**. |
 | Profit Confidence | Belum ada | Hanya sinyal terpisah (`coverage`, `qtyAssumed`, `unknownRisk`) |
-| Money Trace | Belum ada | — |
+| Money Trace | A1 (lokal, belum di-push) | Kartu Jejak uang di halaman Laba: penjualan (dengan rincian refund yang sudah termasuk), potongan, dana pesanan dilepas, penyesuaian terpisah, status rekonsiliasi, sumber, dan basis tanggal (`docs/KAMUS_ANGKA.md` B.1b). **Pencairan dana belum tersedia** (A2/A3). |
 | Profit Decision Engine | Sebagian | Temuan otomatis berbasis aturan + simulator |
 
 ---
@@ -371,6 +371,9 @@ Sumber awal: audit menyeluruh 14 Okt 2026 (read-only), ditambah analisis penghit
 | P9 | Medium | arsitektur (`assets/engine.js`, `supabase/schema.sql`) | Tidak ada konsep toko; file dua toko akan tergabung tanpa peringatan | — | Tabel `stores`, `store_id` di `user_data` dan `reports`, deteksi file dari toko berbeda (fase multi-toko di roadmap audit) | Belum diverifikasi |
 | P10 | **High bila terbukti** | `assets/engine.js:456`, `assets/engine.js:601-613`, `assets/engine.js:499` | **Penghitungan ganda HPP:** refund yang tidak tercatat di baris pesanan (misalnya penyesuaian setelah dana dilepas) + kasus "Tidak kembali" membuat modal pesanan tetap penuh dan kerugian ditambahkan. Juga: kerugian retur dari pesanan di luar periode laporan. Lihat `docs/KAMUS_ANGKA.md` §B.1. | Perlu dicek (`docs/KAMUS_ANGKA.md` C.6) | Cocokkan refund/penyesuaian ke pesanannya sebelum menghitung kerugian retur (A.9); batasi kerugian retur ke pesanan dalam periode | Belum diverifikasi (bukan bagian audit awal) |
 
+| P11 | Medium | `assets/engine.js` (`merge`, kunci baris TikTok) | Kunci duplikat TikTok memuat nilai penyelesaian dan Total Pendapatan. Pesanan yang sama di dua file dengan nilai berbeda (misalnya dihitung ulang) dihitung dua kali. Money Trace A1 menandainya "berdasarkan laporan" (file tumpang tindih) tetapi tidak mengubah angka | Belum ditemukan pada data uji pemilik (tidak ada tumpang tindih di 4 file) | Putuskan aturan versi pesanan TikTok (seperti Shopee) dengan persetujuan pemilik | Belum diverifikasi |
+| P12 | Low | Money Trace A1 | Rekonsiliasi per komponen hanya terhadap ringkasan di file yang sama. Pencairan, saldo, dan dana yang masih tertahan belum dicocokkan; refund setelah dana dilepas (P10) tidak terlihat di Jejak uang | — | Fase A2/A3 (saldo dan riwayat penarikan) setelah disetujui | Belum diverifikasi |
+
 ## Belum dapat diverifikasi
 
 1. Pengaturan Supabase Auth: konfirmasi email, kebijakan sandi, perlindungan sandi bocor, rate limit, Site URL dan
@@ -392,5 +395,8 @@ Sumber awal: audit menyeluruh 14 Okt 2026 (read-only), ditambah analisis penghit
   Shopee) ditambahkan. Belum ada masalah yang diperbaiki.
 - 14 Okt 2026: hasil validasi export pesanan Shopee (tanpa angka bisnis); temuan penghitungan ganda variasi (H1/H3,
   High); aturan SKU opsional; acceptance criteria seller tanpa SKU; ketergantungan H1/H2/H3 diperbarui.
+- 20 Okt 2026: Money Trace A1 (lokal): status pilar Financial Control dan Money Trace diperbarui; P11 dan P12 ditambahkan.
+  L3 kini juga terdeteksi oleh pencocokan "Total Penyesuaian" (status "Perlu dicek"), tetapi belum diperbaiki.
+  Rekonsiliasi pencairan belum ada. Tanpa angka bisnis asli.
 - 19 Okt 2026: H2 diperbarui setelah H2-B3b (refund parsial tidak lagi memakai nominal untuk HPP); aturan resmi
   pemilik dicatat; status parser export pesanan (Beta) diperbarui. Tanpa angka bisnis asli.

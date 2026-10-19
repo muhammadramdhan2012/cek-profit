@@ -64,6 +64,11 @@ const Engine = (() => {
   };
   const headerHas = (names) => (row) => names.every((n) => row.some((c) => str(c) === n));
   const lastValue = (row) => row.filter((c) => str(c) !== '').slice(-1)[0];
+  /** Nilai baris ringkasan berlabel tepat `label` (sel mana pun di baris itu); null bila label tidak ada. */
+  const labelValue = (aoa, label) => {
+    const row = (aoa || []).find((r) => r.some((c) => str(c) === label));
+    return row ? num(lastValue(row)) : null;
+  };
 
   /* ---------- kolom export pesanan (alias ID/EN) ---------- */
   const COL = {
@@ -167,8 +172,18 @@ const Engine = (() => {
         }
       }
     }
+    // Money Trace A1: komponen ringkasan resmi (sheet Summary) dan jumlah barisnya, untuk rekonsiliasi per komponen.
+    // Hanya metadata; tidak dipakai dalam rumus penjualan, biaya, dana, HPP, atau laba.
+    const summary = wb.sheets['Summary'] || [];
+    const sumOf = (f) => orders.reduce((a, o) => a + f(o), 0);
+    const ringkasan = { penjualan: labelValue(summary, '1. Total Pendapatan'), refund: labelValue(summary, 'Jumlah Pengembalian Dana ke Pembeli'),
+      potongan: labelValue(summary, '2. Total Pengeluaran'), dana: summaryTotal, penyesuaian: adj ? labelValue(adj, 'Total Penyesuaian') : null };
+    const jumlah = { penjualan: sumOf((o) => o.harga + o.refund + o.voucher), refund: sumOf((o) => o.refund),
+      potongan: sumOf((o) => o.admin + o.proses + o.xtra + o.ams + o.ship + o.lain), dana: sumOf((o) => o.total),
+      penyesuaian: adjustments.reduce((a, x) => a + x.amount, 0) };
     return { kind: 'shopee_income', orders, items, adjustments,
-      check: { summaryTotal, sum: orders.reduce((a, o) => a + o.total, 0), from, to } };
+      check: { summaryTotal, sum: orders.reduce((a, o) => a + o.total, 0), from, to,
+        ringkasan, jumlah, kolomRefund: 'Jumlah Pengembalian Dana ke Pembeli' in map, sheetPenyesuaian: !!adj } };
   }
 
   /* ---------- TikTok: laporan penghasilan ---------- */
@@ -187,6 +202,10 @@ const Engine = (() => {
     if (h < 0) throw new Error('Kolom "ID Pesanan/Penyesuaian" tidak ditemukan.');
     const map = colMap(aoa[h]);
     const rows = [];
+    // Money Trace A1: refund setelah diskon sudah termasuk di "Total Pendapatan"
+    // (Subtotal setelah diskon penjual + Total pengembalian dana setelah diskon = Total Pendapatan).
+    // Kolom yang tidak ada → NaN (belum tersedia), bukan 0.
+    const hasRefund = 'Total pengembalian dana setelah diskon' in map, hasSubAfter = 'Subtotal setelah diskon penjual' in map;
     for (const row of aoa.slice(h + 1)) {
       const g = getter(row, map);
       const id = str(g('ID Pesanan/Penyesuaian'));
@@ -206,6 +225,8 @@ const Engine = (() => {
         pre: num(g('Subtotal sebelum diskon')) + num(g('Total pengembalian dana sebelum diskon')),
         preGross: num(g('Subtotal sebelum diskon')),
         sales: num(g('Total Pendapatan')), fees, totalBiaya, settle,
+        refundAfter: hasRefund ? num(g('Total pengembalian dana setelah diskon')) : NaN,
+        subAfter: hasSubAfter ? num(g('Subtotal setelah diskon penjual')) : NaN,
         lines: parseSoldDetail(g('Detail produk terjual')),
       });
     }
@@ -214,8 +235,19 @@ const Engine = (() => {
       if (row.some((c) => str(c) === 'Jumlah penyelesaian pembayaran')) { reportSettle = num(lastValue(row)); break; }
     }
     const dates = rows.map((r) => r.payDate).filter(Boolean).sort();
+    // Money Trace A1: komponen sheet Laporan dan jumlah SEMUA baris file (pesanan + non-pesanan), untuk rekonsiliasi.
+    const lap = wb.sheets['Laporan'] || [];
+    const sumOf = (list, f) => list.reduce((a, r) => a + f(r), 0);
+    const nonOrder = rows.filter((r) => !r.isOrder);
+    const ringkasan = { penjualan: labelValue(lap, 'Total Pendapatan'), refund: labelValue(lap, 'Total pengembalian dana setelah diskon'),
+      potongan: labelValue(lap, 'Total Biaya'), dana: reportSettle };
+    const jumlah = { penjualan: sumOf(rows, (r) => r.sales), refund: hasRefund ? sumOf(rows, (r) => r.refundAfter) : NaN,
+      potongan: sumOf(rows, (r) => r.totalBiaya), dana: sumOf(rows, (r) => r.settle) };
+    const nonPesanan = { penjualan: sumOf(nonOrder, (r) => r.sales), refund: hasRefund ? sumOf(nonOrder, (r) => r.refundAfter) : NaN,
+      potongan: sumOf(nonOrder, (r) => r.totalBiaya), dana: sumOf(nonOrder, (r) => r.settle) };
     return { kind: 'tiktok_income', rows,
-      check: { reportSettle, sum: rows.reduce((a, r) => a + r.settle, 0), from: dates[0] || '', to: dates[dates.length - 1] || '' } };
+      check: { reportSettle, sum: rows.reduce((a, r) => a + r.settle, 0), from: dates[0] || '', to: dates[dates.length - 1] || '',
+        ringkasan, jumlah, nonPesanan, kolomRefund: hasRefund, kolomSubtotalSetelahDiskon: hasSubAfter } };
   }
 
   /* ---------- export pesanan (memberi jumlah barang, SKU, varian) ---------- */
@@ -894,6 +926,20 @@ const Engine = (() => {
     const S = { orders: 0, sales: 0, fees: { admin: 0, proses: 0, xtra: 0, ams: 0, ship: 0, lain: 0 }, received: 0, modal: 0, packing: 0,
       adj: 0, first: '', last: '', knownSales: 0, knownReceived: 0, knownPacking: 0, margin: 0, voucher: 0 };
     const shopeeIn = new Set();
+    // Money Trace A1: agregat refund (metadata). Refund SUDAH termasuk di penjualan kedua marketplace, jadi angka ini
+    // hanya rincian dan tidak pernah dikurangkan lagi. nilai NaN = kolom refund tidak ada (belum tersedia, bukan 0).
+    const blankRefund = () => ({ nilai: 0, jumlahPesanan: 0, penuh: 0, parsial: 0, tandaTidakWajar: 0, identitasGagal: 0, tanpaKolom: 0, tanpaSubtotal: 0 });
+    const RF = { shopee: blankRefund(), tiktok: blankRefund() };
+    /** Refund satu pesanan. full = pesanan tidak terhitung terjual (refund penuh), sama dengan dasar `counted`. */
+    const refundAdd = (A, v, full, subAfter, sales) => {
+      if (!isOk(v)) { A.tanpaKolom++; return; }
+      A.nilai += v;
+      if (v > 0) A.tandaTidakWajar++;   // refund di laporan bernilai ≤ 0; positif = tanda belum terbukti
+      if (v < 0) { A.jumlahPesanan++; if (full) A.penuh++; else A.parsial++; }
+      if (sales === undefined || Number.isNaN(sales)) return;   // Shopee: identitas dibuktikan oleh rumus penjualan
+      if (!isOk(subAfter)) A.tanpaSubtotal++;
+      else if (Math.abs(subAfter + v - sales) > 1) A.identitasGagal++;
+    };
     const itemsByOrder = new Map();
     for (const it of m.shopeeItems) { if (!itemsByOrder.has(it.orderId)) itemsByOrder.set(it.orderId, []); itemsByOrder.get(it.orderId).push(it); }
 
@@ -1295,6 +1341,7 @@ const Engine = (() => {
       const fee = o.admin + o.proses + o.xtra + o.ams + o.ship + o.lain;
       const margin = isOk(modal) ? o.total - modal - pack : NaN;
       S.orders += counted ? 1 : 0; S.sales += net; S.received += o.total; S.packing += pack; S.voucher += o.voucher;
+      refundAdd(RF.shopee, o.refund, !counted, NaN, NaN);
       if (isOk(modal)) { S.modal += modal; S.margin += margin; S.knownSales += net; S.knownReceived += o.total; S.knownPacking += pack; }
       for (const k of Object.keys(S.fees)) S.fees[k] += o[k];
       if (o.payDate && (!S.first || o.payDate < S.first)) S.first = o.payDate;
@@ -1412,6 +1459,7 @@ const Engine = (() => {
       const pack = counted ? packing : 0;
       const margin = isOk(modal) ? r.settle - modal - pack : NaN;
       T.orders += counted ? 1 : 0; T.sales += r.sales; T.received += r.settle; T.pre += r.pre; T.packing += pack;
+      refundAdd(RF.tiktok, r.refundAfter, r.preGross > 0 && !counted, r.subAfter, r.sales);
       if (isOk(modal)) { T.modal += modal; T.margin += margin; T.knownSales += r.sales; T.knownReceived += r.settle; T.knownPacking += pack; }
       for (const k of Object.keys(T.fees)) T.fees[k] += r.fees[k];
       const src = r.source || 'Lainnya';
@@ -1760,6 +1808,96 @@ const Engine = (() => {
     }
 
     /**
+     * Money Trace A1 (metadata; tidak mengubah angka apa pun). Nilai penjualan, potongan, dana, dan penyesuaian adalah
+     * angka yang SAMA dengan objek marketplace (S/T); yang baru hanya agregat refund (rincian penjualan) dan status
+     * rekonsiliasinya terhadap ringkasan resmi tiap file. Status (dari terlemah):
+     *  perlu_dicek          = ringkasan resmi ada tetapi tidak cocok, atau tanda/identitas refund tidak wajar;
+     *  belum_tersedia       = kolom/sumber tidak ada → nilai NaN, bukan 0;
+     *  berdasarkan_laporan  = dari laporan, tetapi belum bisa dicocokkan penuh (ringkasan tidak ada, filter tanggal,
+     *                         file tumpang tindih, atau baris non-pesanan ikut dalam ringkasan);
+     *  terekonsiliasi       = setiap file cocok dengan ringkasannya DAN jumlah gabungan = angka yang ditampilkan.
+     * Pencairan dana belum diproses di A1 → selalu belum_tersedia.
+     */
+    function buildJejakUang(r) {
+      const RANK = ['perlu_dicek', 'belum_tersedia', 'berdasarkan_laporan', 'terekonsiliasi'];
+      const weakest = (list) => list.reduce((a, b) => (RANK.indexOf(b) < RANK.indexOf(a) ? b : a), 'terekonsiliasi');
+      const filterTanggal = !!(filter.from || filter.to);
+      const TOL = 1;   // toleransi Rp1 per file, sama dengan pemeriksaan total file yang sudah ada
+      const forPlatform = (pf) => {
+        const kind = pf === 'shopee' ? 'shopee_income' : 'tiktok_income';
+        // File yang isinya identik dengan file sebelumnya (unggah ulang) diabaikan; tumpang tindih lain dicatat.
+        const sigs = new Set(), seenIds = new Set(), files = [];
+        let identik = 0, tumpangTindih = 0;
+        for (const p of parsed) {
+          if (p.kind !== kind) continue;
+          const keys = pf === 'shopee' ? p.orders.map((o) => o.id) : p.rows.map((x) => x.key);
+          const sig = [...keys].sort().join('\n');
+          if (keys.length && sigs.has(sig)) { identik++; continue; }
+          sigs.add(sig);
+          const ids = pf === 'shopee' ? keys : p.rows.filter((x) => x.isOrder).map((x) => x.id);
+          if (ids.some((id) => seenIds.has(id))) tumpangTindih++;
+          ids.forEach((id) => seenIds.add(id));
+          files.push(p);
+        }
+        const P = pf === 'shopee' ? S : T, A = RF[pf];
+        // Kolom refund tidak ada di salah satu file → rincian refund belum tersedia (bukan 0).
+        const noCol = A.tanpaKolom > 0 || files.some((p) => p.check.kolomRefund === false);
+        const tampil = { penjualan: P.sales, refund: noCol ? NaN : A.nilai, potongan: P.feeTotal, penyesuaian: P.adj,
+          dana: pf === 'shopee' ? P.received : P.received + P.adj };   // TikTok: penyelesaian file = dana pesanan + penyesuaian
+        const status = (comp, extra = []) => {
+          const why = [...extra];
+          if (!isOk(tampil[comp])) return { status: 'belum_tersedia', alasan: ['kolom_tidak_ada'] };
+          const ref = files.map((p) => p.check.ringkasan && p.check.ringkasan[comp]);
+          if (files.some((p, i) => isOk(ref[i]) && !(Math.abs(ref[i] - p.check.jumlah[comp]) <= TOL))) why.unshift('tidak_cocok_ringkasan');
+          if (ref.some((v) => !isOk(v))) why.push('ringkasan_resmi_tidak_ada');
+          if (filterTanggal) why.push('filter_tanggal');
+          if (tumpangTindih) why.push('file_tumpang_tindih');
+          if (!why.length) {
+            // Bukti akhir: jumlah gabungan file = angka yang ditampilkan (bukan hanya tiap file cocok sendiri-sendiri).
+            const gab = files.reduce((a, p) => a + p.check.jumlah[comp] - (pf === 'tiktok' && comp !== 'dana' ? p.check.nonPesanan[comp] : 0), 0);
+            if (!(Math.abs(gab - tampil[comp]) <= TOL * files.length)) why.push('gabungan_tidak_cocok');
+          }
+          const hard = why.some((w) => ['tidak_cocok_ringkasan', 'gabungan_tidak_cocok', 'tanda_refund_tidak_wajar', 'identitas_refund_tidak_cocok'].includes(w));
+          return { status: hard ? 'perlu_dicek' : why.length ? 'berdasarkan_laporan' : 'terekonsiliasi', alasan: why };
+        };
+        // TikTok: ringkasan "Total Pendapatan"/"Total Biaya" mencakup baris non-pesanan; bila baris itu berisi nilai,
+        // angka pesanan saja tidak bisa disebut cocok penuh dengan ringkasan.
+        const nonPes = (comp) => pf === 'tiktok' && files.some((p) => Math.abs(p.check.nonPesanan[comp] || 0) > TOL) ? ['baris_non_pesanan'] : [];
+        const refundExtra = [...(A.tandaTidakWajar ? ['tanda_refund_tidak_wajar'] : []), ...(A.identitasGagal ? ['identitas_refund_tidak_cocok'] : []),
+          ...(A.tanpaSubtotal ? ['hubungan_refund_belum_terbukti'] : []), ...nonPes('refund')];
+        const dana = status('dana');
+        const adjCount = pf === 'shopee' ? [...m.shopeeAdj.values()].filter((a) => inRange(a.date)).length
+          : [...m.tiktok.values()].filter((x) => !x.isOrder && inRange(x.payDate)).length;
+        return {
+          file: { jumlah: files.length, identik, tumpangTindih },
+          penjualan: { nilai: P.sales, ...status('penjualan', nonPes('penjualan')) },
+          refund: { nilai: tampil.refund, termasukPenjualan: true,
+            jumlahPesanan: noCol ? NaN : A.jumlahPesanan, penuh: noCol ? NaN : A.penuh, parsial: noCol ? NaN : A.parsial,
+            ...status('refund', refundExtra) },
+          potongan: { nilai: P.feeTotal, ...status('potongan', nonPes('potongan')) },
+          dana: { nilai: P.received, ...dana },
+          // Shopee: dicocokkan dengan "Total Penyesuaian" di sheet Adjustment (file tanpa sheet itu → belum bisa dicocokkan;
+          // basis tanggalnya tanggal penyesuaian). TikTok: tidak ada total resmi tersendiri; penyesuaian ikut dicocokkan
+          // bersama dana (dana pesanan + penyesuaian = "Jumlah penyelesaian pembayaran" di sheet Laporan).
+          penyesuaian: { nilai: P.adj, jumlah: adjCount, termasukLaba: false,
+            ...(pf === 'shopee' ? status('penyesuaian', files.some((p) => !p.check.sheetPenyesuaian) ? ['sheet_penyesuaian_tidak_ada'] : []) : dana) },
+        };
+      };
+      const mp = { shopee: r.has.shopee ? forPlatform('shopee') : null, tiktok: r.has.tiktok ? forPlatform('tiktok') : null };
+      const list = Object.values(mp).filter(Boolean);
+      const total = {};
+      for (const comp of ['penjualan', 'refund', 'potongan', 'dana', 'penyesuaian']) {
+        const vals = list.map((x) => x[comp].nilai);
+        total[comp] = { nilai: list.length && vals.every(isOk) ? vals.reduce((a, b) => a + b, 0) : NaN,
+          status: list.length ? weakest(list.map((x) => x[comp].status)) : 'belum_tersedia' };
+      }
+      total.refund.jumlahPesanan = isOk(total.refund.nilai) ? list.reduce((a, x) => a + x.refund.jumlahPesanan, 0) : NaN;
+      total.penyesuaian.jumlah = list.reduce((a, x) => a + x.penyesuaian.jumlah, 0);
+      return { versi: 'A1', filterTanggal, marketplace: mp, total,
+        pencairan: { status: 'belum_tersedia', nilai: NaN, alasan: ['belum_diproses_A1'] } };
+    }
+
+    /**
      * Status HPP untuk tampilan (metadata, tidak menghitung angka baru). Dasarnya sama dengan `ready` dan margin per
      * platform: HPP diketahui bila ada penjualan yang modalnya diketahui (knownSales > 0).
      *  tidak_diketahui = belum ada penjualan bermodal → modal 0 di objek platform BUKAN HPP Rp0, jangan ditampilkan;
@@ -1780,6 +1918,7 @@ const Engine = (() => {
       productsWithoutCost: products.filter((p) => !p.modalKnown).length,
     };
     result.kepastian = buildKepastian(result);
+    result.jejakUang = buildJejakUang(result);
     result.insights = insights(result);
     return result;
   }

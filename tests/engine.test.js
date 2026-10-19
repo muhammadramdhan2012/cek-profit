@@ -1354,6 +1354,149 @@ test('P0-4 laba bulanan: status per bulan (lengkap / belum diketahui / sebagian 
   const ins = r.insights.find((i) => /^Laba tertinggi di /.test(i.title));
   truthy(ins && !/Februari/.test(ins.title), ins && ins.title); truthy(/terendah di April/.test(ins.title), ins.title);
 });
+/* ---------- Money Trace A1: refund sebagai rincian penjualan + status rekonsiliasi (data SINTETIS) ----------
+ * Definisi yang diuji (docs/KAMUS_ANGKA.md, Money Trace A1):
+ *  Shopee  penjualan = Harga Produk + Jumlah Pengembalian Dana ke Pembeli + voucher; refund = kolom pengembalian (≤ 0).
+ *  TikTok  penjualan = Total Pendapatan = Subtotal setelah diskon penjual + Total pengembalian dana setelah diskon.
+ *  Refund SUDAH termasuk penjualan → hanya rincian, tidak dikurangkan lagi. Angka lain = angka engine yang sudah ada. */
+const A1sh = (orders, { summary = {}, adj = null, withRefundCol = true, name = 'sh-a1.xlsx' } = {}) => {
+  const head = ['No.', 'Lihat berdasarkan', 'No. Pesanan', 'Waktu Pesanan Dibuat', 'Tanggal Dana Dilepaskan', 'Total Penghasilan', 'Harga Produk',
+    ...(withRefundCol ? ['Jumlah Pengembalian Dana ke Pembeli'] : []), 'Biaya Administrasi'];
+  const rows = [head, ...orders.map((o, i) => [i + 1, 'Order', o.id, o.date || '2026-01-10 10:00', '2026-01-20', o.harga + o.refund + o.admin, o.harga,
+    ...(withRefundCol ? [o.refund] : []), o.admin])];
+  const sum = (f) => orders.reduce((a, o) => a + f(o), 0);
+  const v = { pendapatan: sum((o) => o.harga + o.refund), refund: sum((o) => o.refund), pengeluaran: sum((o) => o.admin), dilepas: sum((o) => o.harga + o.refund + o.admin), ...summary };
+  const Summary = [['Dari', '2026-01-01'], ['ke', '2026-03-31'],
+    ...(v.pendapatan === null ? [] : [['1. Total Pendapatan', null, null, v.pendapatan]]),
+    ...(v.refund === null ? [] : [[null, 'Jumlah Pengembalian Dana ke Pembeli', v.refund]]),
+    ...(v.pengeluaran === null ? [] : [['2. Total Pengeluaran', null, null, v.pengeluaran]]),
+    ['3. Total yang Dilepas', null, null, v.dilepas]];
+  const sheets = { Summary, Penghasilan: rows };
+  if (adj) sheets.Adjustment = [['Ringkasan Biaya Penyesuaian'], ['Total Penyesuaian', null, null, null, adj.total ?? adj.rows.reduce((a, x) => a + x.amount, 0)], [],
+    ['No.', 'Tanggal Penyesuaian Dibuat', 'Tipe Penyesuaian | Deskripsi', 'Alasan Penyesuaian', 'Biaya Penyesuaian', 'No. Pesanan Terhubung'],
+    ...adj.rows.map((x, i) => [i + 1, x.date || '2026-01-25', x.type || 'Kompensasi atas pesanan hilang', '', x.amount, x.order || ''])];
+  return E.parseWorkbook({ name, sheets });
+};
+// TikTok: sub = Subtotal setelah diskon penjual; refund = Total pengembalian dana setelah diskon; full = refund penuh (pre = 0).
+const A1tt = (rows, { laporan = {}, cols = true, subCol = true, name = 'tt-a1.xlsx' } = {}) => {
+  const head = ['ID Pesanan/Penyesuaian', 'Jenis transaksi', 'Waktu pemesanan', 'Waktu pembayaran pesanan', 'Jumlah penyelesaian pembayaran', 'Total Pendapatan',
+    ...(subCol ? ['Subtotal setelah diskon penjual'] : []), ...(cols ? ['Total pengembalian dana setelah diskon'] : []), 'Subtotal sebelum diskon', 'Total pengembalian dana sebelum diskon', 'Total Biaya'];
+  const R = rows.map((x) => { const sales = x.sales ?? (x.sub || 0) + (x.refund || 0); return { ...x, jenis: x.jenis || 'Pesanan', sales, settle: sales + (x.biaya || 0) + (x.lain || 0) }; });
+  const aoa = [head, ...R.map((x) => [x.id, x.jenis, x.date || '2026/01/10', x.pay || '2026/01/15', x.settle, x.sales, ...(subCol ? [x.sub || 0] : []), ...(cols ? [x.refund || 0] : []),
+    x.jenis === 'Pesanan' ? x.preGross ?? x.sub : 0, x.full ? -(x.preGross ?? x.sub) : 0, x.biaya || 0])];
+  const sum = (f) => R.reduce((a, x) => a + f(x), 0);
+  const v = { settle: sum((x) => x.settle), sales: sum((x) => x.sales), refund: sum((x) => x.refund || 0), biaya: sum((x) => x.biaya || 0), ...laporan };
+  const Laporan = [['', 'Jumlah penyelesaian pembayaran', '', '', '', v.settle], ['', 'Total Pendapatan', '', '', '', v.sales],
+    ...(v.refund === null ? [] : [['', 'Total pengembalian dana setelah diskon', '', '', '', v.refund]]), ['', 'Total Biaya', '', '', '', v.biaya]];
+  return E.parseWorkbook({ name, sheets: { 'Detail pesanan': aoa, Laporan } });
+};
+const A1ST = { modalMode: 'produk', catalog: [], fallbackPct: 50, periods: [{ start: '', markup: 0, disc: 0 }], fixedCosts: [] };
+const A1_SH = [{ id: 'A1-S1', harga: 100000, refund: 0, admin: -10000 }, { id: 'A1-S2', harga: 80000, refund: -30000, admin: -8000 },
+  { id: 'A1-S3', harga: 50000, refund: -50000, admin: -2000 }, { id: 'A1-S4', harga: 60000, refund: 0, admin: -6000, date: '2026-02-05 09:00' }];
+const A1_TT = [{ id: 'A1-T1', sub: 100000, refund: 0, biaya: -12000 }, { id: 'A1-T2', sub: 90000, refund: -40000, biaya: -9000 },
+  { id: 'A1-T3', sub: 70000, refund: -70000, biaya: -1000, full: true }, { id: 'A1-T4', sub: 50000, refund: 0, biaya: -5000, date: '2026/02/03' }];
+const ju = (files, f = {}) => { const r = E.compute(files, A1ST, {}, f); return { r, J: r.jejakUang }; };
+/** Angka Jejak Uang harus SAMA dengan angka engine yang sudah ada (tidak ada rumus baru). */
+const a1Identik = (r, label = '') => {
+  const T = r.jejakUang.total;
+  near(T.penjualan.nilai, r.totalSales, 0, `${label} penjualan`); near(T.potongan.nilai, r.totalFees, 0, `${label} potongan`);
+  near(T.dana.nilai, r.totalReceived, 0, `${label} dana`); near(T.penyesuaian.nilai, r.adjustments, 0, `${label} penyesuaian`);
+};
+test('MT-A1 refund nol terverifikasi: Rp0 dengan status terekonsiliasi, bukan "belum tersedia"', () => {
+  const { r, J } = ju([A1sh([A1_SH[0]]), A1tt([A1_TT[0]])]);
+  for (const pf of ['shopee', 'tiktok']) { eq(J.marketplace[pf].refund.nilai, 0, pf); eq(J.marketplace[pf].refund.status, 'terekonsiliasi', pf); eq(J.marketplace[pf].refund.jumlahPesanan, 0); }
+  eq(J.total.refund.nilai, 0); a1Identik(r);
+});
+test('MT-A1 refund sudah termasuk penjualan: tidak dikurangkan lagi, dana = penjualan + potongan', () => {
+  const { r, J } = ju([A1sh(A1_SH), A1tt(A1_TT)]);
+  eq(J.marketplace.shopee.refund.nilai, -80000); eq(J.marketplace.tiktok.refund.nilai, -110000);
+  eq(J.marketplace.shopee.refund.termasukPenjualan, true); eq(J.marketplace.tiktok.refund.termasukPenjualan, true);
+  eq(r.shopee.sales, 290000 - 80000, 'Shopee: harga + refund'); eq(r.tiktok.sales, 310000 - 110000, 'TikTok: Total Pendapatan');
+  near(r.totalReceived, r.totalSales + r.totalFees, 0, 'refund tidak dikurangkan dua kali');
+  for (const k of ['penjualan', 'refund', 'potongan', 'dana']) eq(J.total[k].status, 'terekonsiliasi', k);
+  a1Identik(r);
+});
+test('MT-A1 refund penuh dan parsial dihitung terpisah (jumlah pesanan), tanpa mengubah jumlah pesanan terjual', () => {
+  const { r, J } = ju([A1sh(A1_SH), A1tt(A1_TT)]);
+  const s = J.marketplace.shopee.refund, t = J.marketplace.tiktok.refund;
+  eq(`${s.jumlahPesanan}/${s.penuh}/${s.parsial}`, '2/1/1', 'Shopee'); eq(`${t.jumlahPesanan}/${t.penuh}/${t.parsial}`, '2/1/1', 'TikTok');
+  eq(J.total.refund.jumlahPesanan, 4); eq(r.shopee.orders, 3); eq(r.tiktok.orders, 3);
+});
+test('MT-A1 penyesuaian terpisah: Shopee dicocokkan dengan Total Penyesuaian, TikTok bersama dana; laba tidak berubah', () => {
+  const adj = { rows: [{ amount: 25000, order: 'A1-S1' }, { amount: -5000, date: '2026-02-11' }] };
+  const base = ju([A1sh(A1_SH), A1tt(A1_TT)]).r;
+  const { r, J } = ju([A1sh(A1_SH, { adj }), A1tt(A1_TT)]);
+  eq(J.marketplace.shopee.penyesuaian.nilai, 20000); eq(J.marketplace.shopee.penyesuaian.jumlah, 2); eq(J.marketplace.shopee.penyesuaian.status, 'terekonsiliasi');
+  eq(J.marketplace.shopee.penyesuaian.termasukLaba, false);
+  near(r.totalMargin, base.totalMargin, 0, 'laba tidak memuat penyesuaian'); near(r.totalReceived, base.totalReceived, 0, 'dana pesanan tidak memuat penyesuaian');
+  // TikTok: baris non-pesanan bernilai → penyesuaian; dana pesanan + penyesuaian = penyelesaian di sheet Laporan.
+  const x = ju([A1tt([...A1_TT, { id: 'A1-ADJ2', jenis: 'Kompensasi', sales: 0, lain: 15000, pay: '2026/01/20' }])]);
+  eq(x.J.marketplace.tiktok.penyesuaian.nilai, 15000); eq(x.J.marketplace.tiktok.dana.status, 'terekonsiliasi'); eq(x.J.marketplace.tiktok.penyesuaian.status, 'terekonsiliasi');
+  near(x.r.totalReceived, ju([A1tt(A1_TT)]).r.totalReceived, 0, 'dana pesanan TikTok tetap'); a1Identik(x.r);
+  // Ringkasan Total Penyesuaian tidak cocok → perlu dicek; sheet tidak ada → belum bisa dicocokkan.
+  eq(ju([A1sh(A1_SH, { adj: { ...adj, total: 99 } })]).J.marketplace.shopee.penyesuaian.status, 'perlu_dicek');
+  const tanpa = ju([A1sh(A1_SH)]).J.marketplace.shopee.penyesuaian;
+  eq(tanpa.status, 'berdasarkan_laporan'); truthy(tanpa.alasan.includes('sheet_penyesuaian_tidak_ada'), tanpa.alasan.join());
+});
+test('MT-A1 potongan marketplace: cocok dengan ringkasan; ringkasan berbeda → "perlu dicek", angka tidak diubah', () => {
+  const ok1 = ju([A1sh(A1_SH)]);
+  eq(ok1.J.marketplace.shopee.potongan.status, 'terekonsiliasi'); eq(ok1.J.marketplace.shopee.potongan.nilai, -26000);
+  const bad = ju([A1sh(A1_SH, { summary: { pengeluaran: -25000 } }), A1tt(A1_TT, { laporan: { biaya: -1 } })]);
+  eq(bad.J.marketplace.shopee.potongan.status, 'perlu_dicek'); eq(bad.J.marketplace.tiktok.potongan.status, 'perlu_dicek');
+  eq(bad.J.total.potongan.status, 'perlu_dicek'); truthy(bad.J.marketplace.shopee.potongan.alasan.includes('tidak_cocok_ringkasan'), 'alasan');
+  near(bad.r.totalFees, ju([A1sh(A1_SH), A1tt(A1_TT)]).r.totalFees, 0, 'angka potongan sama');
+});
+test('MT-A1 data tidak lengkap: kolom refund tidak ada → belum tersedia (NaN, bukan 0); ringkasan tidak ada → berdasarkan laporan', () => {
+  const tanpaKolom = ju([A1sh(A1_SH), A1tt(A1_TT, { cols: false, laporan: { refund: null } })]);
+  const t = tanpaKolom.J.marketplace.tiktok.refund;
+  truthy(Number.isNaN(t.nilai) && Number.isNaN(t.jumlahPesanan), 'refund TikTok NaN'); eq(t.status, 'belum_tersedia');
+  truthy(Number.isNaN(tanpaKolom.J.total.refund.nilai) && Number.isNaN(tanpaKolom.J.total.refund.jumlahPesanan), 'total refund NaN, bukan Rp0');
+  eq(tanpaKolom.J.marketplace.shopee.refund.nilai, -80000, 'Shopee tetap tersedia');
+  near(tanpaKolom.r.totalSales, ju([A1sh(A1_SH), A1tt(A1_TT)]).r.totalSales, 0, 'penjualan tetap = Total Pendapatan');
+  const shTanpa = ju([A1sh(A1_SH, { withRefundCol: false, summary: { refund: null } })]).J.marketplace.shopee.refund;
+  eq(shTanpa.status, 'belum_tersedia'); truthy(Number.isNaN(shTanpa.nilai), 'Shopee tanpa kolom refund → NaN');
+  const tanpaRingkasan = ju([A1sh(A1_SH, { summary: { pendapatan: null, refund: null, pengeluaran: null } })]).J.marketplace.shopee;
+  for (const k of ['penjualan', 'refund', 'potongan']) { eq(tanpaRingkasan[k].status, 'berdasarkan_laporan', k); truthy(tanpaRingkasan[k].alasan.includes('ringkasan_resmi_tidak_ada'), k); }
+  eq(tanpaRingkasan.dana.status, 'terekonsiliasi', 'dana tetap dicocokkan dengan Total yang Dilepas');
+  // Subtotal setelah diskon tidak ada → hubungan refund–penjualan belum terbukti → tidak disebut terekonsiliasi.
+  const tanpaSub = ju([A1tt(A1_TT, { subCol: false })]).J.marketplace.tiktok.refund;
+  eq(tanpaSub.status, 'berdasarkan_laporan'); truthy(tanpaSub.alasan.includes('hubungan_refund_belum_terbukti'), tanpaSub.alasan.join());
+});
+test('MT-A1 tanda/identitas refund tidak wajar → "perlu dicek"', () => {
+  const pos = ju([A1sh([{ id: 'A1-P', harga: 50000, refund: 5000, admin: -1000 }])]).J.marketplace.shopee.refund;
+  eq(pos.status, 'perlu_dicek'); truthy(pos.alasan.includes('tanda_refund_tidak_wajar'), pos.alasan.join());
+  const idt = ju([A1tt([{ id: 'A1-I', sub: 90000, refund: -10000, sales: 85000, biaya: -1000 }])]).J.marketplace.tiktok.refund;
+  eq(idt.status, 'perlu_dicek'); truthy(idt.alasan.includes('identitas_refund_tidak_cocok'), idt.alasan.join());
+});
+test('MT-A1 unggah berulang: file sama diabaikan, angka tetap dan tetap terekonsiliasi; file tumpang tindih → berdasarkan laporan', () => {
+  const one = ju([A1sh(A1_SH), A1tt(A1_TT)]);
+  const two = ju([A1sh(A1_SH), A1tt(A1_TT), A1sh(A1_SH, { name: 'ulang.xlsx' }), A1tt(A1_TT, { name: 'ulang-tt.xlsx' })]);
+  eq(two.J.marketplace.shopee.file.identik, 1); eq(two.J.marketplace.tiktok.file.identik, 1);
+  for (const k of ['penjualan', 'refund', 'potongan', 'dana']) { near(two.J.total[k].nilai, one.J.total[k].nilai, 0, k); eq(two.J.total[k].status, 'terekonsiliasi', k); }
+  const over = ju([A1sh(A1_SH.slice(0, 2)), A1sh(A1_SH.slice(1), { name: 'feb.xlsx' })]);
+  eq(over.J.marketplace.shopee.file.tumpangTindih, 1); eq(over.J.marketplace.shopee.refund.nilai, -80000, 'pesanan sama dihitung sekali');
+  eq(over.J.marketplace.shopee.penjualan.status, 'berdasarkan_laporan'); truthy(over.J.marketplace.shopee.penjualan.alasan.includes('file_tumpang_tindih'), 'alasan');
+  a1Identik(two.r); a1Identik(over.r);
+});
+test('MT-A1 filter marketplace dan tanggal: hanya data terpilih; filter tanggal tidak pernah "terekonsiliasi"', () => {
+  const tt = ju([A1sh(A1_SH), A1tt(A1_TT)], { platforms: ['tiktok'] });
+  eq(tt.J.marketplace.shopee, null); eq(tt.J.total.refund.nilai, -110000); eq(tt.J.total.refund.status, 'terekonsiliasi'); a1Identik(tt.r, 'tiktok');
+  const jan = ju([A1sh(A1_SH), A1tt(A1_TT)], { from: '2026-01', to: '2026-01' });
+  eq(jan.J.filterTanggal, true); eq(jan.J.total.refund.nilai, -190000, 'semua refund ada di Januari');
+  near(jan.J.total.penjualan.nilai, 210000 - 60000 + 200000 - 50000, 0, 'pesanan Februari tidak ikut');
+  for (const k of ['penjualan', 'refund', 'potongan', 'dana']) { eq(jan.J.total[k].status, 'berdasarkan_laporan', k); truthy(jan.J.marketplace.shopee[k].alasan.includes('filter_tanggal'), k); }
+  a1Identik(jan.r, 'jan');
+});
+test('MT-A1 pencairan belum diproses: selalu "belum tersedia", nilai bukan Rp0; data contoh tetap konsisten', () => {
+  for (const files of [[A1sh(A1_SH)], [A1tt(A1_TT)], parsed]) {
+    const J = E.compute(files, A1ST).jejakUang;
+    eq(J.pencairan.status, 'belum_tersedia'); truthy(Number.isNaN(J.pencairan.nilai), 'pencairan NaN');
+  }
+  const d = E.compute(parsed, st); a1Identik(d, 'demo');
+  eq(d.jejakUang.marketplace.tiktok.refund.status, 'belum_tersedia', 'data contoh TikTok tidak punya kolom refund setelah diskon');
+  eq(d.jejakUang.marketplace.shopee.dana.status, 'terekonsiliasi', 'contoh Shopee: Total yang Dilepas cocok');
+});
+
 test('tanggal dd/mm/yyyy dan serial Excel', () => { eq(E.date('05/06/2026'), '2026-06-05'); eq(E.date(46023), '2026-01-01'); });
 
 console.log(failed ? `\n${failed} uji GAGAL` : '\nSemua uji lulus');
