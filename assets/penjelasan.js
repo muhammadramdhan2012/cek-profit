@@ -76,7 +76,7 @@ const CekInfo = (() => {
     rata_bulan: {
       t: 'Rata-rata per bulan',
       a: 'Perkiraan laba rata-rata dalam satu bulan.',
-      h: 'Total laba dibagi lama periode data dalam bulan (jumlah hari ÷ 30,4).',
+      h: 'Total laba dibagi lama periode data dalam bulan (jumlah hari ÷ 30,4). Bila data belum sebulan penuh, yang tampil adalah laba periode data, bukan rata-rata per bulan, agar angkanya tidak dibesarkan.',
       b: 'Bandingkan dengan target laba bulanan Anda. Periode data yang pendek (kurang dari sebulan) membuat angka ini kurang stabil.',
     },
     margin_pesanan: {

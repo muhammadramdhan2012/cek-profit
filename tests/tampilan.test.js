@@ -15,6 +15,7 @@ let failed = 0;
 const test = (name, fn) => { try { fn(); console.log('ok  ', name); } catch (e) { failed++; console.log('GAGAL', name, '\n     ', e.message); } };
 const eq = (a, b, msg = '') => { if (a !== b) throw new Error(`${msg} ${a} !== ${b}`); };
 const truthy = (c, msg) => { if (!c) throw new Error(msg); };
+const near = (a, b, tol, msg = '') => { if (!(Math.abs(a - b) <= tol)) throw new Error(`${msg} ${a} ≉ ${b}`); };
 const src = (f) => fs.readFileSync(path.join(__dirname, '..', 'assets', f), 'utf8');
 const teks = (html) => html.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ');
 
@@ -457,6 +458,44 @@ test('Patch PDF: data satu bulan penuh (31 hari) → "Laba per bulan" tetap tamp
   // Biaya operasional diisi → sampul tetap memakai laba dari data tersedia (perilaku lama).
   const op = E.compute([ttTanggal(['2026/01/15'])], { ...stPeriode, fixedCosts: [{ label: 'Gaji', amount: 300000 }] });
   truthy(/Laba dari data tersedia/.test(teks(pdf(op))), 'cabang biaya operasional tidak berubah');
+});
+/* ===== Patch dashboard: kartu "Rata-rata per bulan" memakai aturan yang sama dengan sampul PDF ===== */
+const LB = CekReport.labaBulanan;
+const ttTanggalModal = (rows) => E.parseWorkbook({ name: 'tt-periode2-sintetis.xlsx', sheets: {
+  'Detail pesanan': [['ID Pesanan/Penyesuaian', 'Jenis transaksi', 'Waktu pemesanan', 'Waktu pembayaran pesanan', 'Jumlah penyelesaian pembayaran',
+    'Total Pendapatan', 'Subtotal sebelum diskon', 'Total pengembalian dana sebelum diskon', 'Total Biaya', 'Detail produk terjual', 'Sumber pesanan'],
+  ...rows.map(([d, sku], i) => [String(8950 + i), 'Pesanan', d, d, 100000, 100000, 100000, 0, 0, `${sku} * 1;`, 'TikTok Shop'])],
+  Laporan: [['', 'Jumlah penyelesaian pembayaran', '', '', '', rows.length * 100000]] } });
+test('Patch dashboard: laba bulanan 1 hari / 7 hari / 31 hari / beberapa bulan', () => {
+  const satu = E.compute([ttTanggal(['2026/01/15'])], stPeriode), l1 = LB(satu);
+  eq(l1.jenis, 'periode'); eq(l1.label, 'Laba periode data'); eq(l1.nilai, satu.totalMargin, 'laba periode dari engine'); truthy(satu.perMonth > l1.nilai * 20, 'bukan ekstrapolasi engine');
+  const tujuh = E.compute([ttTanggal(['2026/01/10', '2026/01/16'])], stPeriode), l7 = LB(tujuh);
+  eq(tujuh.days, 7); eq(l7.jenis, 'periode'); eq(l7.nilai, 160000);
+  const bulan = E.compute([ttTanggal(['2026/01/01', '2026/01/31'])], stPeriode), l31 = LB(bulan);
+  eq(l31.jenis, 'rata'); eq(l31.label, 'Rata-rata per bulan'); eq(l31.nilai, bulan.perMonth, 'nilai engine'); truthy(l31.nilai <= bulan.totalMargin, 'tidak lebih besar dari laba periode');
+  const multi = E.compute([ttTanggal(['2026/01/01', '2026/02/15', '2026/03/31'])], stPeriode), lm = LB(multi);
+  eq(lm.jenis, 'rata'); eq(lm.nilai, multi.perMonth); near(lm.nilai * multi.monthsSpan, multi.totalMargin, 1, 'rata-rata × bulan = laba periode');
+});
+test('Patch dashboard: HPP belum diketahui / sebagian / laba Rp0 aktual', () => {
+  const unk = LB(E.compute([ttTanggalModal([['2026/01/01', '5559999'], ['2026/01/31', '5559999']])], stPeriode));
+  eq(unk.jenis, 'belum'); truthy(Number.isNaN(unk.nilai), 'bukan 0');
+  const seb = E.compute([ttTanggalModal([['2026/01/01', '5550009'], ['2026/01/31', '5559999']])], stPeriode);
+  eq(seb.statusHpp.total, 'sebagian'); eq(LB(seb).jenis, 'rata'); eq(LB(seb).nilai, seb.perMonth);
+  const nol = E.compute([ttTanggal(['2026/01/15'])], katalog([['', 100000, '5550009']]));
+  eq(nol.totalMargin, 0); eq(LB(nol).jenis, 'periode'); eq(LB(nol).nilai, 0, 'Rp0 aktual tetap 0');
+});
+test('Patch dashboard: biaya operasional tersedia vs tidak', () => {
+  const op = { ...stPeriode, fixedCosts: [{ label: 'Sewa', amount: 304000 }] };
+  const pendek = E.compute([ttTanggal(['2026/01/15'])], op), lp = LB(pendek);
+  eq(lp.jenis, 'periode'); eq(lp.dasar, 'laba_dari_data_tersedia'); eq(lp.nilai, pendek.netProfit);
+  const panjang = E.compute([ttTanggal(['2026/01/01', '2026/03/31'])], op), ll = LB(panjang);
+  eq(ll.jenis, 'rata'); near(ll.nilai, panjang.netProfit / panjang.monthsSpan, 0.001, 'sama dengan cara lama dashboard');
+  eq(LB(E.compute([ttTanggal(['2026/01/15'])], stPeriode)).dasar, 'laba_setelah_modal');
+  const appJs = src('app.js');
+  truthy(/const lb = CekReport\.labaBulanan\(r\)/.test(appJs) && /<span>\$\{lb\.label\}\$\{qi\('rata_bulan'\)\}<\/span>/.test(appJs), 'kartu dashboard memakai aturan bersama');
+  truthy(!/r\.netProfit \/ Math\.max\(r\.monthsSpan, 1\) : r\.perMonth/.test(appJs), 'rumus lama di UI tidak dipakai lagi');
+  truthy(/lb\.jenis === 'belum' \? '<span class="unk">Belum diketahui<\/span>'/.test(appJs), 'belum diketahui, bukan Rp0');
+  truthy(/const perMonthOk = !hasOpex && labaBulanan\(r\)\.jenis === 'rata';/.test(src('report.js')), 'PDF memakai aturan yang sama');
 });
 console.log(failed ? `\n${failed} uji GAGAL` : '\nSemua uji lulus');
 process.exitCode = failed ? 1 : 0;

@@ -100,7 +100,7 @@ const CekReport = (() => {
 
     // "Laba per bulan" (engine: laba ÷ bulan data) hanya sah bila data mencakup minimal satu bulan. Di bawah itu angkanya
     // ekstrapolasi (data 1 hari → ±30× laba periode), jadi yang tampil laba periode data yang sebenarnya.
-    const perMonthOk = r.ready && ok(r.perMonth) && r.monthsSpan >= 1;
+    const perMonthOk = !hasOpex && labaBulanan(r).jenis === 'rata';
     const kpi = (label, value, sub, cls = '') => `<div class="rkpi ${cls}"><span>${label}</span><b>${value}</b><small>${sub}</small></div>`;
 
     // HPP yang belum diketahui tidak ditulis Rp0 (status dari engine). Rp0 hanya bila HPP memang 0 menurut data.
@@ -220,6 +220,21 @@ ${r.products.length ? `<section class="rpage">
   ${foot}
 </section>`;
   }
-  return { html };
+  /**
+   * Metrik laba bulanan untuk kartu dashboard dan sampul PDF (aturan yang sama di keduanya). Rata-rata per bulan hanya
+   * bila data mencakup minimal satu bulan (monthsSpan ≥ 1); di bawah itu angka rata-rata adalah ekstrapolasi, jadi yang
+   * dipakai laba periode data dari engine. Tidak ada rumus baru: nilai dari engine, atau laba dari data tersedia ÷ bulan
+   * data (cara lama dashboard) bila biaya operasional diisi.
+   * @returns {{jenis: 'belum'|'rata'|'periode', label: string, nilai: number, dasar: 'laba_dari_data_tersedia'|'laba_setelah_modal'}}
+   */
+  function labaBulanan(r) {
+    const opex = r.fixedMonthly > 0, dasar = opex ? 'laba_dari_data_tersedia' : 'laba_setelah_modal';
+    const periode = opex ? r.netProfit : r.totalMargin;
+    if (!r.ready || !ok(periode)) return { jenis: 'belum', label: 'Rata-rata per bulan', nilai: NaN, dasar };
+    if (r.monthsSpan >= 1) return { jenis: 'rata', label: 'Rata-rata per bulan', nilai: opex ? r.netProfit / r.monthsSpan : r.perMonth, dasar };
+    return { jenis: 'periode', label: 'Laba periode data', nilai: periode, dasar };
+  }
+
+  return { html, labaBulanan };
 })();
 if (typeof module !== 'undefined') module.exports = CekReport;

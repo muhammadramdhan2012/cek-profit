@@ -759,8 +759,13 @@
     const hitN = ok(target) && target > 0 && r.ready ? msKnown.filter((m) => (r.fixedMonthly ? m.total.net : m.total.margin) >= target).length : null;
     // Laba bulan tanpa penjualan bermodal belum diketahui → NaN (tampil "—"), bukan Rp0; selisih juga tidak dihitung.
     const key = (m) => (r.ready ? (mKnown(m.total) ? m.total.margin : NaN) : m.total.sales);
+    // Sama dengan sampul PDF: rata-rata hanya untuk data ≥ 1 bulan; di bawah itu laba periode data (bukan ekstrapolasi).
+    const lb = CekReport.labaBulanan(r), lbDasar = lb.dasar === 'laba_dari_data_tersedia' ? 'laba dari data tersedia' : 'laba setelah modal';
+    const lbSeb = r.statusHpp && r.statusHpp.total === 'sebagian' ? ', dari penjualan yang modalnya diketahui' : '';
+    const lbNote = lb.jenis === 'rata' ? `${lbDasar} dibagi ${(Math.round(r.monthsSpan * 10) / 10).toLocaleString('id-ID')} bulan data (dinormalisasi per 30,4 hari)${lbSeb}`
+      : lb.jenis === 'periode' ? `${lbDasar} selama ${num(r.days)} hari data, belum sebulan penuh${lbSeb}` : 'modal belum diisi';
     return `<div class="facts">
-      <div class="fact"><span>Rata-rata per bulan${qi('rata_bulan')}</span><b class="${r.perMonth < 0 ? 'neg' : ''}">${r.ready ? fmt(r.fixedMonthly ? r.netProfit / Math.max(r.monthsSpan, 1) : r.perMonth) : '—'}</b><small>${r.fixedMonthly ? 'laba dari data tersedia' : 'laba setelah modal'}, ${(Math.round(r.monthsSpan * 10) / 10).toLocaleString('id-ID')} bulan data</small></div>
+      <div class="fact"><span>${lb.label}${qi('rata_bulan')}</span><b class="${lb.nilai < 0 ? 'neg' : ''}">${lb.jenis === 'belum' ? '<span class="unk">Belum diketahui</span>' : fmt(lb.nilai)}</b><small>${lbNote}</small></div>
       <div class="fact"><span>Laba per pesanan${qi('margin_pesanan')}</span><b>${r.ready ? fmt(r.perOrder) : '—'}</b><small>dari ${num(r.orders)} pesanan</small></div>
       ${a && b ? `<div class="fact"><span>${monthLong(a.month)}${running ? ' (berjalan)' : ''}${qi('bulan_ini')}</span><b>${ok(key(a)) ? fmt(key(a)) : '<span class="unk">Belum diketahui</span>'}</b><small>${r.ready ? 'laba' : 'penjualan'} ${delta(key(a), key(b))} dibanding ${monthLabel(b.month)}</small></div>
       <div class="fact"><span>Potongan ${monthLabel(a.month)}${qi('potongan_bulan')}</span><b>${pct(-a.total.fees / (a.total.sales || 1))}</b><small>${pct(-b.total.fees / (b.total.sales || 1))} di ${monthLabel(b.month)}</small></div>`
