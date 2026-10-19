@@ -124,7 +124,7 @@ const CekReport = (() => {
     return `
 ${ctx.demo ? '<div class="rwatermark">CONTOH</div>' : ''}
 <section class="rpage rcover">
-  <div class="rbrand">${p.logo ? `<img src="${esc(p.logo)}" alt="">` : `<svg width="34" height="34" viewBox="0 0 30 30"><rect width="30" height="30" rx="8" fill="${COL.accent}"/><path d="M7 20.5l5-5 3.5 3 7.5-8" fill="none" stroke="#fff" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/><circle cx="23" cy="10.5" r="2.4" fill="${COL.mark}"/></svg>`}
+  <div class="rbrand">${p.logo ? `<img src="${esc(p.logo)}" alt="">` : `<svg width="34" height="34" viewBox="0 0 16 16" aria-hidden="true"><rect width="16" height="16" rx="4.5" fill="#0f6e56"/><rect x="3" y="9" width="2" height="4" rx="1" fill="#fff" opacity=".62"/><rect x="7" y="7" width="2" height="6" rx="1" fill="#fff" opacity=".85"/><rect x="11" y="5" width="2" height="8" rx="1" fill="#fff"/><circle cx="12.6" cy="2.9" r="1.5" fill="${COL.mark}"/></svg>`}
     <span>${p.logo ? esc(store) : esc(ctx.brand)}</span></div>
   <div class="rtitle">
     <span class="reyebrow">Laporan profit toko online</span>

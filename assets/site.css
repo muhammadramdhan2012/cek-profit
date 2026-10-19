@@ -314,16 +314,30 @@ section.st { position: relative; isolation: isolate; padding-block: clamp(80px, 
 .st-dark { background: radial-gradient(70% 60% at 85% 0%, color-mix(in srgb, var(--mint) 18%, transparent), transparent 70%), var(--forest); color: var(--forest-ink); }
 .st-dark .st-k { color: var(--side-accent); } .st-dark .st-lead { color: var(--forest-muted); }
 .st-dark h2 { color: #fff; }
-.omzet { margin-top: 56px; display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); align-items: end; gap: 24px; }
-.omzet > div { display: grid; gap: 6px; } .omzet span { font-size: 14px; font-weight: 600; color: var(--forest-muted); }
+.omzet { margin-top: 56px; display: grid; gap: 6px clamp(16px, 3vw, 40px); align-items: center; justify-content: start;
+  /* Label di baris 1, angka di baris 2: panah ditaruh di baris angka sehingga sejajar dengan angka (bukan dengan label),
+     dan kolom selebar isinya sehingga jarak panah ke kedua angka sama di semua lebar layar. */
+  grid-template-columns: minmax(0, max-content) auto minmax(0, max-content); }
+.om-a, .om-b { display: contents; }
+.om-a > span { grid-column: 1; grid-row: 1; } .om-a > b { grid-column: 1; grid-row: 2; }
+.om-b > span { grid-column: 3; grid-row: 1; } .om-b > b { grid-column: 3; grid-row: 2; }
+.omzet span { font-size: 14px; font-weight: 600; color: var(--forest-muted); align-self: end; }
 .om-a b { font-size: clamp(34px, 5vw, 64px); font-weight: 800; letter-spacing: -0.045em; color: color-mix(in srgb, var(--forest-ink) 55%, transparent); text-decoration: line-through; text-decoration-thickness: 3px; text-decoration-color: color-mix(in srgb, var(--cost) 80%, transparent); font-variant-numeric: tabular-nums; }
 .om-b b { font-size: clamp(34px, 5vw, 64px); font-weight: 800; letter-spacing: -0.045em; color: var(--side-accent); font-variant-numeric: tabular-nums; }
-.om-arrow { color: var(--forest-muted); padding-bottom: 18px; }
-.om-cap { grid-column: 1 / -1; font-size: 12.5px; color: var(--forest-muted); }
+.om-arrow { grid-column: 2; grid-row: 2; display: flex; align-items: center; justify-content: center; color: var(--forest-muted); }
+.om-arrow svg { display: block; width: clamp(40px, 5vw, 64px); height: auto; }
+.om-cap { grid-column: 1 / -1; grid-row: 3; margin-top: 6px; font-size: 12.5px; color: var(--forest-muted); }
 .st-pains { list-style: none; margin: 64px 0 0; padding: 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 28px; }
 .st-pains li { display: grid; gap: 8px; padding-top: 18px; border-top: 1px solid var(--side-line); }
 .st-pains b { color: #fff; font-size: 17px; } .st-pains span { color: var(--forest-muted); font-size: 14.5px; }
-@media (max-width: 760px) { .omzet { grid-template-columns: 1fr; gap: 8px; } .om-arrow { transform: rotate(90deg); justify-self: start; padding: 0; } .st-pains { grid-template-columns: 1fr; gap: 18px; margin-top: 40px; } }
+@media (max-width: 760px) {
+  /* HP: angka ditumpuk, panah menunjuk ke bawah di antara keduanya. */
+  .omzet { grid-template-columns: minmax(0, 1fr); gap: 6px; }
+  .om-a > span { grid-row: 1; } .om-a > b { grid-row: 2; }
+  .om-a > span, .om-a > b, .om-b > span, .om-b > b, .om-arrow, .om-cap { grid-column: 1; }
+  .om-arrow { grid-row: 3; justify-self: start; width: 40px; height: 44px; margin: 2px 0; }
+  .om-arrow svg { width: 40px; transform: rotate(90deg); }
+  .om-b > span { grid-row: 4; } .om-b > b { grid-row: 5; } .om-cap { grid-row: 6; } .st-pains { grid-template-columns: 1fr; gap: 18px; margin-top: 40px; } }
 /* 02 krem: struk lengket + langkah */
 .st-cream { background: var(--cream); }
 .flow3 { margin-top: 56px; display: grid; grid-template-columns: minmax(0, .9fr) minmax(0, 1.1fr); gap: 64px; align-items: start; }
@@ -456,3 +470,8 @@ section.st { position: relative; isolation: isolate; padding-block: clamp(80px, 
 .conf:has(.pc-legend li[data-k="chk"]:is(:hover, :focus-visible)) .pc-seg .s-chk,
 .conf:has(.pc-legend li[data-k="unk"]:is(:hover, :focus-visible)) .pc-seg .s-unk { opacity: 1; transform: scaleY(1.35); }
 @media (prefers-reduced-motion: reduce) { .flow3-steps li::after { transition: none; } .pc-seg i, .conf .pc-legend li { transition: none; } .conf .pc-legend li:is(:hover, :focus-visible) { transform: none; } }
+/* UX P0: ilustrasi Rp100 diberi label contoh yang jelas agar tidak dikira data penjualan seller. */
+.ilus-note { margin-top: 16px; max-width: 62ch; font-size: 15px; line-height: 1.55; color: var(--ink-2); }
+.ilus-note b { color: var(--ink); }
+.ilus-tag { display: inline-flex; align-items: center; margin-right: 8px; padding: 3px 10px; border-radius: 999px; font-size: 11.5px; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; vertical-align: 1px;
+  color: var(--warn); background: var(--warn-soft); border: 1px solid color-mix(in srgb, var(--warn) 30%, transparent); }

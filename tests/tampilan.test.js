@@ -497,5 +497,57 @@ test('Patch dashboard: biaya operasional tersedia vs tidak', () => {
   truthy(/lb\.jenis === 'belum' \? '<span class="unk">Belum diketahui<\/span>'/.test(appJs), 'belum diketahui, bukan Rp0');
   truthy(/const perMonthOk = !hasOpex && labaBulanan\(r\)\.jenis === 'rata';/.test(src('report.js')), 'PDF memakai aturan yang sama');
 });
+/* ===== UX P0: pengalaman seller pemula (teks & struktur; perilaku diuji di QA browser) ===== */
+test('UX P0 unggah: status jelas, CTA ke Ringkasan, terbaca ≠ tervalidasi', () => {
+  const a = src('app.js');
+  truthy(/<div id="upload-status" aria-live="polite"><\/div>/.test(a), 'kotak status setelah daftar file');
+  truthy(/File terbaca, tetapi belum cukup untuk analisis laba/.test(a) && /Laporan Penghasilan dari Seller Centre masih dibutuhkan/.test(a), 'hanya export pesanan');
+  truthy(/Laba belum bisa dihitung karena modal barang \(HPP\) belum diisi/.test(a), 'tanpa HPP');
+  truthy(/const HASIL = '<button class="btn primary" type="button" data-go="ringkasan">Lihat hasil analisis<\/button>'/.test(a), 'CTA utama ke Ringkasan');
+  truthy(/"Terbaca" berarti format file dikenali/.test(a), 'terbaca bukan berarti tervalidasi');
+  truthy(!/laba (sudah )?final|laba pasti|laba akurat/i.test(a.slice(a.indexOf('function uploadStatus'), a.indexOf('function renderFiles'))), 'tanpa klaim laba final');
+  truthy(/Dipakai untuk: \$\{FILE_USE\[f\.kind\]\}/.test(a), 'kegunaan tiap file');
+});
+test('UX P0 pengaturan: grup wajib/opsional, identitas PDF terpisah, input & kunci simpan tetap', () => {
+  const a = src('app.js');
+  for (const t of ['Data penghasilan', 'Wajib untuk laba', 'Pengaturan harga reseller', "optSec('biaya', '4', 'Biaya tambahan'", "optSec('target', '5', 'Target bisnis'", "'Identitas laporan PDF (opsional)'"]) truthy(a.includes(t), t);
+  truthy(/<p class="note-box">Informasi ini hanya digunakan sebagai identitas pada laporan PDF\. Tidak memengaruhi perhitungan laba\.<\/p>/.test(a) && /Tidak memengaruhi perhitungan laba\.',/.test(a), 'keterangan identitas PDF (di dalam dan di judul bagian)');
+  for (const id of ['s-packing', 's-target', 's-tprofit', 'fc-add', 'pf-store', 'pf-owner', 'pf-logo', 's-mitra', 's-coret', 'add-period']) truthy(a.includes(`id="${id}"`), `input ${id} tetap ada`);
+  truthy(/else if \(id === 'pf-store' \|\| id === 'pf-owner'\) \{ profile\[id === 'pf-store' \? 'store' : 'owner'\] = v; saveProfile\(\); return; \}/.test(a), 'identitas tetap disimpan di profil (tidak di pengaturan hitung)');
+  truthy(/view\.openSec\[e\.target\.dataset\.sec\] = e\.target\.open/.test(a), 'bagian terbuka tidak tertutup saat render ulang');
+});
+test('UX P0 halaman depan: ilustrasi Rp100 berlabel contoh, bukan data seller', () => {
+  const idx = fs.readFileSync(path.join(__dirname, '..', 'index.html'), 'utf8');
+  truthy(/<span class="ilus-tag">Contoh ilustrasi<\/span>/.test(idx) && /bukan data penjualan Anda<\/b> dan bukan margin rata-rata seller/.test(idx), 'label contoh + bukan data');
+  truthy(/CONTOH ILUSTRASI<br>bukan data asli/.test(idx), 'label di nota');
+  truthy(/Di toko Anda bisa lebih besar, lebih kecil, atau rugi/.test(idx), 'margin tidak berlaku umum');
+  truthy(/Contoh: dari Rp100 penjualan, ke mana uangnya\?/.test(idx), 'judul');
+});
+test('Branding: favicon Cek Untung (URL baru), apple-touch-icon, PDF tanpa logo lama', () => {
+  const root = (f) => fs.readFileSync(path.join(__dirname, '..', f), 'utf8');
+  for (const f of ['index.html', 'dashboard.html', 'akun.html', 'admin.html', 'privasi.html', 'app.html']) {
+    truthy(/<link rel="icon" href="icon-cek-untung\.svg" type="image\/svg\+xml">/.test(root(f)), `${f}: favicon Cek Untung`);
+    truthy(!/href="icon\.svg"/.test(root(f)), `${f}: tidak lagi memakai URL favicon lama`);
+  }
+  for (const f of ['index.html', 'dashboard.html', 'akun.html', 'admin.html', 'privasi.html']) truthy(/<link rel="apple-touch-icon" href="apple-touch-icon\.png">/.test(root(f)), `${f}: apple-touch-icon`);
+  eq(root('icon-cek-untung.svg'), root('icon.svg'), 'favicon baru = logo resmi (icon.svg)');
+  truthy(/viewBox="0 0 16 16"/.test(root('icon.svg')) && /#f4c542/.test(root('icon.svg')), 'logo resmi grid 16');
+  const png = fs.readFileSync(path.join(__dirname, '..', 'apple-touch-icon.png'));
+  eq(png.readUInt32BE(16), 180); eq(png.readUInt32BE(20), 180);
+  truthy(/'icon-cek-untung\.svg', 'apple-touch-icon\.png'/.test(root('sw.js')), 'ikon ikut cache offline');
+  truthy(!/M7 20\.5l5-5/.test(src('report.js')) && /viewBox="0 0 16 16" aria-hidden="true"><rect width="16" height="16" rx="4\.5" fill="#0f6e56"/.test(src('report.js')), 'sampul PDF memakai logo Cek Untung');
+});
+test('Landing: panah "Omzet bukan untung" di baris angka, tanpa angka ajaib', () => {
+  const css = src('site.css');
+  truthy(/\.om-a, \.om-b \{ display: contents; \}/.test(css) && /\.om-arrow \{ grid-column: 2; grid-row: 2;/.test(css), 'panah di kolom tengah, baris angka');
+  truthy(!/\.om-arrow \{[^}]*padding-bottom/.test(css), 'tidak lagi memakai padding-bottom tetap');
+  truthy(/\.om-arrow svg \{ width: 40px; transform: rotate\(90deg\); \}/.test(css), 'HP: panah ke bawah');
+});
+test('Formulir: contoh bukan nilai, nilai bawaan yang memengaruhi modal disebut jelas', () => {
+  const a = src('app.js');
+  for (const ph of ['Misalnya 30', 'Misalnya 2000', 'Misalnya 5000000']) truthy(a.includes(`placeholder="${ph}"`), ph);
+  truthy(/Memakai nilai bawaan: harga coret = harga acuan, harga jual Shopee = harga acuan\. Nilai ini ikut menentukan perkiraan modal\./.test(a), 'reseller: nilai bawaan diungkap');
+  truthy(/\(nilai bawaan\)/.test(a), 'target margin bawaan ditandai');
+});
 console.log(failed ? `\n${failed} uji GAGAL` : '\nSemua uji lulus');
 process.exitCode = failed ? 1 : 0;

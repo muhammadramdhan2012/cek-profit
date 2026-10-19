@@ -104,7 +104,7 @@
   let demo = false;
   let license = { ok: false };
   let viewName = 'ringkasan';
-  const view = { section: 'unggah', platform: 'all', from: '', to: '', metric: 'margin', q: '', sort: 'margin', showAll: false, onlyCheck: true, costQ: '', costAll: false, compare: null, typeOpen: false, prodFilter: 'all', prodKey: null, platCol: 'total' };
+  const view = { openSec: {}, section: 'unggah', platform: 'all', from: '', to: '', metric: 'margin', q: '', sort: 'margin', showAll: false, onlyCheck: true, costQ: '', costAll: false, compare: null, typeOpen: false, prodFilter: 'all', prodKey: null, platCol: 'total' };
   const sim = { listPrice: null, disc: null, cost: null, feePct: null, feeFixed: null, src: null, plat: null, status: 'nonmall', kat: null, opsi: [], afiliasi: 0 };
   let last = null;
   const cloud = CekCloud.init({ url: C.supabaseUrl, key: C.supabaseAnonKey });
@@ -299,7 +299,7 @@
       any: !!(filters || canExport) };
   }
   // Tampilan Data berisi tiga bagian; judul bilah atas mengikuti bagian yang dipilih dari menu.
-  const DATA_SEC = { unggah: ['Unggah data', 'Unggah laporan marketplace dan periksa file yang terbaca'], modal: ['Modal & HPP', 'Isi harga beli atau HPP agar laba bisa dihitung'], pengaturan: ['Pengaturan', 'Biaya lain, target, dan identitas laporan'] };
+  const DATA_SEC = { unggah: ['Unggah data', 'Unggah laporan marketplace dan periksa file yang terbaca'], modal: ['Modal & HPP', 'Isi harga beli atau HPP agar laba bisa dihitung'], pengaturan: ['Pengaturan opsional', 'Biaya tambahan, target bisnis, dan identitas laporan PDF'] };
   function renderTop() {
     const base = VIEWS.find((v) => v[0] === viewName);
     const meta = viewName === 'data' ? [base[0], ...(DATA_SEC[view.section] || DATA_SEC.unggah)] : base;
@@ -406,6 +406,8 @@
     if (!VIEWS.some((v) => v[0] === name)) name = 'ringkasan';
     viewName = name;
     if (name === 'data') view.section = section || 'unggah';
+    // Menu "Pengaturan" / tombol "Atur biaya" langsung membuka bagian biaya tambahan.
+    if (name === 'data' && section === 'pengaturan') view.openSec.biaya = true;
     if (push && location.hash !== `#${name}`) history.pushState(null, '', `#${name}`);
     render();
     // Animasi masuk halaman hanya saat berpindah halaman (bukan setiap render ulang).
@@ -1194,47 +1196,62 @@
       <nav class="sec-tabs" aria-label="Bagian halaman data">${[['unggah', 'Unggah data'], ['modal', 'Modal & HPP'], ['pengaturan', 'Pengaturan']].map(([k, l]) => `<button type="button" data-go="data" data-section="${k}" ${sec === k ? 'aria-current="true"' : ''}>${l}</button>`).join('')}</nav>
       ${!demo && (!type || view.typeOpen) ? typePicker(type) : ''}
       <div class="grid-2 data-grid" style="align-items:start">
-        <section class="stack" id="sec-unggah" aria-label="Unggah data">
+        <section class="stack" id="sec-unggah" aria-label="Data penghasilan">
+          <div class="grp-head"><span class="grp-n" aria-hidden="true">1</span><b>Data penghasilan</b><span class="badge todo">Wajib</span><span class="tiny faint grp-sub">Laporan Penghasilan dari Seller Centre: sumber penjualan, potongan, dan dana diterima.</span></div>
           <div class="drop" id="drop"><span class="ic">${svg('data', 24)}</span><strong>Tarik file laporan ke sini</strong>
             <span class="small muted drop-sub">atau pilih dari komputer / HP Anda. File dibaca di browser ini, tidak dikirim ke server.</span>
             <label class="btn primary" for="file-input">Pilih file</label><input id="file-input" type="file" multiple accept=".xlsx,.xls,.csv" hidden>
             <span class="drop-fmt"><span>.xlsx</span><span>.xls</span><span>.csv</span><span class="faint">boleh banyak sekaligus; file yang sama tidak dihitung dua kali</span></span></div>
           <ul class="files" id="file-list"></ul>
+          <div id="upload-status" aria-live="polite"></div>
           ${files.length ? '<div><button class="btn sm quiet danger" type="button" id="clear-btn">Hapus semua file</button></div>' : ''}
           <section class="panel sup" aria-labelledby="sup-h"><div class="panel-head" style="margin:0 0 4px"><h3 id="sup-h">Laporan yang didukung</h3><p>Unduh untuk periode yang sama di semua laporan</p></div>
             ${SUP.map(([lvl, cls, items]) => `<div class="sup-g ${cls}"><span class="sup-lvl">${lvl}</span><ul>${items.map(([p, pl, t, how, beta]) => `<li><span class="sup-plat">${p ? `<i class="sw" style="background:var(--${p === 'modal' ? 'accent' : p})"></i>` : ''}${pl}</span><b>${t}${beta ? ' <span class="beta-tag" title="Belum diuji dengan semua format file asli">Beta</span>' : ''}</b><small>${how}</small></li>`).join('')}${cls === 'rec' ? '<li class="beta-note">Format export marketplace dapat berubah. Hasil pencocokan ditandai bila belum dapat diverifikasi.</li>' : ''}</ul></div>`).join('')}
             <p class="tiny faint">Jenis file dikenali dari nama sheet dan kolom di dalamnya, bukan dari nama file. Nama menu di Seller Centre bisa sedikit berubah dari waktu ke waktu.</p></section>
         </section>
         <section class="panel modal-panel" id="sec-modal" aria-label="Modal dan HPP">
-          <div class="panel-head" style="margin:0"><h3>${type === 'produsen' ? 'Modal produksi (HPP)' : 'Modal barang'}${qi('modal')}</h3>${r && r.totalSales ? `<span class="badge ${r.coverage >= 0.98 ? 'ok' : 'todo'}">${r.coverage >= 0.98 ? 'Lengkap' : `${pct(r.coverage, 0)} penjualan`}</span>` : ''}</div>
+          <div class="panel-head" style="margin:0"><h3><span class="grp-n" aria-hidden="true">2</span>${type === 'produsen' ? 'Modal produksi (HPP)' : 'Modal barang / HPP'}${qi('modal')} <span class="badge todo">Wajib untuk laba</span></h3>${r && r.totalSales ? `<span class="badge ${r.coverage >= 0.98 ? 'ok' : 'todo'}">${r.coverage >= 0.98 ? 'Lengkap' : `${pct(r.coverage, 0)} penjualan`}</span>` : ''}</div>
           ${type ? `<div class="type-chip"><span class="ic">${typeIcon(type, 16)}</span><span>${TYPES[type].label}</span>${demo ? '' : '<button class="btn link" type="button" data-type-open>Ubah</button>'}</div>` : ''}
           <p class="small muted">Laporan marketplace tidak berisi harga beli Anda. Pesanan tanpa modal tidak dihitung dalam laba, bukan dianggap nol.</p>
           ${modalBody(s, r, dis, type)}
         </section>
       </div>
-      <section class="panel" style="display:grid;gap:16px" id="sec-pengaturan" aria-label="Pengaturan">
-        <div class="panel-head" style="margin:0"><h3>Biaya lain dan target</h3><p>Mengurangi laba setelah modal dengan biaya operasional yang tercatat</p></div>
-        <div class="fields align">
-          <div class="field"><label for="s-packing">${isDrop ? 'Biaya dropship per pesanan' : 'Packing per pesanan'}${qi(isDrop ? 'dropship_fee' : 'packing_in')}</label><div class="input"><span>Rp</span><input id="s-packing" type="number" min="0" step="100" inputmode="numeric" placeholder="2000" value="${ok(s.packing) && s.packing > 0 ? s.packing : ''}" ${dis}></div><span class="hint">${isDrop ? 'Packing atau jasa yang ditagih supplier per pesanan.' : 'Plastik, bubble wrap, lakban.'}</span></div>
-          <div class="field"><label for="s-target">Target margin per produk${qi('target_margin')}</label><div class="input"><input id="s-target" type="number" min="0" max="80" step="1" inputmode="decimal" value="${ok(s.targetMargin) ? s.targetMargin : 15}" ${dis}><span>% dari harga</span></div><span class="hint">Untuk status produk dan harga target.</span></div>
-          <div class="field"><label for="s-tprofit">Target laba per bulan${qi('target_laba_in')}</label><div class="input"><span>Rp</span><input id="s-tprofit" type="number" min="0" step="100000" inputmode="numeric" placeholder="5000000" value="${ok(s.targetProfit) ? s.targetProfit : ''}" ${dis}></div><span class="hint">Ditampilkan di ringkasan.</span></div>
-        </div>
-        <div class="field"><span class="label">Biaya operasional per bulan${qi('opex_in')}</span>
-          <div class="costs-list">${(s.fixedCosts || []).map((c, i) => `<div class="cost-row"><input class="plain" id="fc-label-${i}" value="${esc(c.label)}" placeholder="Misalnya gaji admin" aria-label="Nama biaya ${i + 1}" ${dis}>
-            <div class="input"><span>Rp</span><input id="fc-amount-${i}" type="number" min="0" step="10000" value="${ok(c.amount) ? c.amount : ''}" aria-label="Jumlah biaya ${i + 1}" ${dis}></div>
-            ${demo ? '<span></span>' : `<button class="x" type="button" data-fc-del="${i}" aria-label="Hapus biaya ${i + 1}">×</button>`}</div>`).join('')}</div>
-          ${demo ? '' : `<div><button class="btn sm quiet" type="button" id="fc-add">+ Tambah biaya: gaji, sewa, iklan${type === 'produsen' ? ', sewa dapur/alat' : ''}</button></div>`}</div>
-      </section>
-      <section class="panel" style="display:grid;gap:16px">
-        <div class="panel-head" style="margin:0"><h3>Identitas laporan</h3><p>Tampil di sampul laporan PDF</p></div>
-        <div class="fields">
-          <div class="field"><label for="pf-store">Nama toko</label><input class="plain" id="pf-store" value="${esc(prof().store)}" placeholder="Toko Sejahtera" ${dis}></div>
-          <div class="field"><label for="pf-owner">Disusun oleh atau untuk</label><input class="plain" id="pf-owner" value="${esc(prof().owner)}" placeholder="Untuk: Bapak Andi" ${dis}></div>
-          <div class="field"><span class="label">Logo</span><div class="row-actions">${prof().logo ? `<img src="${esc(prof().logo)}" alt="Logo toko" style="height:38px;max-width:120px;object-fit:contain;border-radius:6px">` : ''}
-            <label class="btn sm" for="pf-logo" ${demo ? 'hidden' : ''}>${prof().logo ? 'Ganti' : 'Pilih gambar'}</label><input id="pf-logo" type="file" accept="image/png,image/jpeg,image/svg+xml,image/webp" hidden>
-            ${prof().logo && !demo ? '<button class="btn sm quiet" type="button" id="pf-logo-del">Hapus</button>' : ''}</div></div>
-        </div>
+      <section class="stack opt-groups" id="sec-pengaturan" aria-label="Pengaturan opsional">
+        <div class="opt-intro"><h3>Pengaturan opsional</h3><p class="small muted">Tidak wajib. Laba sudah bisa dihitung dari laporan penghasilan dan modal barang. Buka bagian di bawah hanya bila perlu.</p></div>
+        ${optSec('biaya', '4', 'Biaya tambahan', 'Biaya yang tidak tercatat di laporan marketplace, misalnya packing dan gaji admin.',
+          [ok(s.packing) && s.packing > 0 ? `${isDrop ? 'Dropship' : 'Packing'} ${fmt(s.packing)}/pesanan` : '', (s.fixedCosts || []).length ? `${num(s.fixedCosts.length)} biaya operasional` : ''].filter(Boolean).join(' · ') || 'Belum diisi', `
+          <div class="fields align">
+            <div class="field"><label for="s-packing">${isDrop ? 'Biaya dropship per pesanan' : 'Packing per pesanan'}${qi(isDrop ? 'dropship_fee' : 'packing_in')}</label><div class="input"><span>Rp</span><input id="s-packing" type="number" min="0" step="100" inputmode="numeric" placeholder="Misalnya 2000" value="${ok(s.packing) && s.packing > 0 ? s.packing : ''}" ${dis}></div><span class="hint">${isDrop ? 'Packing atau jasa yang ditagih supplier per pesanan. Contoh: Rp3.000 per paket.' : 'Plastik, bubble wrap, dan lakban per paket. Contoh: Rp1.500. Dikurangkan dari laba setiap pesanan.'}</span></div>
+          </div>
+          <div class="field"><span class="label">Biaya operasional per bulan${qi('opex_in')}</span>
+            <span class="hint" style="margin:0 0 6px">Biaya tetap toko yang tidak ada di laporan marketplace. Contoh: gaji admin Rp2.000.000, sewa gudang Rp1.000.000. Dikurangkan dari laba sesuai lama periode data.</span>
+            <div class="costs-list">${(s.fixedCosts || []).map((c, i) => `<div class="cost-row"><input class="plain" id="fc-label-${i}" value="${esc(c.label)}" placeholder="Misalnya gaji admin" aria-label="Nama biaya ${i + 1}" ${dis}>
+              <div class="input"><span>Rp</span><input id="fc-amount-${i}" type="number" min="0" step="10000" value="${ok(c.amount) ? c.amount : ''}" aria-label="Jumlah biaya ${i + 1}" ${dis}></div>
+              ${demo ? '<span></span>' : `<button class="x" type="button" data-fc-del="${i}" aria-label="Hapus biaya ${i + 1}">×</button>`}</div>`).join('')}</div>
+            ${demo ? '' : `<div><button class="btn sm quiet" type="button" id="fc-add">+ Tambah biaya: gaji, sewa, iklan${type === 'produsen' ? ', sewa dapur/alat' : ''}</button></div>`}</div>`)}
+        ${optSec('target', '5', 'Target bisnis', 'Patokan untuk menilai produk dan bulan. Tidak mengubah angka laba.',
+          `Margin ${ok(s.targetMargin) ? s.targetMargin : 15}%${!ok(s.targetMargin) || s.targetMargin === 15 ? ' (nilai bawaan)' : ''}${ok(s.targetProfit) && s.targetProfit > 0 ? ` · laba ${fmt(s.targetProfit)}/bulan` : ''}`, `
+          <div class="fields align">
+            <div class="field"><label for="s-target">Target margin per produk${qi('target_margin')}</label><div class="input"><input id="s-target" type="number" min="0" max="80" step="1" inputmode="decimal" value="${ok(s.targetMargin) ? s.targetMargin : 15}" ${dis}><span>% dari harga</span></div><span class="hint">Contoh: 20% berarti dari harga jual Rp100.000 Anda ingin sisa laba Rp20.000. Dipakai untuk status produk dan harga target. Bawaan 15% bila tidak diubah; tidak mengubah angka laba.</span></div>
+            <div class="field"><label for="s-tprofit">Target laba per bulan${qi('target_laba_in')}</label><div class="input"><span>Rp</span><input id="s-tprofit" type="number" min="0" step="100000" inputmode="numeric" placeholder="Misalnya 5000000" value="${ok(s.targetProfit) ? s.targetProfit : ''}" ${dis}></div><span class="hint">Contoh: Rp5.000.000. Ringkasan menunjukkan berapa bulan yang mencapai target.</span></div>
+          </div>`)}
+        ${optSec('identitas', '', 'Identitas laporan PDF (opsional)', 'Nama toko, penyusun, dan logo untuk sampul PDF. Tidak memengaruhi perhitungan laba.',
+          prof().store ? esc(prof().store) : 'Belum diisi', `
+          <p class="note-box">Informasi ini hanya digunakan sebagai identitas pada laporan PDF. Tidak memengaruhi perhitungan laba.</p>
+          <div class="fields">
+            <div class="field"><label for="pf-store">Nama toko</label><input class="plain" id="pf-store" value="${esc(prof().store)}" placeholder="Toko Sejahtera" ${dis}><span class="hint">Judul di sampul PDF. Contoh: Toko Buku Sejahtera.</span></div>
+            <div class="field"><label for="pf-owner">Disusun oleh atau untuk</label><input class="plain" id="pf-owner" value="${esc(prof().owner)}" placeholder="Untuk: Bapak Andi" ${dis}><span class="hint">Baris kecil di sampul. Contoh: "Disusun oleh Rina untuk pemilik toko".</span></div>
+            <div class="field"><span class="label">Logo</span><div class="row-actions">${prof().logo ? `<img src="${esc(prof().logo)}" alt="Logo toko" style="height:38px;max-width:120px;object-fit:contain;border-radius:6px">` : ''}
+              <label class="btn sm" for="pf-logo" ${demo ? 'hidden' : ''}>${prof().logo ? 'Ganti' : 'Pilih gambar'}</label><input id="pf-logo" type="file" accept="image/png,image/jpeg,image/svg+xml,image/webp" hidden>
+              ${prof().logo && !demo ? '<button class="btn sm quiet" type="button" id="pf-logo-del">Hapus</button>' : ''}</div><span class="hint">PNG atau JPG. Tampil di pojok sampul PDF, menggantikan logo Cek Untung.</span></div>
+          </div>`)}
       </section>`;
+  }
+  /** Bagian pengaturan opsional yang bisa dibuka-tutup. Status buka disimpan di view.openSec agar tidak tertutup saat render ulang. */
+  function optSec(key, n, title, desc, summary, body) {
+    return `<details class="panel opt-sec" data-sec="${key}" ${view.openSec[key] ? 'open' : ''}>
+      <summary><span class="grp-n ${n ? '' : 'blank'}" aria-hidden="true">${n}</span><span class="opt-t"><b>${title}</b>${/opsional/i.test(title) ? '' : ' <span class="badge">Opsional</span>'}<small>${desc}</small></span><span class="opt-val">${summary}</span></summary>
+      <div class="opt-body">${body}</div></details>`;
   }
   /** Isi panel modal sesuai jenis usaha. */
   function modalBody(s, r, dis, type) {
@@ -1314,11 +1331,17 @@
   function acuanPanel(s, dis) {
     const ready = ok(s.mitra);
     const p = s.periods[s.periods.length - 1];
+    // Bagian lanjutan otomatis terbuka bila seller sudah mengisi nilai selain bawaan.
+    const resellerCustom = (s.coret || 100) !== 100 || s.periods.length > 1 || s.periods.some((q) => q.markup || q.disc || q.start);
     const sell = 100 * (1 + (p.markup || 0) / 100) * (1 - (p.disc || 0) / 100), cost = 100 - (s.mitra || 0);
     return `<p class="small muted">Untuk reseller yang membeli dengan potongan dari harga acuan pemasok, misalnya harga sampul buku atau harga katalog distributor.</p>
       <div class="fields two align">
-        <div class="field"><label for="s-mitra">Diskon dari pemasok${qi('diskon_pemasok')}</label><div class="input ${!ready && files.length ? 'need' : ''}"><input id="s-mitra" type="number" min="0" max="99" step="0.5" inputmode="decimal" placeholder="30" value="${ready ? s.mitra : ''}" ${dis}><span>%</span></div><span class="hint">Harga beli = harga acuan − diskon ini.</span></div>
-        <div class="field"><label for="s-coret">Harga coret di TikTok${qi('harga_coret')}</label><div class="input"><input id="s-coret" type="number" min="1" step="1" value="${s.coret || 100}" ${dis}><span>% dari acuan</span></div><span class="hint">100% bila harga coret sama dengan harga acuan.</span></div></div>
+        <div class="field"><label for="s-mitra">Diskon dari pemasok${qi('diskon_pemasok')}</label><div class="input ${!ready && files.length ? 'need' : ''}"><input id="s-mitra" type="number" min="0" max="99" step="0.5" inputmode="decimal" placeholder="Misalnya 30" value="${ready ? s.mitra : ''}" ${dis}><span>%</span></div><span class="hint">Harga beli = harga acuan − diskon ini. Contoh: mitra penerbit dapat diskon 30% dari harga sampul.</span></div>
+      </div>
+      <details class="opt-sec sub" data-sec="reseller" ${(view.openSec.reseller ?? resellerCustom) ? 'open' : ''}>
+        <summary><span class="grp-n" aria-hidden="true">3</span><span class="opt-t"><b>Pengaturan harga reseller</b> <span class="badge">Opsional</span><small>Isi bila harga jual Anda berbeda dari harga acuan, misalnya dinaikkan atau didiskon toko.</small></span><span class="opt-val">${resellerCustom ? 'Sudah Anda atur' : 'Memakai nilai bawaan: harga coret = harga acuan, harga jual Shopee = harga acuan. Nilai ini ikut menentukan perkiraan modal.'}</span></summary>
+        <div class="opt-body"><div class="fields two align">
+        <div class="field"><label for="s-coret">Harga coret di TikTok${qi('harga_coret')}</label><div class="input"><input id="s-coret" type="number" min="1" step="1" value="${s.coret || 100}" ${dis}><span>% dari acuan</span></div><span class="hint">100% bila harga coret sama dengan harga acuan. Contoh: buku harga sampul Rp100.000 dicoret Rp110.000 → isi 110.</span></div></div>
       <div class="subsec"><div class="subsec-head"><b>Pola harga di Shopee${qi('pola_shopee')}</b><span class="tiny faint">Shopee tidak mencatat harga sebelum diskon</span></div>
         <div class="periods"><div class="period period-head"><span>Mulai tanggal pesanan</span><span>Kenaikan dari acuan</span><span>Diskon toko</span><span></span></div>
         ${s.periods.map((q, i) => `<div class="period"><div class="input"><input type="date" id="p-start-${i}" value="${esc(q.start)}" aria-label="Mulai periode ${i + 1}" ${dis}></div>
@@ -1326,6 +1349,7 @@
           <div class="input"><input type="number" id="p-disc-${i}" step="0.5" min="0" max="99" value="${q.disc}" aria-label="Diskon toko periode ${i + 1}" ${dis}><span>%</span></div>
           ${s.periods.length > 1 && !demo ? `<button class="x" type="button" data-del="${i}" aria-label="Hapus periode ${i + 1}">×</button>` : '<span></span>'}</div>`).join('')}</div>
         ${demo ? '' : '<div><button class="btn sm quiet" type="button" id="add-period">+ Tambah periode harga</button></div>'}</div>
+        </div></details>
       <p class="formula">${ready ? `Contoh harga acuan Rp100.000: Anda membeli Rp${(cost * 1000).toLocaleString('id-ID')} dan menjual Rp${Math.round(sell * 1000).toLocaleString('id-ID')} di Shopee (periode terakhir), sisa ${pct((sell - cost) / sell)} sebelum potongan marketplace.` : 'Isi diskon dari pemasok untuk menghitung modal.'}</p>
       ${batasAman(s)}`;
   }
@@ -1401,7 +1425,10 @@
     files.push(...results);
     track('unggah-file');
     render();
-    if (!hadIncome && last) toast(last.all.ready ? 'Laporan terbaca. Buka Ringkasan untuk melihat hasil.' : 'Laporan terbaca. Langkah berikutnya: isi modal barang.');
+    if (!hadIncome && last) toast(last.all.ready ? 'Laporan terbaca. Tekan "Lihat hasil analisis" untuk membuka hasilnya.' : 'Laporan terbaca. Langkah berikutnya: isi modal barang.');
+    else if (!last) toast('File terbaca. Laporan Penghasilan masih dibutuhkan untuk analisis laba.');
+    // Bawa seller ke status unggah agar langkah berikutnya terlihat (terutama di HP).
+    const box = $('#upload-status'); if (box && box.firstElementChild) box.scrollIntoView({ block: 'center' });
   }
   function fileStatus(f) {
     if (f.error) return `<span class="bad">${esc(f.error)}</span>`;
@@ -1419,7 +1446,51 @@
     if (p.kind === 'shopee_balance') return 'Tidak diperlukan. Gunakan Laporan Penghasilan.';
     return '<span class="bad">Format belum dikenali. Lihat daftar file yang dibaca.</span>';
   }
+  // Kegunaan tiap jenis file, agar seller tahu mengapa file itu diunggah.
+  const FILE_USE = { shopee_income: 'penjualan, potongan marketplace, dan dana diterima', tiktok_income: 'penjualan, potongan marketplace, dan dana diterima',
+    shopee_orders: 'jumlah barang dan variasi tiap pesanan, agar modal lebih tepat', tiktok_orders: 'jumlah barang dan variasi tiap pesanan, agar modal lebih tepat',
+    shopee_return: 'kasus retur dan refund, termasuk barang yang tidak kembali', tiktok_return: 'kasus retur dan refund, termasuk barang yang tidak kembali',
+    modal_template: 'modal per produk' };
+  /**
+   * Status setelah unggah: apa yang sudah terbaca dan apakah sudah cukup untuk analisis laba. Semua dari hasil parser
+   * dan engine (last.all); tidak ada angka baru. "Terbaca" ≠ tervalidasi.
+   */
+  function uploadStatus() {
+    if (demo || !files.length) return '';
+    const ok1 = files.filter((f) => !f.error && f.kind !== 'unknown');
+    const kinds = new Set(ok1.map((f) => f.kind));
+    const bad = files.length - ok1.length;
+    const r = last && last.all;
+    const plat = ['shopee', 'tiktok'].filter((k) => [...kinds].some((x) => x.startsWith(k)));
+    const rows = plat.map((k) => `<li><span class="ftag ${k}">${PNAME[k]}</span>${kinds.has(`${k}_income`) ? '<span class="ok">Laporan Penghasilan ada</span>' : '<span class="warn">Laporan Penghasilan belum ada</span>'}${kinds.has(`${k}_orders`) ? ' · export pesanan' : ''}${kinds.has(`${k}_return`) ? ' · file retur' : ''}</li>`).join('');
+    const MODAL = '<button class="btn" type="button" data-go="data" data-section="modal">Isi modal barang</button>';
+    const HASIL = '<button class="btn primary" type="button" data-go="ringkasan">Lihat hasil analisis</button>';
+    let cls, title, body, ctas;
+    if (!r || !(r.totalSales || r.orders)) {
+      cls = 'pending'; title = 'File terbaca, tetapi belum cukup untuk analisis laba';
+      body = 'Laporan Penghasilan dari Seller Centre masih dibutuhkan. File itulah sumber penjualan, potongan marketplace, dan dana yang Anda terima. Export pesanan dan file retur hanya melengkapi. Cara mengunduhnya ada di daftar "Laporan yang didukung" di bawah.';
+      ctas = '';
+    } else if (!r.ready) {
+      cls = 'pending'; title = 'Penjualan dan potongan sudah bisa dilihat';
+      body = 'Laba belum bisa dihitung karena modal barang (HPP) belum diisi. Pesanan tanpa modal tidak dihitung dalam laba, bukan dianggap nol.';
+      ctas = HASIL + MODAL;
+    } else if (r.statusHpp && r.statusHpp.total === 'sebagian') {
+      cls = 'estimate'; title = 'Data cukup untuk analisis awal';
+      body = `${pct(r.coverage, 0)} penjualan masuk dalam perhitungan laba karena modalnya sudah diketahui. Sisanya belum dihitung sampai modalnya diisi, jadi laba belum final.`;
+      ctas = HASIL + MODAL;
+    } else {
+      cls = 'verified'; title = 'Data cukup untuk analisis laba';
+      body = 'Semua penjualan sudah punya modal. Laba tetap ditandai belum final sampai semua komponen terverifikasi; rinciannya ada di Kepastian Profit.';
+      ctas = HASIL;
+    }
+    return `<section class="up-status ${cls}" aria-labelledby="up-st-h"><div class="up-st-head"><span class="status ${cls}" aria-hidden="true"></span><h3 id="up-st-h">${title}</h3></div>
+      ${rows ? `<ul class="up-st-plat">${rows}</ul>` : ''}<p class="small">${body}</p>
+      ${bad ? `<p class="small warn">${num(bad)} file belum dikenali dan tidak dipakai. Lihat keterangan di daftar file.</p>` : ''}
+      ${ctas ? `<div class="row-actions">${ctas}</div>` : ''}
+      <p class="tiny faint">"Terbaca" berarti format file dikenali. Total Laporan Penghasilan dicocokkan dengan ringkasan resmi; hal lain yang belum pasti ditandai di Kepastian Profit.</p></section>`;
+  }
   function renderFiles() {
+    const st0 = $('#upload-status'); if (st0) st0.innerHTML = uploadStatus();
     const el = $('#file-list');
     if (!el) return;
     const list = demo ? CekDemo.make().map((wb) => ({ name: wb.name, demo: true, kind: Engine.detect(wb) })) : files;
@@ -1429,7 +1500,7 @@
       const st = f.demo ? 'ok' : f.error || f.kind === 'unknown' ? 'bad' : f.kind === 'shopee_balance' ? 'warn' : /class="warn"/.test(fileStatus(f)) ? 'warn' : 'ok';
       return `<li class="file fs-${st}"><span class="file-ic ${cls}" aria-hidden="true">${svg('laporan', 18)}</span><div class="file-body"><div class="name">${esc(f.name)}</div>
         <div class="file-tags"><span class="ftag ${cls}">${esc(plat)}</span>${rest.length ? `<span class="ftag">${esc(rest.join(', '))}</span>` : ''}${f.kind === 'shopee_orders' || f.kind === 'tiktok_orders' ? `<span class="ftag beta-tag" title="${BETA_NOTE}">Beta</span>` : ''}<span class="ftag st ${st}">${st === 'ok' ? '✓ Terbaca' : st === 'warn' ? '! Periksa' : '✕ Tidak terbaca'}</span></div>
-        <div class="muted file-st">${f.demo ? 'Data contoh' : fileStatus(f)}</div></div>
+        <div class="muted file-st">${f.demo ? 'Data contoh' : fileStatus(f)}</div>${!f.demo && FILE_USE[f.kind] ? `<div class="tiny faint file-use">Dipakai untuk: ${FILE_USE[f.kind]}</div>` : ''}</div>
         ${f.demo ? '<span></span>' : `<button class="x" type="button" data-rm="${i}" aria-label="Hapus ${esc(f.name)}">×</button>`}</li>`;
     }).join('');
     const drop = $('#drop');
@@ -1758,7 +1829,7 @@
   $('#sheet').addEventListener('close', () => document.querySelectorAll('tr.is-selected').forEach((tr) => tr.classList.remove('is-selected')));
   // Bilah judul: garis bawah & bayangan tipis muncul setelah halaman digulir (penanda di atas halaman, bukan event scroll).
   if ('IntersectionObserver' in window && $('#top-sentinel')) new IntersectionObserver(([en]) => $('#main-top').classList.toggle('is-stuck', !en.isIntersecting)).observe($('#top-sentinel'));
-  document.addEventListener('toggle', (e) => { if (!e.target.classList) return; if (e.target.classList.contains('rincian')) view.rincian = e.target.open; if (e.target.id === 'month-table') view.monthOpen = e.target.open; }, true);
+  document.addEventListener('toggle', (e) => { if (!e.target.classList) return; if (e.target.classList.contains('rincian')) view.rincian = e.target.open; if (e.target.id === 'month-table') view.monthOpen = e.target.open; if (e.target.dataset && e.target.dataset.sec) view.openSec[e.target.dataset.sec] = e.target.open; }, true);
   document.addEventListener('keydown', (e) => {
     if (e.key !== 'Escape') return;
     hideInfo();
