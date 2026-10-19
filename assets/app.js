@@ -472,6 +472,12 @@
       add('pending', 'Refund parsial: jumlah unit belum diketahui', `Sebagian penjualan tidak masuk dalam perhitungan laba karena jumlah unit pada refund parsial belum dapat diverifikasi. ${num(rpBiasa)} pesanan direfund sebagian tanpa jumlah barang yang tercatat. Nilai refund tidak dipakai untuk menebak jumlah barang.`,
         { label: 'Unggah file retur', go: 'data', section: 'unggah' }, 85, `${fmt(rpx.penjualan - (rpx.penjualanKonflik || 0))} penjualan tidak dihitung`);
     }
+    // R4: refund susulan TikTok yang pesanan asalnya tidak ada di laporan yang diunggah.
+    const rsx = (K.refundTiktok || {}).refundSusulanTidakCocok || { baris: 0 };
+    if (rsx.baris > 0) {
+      add('pending', 'Refund susulan belum dapat dicocokkan', `${num(rsx.baris)} refund TikTok tercatat sebagai baris terpisah, tetapi pesanan asalnya tidak ada di laporan yang diunggah. HPP-nya belum diketahui, jadi baris ini tidak dihitung dalam laba. Nilai refund tidak dipakai untuk menebak jumlah barang.`,
+        UNGGAH, 84, `${fmt(rsx.nilai)} refund`);
+    }
     if (rpKonflik > 0) {
       add('pending', 'Data refund perlu dicek', `${num(rpKonflik)} pesanan: file retur menyebut semua barang direfund, tetapi laporan penghasilan menunjukkan refund sebagian. Pesanan ini tidak masuk dalam perhitungan laba sampai datanya dicek di Seller Centre.`,
         RETUR, 86, `${fmt(rpx.penjualanKonflik || 0)} penjualan tidak dihitung`);
@@ -966,7 +972,7 @@
     // Refund hanya rincian: sudah termasuk di penjualan, tidak pernah dikurangkan lagi.
     const rfSome = Object.values(J.marketplace).some((x) => x && ok(x.refund.nilai));
     const refundLine = !ok(rf.nilai) ? `<span class="tr-sub">Rincian refund belum tersedia${rfSome ? ' untuk sebagian marketplace' : ''}; penjualan tetap sesuai laporan. ${trStatus(rf.status)}</span>`
-      : `<span class="tr-sub">${rf.nilai ? `Sudah termasuk refund <b class="neg">${fmt(rf.nilai)}</b> dari ${num(rf.jumlahPesanan)} pesanan. Refund tidak dikurangkan lagi.` : 'Refund menurut laporan: Rp0.'} ${trStatus(rf.status)}</span>`;
+      : `<span class="tr-sub">${rf.nilai ? `Sudah termasuk refund <b class="neg">${fmt(rf.nilai)}</b> dari ${num(rf.jumlahPesanan)} pesanan. Refund tidak dikurangkan lagi.` : 'Refund menurut laporan: Rp0.'} ${trStatus(rf.status)}${rf.susulanTidakCocok ? ` Total cocok dengan laporan, tetapi ${num(rf.susulanTidakCocok)} refund susulan TikTok belum dapat dicocokkan ke pesanan asalnya.` : ''}</span>`;
     const adj = JT.penyesuaian;
     return `<div class="card-header"><h3 id="trace-t">Jejak uang ${qi('jejak_uang', 'jejak uang')}</h3><p>Agregat dari laporan dan isian Anda</p></div>
       <ol class="trace">

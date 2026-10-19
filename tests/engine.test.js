@@ -1497,6 +1497,126 @@ test('MT-A1 pencairan belum diproses: selalu "belum tersedia", nilai bukan Rp0; 
   eq(d.jejakUang.marketplace.shopee.dana.status, 'terekonsiliasi', 'contoh Shopee: Total yang Dilepas cocok');
 });
 
+/* ---------- R4: refund/biaya susulan TikTok (baris "Pesanan" kedua dengan ID yang sama), data SINTETIS ----------
+ * Aturan (KAMUS B.1c): baris susulan tetap masuk penjualan/potongan/dana apa adanya; untuk HPP dinilai bersama pesanan
+ * asalnya sebagai SATU pesanan (aturan H2-B3b); tidak dihitung sebagai pesanan baru; tanpa pesanan asal → HPP tidak
+ * diketahui. Nominal refund tidak pernah dipakai untuk unit HPP. */
+const susulan = (id, refund, fee = -2000) => ({ id, settle: refund + fee, sales: refund, sub: 0, refund, detail: '' });
+const biayaSusulan = (id, fee) => ({ id, settle: fee, sales: 0, sub: 0, refund: 0, detail: '' });
+const stAcuanR4 = { modalMode: 'acuan', mitra: 30, coret: 100, periods: [{ start: '', markup: 0, disc: 0 }], fixedCosts: [] };
+const stRataR4 = ST([], { fallbackPct: 50 });
+const R4m = (r) => r.kepastian.refundTiktok;
+/** Angka laporan (penjualan, potongan, dana) selalu = jumlah semua baris, apa pun aturan HPP-nya. */
+const r4Laporan = (r, rows) => {
+  eq(r.tiktok.sales, rows.reduce((a, x) => a + x.sales, 0), 'penjualan = Σ baris');
+  eq(r.tiktok.received, rows.reduce((a, x) => a + x.settle, 0), 'dana = Σ baris');
+  eq(r.tiktok.feeTotal, rows.reduce((a, x) => a + x.settle - x.sales, 0), 'potongan = Σ baris');
+};
+test('TT-R4-1 refund parsial di baris asal: perilaku H2-B3b tetap; tercatat sebagai refund baris asal', () => {
+  const r = E.compute([ttPenghasilan([ttOrder('6101', -50000)])], stTT);
+  cekRekonsiliasi(r, 'R4-1'); eq(ck(r).dikeluarkan.alasan[RP], 1); eq(R4m(r).refundSusulanCocok.baris, 0);
+  eq(R4m(r).refundParsialUnitBelumDiketahui, 1);
+});
+test('TT-R4-2/3/8 refund parsial pada baris susulan (file sama, tanpa bukti unit) = sama dengan refund di baris asal', () => {
+  const rows = [ttOrder('6102', 0), susulan('6102', -50000), normalTT];
+  const r = E.compute([ttPenghasilan(rows)], stTT);
+  const inRow = E.compute([ttPenghasilan([ttOrder('6102', -50000), normalTT])], stTT);
+  cekRekonsiliasi(r, 'R4-2'); r4Laporan(r, rows);
+  eq(r.totalModal, inRow.totalModal, 'HPP sama dengan refund di baris asal'); eq(r.totalModal, 40000, 'hanya pesanan normal');
+  truthy(r.totalModal >= 0, 'HPP tidak dikurangi nominal refund');
+  eq(r.tiktok.orders, 2, 'baris susulan bukan pesanan baru'); eq(ck(r).jumlahPesanan.tidakDiketahui, 1, 'cakupan: 1 pesanan, bukan 2');
+  eq(ck(r).dikeluarkan.alasan[RP], 1); eq(ck(r).dikeluarkan.refundParsial.jumlahPesanan, 1);
+  eq(ck(r).dikeluarkan.penjualan, 100000 - 50000, 'penjualan pesanan (asal + susulan) keluar dari laba');
+  eq(ck(r).dikeluarkan.danaDiterima, inRow.kepastian.cakupan.dikeluarkan.danaDiterima - 2000, 'dana asal + susulan (biaya susulan ikut)');
+  eq(R4m(r).refundSusulanCocok.baris, 1); eq(R4m(r).refundSusulanCocok.nilai, -50000); eq(R4m(r).refundParsialUnitBelumDiketahui, 1);
+  eq(r.jejakUang.marketplace.tiktok.refund.pencocokanTransaksi.status, 'lengkap');
+  const p = r.products.find((x) => x.code === SKU); eq(p.qtyKnown, false); eq(p.modalKnown, false);
+});
+test('TT-R4-4 refund susulan di file berbeda dicocokkan sama seperti di file yang sama', () => {
+  const satu = E.compute([ttPenghasilan([ttOrder('6104', 0), susulan('6104', -50000)])], stTT);
+  const dua = E.compute([ttPenghasilan([ttOrder('6104', 0)]), ttPenghasilan([susulan('6104', -50000)])], stTT);
+  for (const k of ['totalSales', 'totalReceived', 'totalModal', 'orders']) eq(dua[k], satu[k], k);
+  eq(JSON.stringify(ck(dua).dikeluarkan), JSON.stringify(ck(satu).dikeluarkan), 'cakupan sama');
+  eq(R4m(dua).refundSusulanCocok.baris, 1);
+  // R1–R3 belum diterapkan: overlap ID antar file tetap menurunkan status Jejak uang (konservatif).
+  eq(dua.jejakUang.marketplace.tiktok.penjualan.status, 'berdasarkan_laporan');
+});
+test('TT-R4-5 refund penuh susulan = refund penuh di baris asal (pesanan tidak terjual, HPP 0, kondisi fisik dicatat)', () => {
+  const rows = [ttOrder('6105', 0), susulan('6105', -100000)];
+  const r = E.compute([ttPenghasilan(rows)], stTT), inRow = E.compute([ttPenghasilan([ttOrder('6105', -100000)])], stTT);
+  r4Laporan(r, rows); cekRekonsiliasi(r, 'R4-5');
+  eq(r.orders, 0, 'tidak terhitung terjual'); eq(r.orders, inRow.orders); eq(r.totalModal, inRow.totalModal); eq(r.totalModal, 0);
+  eq(ck(r).refundTanpaCatatanFisik.jumlahPesanan, 1, 'kondisi fisik belum diketahui tetap dicatat, tidak ditebak');
+  eq(ck(r).refundTanpaCatatanFisik.jumlahPesanan, ck(inRow).refundTanpaCatatanFisik.jumlahPesanan);
+});
+test('TT-R4-6 refund tanpa pesanan asal → HPP tidak diketahui (bukan 0, bukan pengurang HPP); pencocokan belum lengkap', () => {
+  for (const [lbl, st] of [['produk', stTT], ['acuan', stAcuanR4], ['rata', stRataR4]]) {
+    const r = E.compute([ttPenghasilan([susulan('6106', -40000), normalTT])], st);
+    const base = E.compute([ttPenghasilan([normalTT])], st);
+    eq(r.totalModal, base.totalModal, `${lbl}: HPP tidak berubah oleh refund tanpa pesanan asal`);
+    eq(r.totalMargin, base.totalMargin, `${lbl}: laba hanya dari pesanan yang diketahui`);
+    eq(ck(r).dikeluarkan.alasan.refund_susulan_tanpa_pesanan_asal, 1, lbl);
+    eq(R4m(r).refundSusulanTidakCocok.baris, 1, lbl); eq(R4m(r).refundSusulanTidakCocok.nilai, -40000, lbl);
+    eq(r.tiktok.sales, 100000 - 40000, `${lbl}: refund tetap masuk penjualan`);
+  }
+  const only = E.compute([ttPenghasilan([susulan('6106', -40000)])], stTT);
+  truthy(Number.isNaN(only.totalMargin), 'laba NaN, bukan 0'); eq(only.orders, 0);
+});
+test('TT-R4-6b Money Trace: total cocok dengan laporan, tetapi pencocokan transaksi belum lengkap', () => {
+  const r = E.compute([A1tt([{ id: 'R4-X', sub: 0, refund: -30000, biaya: -1000 }, { id: 'R4-N', sub: 50000, refund: 0, biaya: -5000 }])], A1ST);
+  const rf = r.jejakUang.marketplace.tiktok.refund;
+  eq(rf.status, 'terekonsiliasi', 'total refund tetap cocok dengan laporan');
+  eq(rf.pencocokanTransaksi.status, 'belum_lengkap'); eq(rf.pencocokanTransaksi.refundSusulanTidakCocok, 1);
+  eq(r.jejakUang.total.refund.susulanTidakCocok, 1);
+});
+test('TT-R4-7 refund susulan dengan bukti unit valid (file retur) → HPP = unit terjual bersih × modal', () => {
+  const r = E.compute([ttPenghasilan([ttOrder('6107', 0), susulan('6107', -50000)]), ttRetur([{ order: '6107', sku: SKU, qty: 1 }])], stTT);
+  cekRekonsiliasi(r, 'R4-7');
+  eq(r.totalModal, 20000, '2 unit − 1 unit terbukti direfund'); eq(r.coverage, 1); eq(R4m(r).refundParsialUnitTerverifikasi, 1);
+  eq(r.products[0].qty, 1); eq(ck(r).penjualan.belum, 50000, 'status belum (satu sumber bukti), bukan terverifikasi');
+  // Bukti unit tidak sah → tetap tidak diketahui (aturan ketat H2-B3b berlaku juga untuk susulan).
+  const lain = E.compute([ttPenghasilan([ttOrder('6107', 0), susulan('6107', -50000)]), ttRetur([{ order: '6107', sku: '7654321', qty: 1 }])], stTT);
+  eq(ck(lain).dikeluarkan.alasan[RP], 1, 'SKU lain bukan bukti');
+});
+test('TT-R4-9 beberapa refund susulan untuk pesanan yang sama: dijumlahkan per pesanan', () => {
+  const rows = [ttOrder('6109', 0), susulan('6109', -20000), susulan('6109', -30000, -1000)];
+  const r = E.compute([ttPenghasilan(rows), ttRetur([{ order: '6109', sku: SKU, qty: 1 }])], stTT);
+  r4Laporan(r, rows); eq(r.totalModal, 20000); eq(r.orders, 1); eq(R4m(r).refundSusulanCocok.baris, 2);
+  const penuh = E.compute([ttPenghasilan([ttOrder('6109', 0), susulan('6109', -60000), susulan('6109', -40000, -1000)])], stTT);
+  eq(penuh.orders, 0, 'jumlah susulan = seluruh nilai → refund penuh'); eq(penuh.totalModal, 0);
+  // Refund per pesanan di Jejak uang (A1): satu pesanan meski ada dua baris refund.
+  const j = E.compute([A1tt([{ id: 'R4-M', sub: 90000, refund: 0, biaya: -9000 }, { id: 'R4-M', sub: 0, refund: -20000, biaya: -1000 }, { id: 'R4-M', sub: 0, refund: -10000, biaya: -500 }])], A1ST);
+  eq(j.jejakUang.marketplace.tiktok.refund.jumlahPesanan, 1); eq(j.jejakUang.marketplace.tiktok.refund.parsial, 1); eq(j.jejakUang.marketplace.tiktok.refund.nilai, -30000);
+});
+test('TT-R4-10 biaya logistik susulan: biaya sah sesuai laporan, bukan refund barang, bukan pesanan baru', () => {
+  const rows = [ttOrder('6110', 0), biayaSusulan('6110', -15000)];
+  for (const [lbl, st] of [['produk', stTT], ['acuan', stAcuanR4], ['rata', stRataR4]]) {
+    const r = E.compute([ttPenghasilan(rows)], st), base = E.compute([ttPenghasilan([ttOrder('6110', 0)])], st);
+    r4Laporan(r, rows); cekRekonsiliasi(r, `R4-10 ${lbl}`);
+    eq(r.totalModal, base.totalModal, `${lbl}: HPP tidak berubah`); eq(r.orders, 1, lbl);
+    eq(r.totalMargin, base.totalMargin - 15000, `${lbl}: biaya susulan mengurangi laba sebesar biayanya`);
+    eq(R4m(r).biayaSusulan.baris, 1, lbl); eq(R4m(r).refundSusulanCocok.baris, 0, lbl); eq(ck(r).refundParsialDitemukan.jumlahPesanan, 0, `${lbl}: bukan refund parsial`);
+  }
+});
+test('TT-R4-11 tiga mode modal: refund susulan tanpa bukti unit tidak pernah mengurangi HPP secara proporsional', () => {
+  for (const [lbl, st] of [['produk', stTT], ['acuan', stAcuanR4], ['rata', stRataR4]]) {
+    const rows = [ttOrder('6111', 0), susulan('6111', -50000), normalTT];
+    const r = E.compute([ttPenghasilan(rows)], st), base = E.compute([ttPenghasilan([normalTT])], st);
+    const inRow = E.compute([ttPenghasilan([ttOrder('6111', -50000), normalTT])], st);
+    eq(r.totalModal, base.totalModal, `${lbl}: pesanan refund parsial keluar dari HPP, tidak diprorata`);
+    eq(r.totalModal, inRow.totalModal, `${lbl}: sama dengan refund di baris asal`); eq(r.totalMargin, inRow.totalMargin, `${lbl}: laba sama (pesanan keluar dari laba)`);
+    eq(ck(r).dikeluarkan.alasan[RP], 1, lbl);
+    // Mode harga acuan & modal rata-rata tidak memakai unit, jadi bukti unit pun tidak membuat HPP dihitung.
+    if (lbl !== 'produk') eq(ck(E.compute([ttPenghasilan(rows), ttRetur([{ order: '6111', sku: SKU, qty: 1 }])], st)).dikeluarkan.alasan[RP], 1, `${lbl}: tetap tidak diketahui`);
+  }
+});
+test('TT-R4-12 unggah ulang file identik: hasil sama dengan sekali unggah', () => {
+  const f = () => ttPenghasilan([ttOrder('6112', 0), susulan('6112', -50000), biayaSusulan('6112', -3000)]);
+  const a = E.compute([f(), ttRetur([{ order: '6112', sku: SKU, qty: 1 }])], stTT), b = E.compute([f(), f(), ttRetur([{ order: '6112', sku: SKU, qty: 1 }])], stTT);
+  for (const k of ['totalSales', 'totalReceived', 'totalModal', 'totalMargin', 'orders']) eq(b[k], a[k], k);
+  eq(JSON.stringify(R4m(b)), JSON.stringify(R4m(a)), 'metadata R4 sama'); eq(JSON.stringify(ck(b)), JSON.stringify(ck(a)), 'cakupan sama');
+});
+
 test('tanggal dd/mm/yyyy dan serial Excel', () => { eq(E.date('05/06/2026'), '2026-06-05'); eq(E.date(46023), '2026-01-01'); });
 
 console.log(failed ? `\n${failed} uji GAGAL` : '\nSemua uji lulus');

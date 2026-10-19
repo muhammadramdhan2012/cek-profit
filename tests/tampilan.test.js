@@ -242,6 +242,11 @@ test('MT-A1 jejak uang: status provenance, refund hanya rincian, pencairan tanpa
   truthy(/esc\(why\.join/.test(tr) && /esc\(src\)/.test(tr), 'teks alasan & sumber di-escape');
   const pj = src('penjelasan.js'); truthy(/jejak_uang: \{/.test(pj), 'penjelasan jejak_uang ada');
 });
+test('TT-R4 tampilan: refund susulan tanpa pesanan asal punya item kepastian sendiri; Jejak uang membedakan total vs pencocokan', () => {
+  truthy(/'Refund susulan belum dapat dicocokkan'/.test(appJs), 'item kepastian refund susulan');
+  truthy(/Nilai refund tidak dipakai untuk menebak jumlah barang\./.test(appJs), 'tidak menebak unit dari nominal');
+  truthy(/Total cocok dengan laporan, tetapi \$\{num\(rf\.susulanTidakCocok\)\} refund susulan TikTok belum dapat dicocokkan/.test(labaSrc), 'Jejak uang: total vs pencocokan transaksi');
+});
 test('U3 Produk: status = warna + simbol + teks; label cari/urutkan; header tabel semantik; tanpa count-up', () => {
   truthy(/HEALTH = \{ sehat: 'Sehat', tipis: 'Tipis', rugi: 'Rugi', unknown: 'Modal belum ada' \}/.test(prodSrc), 'label teks status');
   const css = src('app.css');

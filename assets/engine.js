@@ -884,21 +884,22 @@ const Engine = (() => {
      * @param partial  (B) true bila laba pesanan ini masih memakai nominal refund parsial sebagai pengganti jumlah unit
      * @param found    (A) true bila pesanan ini refund parsial (apa pun perlakuannya)
      */
-    function ckAdd(pf, status, sales, settle, reasons, partial, found) {
-      const c = CK[pf], k = CAKUPAN_KEY[status];
-      c.penjualan[k] += sales; c.jumlahPesanan[k]++;
+    /** lanjutan = baris susulan TikTok (R4): nilainya ikut status pesanan asal, tetapi tidak dihitung sebagai pesanan baru. */
+    function ckAdd(pf, status, sales, settle, reasons, partial, found, lanjutan = false) {
+      const c = CK[pf], k = CAKUPAN_KEY[status], n = lanjutan ? 0 : 1;
+      c.penjualan[k] += sales; c.jumlahPesanan[k] += n;
       if (status === 'tidak_diketahui') {
         // Dana diterima bisa negatif (potongan/ongkir retur); dicatat apa adanya, tidak dibulatkan ke 0.
-        c.dikeluarkan.penjualan += sales; c.dikeluarkan.danaDiterima += settle; c.dikeluarkan.jumlahPesanan++;
+        c.dikeluarkan.penjualan += sales; c.dikeluarkan.danaDiterima += settle; c.dikeluarkan.jumlahPesanan += n;
         // Satu pesanan bisa punya beberapa alasan, jadi jumlah per alasan bisa lebih besar dari jumlahPesanan.
-        for (const a of new Set(reasons)) c.dikeluarkan.alasan[a] = (c.dikeluarkan.alasan[a] || 0) + 1;
+        if (!lanjutan) for (const a of new Set(reasons)) c.dikeluarkan.alasan[a] = (c.dikeluarkan.alasan[a] || 0) + 1;
         if (reasons.includes(REFUND_PARSIAL)) {
-          const x = c.dikeluarkan.refundParsial; x.jumlahPesanan++; x.penjualan += sales; x.danaDiterima += settle;
-          if (reasons.includes(REFUND_KONFLIK)) { x.konflik++; x.penjualanKonflik += sales; }
+          const x = c.dikeluarkan.refundParsial; x.jumlahPesanan += n; x.penjualan += sales; x.danaDiterima += settle;
+          if (reasons.includes(REFUND_KONFLIK)) { x.konflik += n; x.penjualanKonflik += sales; }
         }
       }
-      if (found) { c.refundParsialDitemukan.jumlahPesanan++; c.refundParsialDitemukan.penjualan += sales; }
-      if (partial) { c.refundParsialTanpaUnit.jumlahPesanan++; c.refundParsialTanpaUnit.penjualan += sales; }
+      if (found) { c.refundParsialDitemukan.jumlahPesanan += n; c.refundParsialDitemukan.penjualan += sales; }
+      if (partial) { c.refundParsialTanpaUnit.jumlahPesanan += n; c.refundParsialTanpaUnit.penjualan += sales; }
     }
     // Kandidat refund penuh (Shopee per item, TikTok per pesanan). Kondisi fisiknya dievaluasi setelah kasus retur dibaca.
     const fullRefunds = [];
@@ -928,14 +929,18 @@ const Engine = (() => {
     const shopeeIn = new Set();
     // Money Trace A1: agregat refund (metadata). Refund SUDAH termasuk di penjualan kedua marketplace, jadi angka ini
     // hanya rincian dan tidak pernah dikurangkan lagi. nilai NaN = kolom refund tidak ada (belum tersedia, bukan 0).
-    const blankRefund = () => ({ nilai: 0, jumlahPesanan: 0, penuh: 0, parsial: 0, tandaTidakWajar: 0, identitasGagal: 0, tanpaKolom: 0, tanpaSubtotal: 0 });
+    const blankRefund = () => ({ nilai: 0, jumlahPesanan: 0, penuh: 0, parsial: 0, tandaTidakWajar: 0, identitasGagal: 0, tanpaKolom: 0, tanpaSubtotal: 0, perPesanan: new Map() });
     const RF = { shopee: blankRefund(), tiktok: blankRefund() };
-    /** Refund satu pesanan. full = pesanan tidak terhitung terjual (refund penuh), sama dengan dasar `counted`. */
-    const refundAdd = (A, v, full, subAfter, sales) => {
+    /**
+     * Refund satu baris. full = pesanan tidak terhitung terjual (refund penuh), sama dengan dasar `counted`.
+     * id (TikTok): refund dihitung per PESANAN, jadi baris refund susulan (R4) tidak menambah pesanan refund baru.
+     */
+    const refundAdd = (A, v, full, subAfter, sales, id) => {
       if (!isOk(v)) { A.tanpaKolom++; return; }
       A.nilai += v;
       if (v > 0) A.tandaTidakWajar++;   // refund di laporan bernilai ≤ 0; positif = tanda belum terbukti
-      if (v < 0) { A.jumlahPesanan++; if (full) A.penuh++; else A.parsial++; }
+      if (v < 0 && id !== undefined) A.perPesanan.set(id, full);
+      else if (v < 0) { A.jumlahPesanan++; if (full) A.penuh++; else A.parsial++; }
       if (sales === undefined || Number.isNaN(sales)) return;   // Shopee: identitas dibuktikan oleh rumus penjualan
       if (!isOk(subAfter)) A.tanpaSubtotal++;
       else if (Math.abs(subAfter + v - sales) > 1) A.identitasGagal++;
@@ -1301,20 +1306,25 @@ const Engine = (() => {
     }
 
     /** H2-B3a: status cakupan satu pesanan TikTok + kandidat refund penuh (metadata saja). */
-    function tiktokCakupan(r, modal, lines, refundParsial) {
+    /** Status cakupan pesanan TikTok. r = pesanan (untuk R4: gabungan baris asal + susulan, lihat ttGabung). */
+    function tiktokCakupanStatus(r, modal, lines, refundParsial) {
       const partial = r.preGross > 0 && r.pre > 0 && r.pre < r.preGross;
       if (!isOk(modal)) {
         // H2-B3b: refund parsial tanpa bukti unit punya alasan sendiri (modalnya ada, unit terjualnya yang tidak diketahui).
+        // R4: refund susulan yang pesanan asalnya tidak ditemukan punya alasan sendiri.
         const reasons = refundParsial === 'konflik' ? [REFUND_PARSIAL, REFUND_KONFLIK]
           : refundParsial === 'unit_tidak_diketahui' ? [REFUND_PARSIAL]
-            : [mode === 'acuan' ? 'diskon_pemasok_belum_diisi' : !lines.length ? 'tanpa_rincian_produk' : 'modal_belum_diisi'];
-        ckAdd('tiktok', 'tidak_diketahui', r.sales, r.settle, reasons, false, partial);
-      } else {
-        // Refund parsial dengan unit dari file retur (satu sumber) → "belum". Nominal refund tidak dipakai lagi,
-        // jadi tidak ada lagi pesanan yang lababnya memakai porsi nominal (refundParsialTanpaUnit tetap 0).
-        const st = partial ? 'belum' : mode === 'acuan' ? 'estimasi' : lines.some((l) => l.entry) ? 'belum' : 'estimasi';
-        ckAdd('tiktok', st, r.sales, r.settle, [], false, partial);
+            : refundParsial === 'susulan_tanpa_pesanan_asal' ? ['refund_susulan_tanpa_pesanan_asal']
+              : [mode === 'acuan' ? 'diskon_pemasok_belum_diisi' : !lines.length ? 'tanpa_rincian_produk' : 'modal_belum_diisi'];
+        return { status: 'tidak_diketahui', reasons, partial };
       }
+      // Refund parsial dengan unit dari file retur (satu sumber) → "belum". Nominal refund tidak dipakai lagi,
+      // jadi tidak ada lagi pesanan yang lababnya memakai porsi nominal (refundParsialTanpaUnit tetap 0).
+      return { status: partial ? 'belum' : mode === 'acuan' ? 'estimasi' : lines.some((l) => l.entry) ? 'belum' : 'estimasi', reasons: [], partial };
+    }
+    function tiktokCakupan(r, modal, lines, refundParsial, row = r) {
+      const { status, reasons, partial } = tiktokCakupanStatus(r, modal, lines, refundParsial);
+      ckAdd('tiktok', status, row.sales, row.settle, reasons, false, partial);
       if (r.preGross > 0 && !(r.pre > 0)) {
         // Refund penuh. "Detail produk terjual" tetap mencantumkan unit yang direfund (audit H2-B3), jadi untuk refund
         // penuh jumlah unitnya = jumlah di detail. Sumbernya dicatat agar bisa ditinjau.
@@ -1445,21 +1455,76 @@ const Engine = (() => {
       const perUnit = notes.every((n) => n.entry);
       return { modal: ok ? modal : NaN, lines: notes, refundParsial: !partial ? null : unresolved ? (bukti.konflik && perUnit ? 'konflik' : 'unit_tidak_diketahui') : refunded ? 'unit_diketahui' : null };
     }
+    /*
+     * R4 (disetujui pemilik 20 Okt 2026): TikTok bisa mencatat refund atau biaya susulan sebagai baris "Pesanan" KEDUA
+     * dengan ID pesanan yang sama (Subtotal sebelum diskon = 0, Total Pendapatan ≤ 0). Baris itu sah dan tetap masuk
+     * penjualan, refund, potongan, dan dana apa adanya. Untuk HPP, baris susulan dicocokkan ke pesanan asalnya (ID sama,
+     * tepat satu baris asal) dan dinilai sebagai SATU pesanan: Subtotal sebelum diskon (setelah refund) digabung, lalu
+     * aturan H2-B3b berlaku (unit refund parsial hanya dari file retur; tanpa bukti → HPP tidak diketahui; nominal
+     * refund tidak pernah dipakai menghitung unit). Baris susulan tidak dihitung sebagai pesanan baru.
+     * Refund susulan tanpa pesanan asal → HPP tidak diketahui (bukan 0 dan bukan pengurang HPP).
+     */
+    const isLanjutan = (r) => r.isOrder && !(r.preGross > 0) && !(r.sales > 0);
+    const isRefundRow = (r) => r.pre < 0 || r.sales < 0 || (isOk(r.refundAfter) && r.refundAfter < 0);
+    const ttAsal = new Map(), ttSusulan = new Map();
+    for (const r of m.tiktok.values()) {
+      if (!r.isOrder) continue;
+      const map = isLanjutan(r) ? ttSusulan : ttAsal;
+      if (!map.has(r.id)) map.set(r.id, []);
+      map.get(r.id).push(r);
+    }
+    /** Pesanan asal unik untuk baris susulan, atau null (tidak ada / lebih dari satu → tidak bisa dicocokkan). */
+    const asalOf = (r) => { const a = ttAsal.get(r.id); return a && a.length === 1 ? a[0] : null; };
+    /** Pesanan asal + semua susulannya yang cocok, dinilai sebagai satu pesanan (hanya untuk HPP/status). */
+    const ttGabung = (r) => {
+      const fu = asalOf(r) === r ? ttSusulan.get(r.id) || [] : [];
+      return fu.length ? { ...r, pre: r.pre + fu.reduce((a, x) => a + x.pre, 0), sales: r.sales + fu.reduce((a, x) => a + x.sales, 0) } : r;
+    };
+    const ttHasil = new Map();   // kunci baris asal → { gab, modal, lines, refundParsial } (dihitung sekali)
+    const ttModalAsal = (r) => {
+      if (!ttHasil.has(r.key)) { const gab = ttGabung(r); ttHasil.set(r.key, { gab, ...tiktokRowModal(gab) }); }
+      return ttHasil.get(r.key);
+    };
+    // Metadata R4 (E): sumber refund dan status pencocokan. Hanya informasi; tidak dipakai menghitung angka lain.
+    const R4 = { refundBarisAsal: 0, refundSusulanCocok: { baris: 0, nilai: 0 }, refundSusulanTidakCocok: { baris: 0, nilai: 0 },
+      biayaSusulan: { baris: 0, nilai: 0, tanpaPesananAsal: 0 }, refundParsialUnitTerverifikasi: 0, refundParsialUnitBelumDiketahui: 0 };
     if (want.has('tiktok')) for (const r of m.tiktok.values()) {
       if (!r.isOrder) { if (inRange(r.payDate)) T.adj += r.settle; continue; }
       if (!inRange(r.orderDate)) continue;
       if (r.payDate && (!T.first || r.payDate < T.first)) T.first = r.payDate;
       if (r.payDate && r.payDate > T.last) T.last = r.payDate;
-      const { modal, lines, refundParsial } = tiktokRowModal(r);
+      const lanjut = isLanjutan(r), asal = lanjut ? asalOf(r) : null;
+      const cocok = !!(asal && inRange(asal.orderDate));
+      let gab = r, modal, lines, refundParsial;
+      if (!lanjut) ({ gab, modal, lines, refundParsial } = ttModalAsal(r));
+      else if (cocok) {
+        // Baris susulan: HPP-nya sudah termasuk penilaian pesanan asal → 0 bila pesanan asal bermodal, NaN bila tidak.
+        const a = ttModalAsal(asal);
+        gab = a.gab; refundParsial = a.refundParsial; modal = isOk(a.modal) ? 0 : NaN;
+        lines = r.lines.map((l) => ({ ...l, cost: modal, qtyNet: 0, unit: NaN, base: NaN, entry: null }));
+      } else if (isRefundRow(r)) {
+        // Refund susulan tanpa pesanan asal: unit dan HPP pesanan aslinya tidak diketahui → keluar dari laba.
+        refundParsial = 'susulan_tanpa_pesanan_asal'; modal = NaN;
+        lines = r.lines.map((l) => ({ ...l, cost: NaN, qtyNet: NaN, unit: NaN, base: NaN, entry: null }));
+      } else ({ modal, lines, refundParsial } = tiktokRowModal(r));   // biaya susulan tanpa pesanan asal: perilaku lama
+      if (lanjut && isRefundRow(r)) { const x = cocok ? R4.refundSusulanCocok : R4.refundSusulanTidakCocok; x.baris++; x.nilai += r.sales; }
+      else if (lanjut) { R4.biayaSusulan.baris++; R4.biayaSusulan.nilai += r.settle; if (!cocok) R4.biayaSusulan.tanpaPesananAsal++; }
+      else if (isOk(r.refundAfter) && r.refundAfter < 0) R4.refundBarisAsal++;
+      if (!lanjut && refundParsial === 'unit_diketahui') R4.refundParsialUnitTerverifikasi++;
+      if (!lanjut && (refundParsial === 'unit_tidak_diketahui' || refundParsial === 'konflik')) R4.refundParsialUnitBelumDiketahui++;
       // Kepastian TikTok: status HPP per baris belum dievaluasi (belum ada pencocokan seperti Shopee), jadi modal
       // per unit = "belum"; modal rata-rata / harga acuan = "estimasi"; tanpa modal = "tidak_diketahui".
-      kAdd(!isOk(modal) ? 'tidak_diketahui' : mode === 'acuan' ? 'estimasi' : lines.some((l) => l.entry) ? 'belum' : 'estimasi', r.sales, modal);
-      tiktokCakupan(r, modal, lines, refundParsial);
-      const counted = r.pre > 0;             // terjual (tidak dibatalkan/direfund penuh)
+      kAdd(!isOk(modal) ? 'tidak_diketahui' : mode === 'acuan' ? 'estimasi' : lanjut && cocok ? (ttHasil.get(asal.key).lines.some((l) => l.entry) ? 'belum' : 'estimasi') : lines.some((l) => l.entry) ? 'belum' : 'estimasi', r.sales, modal);
+      if (lanjut && cocok) {
+        const st = tiktokCakupanStatus(gab, ttHasil.get(asal.key).modal, ttHasil.get(asal.key).lines, refundParsial);
+        ckAdd('tiktok', st.status, r.sales, r.settle, st.reasons, false, st.partial, true);
+      } else tiktokCakupan(gab, modal, lines, refundParsial, r);
+      // terjual = tidak dibatalkan/direfund penuh. R4: dinilai per pesanan (asal + susulan); baris susulan tidak dihitung.
+      const counted = !lanjut && gab.pre > 0;
       const pack = counted ? packing : 0;
       const margin = isOk(modal) ? r.settle - modal - pack : NaN;
       T.orders += counted ? 1 : 0; T.sales += r.sales; T.received += r.settle; T.pre += r.pre; T.packing += pack;
-      refundAdd(RF.tiktok, r.refundAfter, r.preGross > 0 && !counted, r.subAfter, r.sales);
+      refundAdd(RF.tiktok, r.refundAfter, gab.preGross > 0 && !(gab.pre > 0), r.subAfter, r.sales, cocok ? asal.id : lanjut ? `${r.key}` : r.id);
       if (isOk(modal)) { T.modal += modal; T.margin += margin; T.knownSales += r.sales; T.knownReceived += r.settle; T.knownPacking += pack; }
       for (const k of Object.keys(T.fees)) T.fees[k] += r.fees[k];
       const src = r.source || 'Lainnya';
@@ -1485,6 +1550,8 @@ const Engine = (() => {
         p.packing = (p.packing || 0) + pack * w;
       }
     }
+    // Refund TikTok dihitung per pesanan (asal + susulan = satu pesanan); Shopee sudah per pesanan.
+    for (const A of Object.values(RF)) for (const full of A.perPesanan.values()) { A.jumlahPesanan++; if (full) A.penuh++; else A.parsial++; }
     T.feeTotal = Object.values(T.fees).reduce((a, b) => a + b, 0);
     T.discount = T.pre > 0 ? 1 - T.sales / T.pre : 0;
     const ttPaidRatio = T.sales > 0 ? T.pre / T.sales : 1;
@@ -1791,6 +1858,8 @@ const Engine = (() => {
         hpp: { ...K.hpp }, penjualan: { ...K.penjualan }, baris: { ...K.baris },
         // H2-B3a: cakupan per pesanan (lihat buildCakupan). Penjualan di sini = totalSales, berbeda dari penjualan di atas.
         cakupan: buildCakupan(r),
+        // R4: sumber refund TikTok dan status pencocokan baris susulan (metadata; lihat KAMUS B.1c).
+        refundTiktok: { ...R4, refundSusulanCocok: { ...R4.refundSusulanCocok }, refundSusulanTidakCocok: { ...R4.refundSusulanTidakCocok }, biayaSusulan: { ...R4.biayaSusulan } },
         // H2-B1: buku unit Shopee. nilaiUnitBelumDiketahui = modal unit yang direfund tetapi kondisi fisiknya belum
         // diketahui (risiko, BUKAN kerugian; tidak masuk laba). Bisa tumpang tindih dengan risiko kasus "belum dicek".
         bukuUnit: { ...ledgerStats, status: { ...ledgerStats.status } },
@@ -1873,7 +1942,10 @@ const Engine = (() => {
           penjualan: { nilai: P.sales, ...status('penjualan', nonPes('penjualan')) },
           refund: { nilai: tampil.refund, termasukPenjualan: true,
             jumlahPesanan: noCol ? NaN : A.jumlahPesanan, penuh: noCol ? NaN : A.penuh, parsial: noCol ? NaN : A.parsial,
-            ...status('refund', refundExtra) },
+            ...status('refund', refundExtra),
+            // R4/G: kecocokan TOTAL dengan laporan (status di atas) dibedakan dari kelengkapan pencocokan TRANSAKSI.
+            pencocokanTransaksi: pf === 'tiktok' ? { refundSusulanCocok: R4.refundSusulanCocok.baris, refundSusulanTidakCocok: R4.refundSusulanTidakCocok.baris,
+              status: R4.refundSusulanTidakCocok.baris ? 'belum_lengkap' : 'lengkap' } : { status: 'lengkap' } },
           potongan: { nilai: P.feeTotal, ...status('potongan', nonPes('potongan')) },
           dana: { nilai: P.received, ...dana },
           // Shopee: dicocokkan dengan "Total Penyesuaian" di sheet Adjustment (file tanpa sheet itu → belum bisa dicocokkan;
@@ -1892,6 +1964,7 @@ const Engine = (() => {
           status: list.length ? weakest(list.map((x) => x[comp].status)) : 'belum_tersedia' };
       }
       total.refund.jumlahPesanan = isOk(total.refund.nilai) ? list.reduce((a, x) => a + x.refund.jumlahPesanan, 0) : NaN;
+      total.refund.susulanTidakCocok = list.reduce((a, x) => a + (x.refund.pencocokanTransaksi.refundSusulanTidakCocok || 0), 0);
       total.penyesuaian.jumlah = list.reduce((a, x) => a + x.penyesuaian.jumlah, 0);
       return { versi: 'A1', filterTanggal, marketplace: mp, total,
         pencairan: { status: 'belum_tersedia', nilai: NaN, alasan: ['belum_diproses_A1'] } };

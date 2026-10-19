@@ -459,6 +459,33 @@ seluruh periode file; periode Laporan Penghasilan mengikuti tanggal dana dilepas
 menurut tanggal pesanan; voucher Shopee bernilai bukan nol belum ada di data uji (C.2); penyesuaian tetap di luar laba
 (A.10, KNOWN_ISSUES P3). Diuji di `tests/engine.test.js` (MT-A1) dan `tests/tampilan.test.js` (MT-A1).
 
+### B.1c Refund dan biaya susulan TikTok (R4, disetujui pemilik 20 Okt 2026)
+
+Status: **aturan R4 disetujui pemilik**; penerapan dari aturan resmi A.19.1 (refund parsial, 19 Okt 2026).
+
+TikTok kadang mencatat refund atau biaya setelah dana pesanan dilepas sebagai **baris "Pesanan" kedua dengan ID
+pesanan yang sama**. Ciri baris susulan: `Subtotal sebelum diskon` = 0 dan `Total Pendapatan` ≤ 0. Ditemukan pada data
+uji pemilik (agregat): 4 refund susulan parsial dan 1 biaya logistik susulan, semuanya dengan pesanan asal di file
+yang sama.
+
+| Aturan | Penerapan |
+|---|---|
+| Angka laporan | Baris susulan tetap masuk penjualan, refund, potongan, dan dana apa adanya (tidak dihapus, tidak menjadi penjualan baru) |
+| Pencocokan | Ke pesanan asal dengan ID pesanan yang sama dan `Subtotal sebelum diskon` > 0. Harus tepat satu baris asal; antarfile juga dicocokkan |
+| HPP | Pesanan asal + semua susulannya dinilai sebagai **satu pesanan**: `Subtotal sebelum diskon` setelah refund digabung, lalu aturan H2-B3b berlaku di ketiga mode modal |
+| Refund parsial | Unit hanya dari file retur (setiap SKU harus punya kasus valid). Tanpa bukti → HPP pesanan tidak diketahui, pesanan keluar dari laba. Mode harga acuan dan modal rata-rata tidak memakai unit, jadi selalu tidak diketahui. Nominal refund tidak pernah dipakai |
+| Refund penuh | Sama dengan refund penuh di baris asal: tidak terhitung terjual, HPP 0, kondisi fisik barang dicatat terpisah (tidak ditebak) |
+| Baris susulan | HPP 0 bila pesanan asal bermodal, tidak diketahui bila tidak. Tidak dihitung sebagai pesanan baru (jumlah pesanan, cakupan) |
+| Tanpa pesanan asal | Refund susulan → HPP tidak diketahui, alasan `refund_susulan_tanpa_pesanan_asal`. Biaya susulan tanpa pesanan asal → perilaku lama |
+| Biaya susulan | Biaya sah sesuai laporan (mengurangi dana dan laba bila pesanan asal bermodal), bukan refund barang |
+
+Metadata `kepastian.refundTiktok`: refund di baris asal, refund susulan cocok/tidak cocok (baris, nilai), biaya
+susulan, refund parsial dengan unit terverifikasi/belum diketahui. Jejak uang membedakan kecocokan **total** dengan
+laporan (status refund) dari kelengkapan **pencocokan transaksi** (`refund.pencocokanTransaksi`).
+
+Batasan: kunci duplikat TikTok belum diubah (R1–R3 ditunda, KNOWN_ISSUES P11); bila satu pesanan punya lebih dari satu
+baris asal, susulannya dianggap tidak cocok. Diuji di `tests/engine.test.js` (TT-R4-1 s.d. TT-R4-12).
+
 ### B.2 Catatan nama
 
 UI menyebut `totalMargin` sebagai "Margin kotor" atau "Margin setelah modal", dan `netProfit` sebagai "Laba bersih".
