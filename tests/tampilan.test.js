@@ -365,5 +365,68 @@ test('B3b UI: label Beta export pesanan + alasan refund parsial tampil (bukan Rp
   truthy(!/laba (akan )?naik|menaikkan laba/i.test(appJs + src('penjelasan.js')), 'tidak ada klaim "laba naik"');
   truthy(!/Laporan Penghasilan[^'`]*Beta/.test(appJs), 'Laporan Penghasilan tidak diberi label Beta');
 });
+/* ===== P0 rilis: HPP yang belum diketahui tidak tampil sebagai Rp0 (PDF, Excel, tabel Laba dashboard) ===== */
+const ttMini = (rows) => E.parseWorkbook({ name: 'tt-sintetis.xlsx', sheets: {
+  'Detail pesanan': [['ID Pesanan/Penyesuaian', 'Jenis transaksi', 'Waktu pemesanan', 'Waktu pembayaran pesanan', 'Jumlah penyelesaian pembayaran',
+    'Total Pendapatan', 'Subtotal sebelum diskon', 'Total pengembalian dana sebelum diskon', 'Total Biaya', 'Detail produk terjual', 'Sumber pesanan'],
+  ...rows.map((x) => [x.id, 'Pesanan', '2026/01/10', '2026/01/15', x.settle, x.sales, x.sales, 0, x.settle - x.sales, x.detail, 'TikTok Shop'])],
+  Laporan: [['', 'Jumlah penyelesaian pembayaran', '', '', '', rows.reduce((a, x) => a + x.settle, 0)]] } });
+const katalog = (items) => ({ modalMode: 'produk', catalog: items.map(([nama, cost, kode = '']) => ({ kode, nama, variasi: '', cost })) });
+/** Baris "Modal barang" di tabel laba PDF, sebagai teks. */
+const barisModal = (h) => ([...teks(h).matchAll(/Modal barang ((?:Belum diketahui|−?Rp)[^]*?) (?:Packing|Dana dari pesanan|Barang retur|Laba setelah modal)/g)][0] || [])[1] || '';
+test('P0 PDF: HPP semua tidak diketahui / sebagian / lengkap / benar-benar Rp0', () => {
+  const inc = penghasilan(0);
+  const semua = pdf(E.compute([inc], katalog([])));
+  truthy(/^Belum diketahui/.test(barisModal(semua)), `semua tidak diketahui: "${barisModal(semua)}"`); truthy(!/Rp0/.test(barisModal(semua)), 'tidak boleh Rp0');
+  const sebagian = pdf(E.compute([inc], katalog([['Kaos', 20000]])));
+  truthy(/^−Rp20\.000/.test(barisModal(sebagian)), `sebagian: "${barisModal(sebagian)}"`); truthy(/Dana dari pesanan tanpa modal/.test(teks(sebagian)), 'sebagian: pesanan tanpa modal disebut');
+  const lengkap = pdf(E.compute([inc], katalog([['Kaos', 20000], ['Topi', 10000]])));
+  truthy(/^−Rp30\.000/.test(barisModal(lengkap)), `lengkap: "${barisModal(lengkap)}"`);
+  const nol = pdf(E.compute([inc], katalog([['Kaos', 0], ['Topi', 0]])));
+  truthy(/^Rp0/.test(barisModal(nol)), `HPP memang 0 tetap Rp0: "${barisModal(nol)}"`);
+  // Dua platform: Shopee bermodal, TikTok belum → kolom TikTok "Belum diketahui", bukan Rp0.
+  const dua = pdf(E.compute([inc, ttMini([{ id: '8801', settle: 90000, sales: 100000, detail: '5550001 * 2;' }])], katalog([['Kaos', 20000], ['Topi', 10000]])));
+  truthy(/^−Rp30\.000 Belum diketahui −Rp30\.000/.test(barisModal(dua)), `dua platform: "${barisModal(dua)}"`);
+  truthy(/Laba setelah modal Rp[\d.]+ Belum diketahui/.test(teks(dua)), 'laba TikTok belum diketahui, bukan —/Rp0');
+  for (const h of [semua, sebagian, lengkap, nol, dua]) bersih(h, 'P0');
+});
+test('P0 Excel & dashboard: memakai status HPP dari engine, bukan Rp0/0 untuk HPP tidak diketahui', () => {
+  const appJs = src('app.js');
+  truthy(/const RH = \(k, v\) => \(known\(k\) && ok\(v\) \? Math\.round\(v\) : UNK\);/.test(appJs), 'Excel: helper RH');
+  truthy(/\['Modal', \.\.\.plats\.map\(\(k\) => RH\(k, -r\[k\]\.modal\)\), RH\('total', -r\.totalModal\)\]/.test(appJs), 'Excel: baris Modal');
+  truthy(/p\.modalKnown \? R\(p\.modal\) : UNK/.test(appJs), 'Excel: modal produk tidak diketahui');
+  truthy(/\['Modal \/ HPP', \(P, k\) => \(hppOk\(k\) \?/.test(appJs), 'tabel Laba dashboard: status per kolom');
+  truthy(!/\['Modal', \.\.\.plats\.map\(\(k\) => R\(-r\[k\]\.modal\)\)/.test(appJs), 'pola lama Excel tidak ada lagi');
+});
+test('P0 Pro: tanpa kontak pembayaran, CTA bayar tidak tampil dan status "Segera hadir"; kode lama tetap ada', () => {
+  const appJs = src('app.js'), idx = fs.readFileSync(path.join(__dirname, '..', 'index.html'), 'utf8'), akun = src('akun.js'), cfg = src('config.js');
+  truthy(/const PAY_READY = !!C\.whatsapp;/.test(appJs), 'dashboard: status siap bayar dari config');
+  truthy(/if \(!PAY_READY\) action = pending \?/.test(appJs) && /Segera hadir/.test(appJs), 'dialog Pro: Segera hadir saat belum siap');
+  truthy(/\$\{pending \|\| !PAY_READY \? '' : `<div class="plans">/.test(appJs), 'pilihan paket disembunyikan saat belum siap');
+  truthy(/id="req-upgrade">Lanjut ke pembayaran/.test(appJs) && /t\.id === 'req-upgrade'/.test(appJs), 'alur pembayaran lama tetap ada');
+  truthy(/data-pay="pro"/.test(idx) && /if \(!C\.whatsapp\) \{[^]*?'Segera hadir'/.test(idx), 'halaman depan: tombol Pro → Segera hadir');
+  truthy(/C\.whatsapp \? '<a class="btn sm" href="dashboard\.html#upgrade">Upgrade<\/a>' : '<span class="badge">Pro segera hadir<\/span>'/.test(akun), 'halaman akun');
+  truthy(/prices: \{\s*pro: 'Rp49\.000'/.test(cfg) && /whatsapp: '',/.test(cfg), 'harga dan config tidak diubah');
+});
+test('P0 laba bulanan PDF: Belum diketahui / sebagian (*) / Rp0 aktual / lengkap; tanpa NaN', () => {
+  const inc = E.parseWorkbook(Sint.penghasilan([
+    { id: 'B-JAN', orderDate: '2026-01-10 10:00', items: [{ name: 'Kaos', harga: 100000 }] },
+    { id: 'B-FEB', orderDate: '2026-02-10 10:00', items: [{ name: 'Topi', harga: 100000 }] },
+    { id: 'B-MAR1', orderDate: '2026-03-10 10:00', items: [{ name: 'Kaos', harga: 100000 }] },
+    { id: 'B-MAR2', orderDate: '2026-03-11 10:00', items: [{ name: 'Topi', harga: 100000 }] },
+    { id: 'B-APR', orderDate: '2026-04-10 10:00', items: [{ name: 'Gelas', harga: 100000 }] }]));
+  const h = pdf(E.compute([inc], katalog([['Kaos', 20000], ['Gelas', 100000]]))), t = teks(h);
+  truthy(/Januari 2026 1 Rp100\.000 Rp0 -0,0% Rp80\.000 80,0%/.test(t), 'Jan lengkap');
+  truthy(/Februari 2026 1 Rp100\.000 Rp0 -0,0% Belum diketahui — /.test(t), 'Feb belum diketahui, bukan Rp0');
+  truthy(/Maret 2026 2 Rp200\.000 Rp0 -0,0% Rp80\.000\* 80,0%/.test(t), 'Mar sebagian bertanda *');
+  truthy(/April 2026 1 Rp100\.000 Rp0 -0,0% Rp0 0,0%/.test(t), 'Apr laba Rp0 aktual tetap Rp0');
+  truthy(/\* Laba bulan itu hanya dari penjualan yang modalnya diketahui/.test(t) && /\? = laba belum diketahui/.test(t), 'catatan & legenda');
+  bersih(h, 'bulanan');
+  const appJs = src('app.js');
+  truthy(/const mStat = \(t\) => \(!t \|\| !t\.orders \? 'kosong' : t\.statusHpp \|\| 'lengkap'\);/.test(appJs), 'dashboard: status bulan dari engine');
+  truthy(/<td>\$\{lab\(m, m\.total\.margin\)\}<\/td>/.test(appJs) && /<td>\$\{mLaba\(r\.ready, m\.total, m\.total\.margin\)\}<\/td>/.test(appJs), 'dashboard: tabel bulanan');
+  truthy(/const RM = \(t, v\) => \(!r\.ready \|\| mStat\(t\) === 'kosong' \? '' : mKnown\(t\) \? R\(v\) : UNK\);/.test(appJs), 'Excel per bulan');
+  truthy(/margin: mKnown\(m\.total\) \? R\(m\.total\.margin\) : null/.test(appJs), 'ringkasan riwayat tidak menyimpan 0 untuk laba tidak diketahui');
+});
 console.log(failed ? `\n${failed} uji GAGAL` : '\nSemua uji lulus');
 process.exitCode = failed ? 1 : 0;

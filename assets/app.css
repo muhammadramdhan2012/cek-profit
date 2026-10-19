@@ -627,6 +627,7 @@ body.app .empty p { font-size: var(--fs-body-sm); }
 .tchart svg { width: 100%; height: auto; display: block; overflow: visible; }
 .tchart text { fill: var(--ink-3); font-family: var(--font); font-size: 12px; }
 .tchart .grid { stroke: var(--line-subtle); } .tchart .axis0 { stroke: var(--line-strong); }
+.tchart .t-unk { fill: var(--ink-3); font-size: 14px; font-weight: 700; }
 .tbar .hit { fill: transparent; }
 .tbar .bar { fill: var(--accent); transition: fill var(--dur-fast) var(--ease), opacity var(--dur-fast) var(--ease); }
 .tbar.neg .bar { fill: var(--cost); }

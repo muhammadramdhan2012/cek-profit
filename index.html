@@ -269,7 +269,7 @@
         <div class="price featured spot" data-spotlight data-reveal><span class="price-flag">Paling lengkap</span><h3>Pro</h3><div><span class="amount" data-price="pro">Rp49.000</span> <span class="muted" data-price="proUnit">/ bulan</span><div class="small faint" data-price="proNote">atau Rp399.000 / tahun</div></div>
           <p class="small muted">Keputusan harga dan produk berbasis angka.</p>
           <ul class="ticks"><li>Semua fitur Gratis</li><li>Laporan PDF dengan nama dan logo toko</li><li>Semua produk dan saran harga</li><li>Semua temuan dan saran</li><li>Ekspor Excel, riwayat tanpa batas</li></ul>
-          <a class="btn primary" href="dashboard.html#upgrade" data-track="harga-pro">Berlangganan Pro<svg class="arr" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg></a></div>
+          <a class="btn primary" href="dashboard.html#upgrade" data-track="harga-pro" data-pay="pro">Berlangganan Pro<svg class="arr" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg></a></div>
         <div class="price spot" data-spotlight data-reveal><h3>Jasa laporan</h3><div><span class="amount" data-price="jasa">Rp199.000</span> <span class="muted" data-price="jasaUnit">/ toko / bulan</span></div><p class="small muted">Tidak sempat? Kami yang kerjakan.</p>
           <ul class="ticks"><li>Anda kirim file, kami olah</li><li>Bantu menyusun modal per produk</li><li>Laporan PDF bulanan</li><li>Rekomendasi harga dan produk</li><li>Sesi tanya jawab</li></ul>
           <a class="btn" data-wa="jasa" href="#faq" data-track="harga-jasa">Hubungi lewat WhatsApp</a></div>
@@ -291,7 +291,7 @@
         <details><summary>Apakah Tokopedia didukung?</summary><p>Ya. Pesanan Tokopedia tercatat di laporan penghasilan TikTok Shop, dan hasilnya dipisahkan per sumber pesanan. Lazada belum didukung.</p></details>
         <details><summary>Apakah terhubung langsung ke akun Shopee atau TikTok Shop saya?</summary><p>Tidak. Cek Untung tidak terhubung otomatis ke marketplace. Anda mengunduh laporan dari Seller Centre, lalu mengunggahnya ke dashboard.</p></details>
         <details><summary>Seberapa bisa dipercaya hasilnya?</summary><p>Penjualan dan potongan diambil dari laporan resmi, dan total setiap file dicocokkan dengan ringkasan resmi platform. Laba bergantung pada modal yang Anda isi. Pesanan tanpa modal tidak dihitung, bukan dianggap nol, dan Kepastian Profit menunjukkan bagian mana yang sudah kuat dan mana yang masih perlu dilengkapi.</p></details>
-        <details><summary>Bagaimana cara berlangganan Pro?</summary><p>Masuk ke akun, klik Berlangganan Pro, pilih paket, lalu lanjutkan pembayaran lewat transfer atau QRIS melalui WhatsApp. Pro aktif di akun Anda setelah pembayaran dikonfirmasi.</p></details>
+        <details><summary>Bagaimana cara berlangganan Pro?</summary><p data-pay="faq">Masuk ke akun, klik Berlangganan Pro, pilih paket, lalu lanjutkan pembayaran lewat transfer atau QRIS melalui WhatsApp. Pro aktif di akun Anda setelah pembayaran dikonfirmasi.</p></details>
         <details><summary>Apakah ini menggantikan akuntan atau laporan pajak?</summary><p>Tidak. Cek Untung membantu keputusan usaha sehari-hari seperti harga, produk, dan promosi. Untuk laporan keuangan resmi dan pajak, tetap gunakan akuntan.</p></details>
       </div>
     </div>
@@ -349,6 +349,12 @@
     if (C.whatsapp) { el.href = `https://wa.me/${C.whatsapp}?text=${encodeURIComponent(C.waMessageJasa || '')}`; el.target = '_blank'; el.rel = 'noopener'; }
     else { el.removeAttribute('href'); el.setAttribute('aria-disabled', 'true'); el.textContent = 'Kontak segera tersedia'; el.style.opacity = '.55'; el.style.cursor = 'default'; }
   });
+  // Pembayaran Pro manual butuh kontak WhatsApp di config.js. Selama kosong, tombol berlangganan tidak mengarah ke
+  // pembayaran yang belum bisa diselesaikan; teks aslinya kembali otomatis setelah kontak diisi.
+  if (!C.whatsapp) {
+    document.querySelectorAll('[data-pay="pro"]').forEach((el) => { el.removeAttribute('href'); el.setAttribute('aria-disabled', 'true'); el.textContent = 'Segera hadir'; el.style.cursor = 'default'; });
+    document.querySelectorAll('[data-pay="faq"]').forEach((el) => { el.textContent = 'Pembayaran Pro segera hadir. Sementara itu, semua fitur gratis tetap bisa Anda pakai, termasuk menyimpan modal di akun.'; });
+  }
   document.getElementById('yr').textContent = new Date().getFullYear();
 
   const hasIO = 'IntersectionObserver' in window;

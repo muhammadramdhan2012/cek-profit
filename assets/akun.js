@@ -60,7 +60,7 @@
     const pending = (reqs || []).find((r) => r.status === 'baru' || r.status === 'diproses');
     card.innerHTML = `<div><h1>Akun saya</h1><p class="muted" style="margin-top:6px">${esc(user.email || '')}</p></div>${msgHtml()}
       <div class="plan"><div><b>${pro ? 'Pro' : 'Gratis'}</b><span class="small muted">${pro ? `Aktif sampai ${fmtDate(p.pro_until)}` : pending ? 'Permintaan upgrade sedang diproses' : 'Laporan PDF & analisis lengkap ada di Pro'}</span></div>
-        ${pro ? '<span class="badge pro">PRO</span>' : `<a class="btn sm" href="dashboard.html#upgrade">${pending ? 'Lihat status' : 'Upgrade'}</a>`}</div>
+        ${pro ? '<span class="badge pro">PRO</span>' : pending ? '<a class="btn sm" href="dashboard.html#upgrade">Lihat status</a>' : C.whatsapp ? '<a class="btn sm" href="dashboard.html#upgrade">Upgrade</a>' : '<span class="badge">Pro segera hadir</span>'}</div>
       <form id="f-profile">
         <div class="field"><label for="pf-name">Nama</label><input class="plain" id="pf-name" value="${esc(p && p.full_name)}" autocomplete="name"></div>
         <div class="field"><label for="pf-store">Nama toko</label><input class="plain" id="pf-store" value="${esc(p && p.store_name)}" placeholder="Tampil di sampul laporan PDF"></div>

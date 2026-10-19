@@ -20,6 +20,17 @@
   const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des'];
   const MONTHS_L = ['Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni', 'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'];
   const monthLabel = (k) => { const [y, mm] = k.split('-'); return `${MONTHS[+mm - 1]} ${y.slice(2)}`; };
+  // Status laba per bulan dari metadata engine: kosong (tanpa transaksi), tidak_diketahui (tanpa penjualan bermodal:
+  // margin 0 di objek BUKAN laba Rp0), sebagian, lengkap. UI tidak menghitung angka baru.
+  const mStat = (t) => (!t || !t.orders ? 'kosong' : t.statusHpp || 'lengkap');
+  const mKnown = (t) => { const x = mStat(t); return x === 'sebagian' || x === 'lengkap'; };
+  /** Sel laba bulanan (HTML). ready = r.ready. */
+  const mLaba = (ready, t, v) => {
+    const x = mStat(t);
+    if (!ready || x === 'kosong') return '<span class="faint">—</span>';
+    if (x === 'tidak_diketahui') return '<span class="unk">Belum diketahui</span>';
+    return `<span class="${v < 0 ? 'neg' : ''}">${fmt(v)}</span>${x === 'sebagian' ? '<span class="faint tiny"> (modal sebagian)</span>' : ''}`;
+  };
   const monthLong = (k) => { const [y, mm] = k.split('-'); return `${MONTHS_L[+mm - 1]} ${y}`; };
   const tgl = (d) => { if (!d) return '—'; const [y, m, dd] = d.slice(0, 10).split('-'); return `${+dd} ${MONTHS[+m - 1]} ${y}`; };
   const PNAME = { shopee: 'Shopee', tiktok: 'TikTok Shop' };
@@ -29,6 +40,8 @@
     modal_template: ['modal', 'Template modal'], shopee_balance: ['', 'Shopee, saldo (tidak diperlukan)'], unknown: ['bad', 'Belum dikenali'],
   };
   // Export pesanan Shopee/TikTok: parser belum diuji dengan semua format file asli (CLAUDE.md §2.5).
+  // Pembayaran Pro manual hanya bisa diselesaikan bila kontak WhatsApp sudah diisi (config.js).
+  const PAY_READY = !!C.whatsapp;
   const BETA_NOTE = 'Format export marketplace dapat berubah. Hasil pencocokan ditandai bila belum dapat diverifikasi.';
   const track = (e) => { try { window.cekTrack && window.cekTrack(e); } catch (err) { /* abaikan */ } };
   /* Pengumuman: #toast selalu ada di halaman sebagai area status (role=status). Isi dikosongkan dulu lalu diisi,
@@ -192,7 +205,7 @@
     return { v: 1, store: prof().store || '', first: r.first, last: r.last, platforms: ['shopee', 'tiktok'].filter((k) => r.has[k]),
       orders: r.orders, sales: R(r.totalSales), fees: R(r.totalFees), received: R(r.totalReceived), modal: R(r.totalModal), margin: R(r.totalMargin),
       opex: R(r.opex), net: R(r.netProfit), coverage: +r.coverage.toFixed(4), feePct: r.totalSales ? +(-r.totalFees / r.totalSales).toFixed(4) : null,
-      months: r.months.map((m) => ({ month: m.month, sales: R(m.total.sales), fees: R(m.total.fees), margin: R(m.total.margin), net: R(m.total.net), orders: m.total.orders })),
+      months: r.months.map((m) => ({ month: m.month, sales: R(m.total.sales), fees: R(m.total.fees), margin: mKnown(m.total) ? R(m.total.margin) : null, net: mKnown(m.total) ? R(m.total.net) : null, orders: m.total.orders })),
       top: pick([...prods].sort((a, b) => b.margin - a.margin).slice(0, 10)), worst: pick([...prods].sort((a, b) => a.margin - b.margin).slice(0, 5)),
       insights: r.insights.slice(0, 6).map((i) => ({ level: i.level, title: i.title })) };
   }
@@ -525,7 +538,7 @@
     const kpi = (label, value, note, cls = '', extra = '', kind = '') => `<div class="metric-card ${cls}" ${kind ? `data-kpi="${kind}"` : ''}><span class="m-label">${kpiIc(kind)}${label}</span><span class="m-value ${typeof value === 'number' && value < 0 ? 'neg' : ''}">${typeof value === 'number' ? fmt(value) : value}</span>${extra}<span class="m-note">${note}</span></div>`;
     // Garis tren kecil di kartu laba: bentuk dari nilai bulanan engine (r.months), hanya untuk gambar, tanpa angka baru.
     const sk = opex ? 'net' : 'margin';
-    const sv = r.ready ? r.months.map((m) => m.total[sk]).filter(ok) : [];
+    const sv = r.ready ? r.months.filter((m) => mKnown(m.total)).map((m) => m.total[sk]).filter(ok) : [];
     const spark = (() => {
       if (sv.length < 2) return '';
       const lo = Math.min(...sv), hi = Math.max(...sv), span = hi - lo || 1, W = 220, H = 56;
@@ -605,8 +618,10 @@
     const monthEnd = new Date(+last1.month.slice(0, 4), +last1.month.slice(5), 0).toLocaleDateString('sv-SE');
     const running = r.last && r.last < monthEnd;
     const val = (m) => m.total[key];
+    // Bulan yang labanya belum diketahui tidak digambar sebagai batang 0; diberi tanda "?" (dari metadata engine).
+    const unknownM = (m) => key === 'margin' && !mKnown(m.total);
     const W = 640, H = 220, L = 52, R = 8, T = 12, B = 28;
-    const vals = ms.map(val);
+    const vals = ms.map((m) => (unknownM(m) ? 0 : val(m)));
     let lo = Math.min(0, ...vals), hi = Math.max(0, ...vals);
     const step = niceStep((hi - lo) / 4 || 1);
     lo = Math.floor(lo / step) * step; hi = Math.ceil(hi / step) * step || step;
@@ -616,11 +631,13 @@
     for (let v = lo; v <= hi + 1e-9; v += step) g += `<line x1="${L}" x2="${W - R}" y1="${y(v)}" y2="${y(v)}" class="${Math.abs(v) < 1e-9 ? 'axis0' : 'grid'}"/><text x="${L - 8}" y="${y(v) + 4}" text-anchor="end">${fmtShort(v)}</text>`;
     const label = key === 'margin' ? 'Laba setelah modal' : 'Penjualan';
     ms.forEach((m, i) => {
-      const v = val(m), cx = L + band * i + band / 2, x = cx - bw / 2, top = Math.min(y(0), y(v)), h = Math.max(1, Math.abs(y(v) - y(0)));
+      const unk = unknownM(m), v = unk ? 0 : val(m), cx = L + band * i + band / 2, x = cx - bw / 2, top = Math.min(y(0), y(v)), h = Math.max(1, Math.abs(y(v) - y(0)));
       const isRun = running && i === ms.length - 1;
-      const tip = `${monthLong(m.month)}${isRun ? ' (berjalan)' : ''}: ${label} ${fmt(v)} dari ${num(m.total.orders)} pesanan`;
-      g += `<g class="tbar ${v < 0 ? 'neg' : ''} ${isRun ? 'run' : ''}" tabindex="0" role="listitem" aria-label="${esc(tip)}" data-tip="${esc(tip)}">
-        <rect class="hit" x="${cx - band / 2}" y="${T}" width="${band}" height="${H - T - B}"/><rect class="bar" x="${x}" y="${top}" width="${bw}" height="${h}" rx="${Math.min(5, bw / 3)}"/>
+      const part = key === 'margin' && mStat(m.total) === 'sebagian' ? ' (sebagian penjualan belum punya modal)' : '';
+      const tip = unk ? `${monthLong(m.month)}${isRun ? ' (berjalan)' : ''}: ${label} belum diketahui, modal belum ada untuk ${num(m.total.orders)} pesanan`
+        : `${monthLong(m.month)}${isRun ? ' (berjalan)' : ''}: ${label} ${fmt(v)} dari ${num(m.total.orders)} pesanan${part}`;
+      g += `<g class="tbar ${v < 0 ? 'neg' : ''} ${isRun ? 'run' : ''} ${unk ? 'unknown' : ''}" tabindex="0" role="listitem" aria-label="${esc(tip)}" data-tip="${esc(tip)}">
+        <rect class="hit" x="${cx - band / 2}" y="${T}" width="${band}" height="${H - T - B}"/>${unk ? `<text class="t-unk" x="${cx}" y="${y(0) - 6}" text-anchor="middle">?</text>` : `<rect class="bar" x="${x}" y="${top}" width="${bw}" height="${h}" rx="${Math.min(5, bw / 3)}"/>`}
         <text x="${cx}" y="${H - 8}" text-anchor="middle">${monthLabel(m.month)}${isRun ? '*' : ''}</text></g>`;
     });
     const best = r.insights.find((x) => /^Laba tertinggi di /.test(x.title));
@@ -631,8 +648,8 @@
       ${opt.table === false ? '' : `<details class="disclose"><summary>Lihat tabel per bulan</summary>
         <div class="tablewrap"><table class="data"><thead><tr><th>Bulan</th><th>Pesanan</th><th>Penjualan</th><th>Potongan</th><th>Laba setelah modal</th><th>Margin %</th>${r.fixedMonthly ? '<th>Laba dari data tersedia</th>' : ''}</tr></thead>
         <tbody>${ms.map((m) => `<tr><td>${monthLong(m.month)}</td><td>${num(m.total.orders)}</td><td>${fmt(m.total.sales)}</td><td class="neg">${fmt(m.total.fees)}</td>
-          <td class="${m.total.margin < 0 ? 'neg' : ''}">${r.ready ? fmt(m.total.margin) : '—'}</td><td>${r.ready && m.total.knownSales ? pct(m.total.margin / m.total.knownSales) : '—'}</td>
-          ${r.fixedMonthly ? `<td class="${m.total.net < 0 ? 'neg' : ''}">${r.ready ? fmt(m.total.net) : '—'}</td>` : ''}</tr>`).join('')}</tbody></table></div></details>`}`;
+          <td>${mLaba(r.ready, m.total, m.total.margin)}</td><td>${r.ready && mKnown(m.total) && m.total.knownSales ? pct(m.total.margin / m.total.knownSales) : '—'}</td>
+          ${r.fixedMonthly ? `<td>${mLaba(r.ready, m.total, m.total.net)}</td>` : ''}</tr>`).join('')}</tbody></table></div></details>`}`;
   }
   function bindTrend(box) {
     if (!box) return;
@@ -738,15 +755,17 @@
     const running = a && r.last < monthEnd;
     const delta = (x, y) => { if (!ok(x) || !ok(y) || !y) return ''; const d = (x - y) / Math.abs(y); return `<span class="delta ${d > 0 ? 'up' : 'down'}">${d > 0 ? '+' : '−'}${pct(Math.abs(d), 0)}</span>`; };
     const target = st().targetProfit;
-    const hitN = ok(target) && target > 0 && r.ready ? r.months.filter((m) => (r.fixedMonthly ? m.total.net : m.total.margin) >= target).length : null;
-    const key = (m) => (r.ready ? m.total.margin : m.total.sales);
+    const msKnown = r.months.filter((m) => mKnown(m.total));
+    const hitN = ok(target) && target > 0 && r.ready ? msKnown.filter((m) => (r.fixedMonthly ? m.total.net : m.total.margin) >= target).length : null;
+    // Laba bulan tanpa penjualan bermodal belum diketahui → NaN (tampil "—"), bukan Rp0; selisih juga tidak dihitung.
+    const key = (m) => (r.ready ? (mKnown(m.total) ? m.total.margin : NaN) : m.total.sales);
     return `<div class="facts">
       <div class="fact"><span>Rata-rata per bulan${qi('rata_bulan')}</span><b class="${r.perMonth < 0 ? 'neg' : ''}">${r.ready ? fmt(r.fixedMonthly ? r.netProfit / Math.max(r.monthsSpan, 1) : r.perMonth) : '—'}</b><small>${r.fixedMonthly ? 'laba dari data tersedia' : 'laba setelah modal'}, ${(Math.round(r.monthsSpan * 10) / 10).toLocaleString('id-ID')} bulan data</small></div>
       <div class="fact"><span>Laba per pesanan${qi('margin_pesanan')}</span><b>${r.ready ? fmt(r.perOrder) : '—'}</b><small>dari ${num(r.orders)} pesanan</small></div>
-      ${a && b ? `<div class="fact"><span>${monthLong(a.month)}${running ? ' (berjalan)' : ''}${qi('bulan_ini')}</span><b>${fmt(key(a))}</b><small>${r.ready ? 'laba' : 'penjualan'} ${delta(key(a), key(b))} dibanding ${monthLabel(b.month)}</small></div>
+      ${a && b ? `<div class="fact"><span>${monthLong(a.month)}${running ? ' (berjalan)' : ''}${qi('bulan_ini')}</span><b>${ok(key(a)) ? fmt(key(a)) : '<span class="unk">Belum diketahui</span>'}</b><small>${r.ready ? 'laba' : 'penjualan'} ${delta(key(a), key(b))} dibanding ${monthLabel(b.month)}</small></div>
       <div class="fact"><span>Potongan ${monthLabel(a.month)}${qi('potongan_bulan')}</span><b>${pct(-a.total.fees / (a.total.sales || 1))}</b><small>${pct(-b.total.fees / (b.total.sales || 1))} di ${monthLabel(b.month)}</small></div>`
       : `<div class="fact"><span>Potongan marketplace${qi('potongan')}</span><b>${pct(-r.totalFees / r.totalSales)}</b><small>${fmt(-r.totalFees)}</small></div><div class="fact"><span>Modal diketahui${qi('modal_diketahui')}</span><b>${pct(r.coverage, 0)}</b><small>dari penjualan</small></div>`}
-      ${hitN !== null ? `<div class="fact" style="grid-column:1/-1;border-right:0;border-top:1px solid var(--line)"><span>Target ${r.fixedMonthly ? 'laba' : 'laba setelah modal'} ${fmt(target)} per bulan${qi('target_laba')}</span><b>${hitN} dari ${r.months.length} bulan</b><small>mencapai target</small></div>` : ''}
+      ${hitN !== null ? `<div class="fact" style="grid-column:1/-1;border-right:0;border-top:1px solid var(--line)"><span>Target ${r.fixedMonthly ? 'laba' : 'laba setelah modal'} ${fmt(target)} per bulan${qi('target_laba')}</span><b>${hitN} dari ${msKnown.length} bulan</b><small>mencapai target</small></div>` : ''}
     </div>`;
   }
   const insightItem = (i) => `<li class="insight ${i.level}"><span class="bar" aria-hidden="true"></span><div><b>${esc(i.title)}</b><p>${esc(i.detail)}</p>${i.action ? `<div class="act">${esc(i.action)}</div>` : ''}</div></li>`;
@@ -945,14 +964,16 @@
     const sel = cols.some(([k]) => k === view.platCol) ? view.platCol : cols[0][0];
     const cell = (k, f) => f(k === 'total' ? null : r[k], k);
     const unk = '<span class="unk">Belum diketahui</span>';
+    // HPP per kolom: modal 0 pada platform yang belum punya penjualan bermodal BUKAN HPP Rp0 (status dari engine).
+    const hppOk = (k) => (r.statusHpp ? r.statusHpp[k === 'total' || !k ? 'total' : k] !== 'tidak_diketahui' : r.ready);
     const rows = [
       ['Pesanan terjual', (P) => num(P ? P.orders : r.orders)],
       ['Penjualan', (P) => fmt(P ? P.sales : r.totalSales)],
       [`Potongan marketplace${qi('potongan')}`, (P) => `<span class="neg">${fmt(P ? P.feeTotal : r.totalFees)}</span>`],
       [`Dana diterima${qi('dana_diterima')}`, (P) => fmt(P ? P.received : r.totalReceived)],
-      ['Modal / HPP', (P) => (r.ready ? `<span class="neg">${fmt(-(P ? P.modal : r.totalModal))}</span>` : unk)],
-      ...(r.totalPacking ? [['Packing', (P) => (r.ready ? `<span class="neg">${fmt(-(P ? P.knownPacking : r.knownPacking))}</span>` : unk)]] : []),
-      ['Laba setelah modal', (P) => { const v = P ? P.margin : r.totalMargin; return r.ready ? `<b class="${v < 0 ? 'neg' : ''}">${fmt(v)}</b>` : unk; }, 'total'],
+      ['Modal / HPP', (P, k) => (hppOk(k) ? `<span class="neg">${fmt(-(P ? P.modal : r.totalModal))}</span>` : unk)],
+      ...(r.totalPacking ? [['Packing', (P, k) => (hppOk(k) ? `<span class="neg">${fmt(-(P ? P.knownPacking : r.knownPacking))}</span>` : unk)]] : []),
+      ['Laba setelah modal', (P, k) => { const v = P ? P.margin : r.totalMargin; return hppOk(k) && ok(v) ? `<b class="${v < 0 ? 'neg' : ''}">${fmt(v)}</b>` : unk; }, 'total'],
       [`Tarif efektif${qi('tarif_efektif')}`, (P, k) => { const f = P && r.feeModel[k]; return f ? `${pct(f.pct)} + ${fmt(f.fixed)}<span class="faint tiny"> /pesanan</span>` : '<span class="faint">—</span>'; }],
       ['Modal diketahui', (P) => `<span class="faint">${pct(P ? P.coverage : r.coverage, 0)}</span>`],
     ];
@@ -969,10 +990,10 @@
     const opex = r.fixedMonthly > 0;
     const lastM = r.months[r.months.length - 1];
     const running = r.last && r.last < new Date(+lastM.month.slice(0, 4), +lastM.month.slice(5), 0).toLocaleDateString('sv-SE');
-    const lab = (v) => (r.ready ? `<span class="${v < 0 ? 'neg' : ''}">${fmt(v)}</span>` : '<span class="faint">—</span>');
+    const lab = (m, v) => mLaba(r.ready, m.total, v);
     return `<details class="disclose month-table" ${view.monthOpen ? 'open' : ''} id="month-table"><summary>Tabel per bulan (${num(r.months.length)} bulan)</summary>
       <div class="tablewrap"><table class="data"><thead><tr><th scope="col">Bulan</th><th scope="col">Pesanan</th><th scope="col">Penjualan</th><th scope="col">Potongan</th><th scope="col">Dana diterima</th><th scope="col">Laba setelah modal</th>${opex ? '<th scope="col">Laba dari data tersedia</th>' : ''}</tr></thead>
-      <tbody>${r.months.map((m, i) => `<tr><th scope="row">${monthLong(m.month)}${running && i === r.months.length - 1 ? ' <span class="faint tiny">(berjalan)</span>' : ''}</th><td>${num(m.total.orders)}</td><td>${fmt(m.total.sales)}</td><td class="neg">${fmt(m.total.fees)}</td><td>${fmt(m.total.received)}</td><td>${lab(m.total.margin)}</td>${opex ? `<td>${lab(m.total.net)}</td>` : ''}</tr>`).join('')}</tbody></table></div>
+      <tbody>${r.months.map((m, i) => `<tr><th scope="row">${monthLong(m.month)}${running && i === r.months.length - 1 ? ' <span class="faint tiny">(berjalan)</span>' : ''}</th><td>${num(m.total.orders)}</td><td>${fmt(m.total.sales)}</td><td class="neg">${fmt(m.total.fees)}</td><td>${fmt(m.total.received)}</td><td>${lab(m, m.total.margin)}</td>${opex ? `<td>${lab(m, m.total.net)}</td>` : ''}</tr>`).join('')}</tbody></table></div>
       ${r.ready ? '' : '<p class="tiny faint">Laba per bulan muncul setelah modal produk diisi.</p>'}</details>`;
   }
   function viewBiaya() {
@@ -1470,14 +1491,18 @@
         <textarea class="plain code" id="code-input" placeholder="Tempel kode yang diawali CP1." spellcheck="false"></textarea><span class="tiny" id="code-msg">${license.error ? `<span class="bad">${esc(license.error)}</span>` : ''}</span>
         <button class="btn" type="button" id="code-apply">Aktifkan kode</button></div></details>`;
       let action;
-      if (pending) action = `<p class="note-box">Permintaan <b>${pending.plan === 'pro_tahunan' ? 'Pro tahunan' : 'Pro bulanan'}</b> tercatat ${tgl(pending.created_at)} dan sedang diproses. Pro aktif setelah pembayaran dikonfirmasi.</p>
+      // P0 rilis: pembayaran Pro baru bisa diselesaikan bila kontak WhatsApp sudah diisi di config.js. Selama kosong,
+      // tombol yang mengarah ke pembayaran tidak ditampilkan (kode alurnya tetap ada; otomatis aktif setelah diisi).
+      const SOON = '<p class="note-box"><span class="badge">Segera hadir</span> Pembayaran Pro sedang kami siapkan. Semua fitur gratis tetap bisa Anda pakai. Bila sudah punya kode akses, aktifkan di bawah.</p>';
+      if (!PAY_READY) action = pending ? `<p class="note-box">Permintaan <b>${pending.plan === 'pro_tahunan' ? 'Pro tahunan' : 'Pro bulanan'}</b> tercatat ${tgl(pending.created_at)}. Pro aktif setelah pembayaran dikonfirmasi.</p>${SOON}` : SOON;
+      else if (pending) action = `<p class="note-box">Permintaan <b>${pending.plan === 'pro_tahunan' ? 'Pro tahunan' : 'Pro bulanan'}</b> tercatat ${tgl(pending.created_at)} dan sedang diproses. Pro aktif setelah pembayaran dikonfirmasi.</p>
         ${C.whatsapp ? `<a class="btn primary" href="${esc(waLink(`${C.waMessage} Email akun: ${account.user.email}. Paket: ${pending.plan === 'pro_tahunan' ? 'Pro tahunan' : 'Pro bulanan'}.`))}" target="_blank" rel="noopener">Kirim bukti bayar lewat WhatsApp</a>` : ''}`;
       else if (cloud.enabled && !account.user) action = '<a class="btn primary" href="akun.html?mode=daftar&next=dashboard.html%23upgrade">Daftar atau masuk untuk berlangganan</a>';
       else if (cloud.enabled) action = '<button class="btn primary" type="button" id="req-upgrade">Lanjut ke pembayaran</button><p class="tiny faint">Kami catat permintaan Anda, lalu Anda membayar lewat transfer atau QRIS melalui WhatsApp. Pro aktif di akun ini setelah dikonfirmasi.</p>';
       else action = C.whatsapp ? `<a class="btn primary" href="${esc(waLink(C.waMessage))}" target="_blank" rel="noopener" data-track="beli-wa">Pesan lewat WhatsApp</a>` : '<p class="small warn">Kontak pembelian belum diatur.</p>';
       d.innerHTML = `${dHead('Cek Untung Pro', 'Untuk keputusan harga dan produk yang berbasis angka.')}
         <div class="d-body"><ul class="benefits"><li>Laporan PDF siap kirim, dengan nama dan logo toko</li><li>Semua produk dengan status rugi, tipis, atau sehat</li><li>Harga impas dan harga target per produk</li><li>Semua temuan, ekspor Excel, riwayat tanpa batas</li></ul>
-        ${pending ? '' : `<div class="plans">${PLANS().map(([k, l, pr], i) => `<label class="plan-opt"><input type="radio" name="plan" value="${k}" ${i === 0 ? 'checked' : ''}><span><b>${l}</b></span><span class="p">${esc(pr)}</span></label>`).join('')}</div>`}
+        ${pending || !PAY_READY ? '' : `<div class="plans">${PLANS().map(([k, l, pr], i) => `<label class="plan-opt"><input type="radio" name="plan" value="${k}" ${i === 0 ? 'checked' : ''}><span><b>${l}</b></span><span class="p">${esc(pr)}</span></label>`).join('')}</div>`}
         ${action}${codeBlock}</div>`;
     }
     if (!d.open) d.showModal();
@@ -1504,20 +1529,29 @@
     const { r } = last;
     const R = (v) => (ok(v) ? Math.round(v) : '');
     const plats = ['shopee', 'tiktok'].filter((k) => r.has[k]);
+    // HPP yang belum diketahui ditulis sebagai teks, bukan 0 (status dari engine; 0 hanya bila HPP memang 0).
+    const UNK = 'Belum diketahui';
+    const st = r.statusHpp || { total: r.ready ? 'lengkap' : 'tidak_diketahui' };
+    const known = (k) => st[k] !== 'tidak_diketahui';
+    const RH = (k, v) => (known(k) && ok(v) ? Math.round(v) : UNK);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([['Cek Untung', prof().store || ''], ['Periode data', `${r.first} s.d. ${r.last}`], [], ['Komponen', ...plats.map((k) => PNAME[k]), 'Total'],
       ['Pesanan terjual', ...plats.map((k) => r[k].orders), r.orders], ['Penjualan', ...plats.map((k) => R(r[k].sales)), R(r.totalSales)],
       ['Potongan marketplace', ...plats.map((k) => R(r[k].feeTotal)), R(r.totalFees)], ['Dana diterima', ...plats.map((k) => R(r[k].received)), R(r.totalReceived)],
-      ['Modal', ...plats.map((k) => R(-r[k].modal)), R(-r.totalModal)], ['Packing', ...plats.map((k) => R(-r[k].knownPacking)), R(-r.knownPacking)],
+      ['Modal', ...plats.map((k) => RH(k, -r[k].modal)), RH('total', -r.totalModal)], ['Packing', ...plats.map((k) => RH(k, -r[k].knownPacking)), RH('total', -r.knownPacking)],
       ['Retur tidak kembali', ...plats.map(() => ''), R(-r.lostCertain)],
       ...(r.kepastian.risikoBarang.kerugianTanpaNilai ? [['Kasus retur tidak kembali tanpa nilai (belum dikurangkan)', ...plats.map(() => ''), r.kepastian.risikoBarang.kerugianTanpaNilai]] : []),
-      ['Laba setelah modal', ...plats.map((k) => R(r[k].margin)), R(r.totalMargin)],
+      ['Laba setelah modal', ...plats.map((k) => RH(k, r[k].margin)), RH('total', r.totalMargin)],
       ['Biaya operasional', ...plats.map(() => ''), R(-r.opex)], ['Laba dari data tersedia (setelah biaya operasional)', ...plats.map(() => ''), R(r.netProfit)],
       ['Porsi penjualan dengan modal diketahui (%)', ...plats.map((k) => +(r[k].coverage * 100).toFixed(1)), +(r.coverage * 100).toFixed(1)]]), 'Ringkasan');
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([['Bulan pesanan', 'Pesanan', 'Penjualan', 'Potongan', 'Dana diterima', 'Laba setelah modal', 'Laba dari data tersedia', ...plats.flatMap((k) => [`Penjualan ${PNAME[k]}`, `Laba setelah modal ${PNAME[k]}`])],
-      ...r.months.map((m) => [m.month, m.total.orders, R(m.total.sales), R(m.total.fees), R(m.total.received), R(m.total.margin), R(m.total.net), ...plats.flatMap((k) => [R(m[k].sales), R(m[k].margin)])])]), 'Per bulan');
+    // Laba bulanan: "Belum diketahui" bila bulan itu tanpa penjualan bermodal; kosong bila tanpa transaksi (bukan 0).
+    const STATUS_BLN = { tidak_diketahui: 'Belum diketahui', sebagian: 'Modal sebagian', lengkap: 'Modal lengkap', kosong: 'Tidak ada transaksi' };
+    const RM = (t, v) => (!r.ready || mStat(t) === 'kosong' ? '' : mKnown(t) ? R(v) : UNK);
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([['Bulan pesanan', 'Pesanan', 'Penjualan', 'Potongan', 'Dana diterima', 'Laba setelah modal', 'Laba dari data tersedia', 'Status modal', ...plats.flatMap((k) => [`Penjualan ${PNAME[k]}`, `Laba setelah modal ${PNAME[k]}`])],
+      ...r.months.map((m) => [m.month, m.total.orders, R(m.total.sales), R(m.total.fees), R(m.total.received), RM(m.total, m.total.margin), RM(m.total, m.total.net), STATUS_BLN[mStat(m.total)] || '',
+        ...plats.flatMap((k) => [R(m[k].sales), RM(m[k], m[k].margin)])])]), 'Per bulan');
     if (r.products.length) XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([['Platform', 'Kode', 'Produk', 'Terjual', 'Penjualan', 'Dana diterima', 'Modal', 'Laba', 'Margin %', 'Modal per unit', 'Harga rata-rata', 'Harga impas', 'Harga target', 'Status'],
-      ...[...r.products].sort((a, b) => (ok(b.margin) ? b.margin : -1e15) - (ok(a.margin) ? a.margin : -1e15)).map((p) => [PNAME[p.platform], catKey(p), p.name, p.qtyKnown ? Math.round(p.qty) : '', R(p.sales), R(p.received), R(p.modal), R(p.margin), ok(p.pct) ? +(p.pct * 100).toFixed(1) : '', R(p.unitCost), R(p.avgPrice), R(p.breakEven), R(p.targetPrice), p.health])]), 'Produk');
+      ...[...r.products].sort((a, b) => (ok(b.margin) ? b.margin : -1e15) - (ok(a.margin) ? a.margin : -1e15)).map((p) => [PNAME[p.platform], catKey(p), p.name, p.qtyKnown ? Math.round(p.qty) : '', R(p.sales), R(p.received), p.modalKnown ? R(p.modal) : UNK, p.modalKnown && ok(p.margin) ? R(p.margin) : UNK, ok(p.pct) ? +(p.pct * 100).toFixed(1) : '', R(p.unitCost), R(p.avgPrice), R(p.breakEven), R(p.targetPrice), p.health])]), 'Produk');
     if (r.insights.length) XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([['Tingkat', 'Temuan', 'Rincian', 'Saran'], ...r.insights.map((i) => [i.level, i.title, i.detail, i.action])]), 'Temuan');
     if (r.cases.length) XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([['Platform', 'No. pesanan', 'Produk', 'Kategori', 'Alasan', 'Resi retur', 'Nilai refund', 'Perkiraan modal', 'Status barang'],
       ...r.cases.map((c) => [PNAME[c.platform], c.orderId, c.product, Engine.CAT_LABEL[c.cat], c.reason, c.resi, R(c.amount), R(c.estModal), c.needsCheck ? c.state : 'tidak perlu'])]), 'Retur');

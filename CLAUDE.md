@@ -66,10 +66,19 @@ Bila dokumen rujukan bertentangan dengan file ini, file ini yang berlaku. Lapork
    - Parser yang belum diuji dengan file asli diberi label **Beta**.
    - Laba **tidak disebut final atau pasti** selama ada komponen material yang belum diketahui. Asumsi, keterbatasan data, dan kebutuhan verifikasi ditampilkan jelas di dekat angka yang terdampak, baik di UI, PDF, maupun penjelasan kepada pemilik.
    - Perilaku perhitungan yang masih bermasalah tidak boleh dijadikan standar. Definisi keuangan yang disepakati pemilik dipisahkan dari implementasi kode saat ini (`docs/KAMUS_ANGKA.md`). Definisi berstatus "DIUSULKAN — BELUM DISETUJUI" tidak boleh diimplementasikan tanpa persetujuan.
-   - Yang sudah ditetapkan pemilik hanya:
-     - konsep Profit Confidence (§1);
-     - prinsip klasifikasi penyesuaian berdasarkan substansi (butir di bawah).
+   - Yang sudah ditetapkan pemilik hanya (rinciannya di `docs/KAMUS_ANGKA.md`):
+     - konsep Profit Confidence (§1, A.16);
+     - prinsip klasifikasi penyesuaian berdasarkan substansi (butir di bawah, A.10);
+     - empat prinsip kuantitas (A.19.1, 14 Okt 2026);
+     - aturan pencocokan M0–M2 revisi sebagai dasar desain, pemisahan status kuantitas dan variasi, dan SKU opsional
+       (A.19.4–A.19.6, 14 Okt 2026);
+     - aturan refund parsial (A.19.1, 19 Okt 2026), lihat butir berikut.
      Semua rumus, bobot, ambang batas, dan definisi keuangan rinci lainnya tetap **DIUSULKAN — BELUM DISETUJUI**.
+   - **Nominal refund tidak boleh digunakan untuk menentukan jumlah unit HPP.** Bila jumlah unit pada refund parsial tidak dapat diverifikasi, HPP dan laba terkait tidak boleh dihitung menggunakan proporsi nominal refund. Penerapannya (disetujui 19 Okt 2026):
+     - berlaku untuk ketiga mode modal (per produk, harga acuan, modal rata-rata);
+     - bukti unit TikTok ketat: setiap SKU harus punya kasus retur yang valid; SKU yang tidak muncul di file retur tidak dianggap 0 unit;
+     - refund penuh dan kondisi fisik barang (kembali/tidak kembali) tetap dipisahkan dari aturan ini;
+     - bukti unit yang bertentangan dengan laporan penghasilan ditandai perlu dicek, bukan HPP terverifikasi.
    - Penyesuaian (kompensasi, penggantian, denda) diklasifikasikan menurut substansi transaksinya, bukan otomatis dikeluarkan dari laba. Prinsip ini sudah ditetapkan; tabel klasifikasi rinci masih usulan.
    - Bedakan margin, laba operasional, dan arus kas. Jangan menyebut salah satunya dengan nama yang lain.
 6. **Jangan mengubah requirement atau keputusan produk tanpa memberi tahu pemilik.** Bila ragu, tanyakan dulu.
@@ -202,6 +211,6 @@ node tests/cloud.test.js          # memakai server tiruan tests/mock-supabase.js
 - ⏳ Tarif umum di `assets/tarif.js` dicek 14 Okt 2026 dari sumber sekunder; perlu dicocokkan ulang saat marketplace mengumumkan perubahan tarif.
 - ⏳ Nomor WhatsApp dan harga final di `assets/config.js`. Harga sekarang masih placeholder: Rp49.000/bulan, Rp399.000/tahun, jasa Rp199.000.
 - ⏳ Supabase URL Configuration (Site URL dan Redirect URL ke domain GitHub Pages) belum dikonfirmasi.
-- ⏳ Parser export pesanan Shopee dan TikTok masih Beta, belum diuji dengan file asli.
+- ⏳ Parser export pesanan Shopee dan TikTok tetap berlabel Beta (keputusan pemilik 19 Okt 2026). Export Shopee baru dicocokkan dengan satu file asli; export TikTok asli belum diuji.
 - ⏳ Statistik GoatCounter belum aktif (`goatcounter: ''`).
 - ⏳ Masalah akurasi, keamanan, dan teknis dari audit 14 Okt 2026: lihat `KNOWN_ISSUES.md`. Jangan klaim laba akurat pada kasus yang masih terbuka di sana.

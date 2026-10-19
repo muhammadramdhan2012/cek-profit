@@ -1293,6 +1293,67 @@ test('B3b-16 semantik metadata: A ditemukan = B (laba memakai nominal) + C (dike
   const lain = ck(E.compute([ttPenghasilan([ttOrder('5920', -20000, '')])], stTT));
   eq(lain.refundParsialDitemukan.jumlahPesanan, 1); eq(lain.dikeluarkan.refundParsial.jumlahPesanan, 0); eq(lain.dikeluarkan.alasan.tanpa_rincian_produk, 1);
 });
+/* ===== P0 rilis: metadata refund konsisten di ketiga mode + status HPP untuk tampilan (data SINTETIS) ===== */
+test('P0-1 konflik bukti unit dinilai konsisten: hanya bila HPP memakai modal per unit (ketiga mode, dua marketplace)', () => {
+  const ttFiles = [ttPenghasilan([ttOrder('5921', -20000)]), ttRetur([{ order: '5921', sku: SKU, qty: 2 }])];
+  const shFiles = [...filesB1(-50000, 2), retKaos(2)];
+  const MODE = { produk: [stTT, stUnit], acuan: [MODE_B3B.acuan, MODE_B3B.acuan], rata: [stRata, stRata] };
+  for (const [mode, [sT, sS]] of Object.entries(MODE)) {
+    for (const [pf, x] of [['tiktok', E.compute(ttFiles, sT)], ['shopee', E.compute(shFiles, sS)]]) {
+      const rp = ck(x).perMarketplace[pf].dikeluarkan.refundParsial;
+      eq(rp.jumlahPesanan, 1, `${mode}/${pf}: tetap dikeluarkan sebagai refund parsial`);
+      eq(rp.konflik, mode === 'produk' ? 1 : 0, `${mode}/${pf}: konflik hanya bila bukti unit dipakai`);
+      eq(x.totalModal, 0, `${mode}/${pf}: HPP tetap tidak diketahui`);
+      truthy(rp.konflik <= rp.jumlahPesanan, 'konflik bagian dari C');
+    }
+  }
+  // TikTok modal per produk tetapi SKU tanpa modal (memakai modal rata-rata) → bukan konflik, tetap refund parsial.
+  const campur = E.compute([ttPenghasilan([ttOrder('5922', -20000)]), ttRetur([{ order: '5922', sku: SKU, qty: 2 }])], ST([], { fallbackPct: 40 }));
+  eq(ck(campur).dikeluarkan.refundParsial.konflik, 0); eq(ck(campur).dikeluarkan.refundParsial.jumlahPesanan, 1);
+});
+test('P0-2 refund bernilai positif (anomali) bukan refund parsial: tidak masuk A maupun B; angka tidak berubah', () => {
+  const pos = [E.parseWorkbook(Sint.penghasilan([{ id: 'SINT-P1', items: [{ name: 'Kaos', harga: 100000, refund: 10000 }] }]))];
+  for (const [mode, s] of [['produk', stUnit], ['acuan', MODE_B3B.acuan], ['rata', stRata]]) {
+    const r = E.compute(pos, s), c = ck(r);
+    eq(c.refundParsialDitemukan.jumlahPesanan, 0, `${mode}: A`); eq(c.refundParsialTanpaUnit.jumlahPesanan, 0, `${mode}: B`);
+    eq(c.dikeluarkan.refundParsial.jumlahPesanan, 0, `${mode}: C`);
+    truthy(c.refundParsialTanpaUnit.jumlahPesanan <= c.refundParsialDitemukan.jumlahPesanan, `${mode}: B ⊆ A`);
+  }
+  // Angka modal anomali ini tetap seperti sebelumnya (tidak diubah oleh perbaikan metadata).
+  eq(E.compute(pos, stRata).totalModal, 110000 * 0.4); eq(E.compute(pos, stUnit).totalModal, 20000, 'baris tanpa export: estimasi 1 unit (perilaku lama)');
+});
+test('P0-3 statusHpp: semua tidak diketahui / sebagian / lengkap / HPP benar-benar Rp0', () => {
+  const semua = E.compute([ttPenghasilan([normalTT])], ST([]));
+  eq(semua.statusHpp.total, 'tidak_diketahui'); eq(semua.statusHpp.tiktok, 'tidak_diketahui'); eq(semua.totalModal, 0, 'modal 0 di objek BUKAN HPP Rp0');
+  const sebagian = E.compute([ttPenghasilan([normalTT, ttOrder('5923', 0, '5550001 * 2;')])], stTT);
+  eq(sebagian.statusHpp.total, 'sebagian'); eq(sebagian.statusHpp.tiktok, 'sebagian');
+  const lengkap = E.compute([ttPenghasilan([normalTT])], stTT);
+  eq(lengkap.statusHpp.total, 'lengkap'); eq(lengkap.totalModal, 40000);
+  const nol = E.compute([ttPenghasilan([normalTT])], ST([cat('', '', 0, SKU)]));
+  eq(nol.statusHpp.total, 'lengkap', 'modal 0 dari isian seller = HPP diketahui'); eq(nol.totalModal, 0); eq(nol.ready, true);
+  // Per platform: Shopee bermodal, TikTok tanpa modal → status per platform berbeda.
+  const pl = E.compute([E.parseWorkbook(Sint.penghasilan([{ id: 'SINT-Q1', items: [{ name: 'Kaos', harga: 100000, refund: 0 }] }])), ttPenghasilan([normalTT])], stUnit);
+  eq(pl.statusHpp.shopee, 'lengkap'); eq(pl.statusHpp.tiktok, 'tidak_diketahui'); eq(pl.statusHpp.total, 'sebagian');
+});
+/** Empat bulan sintetis: Jan modal lengkap, Feb tanpa modal, Mar sebagian, Apr laba benar-benar Rp0. */
+const bulanP0 = () => [E.parseWorkbook(Sint.penghasilan([
+  { id: 'B-JAN', orderDate: '2026-01-10 10:00', items: [{ name: 'Kaos', harga: 100000 }] },
+  { id: 'B-FEB', orderDate: '2026-02-10 10:00', items: [{ name: 'Topi', harga: 100000 }] },
+  { id: 'B-MAR1', orderDate: '2026-03-10 10:00', items: [{ name: 'Kaos', harga: 100000 }] },
+  { id: 'B-MAR2', orderDate: '2026-03-11 10:00', items: [{ name: 'Topi', harga: 100000 }] },
+  { id: 'B-APR', orderDate: '2026-04-10 10:00', items: [{ name: 'Gelas', harga: 100000 }] }]))];
+const stBulan = ST([cat('Kaos', '', 20000), cat('Gelas', '', 100000)]);
+test('P0-4 laba bulanan: status per bulan (lengkap / belum diketahui / sebagian / Rp0 aktual); angka bulan tidak berubah', () => {
+  const r = E.compute(bulanP0(), stBulan), by = Object.fromEntries(r.months.map((m) => [m.month, m.total]));
+  eq(by['2026-01'].statusHpp, 'lengkap'); eq(by['2026-01'].margin, 80000);
+  eq(by['2026-02'].statusHpp, 'tidak_diketahui', 'Feb tanpa modal'); eq(by['2026-02'].margin, 0, 'nilai objek tetap 0 (rumus tidak diubah), tetapi statusnya belum diketahui');
+  eq(by['2026-03'].statusHpp, 'sebagian'); eq(by['2026-03'].margin, 80000);
+  eq(by['2026-04'].statusHpp, 'lengkap', 'laba Rp0 aktual tetap diketahui'); eq(by['2026-04'].margin, 0);
+  eq(r.months.find((m) => m.month === '2026-02').shopee.statusHpp, 'tidak_diketahui', 'status per platform juga ada');
+  // Temuan bulan tertinggi/terendah tidak memilih bulan yang labanya belum diketahui.
+  const ins = r.insights.find((i) => /^Laba tertinggi di /.test(i.title));
+  truthy(ins && !/Februari/.test(ins.title), ins && ins.title); truthy(/terendah di April/.test(ins.title), ins.title);
+});
 test('tanggal dd/mm/yyyy dan serial Excel', () => { eq(E.date('05/06/2026'), '2026-06-05'); eq(E.date(46023), '2026-01-01'); });
 
 console.log(failed ? `\n${failed} uji GAGAL` : '\nSemua uji lulus');

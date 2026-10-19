@@ -19,13 +19,16 @@ Aturan pemakaian:
 5. **Privasi:** repository ini publik. Jangan menulis angka bisnis asli toko (nominal, jumlah pesanan/refund/produk,
    statistik operasional), data pembeli, atau nomor transaksi asli. Cukup tulis "ditemukan pada data uji pemilik".
 
-Status persetujuan per 14 Okt 2026:
+Status persetujuan per 14 Okt 2026 (diperbarui 19 Okt 2026):
 - **Sudah ditetapkan pemilik (prinsip/konsep):**
   - konsep Profit Confidence (A.16, kalimat definisinya ada di `CLAUDE.md` §1);
   - prinsip bahwa penyesuaian diklasifikasikan berdasarkan substansi transaksi, tidak otomatis dikeluarkan dari laba (A.10);
   - empat prinsip kuantitas (A.19.1);
   - aturan pencocokan M0–M2 revisi sebagai **dasar desain** (A.19.4), pemisahan status kuantitas dan variasi (A.19.5),
-    dan SKU opsional (A.19.6).
+    dan SKU opsional (A.19.6);
+  - aturan resmi 19 Okt 2026: **nominal refund tidak boleh digunakan untuk menentukan jumlah unit HPP**; bila jumlah unit
+    pada refund parsial tidak dapat diverifikasi, HPP dan laba terkait tidak dihitung dengan proporsi nominal refund
+    (A.19.1, beserta penerapannya yang diterima pemilik).
 - **Belum disetujui:** semua rumus, bobot, ambang batas, aturan pencocokan, dan definisi keuangan rinci lain di bagian A,
   termasuk tabel klasifikasi A.10, rumus A.16, dan detail A.19.2–A.19.4. Statusnya **DIUSULKAN — BELUM DISETUJUI**.
 
@@ -410,8 +413,8 @@ gabungan.
 | Simbol | Field | Arti |
 |---|---|---|
 | A | `refundParsialDitemukan` | Semua pesanan refund parsial yang **ditemukan** (ada refund, nilai tersisa > 0), apa pun perlakuannya |
-| B | `refundParsialTanpaUnit` | Pesanan yang labanya **masih memakai porsi nominal refund** sebagai pengganti unit. Nama field dipertahankan untuk kompatibilitas. Sejak H2-B3b nilainya diharapkan **0**; angka > 0 berarti ada jalur yang lolos dari aturan A.19.1 |
-| C | `dikeluarkan.refundParsial` | Pesanan yang **dikeluarkan dari laba** karena unit refund parsial tidak diketahui. `konflik`/`penjualanKonflik` = bagian dari C yang bukti unitnya bertentangan dengan laporan penghasilan |
+| B | `refundParsialTanpaUnit` | Pesanan **refund parsial** (definisi yang sama dengan A, jadi B selalu bagian dari A) yang labanya **masih memakai porsi nominal refund** sebagai pengganti unit. Refund bernilai positif (anomali) bukan refund parsial. Nama field dipertahankan untuk kompatibilitas. Sejak H2-B3b nilainya diharapkan **0**; angka > 0 berarti ada jalur yang lolos dari aturan A.19.1 |
+| C | `dikeluarkan.refundParsial` | Pesanan yang **dikeluarkan dari laba** karena unit refund parsial tidak diketahui. `konflik`/`penjualanKonflik` = bagian dari C yang bukti unitnya bertentangan dengan laporan penghasilan. Konflik hanya dinilai bila HPP pesanan memakai modal per unit (Shopee: per baris bermodal per unit; TikTok: semua baris pesanan bermodal per unit); di mode harga acuan dan modal rata-rata unit tidak dipakai, jadi pesanan tercatat sebagai C biasa |
 
 Hubungannya: A = B + C + pesanan yang dihitung dengan unit yang terbukti + pesanan yang dikeluarkan karena alasan lain
 (misalnya modal belum diisi atau laporan tidak mencantumkan produk). Diuji di `tests/engine.test.js` (B3b-13 s.d.

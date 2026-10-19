@@ -1230,14 +1230,16 @@ const Engine = (() => {
         ckAdd('shopee', 'tidak_diketahui', net, o.total, reasons, false, found);
       } else if (!notes.length) {
         // Tanpa baris produk: modal rata-rata dari nilai pesanan. Refund di sini belum punya dasar unit.
-        ckAdd('shopee', o.refund !== 0 ? 'belum' : 'estimasi', net, o.total, [], o.refund !== 0 && o.harga + o.refund > 0, found);
+        ckAdd('shopee', o.refund !== 0 ? 'belum' : 'estimasi', net, o.total, [], found, found);
       } else {
         const st = notes.map((n) => {
           const s = n.hppStatus === 'terverifikasi_kelompok' ? 'terverifikasi' : (n.hppStatus || 'belum');
           return s === 'estimasi' && n.qtyBasis === 'estimasi_1' ? 'estimasi_minimum' : s;
         });
-        // Refund parsial yang HPP-nya masih dikurangi menurut nominal refund (share), bukan menurut unit (buku unit).
-        const partial = notes.some((n) => n.it.refund !== 0 && n.it.harga + n.it.refund > 0 && n.qtyBasis !== 'buku_unit');
+        // (B) Refund parsial yang HPP-nya masih dikurangi menurut nominal refund (share), bukan menurut unit (buku unit).
+        // Hanya item refund parsial (definisi yang sama dengan A), jadi B selalu bagian dari A. Refund bernilai positif
+        // (anomali) bukan refund parsial dan tidak dihitung di sini.
+        const partial = notes.some((n) => isPartialRefund(n.it.harga + n.it.refund, n.it.harga, n.it.refund) && n.qtyBasis !== 'buku_unit');
         ckAdd('shopee', weakest(st), net, o.total, [], partial, found);
       }
       for (const n of notes) {
@@ -1390,7 +1392,11 @@ const Engine = (() => {
         modal += isOk(cost) ? cost : 0;
         return { ...l, cost, unit: entry ? entry.cost : NaN, base: entry ? entry.baseCost : NaN, entry, share, qtyNet };
       });
-      return { modal: ok ? modal : NaN, lines: notes, refundParsial: !partial ? null : unresolved ? (bukti.konflik ? 'konflik' : 'unit_tidak_diketahui') : refunded ? 'unit_diketahui' : null };
+      // Konflik bukti unit hanya dinilai bila SEMUA baris memakai modal per unit (bukti unit memang dipakai untuk HPP),
+      // sama seperti Shopee (buku unit hanya untuk baris bermodal per unit). Di mode harga acuan dan modal rata-rata
+      // unit tidak pernah dipakai, jadi pesanan dicatat sebagai refund parsial biasa di ketiga mode secara konsisten.
+      const perUnit = notes.every((n) => n.entry);
+      return { modal: ok ? modal : NaN, lines: notes, refundParsial: !partial ? null : unresolved ? (bukti.konflik && perUnit ? 'konflik' : 'unit_tidak_diketahui') : refunded ? 'unit_diketahui' : null };
     }
     if (want.has('tiktok')) for (const r of m.tiktok.values()) {
       if (!r.isOrder) { if (inRange(r.payDate)) T.adj += r.settle; continue; }
@@ -1570,6 +1576,8 @@ const Engine = (() => {
     for (const x of Object.values(catSummary)) x.amount = x.amountUnknown ? NaN : x.amountKnown;
 
     /* ===== Total ===== */
+    // Status HPP (metadata tampilan): tidak_diketahui bila belum ada penjualan bermodal, sebagian, atau lengkap.
+    const statusOf = (sales, known) => (!(known > 0) ? 'tidak_diketahui' : known < sales - 0.5 ? 'sebagian' : 'lengkap');
     const has = { shopee: want.has('shopee') && available.shopee, tiktok: want.has('tiktok') && available.tiktok };
     const pick = (f) => (has.shopee ? f(S) : 0) + (has.tiktok ? f(T) : 0);
     const totalSales = pick((p) => p.sales);
@@ -1591,6 +1599,10 @@ const Engine = (() => {
       x.total = { sales: sel.reduce((a, v) => a + v.sales, 0), fees: sel.reduce((a, v) => a + v.fees, 0), received: sel.reduce((a, v) => a + v.received, 0),
         margin: sel.reduce((a, v) => a + v.margin, 0), knownSales: sel.reduce((a, v) => a + v.knownSales, 0), orders: sel.reduce((a, v) => a + v.orders, 0) };
       x.total.net = x.total.margin - fixedMonthly;
+      // Metadata per bulan (angka tidak berubah): bulan tanpa penjualan bermodal punya margin 0 di objek ini, tetapi
+      // labanya BELUM DIKETAHUI, bukan Rp0. Tampilan wajib memakai status ini.
+      x.total.statusHpp = statusOf(x.total.sales, x.total.knownSales);
+      for (const v of sel) v.statusHpp = statusOf(v.sales, v.knownSales);
     }
 
     /**
@@ -1747,8 +1759,16 @@ const Engine = (() => {
       };
     }
 
+    /**
+     * Status HPP untuk tampilan (metadata, tidak menghitung angka baru). Dasarnya sama dengan `ready` dan margin per
+     * platform: HPP diketahui bila ada penjualan yang modalnya diketahui (knownSales > 0).
+     *  tidak_diketahui = belum ada penjualan bermodal → modal 0 di objek platform BUKAN HPP Rp0, jangan ditampilkan;
+     *  sebagian = hanya sebagian penjualan bermodal; lengkap = semua penjualan bermodal (modal Rp0 di sini memang 0).
+     */
+    const statusHpp = { total: statusOf(totalSales, knownSales), shopee: statusOf(S.sales, S.knownSales), tiktok: statusOf(T.sales, T.knownSales) };
+
     const result = {
-      mode, ready, coverage, knownSales, has, available, shopee: S, tiktok: T, lostCertain, unknownRisk, totalMargin,
+      mode, ready, coverage, knownSales, statusHpp, has, available, shopee: S, tiktok: T, lostCertain, unknownRisk, totalMargin,
       totalSales, totalFees: pick((p) => p.feeTotal), totalReceived: pick((p) => p.received),
       totalModal: pick((p) => p.modal), totalPacking: pick((p) => p.packing), knownReceived: pick((p) => p.knownReceived), knownPacking: pick((p) => p.knownPacking), adjustments: pick((p) => p.adj),
       orders, first, last, days, monthsSpan, feeModel: feeModels,
@@ -1799,9 +1819,11 @@ const Engine = (() => {
       if (late - early > 0.01) add('bad', 85, `Potongan platform naik ${pc(late - early)} poin`,
         `Dari ${pc(early)} di awal periode menjadi ${pc(late)} di 2 bulan terakhir. Harga jual yang sama kini menyisakan margin lebih kecil.`, 'Tinjau ulang harga jual atau ikut/keluar program ongkir & komisi.');
       else if (early - late > 0.01) add('good', 50, `Potongan platform turun ${pc(early - late)} poin`, `Dari ${pc(early)} menjadi ${pc(late)} di 2 bulan terakhir.`);
-      if (r.ready) {
-        const best = ms.reduce((a, x) => (x.total.margin > a.total.margin ? x : a));
-        const worst = ms.reduce((a, x) => (x.total.margin < a.total.margin ? x : a));
+      // Bulan yang labanya belum diketahui (tanpa penjualan bermodal) tidak ikut dibandingkan (bukan laba Rp0).
+      const msLaba = ms.filter((x) => x.total.statusHpp !== 'tidak_diketahui');
+      if (r.ready && msLaba.length >= 2) {
+        const best = msLaba.reduce((a, x) => (x.total.margin > a.total.margin ? x : a));
+        const worst = msLaba.reduce((a, x) => (x.total.margin < a.total.margin ? x : a));
         add('info', 30, `Laba tertinggi di ${monthName(best.month)}, terendah di ${monthName(worst.month)}`, `Laba setelah modal ${rp(best.total.margin)} vs ${rp(worst.total.margin)}.`);
       }
     }

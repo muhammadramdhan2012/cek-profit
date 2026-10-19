@@ -17,12 +17,15 @@ const CekReport = (() => {
 
   function niceStep(x) { const p = 10 ** Math.floor(Math.log10(x || 1)); const n = x / p; return (n <= 1 ? 1 : n <= 2 ? 2 : n <= 5 ? 5 : 10) * p; }
 
+  // Status laba bulanan dari metadata engine (bulan tanpa penjualan bermodal: laba BELUM DIKETAHUI, bukan Rp0).
+  const mStat = (t) => (!t || !t.orders ? 'kosong' : t.statusHpp || 'lengkap');
+  const mKnown = (t) => { const x = mStat(t); return x === 'sebagian' || x === 'lengkap'; };
   /** Grafik batang bulanan: penjualan (abu) dan margin (hijau). */
   function monthChart(r) {
     const ms = r.months;
     if (!ms.length) return '';
     const W = 700, H = 230, L = 52, R = 6, T = 10, B = 26;
-    const vals = ms.flatMap((m) => [m.total.sales, r.ready ? m.total.margin : 0]);
+    const vals = ms.flatMap((m) => [m.total.sales, r.ready && mKnown(m.total) ? m.total.margin : 0]);
     let lo = Math.min(0, ...vals), hi = Math.max(0, ...vals);
     const step = niceStep((hi - lo) / 4 || 1);
     lo = Math.floor(lo / step) * step; hi = Math.ceil(hi / step) * step || step;
@@ -34,12 +37,20 @@ const CekReport = (() => {
       const cx = L + band * i + band / 2;
       const bar = (v, x, c) => `<rect x="${x}" y="${Math.min(y(0), y(v))}" width="${bw}" height="${Math.max(1, Math.abs(y(v) - y(0)))}" rx="2" fill="${c}"/>`;
       g += bar(m.total.sales, cx - bw - 1, '#b9c2bc');
-      if (r.ready) g += bar(m.total.margin, cx + 1, m.total.margin < 0 ? COL.cost : COL.accent);
+      if (r.ready && mKnown(m.total)) g += bar(m.total.margin, cx + 1, m.total.margin < 0 ? COL.cost : COL.accent);
+      else if (r.ready) g += `<text x="${cx + 1 + bw / 2}" y="${y(0) - 4}" text-anchor="middle" font-weight="700">?</text>`;
       g += `<text x="${cx}" y="${H - 8}" text-anchor="middle">${mlabel(m.month)}</text>`;
     });
     return `<svg viewBox="0 0 ${W} ${H}" class="rchart">${g}</svg>
-      <div class="rlegend"><span><i style="background:#b9c2bc"></i>Penjualan</span>${r.ready ? `<span><i style="background:${COL.accent}"></i>Laba setelah modal</span>` : ''}</div>`;
+      <div class="rlegend"><span><i style="background:#b9c2bc"></i>Penjualan</span>${r.ready ? `<span><i style="background:${COL.accent}"></i>Laba setelah modal</span>` : ''}${r.ready && ms.some((m) => mStat(m.total) === 'tidak_diketahui') ? '<span>? = laba belum diketahui (modal belum ada)</span>' : ''}</div>`;
   }
+  /** Sel laba bulanan: Belum diketahui / nilai (+ tanda * bila modal hanya sebagian) / — . */
+  const mLaba = (r, t, v) => {
+    const x = mStat(t);
+    if (!r.ready || x === 'kosong') return '—';
+    if (x === 'tidak_diketahui') return '<span class="f">Belum diketahui</span>';
+    return `${rp(v)}${x === 'sebagian' ? '*' : ''}`;
+  };
   /** Batang horizontal sederhana. Nilai yang tidak diketahui (NaN) tidak diberi batang dan tidak dianggap 0. */
   const hbars = (rows, total, color = COL.cost) => {
     const max = Math.max(...rows.filter((x) => ok(x.v)).map((x) => Math.abs(x.v)), 1);
@@ -89,16 +100,21 @@ const CekReport = (() => {
 
     const kpi = (label, value, sub, cls = '') => `<div class="rkpi ${cls}"><span>${label}</span><b>${value}</b><small>${sub}</small></div>`;
 
+    // HPP yang belum diketahui tidak ditulis Rp0 (status dari engine). Rp0 hanya bila HPP memang 0 menurut data.
+    const UNK = '<span class="f">Belum diketahui</span>';
+    const st = r.statusHpp || { total: r.ready ? 'lengkap' : 'tidak_diketahui' };
+    const hk = (k) => st[k] !== 'tidak_diketahui';
+    const rh = (k, v) => (hk(k) && ok(v) ? rp(v) : UNK);
     const plRows = [
       ['Pesanan terjual', (k) => r[k].orders.toLocaleString('id-ID'), r.orders.toLocaleString('id-ID'), ''],
       ['Penjualan', (k) => rp(r[k].sales), rp(r.totalSales), '100%', 'b'],
       ['Potongan platform', (k) => rp(r[k].feeTotal), rp(r.totalFees), pc(-r.totalFees / r.totalSales), 'neg'],
       ['Dana diterima', (k) => rp(r[k].received), rp(r.totalReceived), pc(r.totalReceived / r.totalSales), 'b'],
-      ['Modal barang', (k) => rp(-r[k].modal), rp(-r.totalModal), r.ready ? pc(r.totalModal / r.totalSales) : '—', 'neg'],
-      ...(r.totalPacking ? [['Packing', (k) => rp(-r[k].knownPacking), rp(-r.knownPacking), pc(r.knownPacking / r.totalSales), 'neg']] : []),
+      ['Modal barang', (k) => rh(k, -r[k].modal), rh('total', -r.totalModal), r.ready ? pc(r.totalModal / r.totalSales) : '—', 'neg'],
+      ...(r.totalPacking ? [['Packing', (k) => rh(k, -r[k].knownPacking), rh('total', -r.knownPacking), r.ready ? pc(r.knownPacking / r.totalSales) : '—', 'neg']] : []),
       ...(r.coverage < 0.98 && r.ready ? [['Dana dari pesanan tanpa modal (tidak dihitung)', (k) => rp(-excludedOf(k)), rp(-excludedAll), '', 'neg f']] : []),
       ...(r.lostCertain || lostNoValue ? [[`Barang retur hilang${lostNoValue ? ` (${lostNoValue} kasus tanpa nilai belum dikurangkan)` : ''}`, () => '', r.lostCertain ? rp(-r.lostCertain) : '—', r.lostCertain ? pc(r.lostCertain / r.totalSales) : '', 'neg']] : []),
-      ['Laba setelah modal', (k) => rp(r[k].margin), rp(r.totalMargin), pc(marginPct), 'total'],
+      ['Laba setelah modal', (k) => rh(k, r[k].margin), rh('total', r.totalMargin), pc(marginPct), 'total'],
       ...(hasOpex ? [['Biaya operasional', () => '', rp(-r.opex), pc(r.opex / r.totalSales), 'neg'], ['Laba dari data tersedia (setelah biaya operasional)', () => '', rp(r.netProfit), pc(r.netProfit / r.totalSales), 'total']] : []),
     ];
 
@@ -151,10 +167,11 @@ ${ctx.demo ? '<div class="rwatermark">CONTOH</div>' : ''}
   <table class="rtable rsmall">
     <thead><tr><th>Bulan</th><th>Pesanan</th><th>Penjualan</th><th>Potongan</th><th>% potongan</th><th>Laba setelah modal</th><th>Margin %</th>${hasOpex ? '<th>Laba dari data tersedia</th>' : ''}</tr></thead>
     <tbody>${r.months.map((m) => `<tr><td>${BULAN_P[+m.month.slice(5) - 1]} ${m.month.slice(0, 4)}</td><td>${m.total.orders.toLocaleString('id-ID')}</td><td>${rp(m.total.sales)}</td><td>${rp(m.total.fees)}</td>
-      <td class="f">${pc(-m.total.fees / (m.total.sales || 1))}</td><td class="${m.total.margin < 0 ? 'neg' : ''}">${r.ready ? rp(m.total.margin) : '—'}</td><td class="f">${r.ready && m.total.knownSales ? pc(m.total.margin / m.total.knownSales) : '—'}</td>
-      ${hasOpex ? `<td class="${m.total.net < 0 ? 'neg' : ''}">${r.ready ? rp(m.total.net) : '—'}</td>` : ''}</tr>`).join('')}
+      <td class="f">${pc(-m.total.fees / (m.total.sales || 1))}</td><td class="${m.total.margin < 0 && mKnown(m.total) ? 'neg' : ''}">${mLaba(r, m.total, m.total.margin)}</td><td class="f">${r.ready && mKnown(m.total) && m.total.knownSales ? pc(m.total.margin / m.total.knownSales) : '—'}</td>
+      ${hasOpex ? `<td class="${m.total.net < 0 && mKnown(m.total) ? 'neg' : ''}">${mLaba(r, m.total, m.total.net)}</td>` : ''}</tr>`).join('')}
       <tr class="total"><td>Total</td><td>${r.orders.toLocaleString('id-ID')}</td><td>${rp(r.totalSales)}</td><td>${rp(r.totalFees)}</td><td class="f">${pc(-r.totalFees / r.totalSales)}</td><td>${rp(r.totalMargin)}</td><td class="f">${pc(marginPct)}</td>${hasOpex ? `<td>${rp(r.netProfit)}</td>` : ''}</tr></tbody>
   </table>
+  ${r.ready && r.months.some((m) => mStat(m.total) === 'sebagian') ? '<p class="rnote">* Laba bulan itu hanya dari penjualan yang modalnya diketahui.</p>' : ''}${r.ready && r.months.some((m) => mStat(m.total) === 'tidak_diketahui') ? '<p class="rnote">Belum diketahui: bulan itu belum punya penjualan yang modalnya diketahui, jadi labanya tidak ditulis Rp0.</p>' : ''}
   ${foot}
 </section>
 
