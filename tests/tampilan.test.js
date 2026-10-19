@@ -428,5 +428,35 @@ test('P0 laba bulanan PDF: Belum diketahui / sebagian (*) / Rp0 aktual / lengkap
   truthy(/const RM = \(t, v\) => \(!r\.ready \|\| mStat\(t\) === 'kosong' \? '' : mKnown\(t\) \? R\(v\) : UNK\);/.test(appJs), 'Excel per bulan');
   truthy(/margin: mKnown\(m\.total\) \? R\(m\.total\.margin\) : null/.test(appJs), 'ringkasan riwayat tidak menyimpan 0 untuk laba tidak diketahui');
 });
+/* ===== Patch PDF: "Laba per bulan" di sampul tidak boleh ekstrapolasi data < 1 bulan ===== */
+/** Laporan TikTok sintetis: satu pesanan per tanggal dana diterima (laba 80.000 per pesanan dengan modal 20.000 × 1). */
+const ttTanggal = (dates) => E.parseWorkbook({ name: 'tt-periode-sintetis.xlsx', sheets: {
+  'Detail pesanan': [['ID Pesanan/Penyesuaian', 'Jenis transaksi', 'Waktu pemesanan', 'Waktu pembayaran pesanan', 'Jumlah penyelesaian pembayaran',
+    'Total Pendapatan', 'Subtotal sebelum diskon', 'Total pengembalian dana sebelum diskon', 'Total Biaya', 'Detail produk terjual', 'Sumber pesanan'],
+  ...dates.map((d, i) => [String(8900 + i), 'Pesanan', d, d, 100000, 100000, 100000, 0, 0, '5550009 * 1;', 'TikTok Shop'])],
+  Laporan: [['', 'Jumlah penyelesaian pembayaran', '', '', '', dates.length * 100000]] } });
+const stPeriode = katalog([['', 20000, '5550009']]);
+const sampul = (h) => (teks(h).match(/Laba setelah modal (\S+) .*?(Laba per bulan|Laba periode data) (\S+) (.*?) Ringkasan/) || []);
+test('Patch PDF: data 1 hari → tanpa "Laba per bulan", tampil laba periode data', () => {
+  const r = E.compute([ttTanggal(['2026/01/15'])], stPeriode);
+  truthy(r.perMonth > r.totalMargin * 20, 'prasyarat: engine memang mengekstrapolasi (angka engine tidak diubah)');
+  const m = sampul(pdf(r));
+  eq(m[2], 'Laba periode data', 'label'); eq(m[3], 'Rp80.000', 'nilai = laba periode, bukan ekstrapolasi'); truthy(/dari 1 hari data/.test(m[4]), m[4]);
+  truthy(!/Laba per bulan/.test(teks(pdf(r))), 'metrik ekstrapolasi tidak tampil');
+});
+test('Patch PDF: data beberapa hari (7 hari) → laba periode, bukan ×4', () => {
+  const r = E.compute([ttTanggal(['2026/01/10', '2026/01/13', '2026/01/16'])], stPeriode);
+  eq(r.days, 7); const m = sampul(pdf(r));
+  eq(m[2], 'Laba periode data'); eq(m[3], 'Rp240.000', '3 × 80.000'); truthy(/dari 7 hari data/.test(m[4]), m[4]);
+});
+test('Patch PDF: data satu bulan penuh (31 hari) → "Laba per bulan" tetap tampil dari engine', () => {
+  const r = E.compute([ttTanggal(['2026/01/01', '2026/01/31'])], stPeriode);
+  truthy(r.monthsSpan >= 1, 'prasyarat'); const m = sampul(pdf(r));
+  eq(m[2], 'Laba per bulan'); const v = `Rp${Math.round(r.perMonth).toLocaleString('id-ID')}`; eq(m[3], v, 'nilai engine');
+  truthy(r.perMonth <= r.totalMargin, 'rata-rata tidak melebihi laba periode'); truthy(/rata-rata 1 bulan data/.test(m[4]), m[4]);
+  // Biaya operasional diisi → sampul tetap memakai laba dari data tersedia (perilaku lama).
+  const op = E.compute([ttTanggal(['2026/01/15'])], { ...stPeriode, fixedCosts: [{ label: 'Gaji', amount: 300000 }] });
+  truthy(/Laba dari data tersedia/.test(teks(pdf(op))), 'cabang biaya operasional tidak berubah');
+});
 console.log(failed ? `\n${failed} uji GAGAL` : '\nSemua uji lulus');
 process.exitCode = failed ? 1 : 0;

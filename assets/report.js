@@ -98,6 +98,9 @@ const CekReport = (() => {
       best ? `${PN[best]} memberi margin per rupiah penjualan yang lebih tinggi pada periode ini.` : '',
     ].filter(Boolean).join(' ');
 
+    // "Laba per bulan" (engine: laba ÷ bulan data) hanya sah bila data mencakup minimal satu bulan. Di bawah itu angkanya
+    // ekstrapolasi (data 1 hari → ±30× laba periode), jadi yang tampil laba periode data yang sebenarnya.
+    const perMonthOk = r.ready && ok(r.perMonth) && r.monthsSpan >= 1;
     const kpi = (label, value, sub, cls = '') => `<div class="rkpi ${cls}"><span>${label}</span><b>${value}</b><small>${sub}</small></div>`;
 
     // HPP yang belum diketahui tidak ditulis Rp0 (status dari engine). Rp0 hanya bila HPP memang 0 menurut data.
@@ -133,7 +136,9 @@ ${ctx.demo ? '<div class="rwatermark">CONTOH</div>' : ''}
     ${kpi('Penjualan', rp(r.totalSales), `${r.orders.toLocaleString('id-ID')} pesanan`)}
     ${kpi('Potongan platform', pc(-r.totalFees / r.totalSales), rp(-r.totalFees))}
     ${kpi('Laba setelah modal', rp(r.totalMargin), r.ready ? `margin ${pc(marginPct)} dari penjualan bermodal` : 'modal belum diisi')}
-    ${hasOpex ? kpi('Laba dari data tersedia', rp(r.netProfit), `setelah biaya operasional yang tercatat ${short(r.opex)}`, 'hero') : kpi('Laba per bulan', rp(r.perMonth), `rata-rata ${Math.round(r.monthsSpan * 10) / 10} bulan`, 'hero')}
+    ${hasOpex ? kpi('Laba dari data tersedia', rp(r.netProfit), `setelah biaya operasional yang tercatat ${short(r.opex)}`, 'hero')
+    : perMonthOk ? kpi('Laba per bulan', rp(r.perMonth), `rata-rata ${(Math.round(r.monthsSpan * 10) / 10).toLocaleString('id-ID')} bulan data`, 'hero')
+      : kpi('Laba periode data', rp(r.totalMargin), r.ready ? `dari ${r.days.toLocaleString('id-ID')} hari data, belum sebulan penuh` : 'modal belum diisi', 'hero')}
   </div>
   <div class="rsummary"><h2>Ringkasan</h2><p>${narr}</p></div>
   ${r.insights.length ? `<div class="rtop"><h2>Hal terpenting</h2><ol>${r.insights.slice(0, 4).map((i) => `<li><b>${esc(i.title)}.</b> ${esc(i.detail)}${i.action ? ` <em>${esc(i.action)}</em>` : ''}</li>`).join('')}</ol></div>` : ''}
