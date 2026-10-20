@@ -149,6 +149,8 @@
       }
     } catch (err) { keepEmail(); message = { text: online() ? err.message : OFFLINE }; }
     render(); restoreEmail();
+    // Setelah pesan error dari server: fokus ke kolom kata sandi (pesan tetap dibacakan lewat role="alert").
+    if (message && !message.ok && f.id === 'f-auth') { const pw = $('#pw'); if (pw) pw.focus(); }
   });
 
   /** Pindah ke tujuan hanya bila sesi sudah ada dan penggunanya dikenali server. */
