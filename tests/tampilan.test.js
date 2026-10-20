@@ -247,6 +247,12 @@ test('TT-R4 tampilan: refund susulan tanpa pesanan asal punya item kepastian sen
   truthy(/Nilai refund tidak dipakai untuk menebak jumlah barang\./.test(appJs), 'tidak menebak unit dari nominal');
   truthy(/Total cocok dengan laporan, tetapi \$\{num\(rf\.susulanTidakCocok\)\} refund susulan TikTok belum dapat dicocokkan/.test(labaSrc), 'Jejak uang: total vs pencocokan transaksi');
 });
+test('MG-P11 tampilan: konflik antarlaporan → "Perlu rekonsiliasi", tidak memilih versi; duplikat tidak menurunkan status', () => {
+  truthy(/perlu_rekonsiliasi: \['pending', 'Perlu rekonsiliasi'\]/.test(labaSrc), 'label status Perlu rekonsiliasi');
+  truthy(/'Perlu rekonsiliasi: laporan berbeda'/.test(appJs) && /tidak dipilih salah satu versinya/.test(appJs), 'item kepastian konflik');
+  truthy(/transaksi berbeda antarlaporan ditahan, tidak masuk angka di bawah/.test(labaSrc), 'catatan transaksi ditahan');
+  truthy(!/file_tumpang_tindih/.test(labaSrc), 'alasan lama "tumpang tindih" tidak dipakai lagi');
+});
 test('U3 Produk: status = warna + simbol + teks; label cari/urutkan; header tabel semantik; tanpa count-up', () => {
   truthy(/HEALTH = \{ sehat: 'Sehat', tipis: 'Tipis', rugi: 'Rugi', unknown: 'Modal belum ada' \}/.test(prodSrc), 'label teks status');
   const css = src('app.css');

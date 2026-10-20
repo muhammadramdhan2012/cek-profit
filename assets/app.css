@@ -823,6 +823,7 @@ body.app .empty p { font-size: var(--fs-body-sm); }
 .tr-src { margin: 0 0 var(--sp-3); font-size: 12.5px; }
 .tr-src > summary { cursor: pointer; font-weight: 650; color: var(--ink-2); padding: 6px 0; }
 .ts-pf { margin: var(--sp-2) 0 4px; font-weight: 650; color: var(--ink-2); display: flex; align-items: center; gap: 6px; }
+.ts-gab { margin: 0 0 6px; color: var(--ink-3); }
 .ts-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
 .ts-list li { padding: 8px 10px; border: 1px solid var(--line); border-radius: 10px; min-width: 0; }
 .ts-h { display: flex; justify-content: space-between; gap: var(--sp-2); }

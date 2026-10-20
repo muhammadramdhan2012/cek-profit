@@ -486,6 +486,30 @@ laporan (status refund) dari kelengkapan **pencocokan transaksi** (`refund.penco
 Batasan: kunci duplikat TikTok belum diubah (R1–R3 ditunda, KNOWN_ISSUES P11); bila satu pesanan punya lebih dari satu
 baris asal, susulannya dianggap tidak cocok. Diuji di `tests/engine.test.js` (TT-R4-1 s.d. TT-R4-12).
 
+### B.1d Penggabungan beberapa Laporan Penghasilan (P11, R1–R3, 20 Okt 2026)
+
+Status: **penerapan instruksi pemilik 20 Okt 2026** (konflik ditahan, bukan dijumlahkan atau dipilih). Aturan identitas
+dan cakupan di bawah adalah rancangan Claude Code yang perlu ditinjau pemilik.
+
+| Aturan | Isi | Bukti |
+|---|---|---|
+| Identitas baris | Isi finansial baris: ID, jenis, tanggal pesanan & bayar, penjualan, refund, subtotal, biaya per jenis, settlement, rincian SKU×jumlah, sumber (TikTok); harga, refund, voucher, biaya, total + baris SKU (pesanan Shopee); tanggal, tipe, nilai, nomor pesanan terkait (penyesuaian Shopee). Tanpa data pribadi | — |
+| Dalam satu file | Tidak ada deduplikasi (kecuali pesanan Shopee yang tercatat dua kali dengan isi sama), karena ringkasan resmi file hanya cocok bila semua barisnya dihitung | Ringkasan per file |
+| Antarfile | Baris berisi sama dihitung sekali (jumlah kemunculan maksimum di satu file) | File asli: 3 file TikTok unduhan ulang (3.283 baris) dan periode berurutan |
+| Cakupan file | Rentang tanggal bayar/dana dilepas yang dicakup file: TikTok = tanggal bayar terawal–terakhir; Shopee = "Dari"–"ke" di Summary (terbukti basisnya tanggal dana dilepas) | File asli |
+| Konflik versi | Pada tanggal yang dicakup dua file, isi kelompok transaksi (ID) berbeda; atau pesanan Shopee / baris asal TikTok dengan isi berbeda di dua file. Seluruh kelompok **ditahan**: tidak masuk penjualan, dana, biaya, HPP, maupun laba; kedua versinya dicatat; status "Perlu rekonsiliasi"; laba tidak final (`konflik_antar_laporan`) | **Hanya sintetis** |
+| Tidak saling lengkap | File mencakup tanggal transaksi tetapi tidak memuat ID-nya sama sekali. Transaksi **tetap dihitung**; status "Perlu dicek" (`laporan_tidak_saling_lengkap`) | **Hanya sintetis** |
+| Refund/biaya susulan | Baris dengan ID sama di periode lain (di luar cakupan file asal) bukan konflik dan bukan duplikat; aturan R4 tetap berlaku | Sintetis + 4 kasus asli dalam satu file |
+
+Money Trace: status komponen = gabungan **rekonsiliasi intrafile** (`rekonsiliasiFile`: cocok / tidak_cocok /
+tanpa_ringkasan) dan **rekonsiliasi gabungan** (`rekonsiliasiGabungan`: bebas_konflik / tidak_lengkap / konflik).
+"Sesuai laporan dan terekonsiliasi" hanya bila keduanya bersih. Duplikat identik yang sudah ditangani tidak menurunkan
+status. File dianggap identik berdasarkan seluruh isi barisnya, bukan himpunan nomor pesanan.
+
+Batasan: semua versi laporan nyata yang berbeda isi belum pernah ditemukan pada data uji, jadi aturan konflik baru
+diuji sintetis. Cakupan TikTok dari baris (bukan dari periode resmi file) bisa lebih sempit dari periode unduhan.
+Diuji di `tests/engine.test.js` (MG-P11-*).
+
 ### B.2 Catatan nama
 
 UI menyebut `totalMargin` sebagai "Margin kotor" atau "Margin setelah modal", dan `netProfit` sebagai "Laba bersih".

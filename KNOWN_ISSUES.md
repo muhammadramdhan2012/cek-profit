@@ -371,7 +371,7 @@ Sumber awal: audit menyeluruh 14 Okt 2026 (read-only), ditambah analisis penghit
 | P9 | Medium | arsitektur (`assets/engine.js`, `supabase/schema.sql`) | Tidak ada konsep toko; file dua toko akan tergabung tanpa peringatan | — | Tabel `stores`, `store_id` di `user_data` dan `reports`, deteksi file dari toko berbeda (fase multi-toko di roadmap audit) | Belum diverifikasi |
 | P10 | **High bila terbukti** | `assets/engine.js:456`, `assets/engine.js:601-613`, `assets/engine.js:499` | **Penghitungan ganda HPP:** refund yang tidak tercatat di baris pesanan (misalnya penyesuaian setelah dana dilepas) + kasus "Tidak kembali" membuat modal pesanan tetap penuh dan kerugian ditambahkan. Juga: kerugian retur dari pesanan di luar periode laporan. Lihat `docs/KAMUS_ANGKA.md` §B.1. | Perlu dicek (`docs/KAMUS_ANGKA.md` C.6) | Cocokkan refund/penyesuaian ke pesanannya sebelum menghitung kerugian retur (A.9); batasi kerugian retur ke pesanan dalam periode | Belum diverifikasi (bukan bagian audit awal) |
 
-| P11 | Medium | `assets/engine.js` (`merge`, kunci baris TikTok) | Kunci duplikat TikTok memuat nilai penyelesaian dan Total Pendapatan. Pesanan yang sama di dua file dengan nilai berbeda (misalnya dihitung ulang) dihitung dua kali. Money Trace A1 menandainya "berdasarkan laporan" (file tumpang tindih) tetapi tidak mengubah angka | Audit 20 Okt 2026 (7 file): 3.278 ID di beberapa file, semuanya duplikat identik; tidak ada versi berbeda. Ditemukan pola lain: refund/biaya susulan dengan ID sama (ditangani R4) | Putuskan aturan versi pesanan TikTok (seperti Shopee) dengan persetujuan pemilik | Belum diverifikasi |
+| P11 | Medium | `assets/engine.js` (`mergeIncome`) | **Sebagian ditangani (20 Okt 2026, lokal):** identitas baris berdasarkan isi; duplikat identik dihitung sekali; konflik versi ditahan dan ditandai "Perlu rekonsiliasi"; laporan tidak saling lengkap ditandai "Perlu dicek" (`docs/KAMUS_ANGKA.md` B.1d) | Audit 20 Okt 2026 (7 file): 3.278 ID di beberapa file, semuanya duplikat identik; tidak ada versi berbeda | Validasi aturan konflik dengan unduhan ulang asli setelah refund/perubahan; tinjau aturan cakupan | Aturan konflik baru diuji sintetis |
 | P12 | Low | Money Trace A1 | Rekonsiliasi per komponen hanya terhadap ringkasan di file yang sama. Pencairan, saldo, dan dana yang masih tertahan belum dicocokkan; refund setelah dana dilepas (P10) tidak terlihat di Jejak uang | — | Fase A2/A3 (saldo dan riwayat penarikan) setelah disetujui | Belum diverifikasi |
 
 ## Belum dapat diverifikasi
@@ -395,6 +395,10 @@ Sumber awal: audit menyeluruh 14 Okt 2026 (read-only), ditambah analisis penghit
   Shopee) ditambahkan. Belum ada masalah yang diperbaiki.
 - 14 Okt 2026: hasil validasi export pesanan Shopee (tanpa angka bisnis); temuan penghitungan ganda variasi (H1/H3,
   High); aturan SKU opsional; acceptance criteria seller tanpa SKU; ketergantungan H1/H2/H3 diperbarui.
+- 20 Okt 2026: P11/R1–R3 (lokal): penggabungan Laporan Penghasilan berdasarkan isi baris; konflik versi ditahan
+  (tidak dijumlahkan, tidak dipilih); status Money Trace memisahkan rekonsiliasi intrafile dan gabungan. Sebelumnya
+  Shopee diam-diam memakai versi file pertama (L4 bagian laporan penghasilan) dan TikTok bisa menjumlahkan dua versi.
+  Aturan konflik baru diuji sintetis.
 - 20 Okt 2026: R4 (lokal): refund susulan TikTok (baris "Pesanan" kedua dengan ID sama) dinilai bersama pesanan
   asalnya untuk HPP; nominal refund tidak lagi mengurangi HPP di mode harga acuan; refund susulan tanpa pesanan asal
   → HPP tidak diketahui. Menutup jalur refund-setelah-dana-dilepas P10 **khusus TikTok bila refundnya tercatat sebagai

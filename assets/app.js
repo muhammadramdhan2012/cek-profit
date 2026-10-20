@@ -472,6 +472,17 @@
       add('pending', 'Refund parsial: jumlah unit belum diketahui', `Sebagian penjualan tidak masuk dalam perhitungan laba karena jumlah unit pada refund parsial belum dapat diverifikasi. ${num(rpBiasa)} pesanan direfund sebagian tanpa jumlah barang yang tercatat. Nilai refund tidak dipakai untuk menebak jumlah barang.`,
         { label: 'Unggah file retur', go: 'data', section: 'unggah' }, 85, `${fmt(rpx.penjualan - (rpx.penjualanKonflik || 0))} penjualan tidak dihitung`);
     }
+    // P11: transaksi dengan versi berbeda antarlaporan ditahan (tidak masuk total maupun laba).
+    const gb = K.gabungan || {}, ditahan = ['shopee', 'tiktok'].reduce((a, k) => a + ((gb[k] || {}).pesananDitahan || 0) + ((gb[k] || {}).penyesuaianDitahan || 0), 0);
+    if (ditahan > 0) {
+      add('pending', 'Perlu rekonsiliasi: laporan berbeda', `${num(ditahan)} transaksi muncul di beberapa Laporan Penghasilan dengan isi berbeda. Transaksi ini ditahan: tidak dihitung dalam penjualan, dana, maupun laba, dan tidak dipilih salah satu versinya. Cek di Seller Centre, lalu unggah hanya versi laporan yang benar.`,
+        { label: 'Lihat file', go: 'data', section: 'unggah' }, 95, 'total belum final');
+    }
+    const tl = ['shopee', 'tiktok'].reduce((a, k) => a + ((gb[k] || {}).tidakLengkap || 0), 0);
+    if (tl > 0) {
+      add('pending', 'Laporan tidak saling lengkap', `${num(tl)} transaksi tercatat di satu Laporan Penghasilan, tetapi tidak ada di laporan lain yang mencakup tanggal yang sama. Transaksi tetap dihitung; pastikan rentang tanggal unduhan benar.`,
+        { label: 'Lihat file', go: 'data', section: 'unggah' }, 58);
+    }
     // R4: refund susulan TikTok yang pesanan asalnya tidak ada di laporan yang diunggah.
     const rsx = (K.refundTiktok || {}).refundSusulanTidakCocok || { baris: 0 };
     if (rsx.baris > 0) {
@@ -911,7 +922,7 @@
    * Angka langkah 1–3 dan penyesuaian = angka engine yang sama (r.totalSales, r.totalFees, r.totalReceived,
    * r.adjustments). Yang baru hanya rincian refund dan status rekonsiliasi dari r.jejakUang; UI tidak menghitung apa pun. */
   const TR_ST = { terekonsiliasi: ['verified', 'Sesuai laporan dan terekonsiliasi'], berdasarkan_laporan: ['estimate', 'Berdasarkan laporan, belum sepenuhnya terekonsiliasi'],
-    belum_tersedia: ['unknown', 'Belum tersedia'], perlu_dicek: ['pending', 'Perlu dicek'] };
+    belum_tersedia: ['unknown', 'Belum tersedia'], perlu_dicek: ['pending', 'Perlu dicek'], perlu_rekonsiliasi: ['pending', 'Perlu rekonsiliasi'] };
   const trStatus = (s) => { const [c, l] = TR_ST[s] || TR_ST.belum_tersedia; return `<span class="status ${c} tr-st">${l}</span>`; };
   const TR_WHY = {
     tidak_cocok_ringkasan: 'jumlah baris tidak cocok dengan ringkasan resmi di file',
@@ -922,7 +933,8 @@
     ringkasan_resmi_tidak_ada: 'ringkasan resmi untuk angka ini tidak ada di file',
     sheet_penyesuaian_tidak_ada: 'sheet Adjustment tidak ada di file',
     filter_tanggal: 'filter bulan sedang aktif, sedangkan ringkasan resmi mencakup seluruh periode file',
-    file_tumpang_tindih: 'beberapa file memuat pesanan yang sama; pesanan dihitung sekali',
+    konflik_antar_laporan: 'ada transaksi dengan isi berbeda di beberapa laporan; transaksi itu ditahan dan tidak dihitung',
+    laporan_tidak_saling_lengkap: 'ada transaksi yang tidak muncul di laporan lain yang mencakup tanggal yang sama',
     baris_non_pesanan: 'ringkasan file ikut memuat baris non-pesanan',
     hubungan_refund_belum_terbukti: 'kolom subtotal setelah diskon tidak ada, jadi hubungan refund dengan penjualan belum bisa dibuktikan',
   };
@@ -954,7 +966,7 @@
     }).join('');
     const mp = Object.entries(J.marketplace).filter(([, x]) => x);
     return `<details class="tr-src"><summary>Sumber, tanggal, dan status per marketplace</summary>
-      ${mp.map(([pf, x]) => `<p class="ts-pf">${PLAT_DOT(pf)}${PNAME[pf]} · ${num(x.file.jumlah)} Laporan Penghasilan${x.file.identik ? ` (+${num(x.file.identik)} file sama diabaikan)` : ''}</p><ul class="ts-list">${rows(pf, x)}</ul>`).join('')}
+      ${mp.map(([pf, x]) => `<p class="ts-pf">${PLAT_DOT(pf)}${PNAME[pf]} · ${num(x.file.jumlah)} Laporan Penghasilan${x.file.identik ? ` (+${num(x.file.identik)} file sama diabaikan)` : ''}</p>${x.gabungan.ditahan ? `<p class="ts-gab">${trStatus('perlu_rekonsiliasi')} ${num(x.gabungan.ditahan)} transaksi berbeda antarlaporan ditahan, tidak masuk angka di bawah.</p>` : x.gabungan.duplikatDiabaikan ? `<p class="ts-gab">${num(x.gabungan.duplikatDiabaikan)} baris yang sama di beberapa laporan dihitung sekali.</p>` : ''}<ul class="ts-list">${rows(pf, x)}</ul>`).join('')}
       <p class="tiny faint">Angka pesanan dikelompokkan menurut tanggal pesanan, sedangkan periode Laporan Penghasilan mengikuti tanggal dana dilepas atau dibayar. Penyesuaian memakai tanggalnya sendiri. Jadi tidak semua angka di atas memakai basis tanggal yang sama.</p></details>`;
   }
   function moneyTrace(r) {

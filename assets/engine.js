@@ -555,6 +555,110 @@ const Engine = (() => {
   const BUCKETS = [[0, 50000, '< Rp50 rb'], [50000, 100000, 'Rp50–100 rb'], [100000, 200000, 'Rp100–200 rb'],
     [200000, 500000, 'Rp200–500 rb'], [500000, Infinity, '≥ Rp500 rb']];
 
+  /* ---------- P11 (R1–R3): penggabungan Laporan Penghasilan dari beberapa file ----------
+   * Identitas baris = ISI finansialnya (bukan ID saja, bukan beberapa kolom saja). Aturan yang dipakai:
+   *  1. Di dalam SATU file tidak ada deduplikasi (kecuali pesanan Shopee yang tercatat dua kali dengan isi sama):
+   *     ringkasan resmi file hanya cocok bila semua barisnya dihitung.
+   *  2. Antarfile, baris dengan isi sama dihitung sekali (jumlah kemunculan maksimum di satu file).
+   *  3. Pada rentang tanggal yang dicakup dua file sekaligus, isi kelompok transaksi (ID pesanan/penyesuaian) harus
+   *     sama. Berbeda → KONFLIK versi: seluruh kelompok DITAHAN (tidak masuk total maupun laba, tidak dipilih versi
+   *     mana pun, tidak dianggap 0). File yang mencakup tanggal itu tetapi tidak memuat ID-nya sama sekali →
+   *     "tidak saling lengkap": baris tetap dihitung, gabungan ditandai perlu dicek.
+   *  4. Rekaman yang harus unik (pesanan Shopee, baris asal TikTok) dengan isi berbeda antarfile → konflik, di luar
+   *     rentang tanggal mana pun.
+   * Hanya kasus 1–2 yang diuji dengan file asli (file identik, periode berurutan); 3–4 baru diuji sintetis.
+   */
+  const inCov = (d, c) => !!(d && c && (!c.from || d >= c.from) && (!c.to || d <= c.to));
+  const sameBag = (a, b) => {
+    if (a.length !== b.length) return false;
+    const n = new Map(); a.forEach((x) => n.set(x, (n.get(x) || 0) + 1));
+    return b.every((x) => { const k = n.get(x); if (!k) return false; n.set(x, k - 1); return true; });
+  };
+  /**
+   * @param groups Map gid → Map(indeks file → [{sig, date, seq, rec, strict}])
+   * @param covs   cakupan tanggal per indeks file ({from,to} atau null bila tidak diketahui)
+   * @returns { kept: rec[] (urutan asli), held: [{gid, versi:[{file, recs}]}], dupes, tidakLengkap }
+   */
+  function unionGroups(groups, covs) {
+    const kept = [], held = []; let dupes = 0, tidakLengkap = 0;
+    for (const [gid, byFile] of groups) {
+      const fs = [...byFile.keys()];
+      let conflict = false, incomplete = false;
+      const strictSets = fs.map((f) => byFile.get(f).filter((x) => x.strict).map((x) => x.sig)).filter((x) => x.length);
+      if (strictSets.some((set) => !sameBag([...new Set(set)], [...new Set(strictSets[0])]))) conflict = true;
+      for (const a of fs) for (let b = 0; b < covs.length && !conflict; b++) {
+        if (b === a || !covs[a] || !covs[b]) continue;
+        const both = (d) => inCov(d, covs[a]) && inCov(d, covs[b]);
+        const A = byFile.get(a).filter((x) => both(x.date)).map((x) => x.sig);
+        const B = (byFile.get(b) || []).filter((x) => both(x.date)).map((x) => x.sig);
+        if (!sameBag(A, B)) { if (byFile.has(b)) conflict = true; else incomplete = true; }
+      }
+      if (conflict) { held.push({ gid, versi: fs.map((f) => ({ file: f, recs: byFile.get(f).map((x) => x.rec) })) }); continue; }
+      if (incomplete) tidakLengkap++;
+      const best = new Map();
+      for (const f of fs) {
+        const bag = new Map();
+        for (const x of byFile.get(f)) { if (!bag.has(x.sig)) bag.set(x.sig, []); bag.get(x.sig).push(x); }
+        for (const [sg, list] of bag) if (!best.has(sg) || list.length > best.get(sg).length) best.set(sg, list);
+      }
+      const total = fs.reduce((a, f) => a + byFile.get(f).length, 0);
+      let k = 0;
+      for (const list of best.values()) { kept.push(...list); k += list.length; }
+      dupes += total - k;
+    }
+    kept.sort((a, b) => a.seq - b.seq);
+    return { kept: kept.map((x) => x.rec), held, dupes, tidakLengkap };
+  }
+  const R2 = (v) => (isOk(v) ? Math.round(v * 100) / 100 : String(v));
+  const sigShopeeOrder = (o, items) => JSON.stringify([o.id, o.orderDate, o.payDate, ...['harga', 'refund', 'voucher', 'ship', 'admin', 'proses', 'xtra', 'ams', 'lain', 'total'].map((k) => R2(o[k])),
+    items.map((it) => [it.productId, it.name, R2(it.harga), R2(it.refund), R2(it.total)]).sort((a, b) => byText(JSON.stringify(a), JSON.stringify(b)))]);
+  const sigTiktokRow = (r) => JSON.stringify([r.id, r.jenis, r.orderDate, r.payDate, r.source, ...['settle', 'sales', 'totalBiaya', 'pre', 'preGross', 'refundAfter', 'subAfter'].map((k) => R2(r[k])),
+    Object.keys(r.fees).sort().map((k) => R2(r.fees[k])), r.lines.map((l) => `${l.skuId}*${l.qty}`).sort()]);
+  /** Gabungkan Laporan Penghasilan Shopee & TikTok (lihat aturan di atas). */
+  function mergeIncome(parsed, out) {
+    let seq = 0;
+    const push = (groups, gid, f, x) => { if (!groups.has(gid)) groups.set(gid, new Map()); const g = groups.get(gid); if (!g.has(f)) g.set(f, []); g.get(f).push({ ...x, seq: seq++ }); };
+    const covOf = (p) => (p.check && (p.check.from || p.check.to) ? { from: p.check.from || '', to: p.check.to || '' } : null);
+    // Shopee: pesanan (+ baris SKU) dan penyesuaian
+    const sh = parsed.filter((p) => p.kind === 'shopee_income'), shCov = sh.map(covOf);
+    const orderGroups = new Map(), adjGroups = new Map();
+    sh.forEach((p, f) => {
+      const items = new Map();
+      for (const it of p.items) { if (!items.has(it.orderId)) items.set(it.orderId, []); items.get(it.orderId).push(it); }
+      const seen = new Map();
+      for (const o of p.orders) {
+        const its = items.get(o.id) || [], sig = sigShopeeOrder(o, its);
+        if (seen.get(o.id) === sig) { out.dupes++; continue; }   // pesanan sama tercatat dua kali dalam satu file
+        seen.set(o.id, sig);
+        push(orderGroups, o.id, f, { sig, date: o.payDate, strict: true, rec: { o, items: its } });
+      }
+      for (const a of p.adjustments) push(adjGroups, `${a.orderId}|${a.type}`, f, { sig: a.key, date: a.date, strict: false, rec: a });
+    });
+    const so = unionGroups(orderGroups, shCov), sa = unionGroups(adjGroups, shCov);
+    for (const { o, items } of so.kept) { out.shopeeOrders.set(o.id, o); out.shopeeItems.push(...items); }
+    sa.kept.forEach((a, i) => out.shopeeAdj.set(`${a.key}#${i}`, a));
+    // TikTok: semua baris (pesanan, susulan, penyesuaian) dikelompokkan per ID
+    const tt = parsed.filter((p) => p.kind === 'tiktok_income'), ttCov = tt.map(covOf);
+    const rowGroups = new Map();
+    tt.forEach((p, f) => { for (const r of p.rows) push(rowGroups, r.id, f, { sig: sigTiktokRow(r), date: r.payDate, strict: r.isOrder && r.preGross > 0, rec: r }); });
+    const tr = unionGroups(rowGroups, ttCov);
+    const used = new Map();
+    for (const r of tr.kept) {
+      // Baris kembar yang sah dalam satu file tetap dihitung; kuncinya dibuat unik per kemunculan.
+      const n = used.get(r.key) || 0; used.set(r.key, n + 1);
+      out.tiktok.set(n ? `${r.key}#${n}` : r.key, n ? { ...r, key: `${r.key}#${n}` } : r);
+    }
+    out.dupes += so.dupes + sa.dupes + tr.dupes;
+    out.gabungan = {
+      shopee: { pesananDitahan: so.held.map((h) => ({ id: h.gid, versi: h.versi.map((v) => ({ file: v.file, ...v.recs.reduce((a, x) => ({ penjualan: a.penjualan + x.o.harga + x.o.refund + x.o.voucher, dana: a.dana + x.o.total, tanggalPesanan: x.o.orderDate }), { penjualan: 0, dana: 0 }) })) })),
+        penyesuaianDitahan: sa.held.map((h) => ({ id: h.gid, versi: h.versi.map((v) => ({ file: v.file, nilai: v.recs.reduce((a, x) => a + x.amount, 0), tanggal: (v.recs[0] || {}).date })) })),
+        duplikat: so.dupes + sa.dupes, tidakLengkap: so.tidakLengkap + sa.tidakLengkap, file: sh.length },
+      tiktok: { pesananDitahan: tr.held.map((h) => ({ id: h.gid, versi: h.versi.map((v) => ({ file: v.file, penjualan: v.recs.filter((x) => x.isOrder).reduce((a, x) => a + x.sales, 0), dana: v.recs.reduce((a, x) => a + x.settle, 0),
+        tanggalPesanan: (v.recs.find((x) => x.orderDate) || {}).orderDate || '', tanggalBayar: (v.recs[0] || {}).payDate || '', pesanan: v.recs.some((x) => x.isOrder) })) })),
+        duplikat: tr.dupes, tidakLengkap: tr.tidakLengkap, file: tt.length },
+    };
+  }
+
   function merge(parsed) {
     const out = { shopeeOrders: new Map(), shopeeItems: [], shopeeAdj: new Map(), tiktok: new Map(), cases: new Map(),
       shopeeLines: new Map(), tiktokLines: new Map(), dupes: 0,
@@ -566,13 +670,8 @@ const Engine = (() => {
     const caseVersions = new Map();     // kunci kasus retur → Map(isi → kasus) dari semua file retur
     const seenLine = new Set();
     for (const p of parsed) {
-      if (p.kind === 'shopee_income') {
-        const fresh = new Set();
-        for (const o of p.orders) { if (out.shopeeOrders.has(o.id)) { out.dupes++; continue; } out.shopeeOrders.set(o.id, o); fresh.add(o.id); }
-        out.shopeeItems.push(...p.items.filter((it) => fresh.has(it.orderId)));
-        for (const a of p.adjustments) out.shopeeAdj.set(a.key, a);
-      } else if (p.kind === 'tiktok_income') {
-        for (const r of p.rows) { if (out.tiktok.has(r.key)) { out.dupes++; continue; } out.tiktok.set(r.key, r); }
+      if (p.kind === 'shopee_income' || p.kind === 'tiktok_income') {
+        continue;   // digabung di mergeIncome (P11)
       } else if (p.kind === 'shopee_return' || p.kind === 'tiktok_return') {
         // H2-A: kasus yang sama bisa muncul di beberapa file retur. Simpan semua versinya; versi final dipilih
         // menurut isinya (bukan urutan unggah) di finalizeCases.
@@ -593,6 +692,7 @@ const Engine = (() => {
         }
       }
     }
+    mergeIncome(parsed, out);
     finalizeShopeeLines(shopeeVersions, out);
     finalizeCases(caseVersions, out);
     return out;
@@ -1840,6 +1940,10 @@ const Engine = (() => {
       if (ledgerStats.unitBelumDiketahui) why.push('kondisi_fisik_unit_refund_belum_diketahui');
       if (CK.shopee.dikeluarkan.refundParsial.jumlahPesanan + CK.tiktok.dikeluarkan.refundParsial.jumlahPesanan) why.push(REFUND_PARSIAL);
       if (r.adjustments) why.push('penyesuaian_belum_diklasifikasikan');
+      // P11: konflik versi antarlaporan ditahan dari total dan laba; laporan yang tidak saling lengkap perlu dicek.
+      const G = m.gabungan, pfs = ['shopee', 'tiktok'].filter((k) => want.has(k));
+      if (pfs.some((k) => G[k].pesananDitahan.length || (G[k].penyesuaianDitahan || []).length)) why.push('konflik_antar_laporan');
+      if (pfs.some((k) => G[k].tidakLengkap)) why.push('laporan_tidak_saling_lengkap');
       // Total tiap Laporan Penghasilan harus cocok dengan ringkasan resmi (toleransi Rp1, sama seperti dashboard).
       for (const p of parsed) {
         if (p.kind !== 'shopee_income' && p.kind !== 'tiktok_income') continue;
@@ -1858,6 +1962,10 @@ const Engine = (() => {
         hpp: { ...K.hpp }, penjualan: { ...K.penjualan }, baris: { ...K.baris },
         // H2-B3a: cakupan per pesanan (lihat buildCakupan). Penjualan di sini = totalSales, berbeda dari penjualan di atas.
         cakupan: buildCakupan(r),
+        // P11: hasil penggabungan Laporan Penghasilan (metadata). Transaksi yang ditahan TIDAK masuk angka mana pun.
+        gabungan: Object.fromEntries(['shopee', 'tiktok'].map((k) => [k, { ...m.gabungan[k], pesananDitahan: m.gabungan[k].pesananDitahan.length,
+          penyesuaianDitahan: (m.gabungan[k].penyesuaianDitahan || []).length,
+          nilaiDitahan: { penjualan: m.gabungan[k].pesananDitahan.map((h) => h.versi.map((v) => v.penjualan)), dana: m.gabungan[k].pesananDitahan.map((h) => h.versi.map((v) => v.dana)) } }])),
         // R4: sumber refund TikTok dan status pencocokan baris susulan (metadata; lihat KAMUS B.1c).
         refundTiktok: { ...R4, refundSusulanCocok: { ...R4.refundSusulanCocok }, refundSusulanTidakCocok: { ...R4.refundSusulanTidakCocok }, biayaSusulan: { ...R4.biayaSusulan } },
         // H2-B1: buku unit Shopee. nilaiUnitBelumDiketahui = modal unit yang direfund tetapi kondisi fisiknya belum
@@ -1888,26 +1996,33 @@ const Engine = (() => {
      * Pencairan dana belum diproses di A1 → selalu belum_tersedia.
      */
     function buildJejakUang(r) {
-      const RANK = ['perlu_dicek', 'belum_tersedia', 'berdasarkan_laporan', 'terekonsiliasi'];
+      const RANK = ['perlu_rekonsiliasi', 'perlu_dicek', 'belum_tersedia', 'berdasarkan_laporan', 'terekonsiliasi'];
       const weakest = (list) => list.reduce((a, b) => (RANK.indexOf(b) < RANK.indexOf(a) ? b : a), 'terekonsiliasi');
       const filterTanggal = !!(filter.from || filter.to);
       const TOL = 1;   // toleransi Rp1 per file, sama dengan pemeriksaan total file yang sudah ada
       const forPlatform = (pf) => {
         const kind = pf === 'shopee' ? 'shopee_income' : 'tiktok_income';
-        // File yang isinya identik dengan file sebelumnya (unggah ulang) diabaikan; tumpang tindih lain dicatat.
-        const sigs = new Set(), seenIds = new Set(), files = [];
-        let identik = 0, tumpangTindih = 0;
+        // File yang ISINYA identik dengan file sebelumnya (unggah ulang) diabaikan. Identik = semua baris finansial sama,
+        // bukan hanya himpunan nomor pesanan (P11). File lain yang tumpang tindih ditangani mergeIncome.
+        const sigs = new Set(), files = [];
+        let identik = 0, barisIdentik = 0;
         for (const p of parsed) {
           if (p.kind !== kind) continue;
-          const keys = pf === 'shopee' ? p.orders.map((o) => o.id) : p.rows.map((x) => x.key);
-          const sig = [...keys].sort().join('\n');
-          if (keys.length && sigs.has(sig)) { identik++; continue; }
+          const rows = pf === 'shopee'
+            ? [...p.orders.map((o) => sigShopeeOrder(o, p.items.filter((it) => it.orderId === o.id))), ...p.adjustments.map((a) => 'adj|' + a.key)]
+            : p.rows.map(sigTiktokRow);
+          const sig = rows.sort().join('\n');
+          if (rows.length && sigs.has(sig)) { identik++; barisIdentik += rows.length; continue; }
           sigs.add(sig);
-          const ids = pf === 'shopee' ? keys : p.rows.filter((x) => x.isOrder).map((x) => x.id);
-          if (ids.some((id) => seenIds.has(id))) tumpangTindih++;
-          ids.forEach((id) => seenIds.add(id));
           files.push(p);
         }
+        // Rekonsiliasi gabungan (lintas file): konflik versi yang ditahan, file yang tidak saling lengkap, duplikat.
+        const G = m.gabungan[pf];
+        const heldIn = [...G.pesananDitahan.filter((h) => h.versi.some((v) => inRange(v.tanggalPesanan || v.tanggalBayar))),
+          ...(G.penyesuaianDitahan || []).filter((h) => h.versi.some((v) => inRange(v.tanggal)))];
+        const overlap = G.duplikat - barisIdentik > 0;   // ada baris sama dari file yang tidak identik → sudah dihitung sekali
+        const gabungan = { status: heldIn.length ? 'konflik' : G.tidakLengkap ? 'tidak_lengkap' : 'bebas_konflik',
+          ditahan: heldIn.length, duplikatDiabaikan: G.duplikat, tidakLengkap: G.tidakLengkap };
         const P = pf === 'shopee' ? S : T, A = RF[pf];
         // Kolom refund tidak ada di salah satu file → rincian refund belum tersedia (bukan 0).
         const noCol = A.tanpaKolom > 0 || files.some((p) => p.check.kolomRefund === false);
@@ -1920,14 +2035,18 @@ const Engine = (() => {
           if (files.some((p, i) => isOk(ref[i]) && !(Math.abs(ref[i] - p.check.jumlah[comp]) <= TOL))) why.unshift('tidak_cocok_ringkasan');
           if (ref.some((v) => !isOk(v))) why.push('ringkasan_resmi_tidak_ada');
           if (filterTanggal) why.push('filter_tanggal');
-          if (tumpangTindih) why.push('file_tumpang_tindih');
-          if (!why.length) {
+          if (heldIn.length) why.unshift('konflik_antar_laporan');
+          if (G.tidakLengkap) why.push('laporan_tidak_saling_lengkap');
+          if (!why.length && !overlap) {
             // Bukti akhir: jumlah gabungan file = angka yang ditampilkan (bukan hanya tiap file cocok sendiri-sendiri).
             const gab = files.reduce((a, p) => a + p.check.jumlah[comp] - (pf === 'tiktok' && comp !== 'dana' ? p.check.nonPesanan[comp] : 0), 0);
             if (!(Math.abs(gab - tampil[comp]) <= TOL * files.length)) why.push('gabungan_tidak_cocok');
           }
-          const hard = why.some((w) => ['tidak_cocok_ringkasan', 'gabungan_tidak_cocok', 'tanda_refund_tidak_wajar', 'identitas_refund_tidak_cocok'].includes(w));
-          return { status: hard ? 'perlu_dicek' : why.length ? 'berdasarkan_laporan' : 'terekonsiliasi', alasan: why };
+          const hard = why.some((w) => ['tidak_cocok_ringkasan', 'gabungan_tidak_cocok', 'tanda_refund_tidak_wajar', 'identitas_refund_tidak_cocok', 'laporan_tidak_saling_lengkap'].includes(w));
+          // Intrafile (tiap file vs ringkasannya) dan gabungan (lintas file) dicatat terpisah; status akhir butuh keduanya.
+          const rekonsiliasiFile = why.includes('tidak_cocok_ringkasan') ? 'tidak_cocok' : why.includes('ringkasan_resmi_tidak_ada') ? 'tanpa_ringkasan' : 'cocok';
+          return { status: why.includes('konflik_antar_laporan') ? 'perlu_rekonsiliasi' : hard ? 'perlu_dicek' : why.length ? 'berdasarkan_laporan' : 'terekonsiliasi',
+            alasan: why, rekonsiliasiFile, rekonsiliasiGabungan: gabungan.status };
         };
         // TikTok: ringkasan "Total Pendapatan"/"Total Biaya" mencakup baris non-pesanan; bila baris itu berisi nilai,
         // angka pesanan saja tidak bisa disebut cocok penuh dengan ringkasan.
@@ -1938,7 +2057,8 @@ const Engine = (() => {
         const adjCount = pf === 'shopee' ? [...m.shopeeAdj.values()].filter((a) => inRange(a.date)).length
           : [...m.tiktok.values()].filter((x) => !x.isOrder && inRange(x.payDate)).length;
         return {
-          file: { jumlah: files.length, identik, tumpangTindih },
+          file: { jumlah: files.length, identik },
+          gabungan: { ...gabungan, nilaiDitahan: heldIn.map((h) => h.versi.map((v) => ({ penjualan: v.penjualan, dana: v.dana, nilai: v.nilai }))) },
           penjualan: { nilai: P.sales, ...status('penjualan', nonPes('penjualan')) },
           refund: { nilai: tampil.refund, termasukPenjualan: true,
             jumlahPesanan: noCol ? NaN : A.jumlahPesanan, penuh: noCol ? NaN : A.penuh, parsial: noCol ? NaN : A.parsial,
