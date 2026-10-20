@@ -373,6 +373,7 @@ Sumber awal: audit menyeluruh 14 Okt 2026 (read-only), ditambah analisis penghit
 
 | P11 | Medium | `assets/engine.js` (`mergeIncome`) | **Sebagian ditangani (20 Okt 2026, lokal):** identitas baris berdasarkan isi; duplikat identik dihitung sekali; konflik versi ditahan dan ditandai "Perlu rekonsiliasi"; laporan tidak saling lengkap ditandai "Perlu dicek" (`docs/KAMUS_ANGKA.md` B.1d) | Audit 20 Okt 2026 (7 file): 3.278 ID di beberapa file, semuanya duplikat identik; tidak ada versi berbeda | Validasi aturan konflik dengan unduhan ulang asli setelah refund/perubahan; tinjau aturan cakupan | Aturan konflik baru diuji sintetis |
 | P12 | Low | Money Trace A1 | Rekonsiliasi per komponen hanya terhadap ringkasan di file yang sama. Pencairan, saldo, dan dana yang masih tertahan belum dicocokkan; refund setelah dana dilepas (P10) tidak terlihat di Jejak uang | — | Fase A2/A3 (saldo dan riwayat penarikan) setelah disetujui | Belum diverifikasi |
+| P13 | Medium | `assets/engine.js` (`mergeIncome`, cakupan file TikTok) | Cakupan file TikTok diambil dari tanggal bayar terawal–terakhir di baris, padahal sheet Laporan memuat **periode resmi** (baris "Periode", mis. `2026/09/28-2026/10/13`, zona waktu UTC+7). Bila tidak ada transaksi di hari tepi, cakupan menyempit sehingga versi berbeda dari transaksi yang sama (tanggal berbeda) bisa **dijumlahkan diam-diam** dan file yang tidak saling lengkap tidak terdeteksi; status tetap "terekonsiliasi" | Pada data uji pemilik: 1 dari 4 file punya hari awal tanpa transaksi; tidak ada konflik nyata. Celah dibuktikan sintetis | Pakai periode resmi sheet Laporan (cadangan: tanggal baris, ditandai) — perubahan aturan merge, perlu persetujuan | Terbukti sintetis |
 
 ## Belum dapat diverifikasi
 
@@ -395,6 +396,8 @@ Sumber awal: audit menyeluruh 14 Okt 2026 (read-only), ditambah analisis penghit
   Shopee) ditambahkan. Belum ada masalah yang diperbaiki.
 - 14 Okt 2026: hasil validasi export pesanan Shopee (tanpa angka bisnis); temuan penghitungan ganda variasi (H1/H3,
   High); aturan SKU opsional; acceptance criteria seller tanpa SKU; ketergantungan H1/H2/H3 diperbarui.
+- 20 Okt 2026: pemeriksaan rilis (lokal): total yang belum lengkap karena transaksi ditahan kini dinyatakan di
+  dashboard, PDF, dan Excel; P13 (cakupan periode TikTok) ditambahkan, belum diperbaiki.
 - 20 Okt 2026: P11/R1–R3 (lokal): penggabungan Laporan Penghasilan berdasarkan isi baris; konflik versi ditahan
   (tidak dijumlahkan, tidak dipilih); status Money Trace memisahkan rekonsiliasi intrafile dan gabungan. Sebelumnya
   Shopee diam-diam memakai versi file pertama (L4 bagian laporan penghasilan) dan TikTok bisa menjumlahkan dua versi.

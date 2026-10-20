@@ -507,7 +507,9 @@ tanpa_ringkasan) dan **rekonsiliasi gabungan** (`rekonsiliasiGabungan`: bebas_ko
 status. File dianggap identik berdasarkan seluruh isi barisnya, bukan himpunan nomor pesanan.
 
 Batasan: semua versi laporan nyata yang berbeda isi belum pernah ditemukan pada data uji, jadi aturan konflik baru
-diuji sintetis. Cakupan TikTok dari baris (bukan dari periode resmi file) bisa lebih sempit dari periode unduhan.
+diuji sintetis. Cakupan TikTok dari baris (bukan dari periode resmi file) bisa lebih sempit dari periode unduhan;
+sheet Laporan TikTok sebenarnya memuat periode resmi (baris "Periode", basis tanggal pembayaran, UTC+7) — lihat
+KNOWN_ISSUES P13. Total yang tampil saat ada transaksi ditahan dinyatakan "belum lengkap" di dashboard, PDF, dan Excel.
 Diuji di `tests/engine.test.js` (MG-P11-*).
 
 ### B.2 Catatan nama

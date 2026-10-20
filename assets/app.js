@@ -441,6 +441,8 @@
     return COV.map(([k, cls, label, tip]) => ({ k, cls, label, tip, v: c.penjualan[k], n: c.jumlahPesanan[k], share: tot > 0 ? c.penjualan[k] / tot : NaN }));
   }
   /** Kalimat pengingat bahwa persen di atas adalah cakupan, bukan tingkat akurasi (berdasarkan status dari engine). */
+  /** P11: catatan singkat di kartu angka bila ada transaksi yang ditahan (total belum lengkap). */
+  const heldShort = (r) => { const n = CekReport.ditahan(r).n; return n ? ` · Belum lengkap: ${num(n)} transaksi ditahan` : ''; };
   const covCaveat = (c) => (c.penjualan.belum > 0 ? ' Namun sebagian angka masih perlu diperiksa.'
     : c.penjualan.estimasiMinimum > 0 || c.penjualan.estimasi > 0 ? ' Namun sebagian HPP masih perkiraan.' : '');
   const ctaBtn = (c, cls = 'btn sm') => (!c ? '' : c.sheet ? `<button class="${cls}" type="button" data-sheet="${c.sheet}">${c.label}</button>`
@@ -566,7 +568,7 @@
         <figcaption>${opex ? 'Laba dari data tersedia' : 'Laba setelah modal'} per bulan, ${num(sv.length)} bulan</figcaption></figure>`;
     })();
     const kpiTiles = `<section class="d3-tiles" aria-label="Angka pendukung">
-        ${kpi(`Penjualan${qi('penjualan', 'Penjualan')}`, r.totalSales, `${num(r.orders)} pesanan terjual`, '', '', 'sales')}
+        ${kpi(`Penjualan${qi('penjualan', 'Penjualan')}`, r.totalSales, `${num(r.orders)} pesanan terjual${heldShort(r)}`, '', '', 'sales')}
         ${kpi(`Modal / HPP${qi('modal', 'Modal')}`, r.ready ? r.totalModal : '<span class="faint">—</span>', r.ready ? 'dari penjualan yang modalnya diketahui' : 'modal belum diisi', '',
           hppMixed ? '<div class="m-status"><span class="status estimate">Sebagian perkiraan</span></div>' : r.ready && c.penjualan.terverifikasi > 0 ? '<div class="m-status"><span class="status verified">Terverifikasi</span></div>' : '', 'modal')}
         ${kpi(`Potongan marketplace${qi('potongan', 'Potongan marketplace')}`, -r.totalFees, 'dipotong dari penjualan oleh marketplace', '', '', 'fees')}
@@ -575,7 +577,7 @@
       <div class="d3-top">
         <section class="dash-hero d3-profit" aria-label="Laba">
           ${kpi(`Laba dari data tersedia${qi('laba_bersih', 'Laba dari data tersedia')}`, r.ready ? laba : '<span class="faint">Belum dihitung</span>',
-            r.ready ? `${opex ? 'setelah biaya operasional yang tercatat. ' : ''}${pct(r.coverage, 0)} penjualan masuk dalam perhitungan` : 'isi modal produk agar laba bisa dihitung',
+            `${r.ready ? `${opex ? 'setelah biaya operasional yang tercatat. ' : ''}${pct(r.coverage, 0)} penjualan masuk dalam perhitungan` : 'isi modal produk agar laba bisa dihitung'}${heldShort(r)}`,
             'is-hero', `<div class="m-status">${finalBadge}</div>${spark}<div class="ph-cta">${r.ready ? '<button type="button" class="btn sm ph-btn" data-go="biaya">Lihat rincian laba<svg class="arr" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg></button>' : '<button type="button" class="btn sm ph-btn" data-go="data" data-section="modal">Isi modal</button>'}</div>`)}
         </section>
 
@@ -589,7 +591,7 @@
               ${barOk ? `<div class="cov-bar" role="group" aria-label="Kualitas dasar perhitungan, porsi penjualan per status: ${parts.filter((p) => p.v > 0).map((p) => `${p.label} ${pct(p.share)}`).join(', ')}">
                 ${parts.filter((p) => p.v > 0).map((p) => `<button type="button" class="cov-seg ${p.cls}" style="--w:${(p.share * 100).toFixed(3)}%" data-sheet="kepastian" aria-haspopup="dialog" data-tip="${p.label} · ${pct(p.share)}" aria-label="${p.label} ${pct(p.share)}. Buka penjelasan"></button>`).join('')}</div>`
                 : '<p class="small muted">Sebagian penjualan bernilai minus (refund atau potongan), jadi porsinya tidak digambar sebagai batang. Rinciannya ada di daftar.</p>'}
-              <p class="kep-note">${r.ready ? `<b>${pct(r.coverage, 0)}</b> penjualan (${fmt(c.labaTerhitung.dasarPenjualan)}) masuk dalam perhitungan laba.${covCaveat(c)}` : 'Laba belum bisa dihitung karena modal belum diisi.'}</p>
+              <p class="kep-note">${r.ready ? `<b>${pct(r.coverage, 0)}</b> penjualan (${fmt(c.labaTerhitung.dasarPenjualan)}) masuk dalam perhitungan laba.${covCaveat(c)}` : 'Laba belum bisa dihitung karena modal belum diisi.'}${CekReport.ditahan(r).n ? ` ${esc(CekReport.ditahan(r).teks)}` : ''}</p>
               <div class="kep-actions">${cert.length ? `<button type="button" class="kep-count" data-sheet="kepastian" aria-haspopup="dialog"><b>${num(cert.length)}</b><span>hal perlu dilengkapi</span></button>` : '<span class="status verified">Tidak ada yang perlu dilengkapi</span>'}
                 <button type="button" class="btn sm" data-sheet="kepastian" aria-haspopup="dialog">Lihat detail kepastian</button></div>
             </div>
@@ -709,7 +711,7 @@
       <ul class="flow">${rows.map((x) => `<li class="flow-row ${x.cls} ${ok(x.v) && x.v < 0 ? 'is-neg' : ''}"><div class="flow-lbl"><b>${x.label}</b><span>${esc(x.note)}</span></div>
         <div class="flow-track" aria-hidden="true">${ok(x.v) ? `<i style="--w:${((Math.abs(x.v) / max) * 100).toFixed(2)}%"></i>` : ''}</div>
         <span class="flow-val ${ok(x.v) && x.v < 0 ? 'neg' : ''}">${ok(x.v) ? fmt(x.cls === 'cost' ? -x.v : x.v) : 'Belum diketahui'}</span></li>`).join('')}</ul>
-      <p class="tiny faint">Komponen tidak dijumlahkan menjadi 100%: sebagian penjualan belum dihitung dan tiap laporan punya definisi sendiri. Berdasarkan laporan yang diunggah. Belum merupakan rekonsiliasi pencairan dana.</p>`;
+      ${CekReport.ditahan(r).n ? `<p class="small warn-text">${esc(CekReport.ditahan(r).teks)}</p>` : ''}<p class="tiny faint">Komponen tidak dijumlahkan menjadi 100%: sebagian penjualan belum dihitung dan tiap laporan punya definisi sendiri. Berdasarkan laporan yang diunggah. Belum merupakan rekonsiliasi pencairan dana.</p>`;
   }
 
   /** Cuplikan produk: urutan dari angka engine (laba produk, status), tanpa status kepastian baru. */
@@ -740,7 +742,7 @@
     const rb = r.kepastian.risikoBarang, opex = r.fixedMonthly > 0;
     // Pengecekan kecocokan hanya memilih tanda "=", tidak menghasilkan angka baru.
     const near = (a, b) => ok(a) && ok(b) && Math.abs(a - b) < 1;
-    L('', 'Penjualan', r.totalSales, '', `${num(r.orders)} pesanan terjual`, 'penjualan');
+    L('', 'Penjualan', r.totalSales, '', `${num(r.orders)} pesanan terjual${heldShort(r)}`, 'penjualan');
     L('−', 'Potongan marketplace', r.totalFees, 'minus', `${pct(-r.totalFees / r.totalSales)} dari penjualan`, 'potongan');
     L(near(r.totalSales + r.totalFees, r.totalReceived) ? '=' : '', 'Dana diterima', r.totalReceived, 'sub', near(r.totalSales + r.totalFees, r.totalReceived) ? '' : 'menurut laporan; ada komponen lain di luar penjualan dan potongan', 'dana_diterima');
     if (r.ready) {
@@ -755,7 +757,7 @@
     } else L('−', 'Modal / HPP', NaN, 'minus', 'modal produk belum diisi', 'modal');
     const total = opex ? r.netProfit : r.totalMargin;
     const label = 'Laba dari data tersedia';
-    const notes = [opex ? 'Setelah biaya operasional yang tercatat.' : 'Biaya operasional belum dicatat.',
+    const notes = [CekReport.ditahan(r).teks, opex ? 'Setelah biaya operasional yang tercatat.' : 'Biaya operasional belum dicatat.',
       r.coverage < 0.995 ? `Dari ${pct(r.coverage, 0)} penjualan yang masuk dalam perhitungan.` : '',
       r.unknownRisk > 0 ? `Bisa turun ${fmt(r.unknownRisk)} bila retur yang belum dicek tidak kembali.` : '',
       rb.risikoTanpaNilai ? `${num(rb.risikoTanpaNilai)} kasus retur yang belum dicek belum punya nilai, jadi risikonya belum bisa dihitung.` : ''].filter(Boolean).join(' ');
@@ -764,7 +766,8 @@
       <dl>${lines.join('')}</dl>
       <div class="nota-total"><span class="lbl"><span class="op" aria-hidden="true">=</span>${label}${qi(opex ? 'laba_bersih' : 'margin_total', label)}</span>
         ${r.ready ? `<span class="big ${total < 0 ? 'neg' : ''}">${fmt(total)}</span><span class="note">${notes}</span>`
-          : '<span class="big faint">Belum dihitung</span><span class="note">Isi modal produk agar laba bisa dihitung.</span><button class="btn sm primary" type="button" data-go="data" data-section="modal" style="justify-self:start;margin-top:6px">Isi modal</button>'}
+          : `<span class="big faint">Belum dihitung</span><span class="note">${CekReport.ditahan(r).teks} Isi modal produk agar laba bisa dihitung.</span>`
+          + '<button class="btn sm primary" type="button" data-go="data" data-section="modal" style="justify-self:start;margin-top:6px">Isi modal</button>'}
       </div></section>`;
   }
   function facts(r) {
@@ -910,8 +913,8 @@
     const card = (label, value, note, cls = '', extra = '', kind = '') => `<div class="metric-card ${cls}" ${kind ? `data-kpi="${kind}"` : ''}><span class="m-label">${kpiIc(kind)}${label}</span><span class="m-value ${typeof value === 'number' && value < 0 ? 'neg' : ''}">${typeof value === 'number' ? fmt(value) : value}</span>${extra}<span class="m-note">${note}</span></div>`;
     return `<section class="dash-hero laba-kpis" aria-label="Angka utama">
       ${card(`Laba dari data tersedia${qi(opex ? 'laba_bersih' : 'margin_total', 'Laba dari data tersedia')}`, r.ready ? (opex ? r.netProfit : r.totalMargin) : '<span class="faint">Belum dihitung</span>',
-        r.ready ? `${opex ? 'setelah biaya operasional yang tercatat' : 'biaya operasional belum dicatat'}. ${pct(r.coverage, 0)} penjualan masuk dalam perhitungan` : 'isi modal produk agar laba bisa dihitung', 'is-hero', `<div class="m-status">${finalBadge}</div>`)}
-      ${card(`Penjualan${qi('penjualan', 'Penjualan')}`, r.totalSales, `${num(r.orders)} pesanan terjual`, '', '', 'sales')}
+        `${r.ready ? `${opex ? 'setelah biaya operasional yang tercatat' : 'biaya operasional belum dicatat'}. ${pct(r.coverage, 0)} penjualan masuk dalam perhitungan` : 'isi modal produk agar laba bisa dihitung'}${heldShort(r)}`, 'is-hero', `<div class="m-status">${finalBadge}</div>`)}
+      ${card(`Penjualan${qi('penjualan', 'Penjualan')}`, r.totalSales, `${num(r.orders)} pesanan terjual${heldShort(r)}`, '', '', 'sales')}
       ${card(`Modal / HPP${qi('modal', 'Modal')}`, r.ready ? r.totalModal : '<span class="faint">Belum diketahui</span>', r.ready ? 'dari penjualan yang modalnya diketahui' : 'modal belum diisi', '',
         hppMixed ? '<div class="m-status"><span class="status estimate">Sebagian perkiraan</span></div>' : r.ready && c.penjualan.terverifikasi > 0 ? '<div class="m-status"><span class="status verified">Terverifikasi</span></div>' : !r.ready ? '<div class="m-status"><span class="status unknown">Belum diketahui</span></div>' : '', 'modal')}
       ${card(`Potongan marketplace${qi('potongan', 'Potongan marketplace')}`, -r.totalFees, 'dipotong dari penjualan oleh marketplace', '', '', 'fees')}
@@ -1003,7 +1006,7 @@
         </ul>
       </div>
       ${traceSources(J)}
-      <p class="tiny faint">Berdasarkan laporan yang diunggah. Dana dilepas belum tentu sama dengan dana yang sudah masuk rekening.</p>`;
+      ${CekReport.ditahan(r).n ? `<p class="small warn-text">${esc(CekReport.ditahan(r).teks)}</p>` : ''}<p class="tiny faint">Berdasarkan laporan yang diunggah. Dana dilepas belum tentu sama dengan dana yang sudah masuk rekening.</p>`;
   }
   /** Satu baris rincian biaya: label, nilai, arti singkat, dan sumbernya (teks dari penjelasan.js). */
   function costRow(label, v, key, src, share) {
@@ -1722,7 +1725,8 @@
     const known = (k) => st[k] !== 'tidak_diketahui';
     const RH = (k, v) => (known(k) && ok(v) ? Math.round(v) : UNK);
     const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([['Cek Untung', prof().store || ''], ['Periode data', `${r.first} s.d. ${r.last}`], [], ['Komponen', ...plats.map((k) => PNAME[k]), 'Total'],
+    const held = CekReport.ditahan(r);   // P11: total belum lengkap bila ada transaksi yang ditahan
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([['Cek Untung', prof().store || ''], ['Periode data', `${r.first} s.d. ${r.last}`], ...(held.n ? [['Status total', held.teks]] : []), [], ['Komponen', ...plats.map((k) => PNAME[k]), 'Total'],
       ['Pesanan terjual', ...plats.map((k) => r[k].orders), r.orders], ['Penjualan', ...plats.map((k) => R(r[k].sales)), R(r.totalSales)],
       ['Potongan marketplace', ...plats.map((k) => R(r[k].feeTotal)), R(r.totalFees)], ['Dana diterima', ...plats.map((k) => R(r[k].received)), R(r.totalReceived)],
       ['Modal', ...plats.map((k) => RH(k, -r[k].modal)), RH('total', -r.totalModal)], ['Packing', ...plats.map((k) => RH(k, -r[k].knownPacking)), RH('total', -r.knownPacking)],

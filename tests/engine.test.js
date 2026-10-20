@@ -1713,6 +1713,19 @@ test('MG-P11-13/14 status A1 memisahkan intrafile dan gabungan; HPP/laba R4 tida
   eq(b.totalModal, a.totalModal); eq(b.totalMargin, a.totalMargin); eq(a.totalModal, 20000);
 });
 
+test('FR-3 cakupan periode TikTok: transaksi di hari pertama & terakhir, dan file sebagian, tanpa konflik palsu atau duplikasi', () => {
+  const FULL = [{ id: 'C-1', sub: 50000, biaya: -5000, pay: '2026/01/01' }, { id: 'C-2', sub: 60000, biaya: -6000, pay: '2026/01/15' }, { id: 'C-3', sub: 70000, biaya: -7000, pay: '2026/01/31' }];
+  const one = ju([A1tt(FULL)]);
+  const dua = ju([A1tt(FULL), A1tt(FULL, { name: 'ulang.xlsx' })]);
+  sameTot(one.r, dua.r, 'FR-3 hari pertama/terakhir'); eq(dua.J.marketplace.tiktok.gabungan.status, 'bebas_konflik');
+  const ubah = ju([A1tt(FULL), A1tt([FULL[0], FULL[1], { ...FULL[2], biaya: -7500 }], { name: 'ulang.xlsx' })]);
+  eq(ubah.J.marketplace.tiktok.gabungan.status, 'konflik', 'perubahan di hari terakhir tetap terdeteksi'); eq(ubah.r.orders, 2);
+  // File sebagian (1–15 Jan) + file penuh: isi sama di rentang bersama → tidak ada konflik, tidak ada duplikasi.
+  const sebagian = ju([A1tt(FULL.slice(0, 2), { name: 'awal.xlsx' }), A1tt(FULL)]);
+  sameTot(one.r, sebagian.r, 'FR-3 file sebagian'); eq(sebagian.J.marketplace.tiktok.gabungan.status, 'bebas_konflik');
+  eq(sebagian.J.marketplace.tiktok.dana.status, 'terekonsiliasi');
+});
+
 test('tanggal dd/mm/yyyy dan serial Excel', () => { eq(E.date('05/06/2026'), '2026-06-05'); eq(E.date(46023), '2026-01-01'); });
 
 console.log(failed ? `\n${failed} uji GAGAL` : '\nSemua uji lulus');

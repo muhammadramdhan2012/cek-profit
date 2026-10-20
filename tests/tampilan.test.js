@@ -253,6 +253,25 @@ test('MG-P11 tampilan: konflik antarlaporan → "Perlu rekonsiliasi", tidak memi
   truthy(/transaksi berbeda antarlaporan ditahan, tidak masuk angka di bawah/.test(labaSrc), 'catatan transaksi ditahan');
   truthy(!/file_tumpang_tindih/.test(labaSrc), 'alasan lama "tumpang tindih" tidak dipakai lagi');
 });
+test('FR-1 konflik antarlaporan: PDF, Excel, dan dashboard menyatakan total BELUM LENGKAP (bukan Rp0); tanpa konflik tidak berubah', () => {
+  // Data SINTETIS: pesanan K-1 punya dua versi (biaya berbeda) di dua laporan Januari → ditahan engine.
+  const H = ['ID Pesanan/Penyesuaian', 'Jenis transaksi', 'Waktu pemesanan', 'Waktu pembayaran pesanan', 'Jumlah penyelesaian pembayaran', 'Total Pendapatan', 'Subtotal sebelum diskon', 'Total pengembalian dana sebelum diskon', 'Total Biaya'];
+  const f = (name, rows) => E.parseWorkbook({ name, sheets: { 'Detail pesanan': [H, ...rows.map(([id, pay, sub, fee]) => [id, 'Pesanan', '2026/01/02', pay, sub + fee, sub, sub, 0, fee])],
+    Laporan: [['', 'Jumlah penyelesaian pembayaran', '', '', '', rows.reduce((a, r) => a + r[2] + r[3], 0)]] } });
+  const st = { modalMode: 'produk', catalog: [], fallbackPct: 50, periods: [{ start: '', markup: 0, disc: 0 }], fixedCosts: [] };
+  const konflik = E.compute([f('a.xlsx', [['K-1', '2026/01/05', 100000, -10000], ['K-2', '2026/01/20', 80000, -8000]]), f('b.xlsx', [['K-1', '2026/01/05', 100000, -12000], ['K-2', '2026/01/20', 80000, -8000]])], st);
+  const normal = E.compute([f('a.xlsx', [['K-1', '2026/01/05', 100000, -10000], ['K-2', '2026/01/20', 80000, -8000]])], st);
+  const d = CekReport.ditahan(konflik);
+  eq(d.n, 1); truthy(/Total belum lengkap: 1 transaksi ditahan/.test(d.teks) && /bukan Rp0/.test(d.teks), d.teks);
+  eq(CekReport.ditahan(normal).n, 0); eq(CekReport.ditahan(normal).teks, '');
+  const html = pdf(konflik);
+  truthy(html.includes(d.teks), 'PDF: keterangan di ringkasan dan di bawah laba rugi');
+  truthy((html.match(/Total belum lengkap/g) || []).length >= 2, 'PDF: dua kali (ringkasan + tabel laba rugi)'); truthy(/pesanan · belum lengkap/.test(html), 'PDF: KPI penjualan');
+  truthy(!/belum lengkap/i.test(pdf(normal)), 'PDF tanpa konflik tidak berubah');
+  truthy(/\['Status total', held\.teks\]/.test(appJs), 'Excel: baris "Status total" bila ada transaksi ditahan');
+  truthy((appJs.match(/heldShort\(r\)/g) || []).length >= 5, 'dashboard: kartu laba, penjualan, dan nota memuat catatan');
+  truthy((appJs.match(/CekReport\.ditahan\(r\)\.n \? `<p class="small warn-text">/g) || []).length >= 2, 'dashboard: "Ke mana uang pergi" dan Jejak uang');
+});
 test('U3 Produk: status = warna + simbol + teks; label cari/urutkan; header tabel semantik; tanpa count-up', () => {
   truthy(/HEALTH = \{ sehat: 'Sehat', tipis: 'Tipis', rugi: 'Rugi', unknown: 'Modal belum ada' \}/.test(prodSrc), 'label teks status');
   const css = src('app.css');
