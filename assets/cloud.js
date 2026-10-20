@@ -11,6 +11,7 @@
  */
 const CekCloud = (() => {
   const SESSION_KEY = 'cekprofit.session';
+  const PKCE_KEY = 'cekprofit.pkce';    // code_verifier login Google (sementara, dihapus setelah dipakai)
   let cfg = { url: '', key: '' };
   let session = null;               // {access_token, refresh_token, expires_at, user}
   let storage = null;
@@ -28,11 +29,16 @@ const CekCloud = (() => {
     const m = String(raw).toLowerCase();
     if (m.includes('invalid login credentials')) return 'Email atau kata sandi salah.';
     if (m.includes('email not confirmed')) return 'Email belum dikonfirmasi. Buka tautan konfirmasi di kotak masuk email Anda.';
-    if (m.includes('already registered') || m.includes('already been registered')) return 'Email ini sudah terdaftar. Silakan masuk.';
+    // Tidak menyebut apakah email terdaftar (mencegah enumerasi akun).
+    if (m.includes('already registered') || m.includes('already been registered') || m.includes('already exists')) return 'Pendaftaran dengan email ini tidak dapat diproses. Jika Anda sudah punya akun, silakan masuk atau pakai "Lupa kata sandi".';
     if (m.includes('password should be at least') || m.includes('weak')) return 'Kata sandi minimal 8 karakter dan sulit ditebak.';
     if (m.includes('rate limit') || status === 429) return 'Terlalu banyak percobaan. Coba lagi beberapa menit lagi.';
     if (m.includes('invalid email') || m.includes('unable to validate email')) return 'Format email tidak valid.';
     if (m.includes('jwt expired')) return 'Sesi berakhir. Silakan masuk lagi.';
+    if (m === 'access_denied') return 'Masuk dengan Google dibatalkan. Anda bisa mencoba lagi atau memakai email.';
+    if (m === 'tautan_kedaluwarsa') return 'Tautan sudah tidak berlaku. Silakan minta tautan baru.';
+    if (m === 'oauth_gagal') return 'Masuk dengan Google gagal. Silakan coba lagi beberapa saat lagi.';
+    if (m.includes('code verifier') || m.includes('flow state') || m.includes('auth code')) return 'Proses masuk dengan Google kedaluwarsa. Silakan ulangi dari awal.';
     if (status === 0) return 'Tidak bisa terhubung ke server. Periksa koneksi internet.';
     return raw || `Permintaan gagal (${status}).`;
   }
@@ -79,6 +85,14 @@ const CekCloud = (() => {
     await refreshing;
   }
 
+  const b64url = (bytes) => btoa(String.fromCharCode(...bytes)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+  const pkceStore = () => { try { if (typeof sessionStorage !== 'undefined') return sessionStorage; } catch (e) { /* abaikan */ } return storage; };
+  /** Token baru dari URL dianggap sah hanya bila server mengenali penggunanya; bila tidak, sesi dihapus. */
+  async function verifyUser() {
+    try { session.user = await http('/auth/v1/user'); write(session); emit(); }
+    catch (e) { setSession(null); throw new CloudError(e.status || 401, { message: 'Sesi tidak dapat diverifikasi. Silakan masuk lagi.' }); }
+  }
+
   /* ---------- auth ---------- */
   const auth = {
     async signUp({ email, password, fullName, redirectTo }) {
@@ -94,6 +108,40 @@ const CekCloud = (() => {
     oauthUrl(provider, redirectTo) {
       return `${cfg.url}/auth/v1/authorize?provider=${encodeURIComponent(provider)}&redirect_to=${encodeURIComponent(redirectTo)}`;
     },
+    /**
+     * Login Google dengan PKCE (alur resmi Supabase Auth): verifier acak disimpan sementara di sessionStorage, Supabase
+     * mengembalikan ?code= yang hanya bisa ditukar dengan verifier itu. Tidak ada token di URL. Lingkup Google bawaan
+     * Supabase (email, profil); tidak meminta akses Gmail/Drive.
+     */
+    async oauthStart(provider, redirectTo) {
+      const verifier = b64url(crypto.getRandomValues(new Uint8Array(32)));
+      const challenge = b64url(new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(verifier))));
+      pkceStore().setItem(PKCE_KEY, verifier);
+      return `${this.oauthUrl(provider, redirectTo)}&code_challenge=${challenge}&code_challenge_method=s256`;
+    },
+    /**
+     * Hasil kembali dari Supabase: ?code= (PKCE), #access_token= (tautan email / alur lama), atau ?error= / #error=.
+     * Sesi baru dianggap sah hanya setelah /auth/v1/user berhasil; bila gagal, sesi dihapus.
+     * @returns {Promise<null|{type: string}>}
+     */
+    async fromUrl({ search = '', hash = '' } = {}) {
+      const q = new URLSearchParams(String(search).replace(/^\?/, '')), h = new URLSearchParams(String(hash).replace(/^#/, ''));
+      const err = q.get('error') || h.get('error') || q.get('error_code') || h.get('error_code');
+      if (err) {
+        pkceStore().removeItem(PKCE_KEY);
+        const code = q.get('error_code') || h.get('error_code') || err;
+        // Rincian teknis dari URL tidak ditampilkan apa adanya (bisa dimanipulasi lewat tautan).
+        throw new CloudError(400, { message: err === 'access_denied' ? 'access_denied' : /otp_expired|expired/.test(code) ? 'tautan_kedaluwarsa' : 'oauth_gagal' });
+      }
+      if (q.get('code')) {
+        const verifier = pkceStore().getItem(PKCE_KEY); pkceStore().removeItem(PKCE_KEY);
+        if (!verifier) throw new CloudError(400, { message: 'flow state: code verifier tidak ditemukan' });
+        setSession(await http('/auth/v1/token?grant_type=pkce', { method: 'POST', auth: false, body: { auth_code: q.get('code'), code_verifier: verifier } }));
+        await verifyUser();
+        return { type: 'login' };
+      }
+      return h.get('access_token') ? this.fromUrlHash(hash) : null;
+    },
     async recover(email, redirectTo) {
       await http(`/auth/v1/recover?redirect_to=${encodeURIComponent(redirectTo)}`, { method: 'POST', auth: false, body: { email } });
     },
@@ -108,7 +156,7 @@ const CekCloud = (() => {
       if (p.get('error_description')) throw new CloudError(400, { message: p.get('error_description') });
       if (!p.get('access_token')) return null;
       setSession({ access_token: p.get('access_token'), refresh_token: p.get('refresh_token'), expires_in: p.get('expires_in'), expires_at: Number(p.get('expires_at')) || undefined });
-      try { session.user = await http('/auth/v1/user'); write(session); emit(); } catch (e) { /* biarkan */ }
+      await verifyUser();
       return { type: p.get('type') || 'login' };
     },
     user: () => (session && session.user) || null,

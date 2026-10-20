@@ -3,32 +3,48 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Akun — Cek Untung</title>
+<title>Masuk atau daftar — Cek Untung</title>
 <meta name="description" content="Masuk atau daftar Cek Untung untuk menyimpan modal produk dan riwayat laporan toko Anda.">
 <meta name="theme-color" content="#0f6e56">
 <link rel="icon" href="icon-cek-untung.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <script src="assets/theme.js?v=f5317dffb6"></script>
 <link rel="stylesheet" href="assets/base.css?v=1b9d8be2b5">
-<link rel="stylesheet" href="assets/account.css?v=d369f69784">
+<link rel="stylesheet" href="assets/account.css?v=13e4576ea6">
 <script src="assets/config.js?v=dcdd9d44ce"></script>
 <script src="assets/analytics.js?v=26db3465aa" defer></script>
 </head>
 <body class="acct">
 <aside class="acct-side" aria-label="Tentang Cek Untung">
   <a class="brand" href="./"><svg class="logo" width="28" height="28" viewBox="0 0 16 16" aria-hidden="true"><rect class="lg-bg" width="16" height="16" rx="4.5" fill="var(--accent)"/><rect class="lg-b" x="3" y="9" width="2" height="4" rx="1" fill="var(--accent-ink)" opacity=".62"/><rect class="lg-b" x="7" y="7" width="2" height="6" rx="1" fill="var(--accent-ink)" opacity=".85"/><rect class="lg-b" x="11" y="5" width="2" height="8" rx="1" fill="var(--accent-ink)"/><circle class="lg-d" cx="12.6" cy="2.9" r="1.5" fill="var(--mark)"/></svg><span class="wm">Cek <b>Untung</b></span></a>
-  <div><h2>Laba toko marketplace, dari laporan resmi Anda.</h2>
-    <ul><li>File laporan diproses di browser Anda</li><li>Modal produk dan riwayat tersimpan di akun</li><li>Kualitas data ditampilkan, bukan disembunyikan</li></ul></div>
+  <div class="side-copy">
+    <p class="side-eyebrow">Untuk seller Shopee &amp; TikTok Shop</p>
+    <h2>Tahu untung bersih toko Anda, bukan cuma omzet.</h2>
+    <p class="side-lead">Unggah laporan resmi marketplace. Cek Untung menghitung laba dari potongan nyata, modal, dan refund, lengkap dengan status kepastian tiap angka.</p>
+  </div>
+  <figure class="side-nota" aria-label="Contoh tampilan nota laba dengan angka contoh">
+    <div class="sn-head"><b>Nota laba</b><span>Contoh tampilan</span></div>
+    <dl>
+      <div><dt>Penjualan</dt><dd>Rp12.400.000</dd></div>
+      <div><dt>Potongan marketplace</dt><dd class="neg">−Rp1.860.000</dd></div>
+      <div><dt>Modal / HPP</dt><dd class="neg">−Rp7.150.000</dd></div>
+      <div class="sn-total"><dt>Laba dari data tersedia</dt><dd>Rp3.390.000</dd></div>
+    </dl>
+    <div class="sn-bars" aria-hidden="true"><i style="--h:42%"></i><i style="--h:58%"></i><i style="--h:51%"></i><i style="--h:70%"></i><i style="--h:64%"></i><i style="--h:82%"></i></div>
+    <span class="sn-chip">Sesuai laporan dan terekonsiliasi</span>
+  </figure>
+  <ul class="side-points"><li>File laporan diproses di browser Anda</li><li>Modal produk dan riwayat tersimpan di akun</li><li>Angka yang belum pasti ditandai, bukan disembunyikan</li></ul>
   <small>Perkiraan untuk keputusan usaha, bukan nasihat keuangan atau pajak.</small>
 </aside>
 <div class="acct-wrap">
   <a class="brand" href="./"><svg class="logo" width="28" height="28" viewBox="0 0 16 16" aria-hidden="true"><rect class="lg-bg" width="16" height="16" rx="4.5" fill="var(--accent)"/><rect class="lg-b" x="3" y="9" width="2" height="4" rx="1" fill="var(--accent-ink)" opacity=".62"/><rect class="lg-b" x="7" y="7" width="2" height="6" rx="1" fill="var(--accent-ink)" opacity=".85"/><rect class="lg-b" x="11" y="5" width="2" height="8" rx="1" fill="var(--accent-ink)"/><circle class="lg-d" cx="12.6" cy="2.9" r="1.5" fill="var(--mark)"/></svg><span class="wm">Cek <b>Untung</b></span></a>
+  <p class="acct-tag">Cek laba toko marketplace dari laporan resmi Anda.</p>
   <main class="acct-card" id="card" aria-live="polite"></main>
   <div data-theme-toggle></div>
   <p class="tiny faint acct-note">File laporan Anda tetap diolah di browser. Akun hanya menyimpan profil, modal produk, pengaturan, dan ringkasan angka. <a href="privasi.html">Privasi</a></p>
 </div>
 <div id="toast" class="toast" role="status" hidden></div>
-<script src="assets/cloud.js?v=a25b993ab7"></script>
-<script src="assets/akun.js?v=2d51473777"></script>
+<script src="assets/cloud.js?v=1849aa172d"></script>
+<script src="assets/akun.js?v=514f4a850e"></script>
 </body>
 </html>

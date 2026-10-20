@@ -8,6 +8,7 @@ const crypto = require('crypto');
 function createMock({ confirmEmail = false, tokenTtl = 3600 } = {}) {
   const users = new Map();      // id → {id,email,password,meta}
   const tokens = new Map();     // access → {uid, exp}
+  const codes = new Map();      // kode PKCE → {id, challenge, method}
   const refresh = new Map();    // refresh → uid
   const profiles = new Map(), userData = new Map(), reports = [], requests = [];
   let reqSeq = 1;
@@ -67,12 +68,29 @@ function createMock({ confirmEmail = false, tokenTtl = 3600 } = {}) {
     if (p === '/auth/v1/logout') { tokens.delete(bearer); return send(204); }
     if (p === '/auth/v1/recover') return send(200, {});
     if (p === '/auth/v1/authorize') {
-      let u = [...users.values()].find((x) => x.email === 'google@contoh.id');
-      const id = u ? u.id : addUser('google@contoh.id', crypto.randomUUID(), { name: 'Pengguna Google' });
+      // Tiruan penyedia Google. mock_error = pengguna membatalkan; mock_email = akun Google yang dipakai. Email yang sudah
+      // terdaftar memakai ID pengguna yang sama (meniru penautan identitas otomatis Supabase untuk email terverifikasi —
+      // perilaku server sungguhan tetap harus diuji di Supabase).
+      const back = new URL(q.get('redirect_to'));
+      if (q.get('mock_error')) { back.searchParams.set('error', q.get('mock_error')); back.searchParams.set('error_description', 'User cancelled'); res.writeHead(302, { Location: back.toString() }); return res.end(); }
+      const email = q.get('mock_email') || 'google@contoh.id';
+      let u = [...users.values()].find((x) => x.email === email);
+      const id = u ? u.id : addUser(email, crypto.randomUUID(), { name: 'Pengguna Google', full_name: 'Pengguna Google' });
       users.get(id).confirmed = true;
+      if (q.get('code_challenge')) {
+        const code = crypto.randomUUID(); codes.set(code, { id, challenge: q.get('code_challenge'), method: q.get('code_challenge_method') });
+        back.searchParams.set('code', code); res.writeHead(302, { Location: back.toString() }); return res.end();
+      }
       const s = issue(id);
       res.writeHead(302, { Location: `${q.get('redirect_to')}#access_token=${s.access_token}&refresh_token=${s.refresh_token}&expires_in=${s.expires_in}&token_type=bearer` });
       return res.end();
+    }
+    if (p === '/auth/v1/token' && q.get('grant_type') === 'pkce') {
+      const c = codes.get(body.auth_code); codes.delete(body.auth_code);   // kode hanya sekali pakai
+      if (!c) return send(404, { error_description: 'invalid flow state, no valid flow state found' });
+      const ch = crypto.createHash('sha256').update(String(body.code_verifier || '')).digest('base64url');
+      if (c.method !== 's256' || ch !== c.challenge) return send(400, { error_description: 'code challenge does not match previously saved code verifier' });
+      return send(200, issue(c.id));
     }
 
     /* ---- REST ---- */

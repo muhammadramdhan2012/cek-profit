@@ -278,6 +278,21 @@ test('P13 tampilan: periode resmi vs transaksi teramati dibedakan; identitas bel
   truthy(/'Periode laporan TikTok perlu dicek'/.test(appJs), 'item kepastian periode');
   for (const k of ['identitas_transaksi_belum_pasti', 'periode_resmi_rusak', 'baris_di_luar_periode_resmi', 'cakupan_teramati']) truthy(new RegExp(`${k}: '`).test(labaSrc), `alasan ${k} punya teks`);
 });
+test('AUTH-V2: tombol Google hanya bila diaktifkan; tujuan setelah masuk hanya halaman situs; tanpa log token', () => {
+  const ak = src('akun.js'), cl = src('cloud.js'), html = require('fs').readFileSync(require('path').join(__dirname, '..', 'akun.html'), 'utf8');
+  truthy(/const google = \(\) => \(C\.googleLogin \?/.test(ak), 'tombol Google bergantung pada config.googleLogin');
+  truthy(/googleLogin: false/.test(require('fs').readFileSync(require('path').join(__dirname, '..', 'assets', 'config.js'), 'utf8')), 'Google belum diaktifkan di config');
+  const safe = /^[\w-]+\.html([?#][\w=&%.-]*)?$/;
+  for (const bad of ['https://jahat.example/x.html', '//jahat.example/a.html', 'javascript:alert(1)', '../x.html', 'a.html#x<y']) truthy(!safe.test(bad), `next ditolak: ${bad}`);
+  truthy(safe.test('dashboard.html') && safe.test('dashboard.html#riwayat') && safe.test('admin.html'), 'next sah diterima');
+  truthy(ak.includes(safe.source.replace(/\\/g, '\\')) || /safeNext = \(v\) => \(\/\^\[\\w-\]\+\\\.html/.test(ak), 'akun.js memakai pola yang sama');
+  for (const f of [ak, cl]) truthy(!/console\.(log|info|debug)/.test(f), 'tanpa console.log');
+  truthy(!/client_secret|service_role|sb_secret/i.test(ak + cl + html), 'tanpa secret');
+  truthy(/code_challenge_method=s256/.test(cl) && /grant_type=pkce/.test(cl), 'Google memakai PKCE');
+  truthy(/Jika email tersebut terdaftar/.test(ak), 'lupa sandi: pesan netral');
+  truthy(/prefers-reduced-motion: no-preference/.test(src('account.css')), 'animasi hanya bila gerak tidak dikurangi');
+  truthy(/<label for="em">Email<\/label>/.test(ak) && /aria-pressed="false"/.test(ak), 'label form & tombol tampilkan sandi');
+});
 test('U3 Produk: status = warna + simbol + teks; label cari/urutkan; header tabel semantik; tanpa count-up', () => {
   truthy(/HEALTH = \{ sehat: 'Sehat', tipis: 'Tipis', rugi: 'Rugi', unknown: 'Modal belum ada' \}/.test(prodSrc), 'label teks status');
   const css = src('app.css');

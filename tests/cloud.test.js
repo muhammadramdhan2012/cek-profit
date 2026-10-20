@@ -21,8 +21,9 @@ const memStore = () => { const m = new Map(); return { getItem: (k) => (m.has(k)
   await t('sandi pendek → pesan bahasa Indonesia', async () => {
     try { await C.auth.signUp({ email: 'x@y.id', password: '123' }); throw new Error('harus gagal'); } catch (e) { truthy(/minimal 8/.test(e.message), e.message); }
   });
-  await t('email sudah terdaftar → pesan jelas', async () => {
-    try { await C.auth.signUp({ email: 'ani@toko.id', password: 'sandiku123' }); throw new Error('harus gagal'); } catch (e) { truthy(/sudah terdaftar/.test(e.message), e.message); }
+  await t('email sudah terdaftar → pesan netral (tidak membuka apakah email terdaftar)', async () => {
+    try { await C.auth.signUp({ email: 'ani@toko.id', password: 'sandiku123' }); throw new Error('harus gagal'); }
+    catch (e) { truthy(!/sudah terdaftar/.test(e.message) && /tidak dapat diproses/.test(e.message) && /Lupa kata sandi/.test(e.message), e.message); }
   });
   await t('profil dibuat otomatis & bisa diubah', async () => {
     const p = await C.db.profile(); truthy(p && p.full_name === 'Ani');
@@ -75,6 +76,68 @@ const memStore = () => { const m = new Map(); return { getItem: (k) => (m.has(k)
     const res = await fetch(C7.auth.oauthUrl('google', 'http://situs/akun.html'), { redirect: 'manual' });
     const hash = new URL(res.headers.get('location')).hash;
     const r = await C7.auth.fromUrlHash(hash); truthy(r && C7.auth.user().email === 'google@contoh.id');
+  });
+  /* ---------- Auth V2: login Google (PKCE) — server TIRUAN; perilaku Supabase/Google sungguhan belum teruji ---------- */
+  const oauthBack = async (C, extra = '') => {
+    const start = await C.auth.oauthStart('google', 'http://situs/akun.html');
+    const res = await fetch(start + extra, { redirect: 'manual' });
+    return { start, back: new URL(res.headers.get('location')) };
+  };
+  await t('Google PKCE: URL memuat code_challenge s256, tanpa token; kode ditukar dengan verifier → sesi terverifikasi', async () => {
+    const st = memStore(); const G = fresh().init({ url, key: 'anon', store: st });
+    const { start, back } = await oauthBack(G);
+    truthy(/[?&]provider=google/.test(start) && /code_challenge=[\w-]{43}&code_challenge_method=s256$/.test(start), start);
+    truthy(!/scope=/.test(start), 'tidak meminta lingkup Google tambahan');
+    truthy(st.getItem('cekprofit.pkce'), 'verifier tersimpan sementara');
+    truthy(back.searchParams.get('code') && !back.hash, 'kembali dengan ?code=, bukan token di URL');
+    const r = await G.auth.fromUrl({ search: back.search, hash: back.hash });
+    truthy(r && r.type === 'login' && G.auth.user().email === 'google@contoh.id', 'sesi Google');
+    truthy(!st.getItem('cekprofit.pkce'), 'verifier dihapus setelah dipakai');
+    truthy(JSON.parse(st.getItem('cekprofit.session')).user.id === G.auth.user().id, 'sesi tersimpan untuk refresh halaman');
+  });
+  await t('Google PKCE: verifier hilang/salah atau kode dipakai ulang → gagal, tanpa sesi', async () => {
+    const st = memStore(); const G = fresh().init({ url, key: 'anon', store: st });
+    const { back } = await oauthBack(G);
+    st.removeItem('cekprofit.pkce');
+    try { await G.auth.fromUrl({ search: back.search }); throw new Error('harus gagal'); } catch (e) { truthy(/kedaluwarsa/.test(e.message), e.message); }
+    truthy(!G.auth.user() && !st.getItem('cekprofit.session'), 'tidak ada sesi');
+    const b2 = (await oauthBack(G)).back; st.setItem('cekprofit.pkce', 'verifier-palsu');
+    try { await G.auth.fromUrl({ search: b2.search }); throw new Error('harus gagal'); } catch (e) { truthy(!G.auth.user(), 'tidak ada sesi'); }
+    const b3 = (await oauthBack(G)).back; const v = st.getItem('cekprofit.pkce');
+    await G.auth.fromUrl({ search: b3.search }); await G.auth.signOut(); st.setItem('cekprofit.pkce', v);
+    try { await G.auth.fromUrl({ search: b3.search }); throw new Error('harus gagal'); } catch (e) { truthy(!G.auth.user(), 'kode sekali pakai'); }
+  });
+  await t('Google dibatalkan / gagal → pesan Indonesia, rincian dari URL tidak ditampilkan, tanpa sesi', async () => {
+    const st = memStore(); const G = fresh().init({ url, key: 'anon', store: st });
+    const { back } = await oauthBack(G, '&mock_error=access_denied');
+    try { await G.auth.fromUrl({ search: back.search }); throw new Error('harus gagal'); } catch (e) { truthy(/dibatalkan/.test(e.message), e.message); }
+    try { await G.auth.fromUrl({ search: '?error=server_error&error_description=<b>teks+jahat</b>' }); throw new Error('harus gagal'); }
+    catch (e) { truthy(/gagal/.test(e.message) && !/jahat|<b>/.test(e.message), e.message); }
+    try { await G.auth.fromUrl({ hash: '#error=access_denied&error_code=otp_expired&error_description=x' }); throw new Error('harus gagal'); }
+    catch (e) { truthy(/tidak berlaku|dibatalkan/.test(e.message), e.message); }
+    truthy(!G.auth.user() && !st.getItem('cekprofit.pkce'), 'tanpa sesi, verifier dibersihkan');
+  });
+  await t('token dari URL yang tidak dikenali server → sesi dihapus (tidak masuk dashboard)', async () => {
+    const st = memStore(); const G = fresh().init({ url, key: 'anon', store: st });
+    try { await G.auth.fromUrl({ hash: '#access_token=palsu&refresh_token=palsu&expires_in=3600' }); throw new Error('harus gagal'); } catch (e) { truthy(/tidak dapat diverifikasi/.test(e.message), e.message); }
+    truthy(!G.auth.user() && !st.getItem('cekprofit.session'));
+    truthy((await G.auth.fromUrl({ search: '?next=dashboard.html' })) === null, 'URL tanpa token/kode → tidak ada perubahan');
+  });
+  await t('pengguna lama (email/sandi, Pro) masuk dengan Google ber-email sama → ID, data, dan Pro tetap (tiruan penautan)', async () => {
+    const A = fresh().init({ url, key: 'anon', store: memStore() }); await A.auth.signIn({ email: 'ani@toko.id', password: 'sandiku123' });
+    const idLama = A.auth.user().id, proLama = A.isPro(await A.db.profile()), dataLama = await A.db.loadData();
+    const st = memStore(); const G = fresh().init({ url, key: 'anon', store: st });
+    const { back } = await oauthBack(G, '&mock_email=ani%40toko.id'); await G.auth.fromUrl({ search: back.search });
+    truthy(G.auth.user().id === idLama, 'ID pengguna sama'); truthy(G.isPro(await G.db.profile()) === proLama && proLama, 'status Pro tetap');
+    truthy(JSON.stringify((await G.db.loadData()).settings) === JSON.stringify(dataLama.settings), 'data modal tetap');
+    await G.auth.signOut(); truthy(!G.auth.user() && !st.getItem('cekprofit.session'), 'keluar membersihkan sesi');
+    await A.auth.signIn({ email: 'ani@toko.id', password: 'sandiku123' }); truthy(A.auth.user().id === idLama, 'masuk dengan sandi lama tetap bisa');
+  });
+  await t('akses data pengguna lain tetap ditolak (RLS tiruan)', async () => {
+    const G = fresh().init({ url, key: 'anon', store: memStore() }); const { back } = await oauthBack(G, '&mock_email=baru%40google.id'); await G.auth.fromUrl({ search: back.search });
+    truthy((await G.db.listReports()).length === 0, 'riwayat orang lain tidak terlihat');
+    try { await G.db.adminProfiles().then((rows) => { if (rows.length > 1) throw new Error('profil lain terlihat'); }); } catch (e) { truthy(!/terlihat/.test(e.message), e.message); }
+    truthy(!G.isPro(await G.db.profile()), 'akun Google baru bukan Pro');
   });
   await t('keluar menghapus sesi', async () => {
     const C8 = fresh().init({ url, key: 'anon', store });

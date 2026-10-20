@@ -63,9 +63,25 @@ Untuk memperpanjang, klik **+1 bln** atau **+1 thn** di daftar pengguna. Masa be
 
 ## Opsional
 
-- **Login dengan Google**:
-  1. Authentication → Providers → Google, lalu ikuti petunjuk Supabase untuk membuat OAuth Client di Google Cloud.
-  2. Setelah aktif, ubah `googleLogin: true` di `config.js`.
+- **Login dengan Google** (website memakai alur PKCE Supabase; Client Secret hanya diisi di dashboard Supabase,
+  **jangan** di file website, GitHub, atau chat):
+  1. Supabase → Authentication → Providers → **Google** → salin **Callback URL (for OAuth)** yang tertera di sana
+     (bentuknya `https://<ref-project>.supabase.co/auth/v1/callback`).
+  2. Google Cloud Console → pilih/buat project → **APIs & Services → OAuth consent screen**: tipe *External*, nama
+     aplikasi *Cek Untung*, email dukungan, domain `muhammadramdhan2012.github.io`, tautan privasi
+     `https://muhammadramdhan2012.github.io/cek-profit/privasi.html`. Lingkup cukup bawaan: `openid`, `email`,
+     `profile` (jangan tambahkan Gmail/Drive). Status *Testing* hanya mengizinkan akun penguji; pilih *Publish* bila
+     sudah siap untuk semua seller.
+  3. **APIs & Services → Credentials → Create credentials → OAuth client ID** → *Web application*.
+     *Authorized JavaScript origins*: `https://muhammadramdhan2012.github.io`.
+     *Authorized redirect URIs*: tempel Callback URL dari langkah 1.
+  4. Salin **Client ID** dan **Client Secret** → kembali ke Supabase → Providers → Google → aktifkan, tempel keduanya,
+     simpan. Secret tersimpan di Supabase, tidak di website.
+  5. Supabase → Authentication → **URL Configuration**: *Site URL* `https://muhammadramdhan2012.github.io/cek-profit/`;
+     *Redirect URLs* tambahkan `https://muhammadramdhan2012.github.io/cek-profit/akun.html`.
+  6. Ubah `googleLogin: true` di `assets/config.js` (lewat commit yang disetujui), tunggu GitHub Pages, lalu uji:
+     masuk dengan Google (akun baru), masuk dengan Google memakai email akun lama, batal di layar Google, keluar,
+     dan muat ulang halaman. Pastikan status Pro dan riwayat akun lama tetap ada.
 - **Email dari domain sendiri**: email bawaan Supabase dibatasi beberapa email per jam. Saat pengguna mulai banyak, atur SMTP sendiri di Authentication → Emails → SMTP Settings. Layanan gratis seperti Brevo atau Resend bisa dipakai.
 - **Template email bahasa Indonesia**: Authentication → Emails → Templates. Ubah teks "Confirm your signup" dan "Reset password", dan pakai nama produk **Cek Untung** di judul dan isi email. Nama project Supabase (`cek-profit`) dan alamat situs tidak perlu diubah.
 
