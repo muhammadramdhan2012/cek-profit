@@ -262,15 +262,15 @@ test('FR-1 konflik antarlaporan: PDF, Excel, dan dashboard menyatakan total BELU
   const konflik = E.compute([f('a.xlsx', [['K-1', '2026/01/05', 100000, -10000], ['K-2', '2026/01/20', 80000, -8000]]), f('b.xlsx', [['K-1', '2026/01/05', 100000, -12000], ['K-2', '2026/01/20', 80000, -8000]])], st);
   const normal = E.compute([f('a.xlsx', [['K-1', '2026/01/05', 100000, -10000], ['K-2', '2026/01/20', 80000, -8000]])], st);
   const d = CekReport.ditahan(konflik);
-  eq(d.n, 1); truthy(/Total belum lengkap: 1 transaksi ditahan/.test(d.teks) && /bukan Rp0/.test(d.teks), d.teks);
+  eq(d.n, 1); truthy(/^Total belum lengkap\. Sebagian transaksi ditahan karena terdapat perbedaan data antar laporan\./.test(d.teks) && /tidak dihitung sebagai Rp0/.test(d.teks), d.teks);
   eq(CekReport.ditahan(normal).n, 0); eq(CekReport.ditahan(normal).teks, '');
   const html = pdf(konflik);
   truthy(html.includes(d.teks), 'PDF: keterangan di ringkasan dan di bawah laba rugi');
   truthy((html.match(/Total belum lengkap/g) || []).length >= 2, 'PDF: dua kali (ringkasan + tabel laba rugi)'); truthy(/pesanan · belum lengkap/.test(html), 'PDF: KPI penjualan');
   truthy(!/belum lengkap/i.test(pdf(normal)), 'PDF tanpa konflik tidak berubah');
-  truthy(/\['Status total', held\.teks\]/.test(appJs), 'Excel: baris "Status total" bila ada transaksi ditahan');
+  truthy(/\.map\(\(x\) => \['Status total', x\.teks\]\)/.test(appJs), 'Excel: baris "Status total" bila ada transaksi ditahan');
   truthy((appJs.match(/heldShort\(r\)/g) || []).length >= 5, 'dashboard: kartu laba, penjualan, dan nota memuat catatan');
-  truthy((appJs.match(/CekReport\.ditahan\(r\)\.n \? `<p class="small warn-text">/g) || []).length >= 2, 'dashboard: "Ke mana uang pergi" dan Jejak uang');
+  truthy((appJs.match(/\$\{warnTotal\(r\)\}/g) || []).length >= 2, 'dashboard: "Ke mana uang pergi" dan Jejak uang');
 });
 test('P13 tampilan: periode resmi vs transaksi teramati dibedakan; identitas belum pasti tidak disebut konflik', () => {
   truthy(/, periode \$\{tgl\(per\.from\)\} sampai \$\{tgl\(per\.to\)\}/.test(appJs) && /transaksi teramati \$\{tgl\(p\.check\.from\)\}/.test(appJs), 'daftar file: periode resmi vs teramati');
@@ -292,6 +292,45 @@ test('AUTH-V2: tombol Google hanya bila diaktifkan; tujuan setelah masuk hanya h
   truthy(/Jika email tersebut terdaftar/.test(ak), 'lupa sandi: pesan netral');
   truthy(/prefers-reduced-motion: no-preference/.test(src('account.css')), 'animasi hanya bila gerak tidak dikurangi');
   truthy(/<label for="em">Email<\/label>/.test(ak) && /aria-pressed="false"/.test(ak), 'label form & tombol tampilkan sandi');
+});
+test('P13-D peringatan total: ditahan vs ambigu, konsisten di dashboard, PDF, Excel; tanpa konflik identik', () => {
+  // Data SINTETIS TikTok berperiode resmi Januari. Engine tidak diubah; yang diuji hanya penyajian metadata P11/P13.
+  const H = ['ID Pesanan/Penyesuaian', 'Jenis transaksi', 'Waktu pemesanan', 'Waktu pembayaran pesanan', 'Jumlah penyelesaian pembayaran', 'Total Pendapatan', 'Subtotal sebelum diskon', 'Total pengembalian dana sebelum diskon', 'Total Biaya'];
+  const f = (name, rows) => E.parseWorkbook({ name, sheets: { 'Detail pesanan': [H, ...rows.map(([id, jenis, pay, settle, sales, sub, ref]) => [id, jenis, '2026/01/02', pay, settle, sales, sub, ref, settle - sales])],
+    Laporan: [['', 'Periode', '', '', '', '2026/01/01-2026/01/31'], ['', 'Zona waktu', '', '', '', 'UTC+7'], ['', 'Jumlah penyelesaian pembayaran', '', '', '', rows.reduce((a, r) => a + r[3], 0)]] } });
+  const st = { modalMode: 'produk', catalog: [], fallbackPct: 50, periods: [{ start: '', markup: 0, disc: 0 }], fixedCosts: [] };
+  const P = (id, pay, sub) => [id, 'Pesanan', pay, sub * 0.9, sub, sub, 0];
+  const S = (id, pay, ref) => [id, 'Pesanan', pay, ref - 1000, ref, 0, ref];          // refund susulan
+  const A = (id, pay, v) => [id, 'Penggantian Biaya Logistik', pay, v, 0, 0, 0];      // penyesuaian
+  const CASES = {
+    'refund susulan ID sama, nominal beda': [f('a', [P('X1', '2026/01/05', 100000), S('X1', '2026/01/21', -30000)]), f('b', [S('X1', '2026/01/22', -35000), P('X2', '2026/01/28', 50000)])],
+    'penyesuaian ID sama, nominal beda': [f('a', [P('X1', '2026/01/05', 100000), A('ADJ-1', '2026/01/21', 5000)]), f('b', [A('ADJ-1', '2026/01/22', 6000), P('X2', '2026/01/28', 50000)])],
+    'konflik ditahan': [f('a', [P('X1', '2026/01/05', 100000), P('X2', '2026/01/20', 80000)]), f('b', [[...P('X1', '2026/01/05', 100000).slice(0, 3), 88000, 100000, 100000, 0], P('X2', '2026/01/20', 80000)])],
+    'tanpa konflik': [f('a', [P('X1', '2026/01/05', 100000), P('X2', '2026/01/28', 50000)]), f('a-ulang', [P('X1', '2026/01/05', 100000), P('X2', '2026/01/28', 50000)])],
+  };
+  const R = Object.fromEntries(Object.entries(CASES).map(([k, files]) => [k, E.compute(files, st)]));
+  for (const k of ['refund susulan ID sama, nominal beda', 'penyesuaian ID sama, nominal beda']) {
+    const r = R[k], w = CekReport.peringatanTotal(r), html = pdf(r), J = r.jejakUang.marketplace.tiktok;
+    eq(w.ambigu.n, 1, k); eq(w.ditahan.n, 0, k);
+    truthy(w.ambigu.teks.startsWith('Total perlu diverifikasi. Ada transaksi dengan identitas yang belum dapat dipastikan dan mungkin tercatat lebih dari sekali.'), w.ambigu.teks);
+    truthy(html.includes(w.ambigu.teks) && /pesanan · perlu diverifikasi/.test(html), `${k}: PDF`); truthy(!/Total belum lengkap/.test(html), `${k}: bukan "ditahan"`);
+    eq(r.kepastian.laba.final, false, k);
+    for (const c of ['penjualan', 'refund', 'potongan', 'dana', 'penyesuaian']) truthy(J[c].status !== 'terekonsiliasi', `${k}: ${c} tidak "terekonsiliasi" (${J[c].status})`);
+    eq(J.gabungan.status, 'identitas_belum_pasti', k); eq(r.kepastian.gabungan.tiktok.pesananDitahan, 0, `${k}: tidak ditahan`);
+  }
+  eq(R['refund susulan ID sama, nominal beda'].totalSales, 100000 - 30000 - 35000 + 50000, 'perlakuan engine tetap: kedua refund dihitung');
+  eq(R['penyesuaian ID sama, nominal beda'].adjustments, 11000, 'perlakuan engine tetap: kedua penyesuaian dihitung');
+  const h = R['konflik ditahan'], wh = CekReport.peringatanTotal(h);
+  eq(wh.ditahan.n, 1); eq(wh.ambigu.n, 0); truthy(pdf(h).includes(wh.ditahan.teks) && /pesanan · belum lengkap/.test(pdf(h)), 'konflik: PDF');
+  eq(h.jejakUang.marketplace.tiktok.penjualan.status, 'perlu_rekonsiliasi');
+  const n = R['tanpa konflik'], wn = CekReport.peringatanTotal(n);
+  truthy(!wn.ada && wn.teks === '' && !/belum lengkap|perlu diverifikasi/i.test(pdf(n)), 'tanpa konflik: tanpa peringatan');
+  eq(n.jejakUang.marketplace.tiktok.dana.status, 'terekonsiliasi');
+  // Dashboard & Excel memakai sumber peringatan yang sama.
+  truthy(/const heldShort = \(r\) => \{ const w = CekReport\.peringatanTotal\(r\)/.test(appJs) && /Perlu verifikasi: \$\{num\(w\.ambigu\.n\)\} transaksi belum pasti/.test(appJs), 'kartu penjualan & laba');
+  truthy(/CekReport\.peringatanTotal\(r\)\.ada \? ` \$\{esc\(CekReport\.peringatanTotal\(r\)\.teks\)\}`/.test(appJs), 'Kepastian Profit');
+  truthy(/\[held\.ditahan, held\.ambigu\]\.filter\(\(x\) => x\.n\)\.map\(\(x\) => \['Status total', x\.teks\]\)/.test(appJs), 'Excel');
+  truthy(/transaksi dengan identitas belum pasti tetap dihitung; total perlu diverifikasi/.test(appJs), 'Money Trace: rincian sumber');
 });
 test('U3 Produk: status = warna + simbol + teks; label cari/urutkan; header tabel semantik; tanpa count-up', () => {
   truthy(/HEALTH = \{ sehat: 'Sehat', tipis: 'Tipis', rugi: 'Rugi', unknown: 'Modal belum ada' \}/.test(prodSrc), 'label teks status');

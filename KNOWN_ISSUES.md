@@ -373,7 +373,7 @@ Sumber awal: audit menyeluruh 14 Okt 2026 (read-only), ditambah analisis penghit
 
 | P11 | Medium | `assets/engine.js` (`mergeIncome`) | **Sebagian ditangani (20 Okt 2026, lokal):** identitas baris berdasarkan isi; duplikat identik dihitung sekali; konflik versi ditahan dan ditandai "Perlu rekonsiliasi"; laporan tidak saling lengkap ditandai "Perlu dicek" (`docs/KAMUS_ANGKA.md` B.1d) | Audit 20 Okt 2026 (7 file): 3.278 ID di beberapa file, semuanya duplikat identik; tidak ada versi berbeda | Validasi aturan konflik dengan unduhan ulang asli setelah refund/perubahan; tinjau aturan cakupan | Aturan konflik baru diuji sintetis |
 | P12 | Low | Money Trace A1 | Rekonsiliasi per komponen hanya terhadap ringkasan di file yang sama. Pencairan, saldo, dan dana yang masih tertahan belum dicocokkan; refund setelah dana dilepas (P10) tidak terlihat di Jejak uang | — | Fase A2/A3 (saldo dan riwayat penarikan) setelah disetujui | Belum diverifikasi |
-| P13 | Medium | `assets/engine.js` (`parsePeriode`, `mergeIncome`) | **Sebagian ditangani (20 Okt 2026, lokal):** periode resmi sheet Laporan dibaca dan dipakai untuk status (kelengkapan, identitas belum pasti, anomali periode); "terekonsiliasi" tidak lagi muncul untuk kasus contoh P13. **Masih terbuka:** angka kasus itu tetap menjumlahkan kedua baris (tanpa bukti identitas), dan aturan P11 menahan penyesuaian bernomor sama bila cakupan teramati bersinggungan — perlakuan finansial penyesuaian bernomor sama perlu keputusan pemilik | File asli: 4 periode resmi valid, 0 transaksi di luar periode, tidak ada konflik | Putuskan identitas penyesuaian (lihat KAMUS B.1e) | Status terbukti sintetis; angka file asli identik |
+| P13 | Medium | `assets/engine.js` (`parsePeriode`, `mergeIncome`) | **Sebagian ditangani (20 Okt 2026, lokal):** periode resmi sheet Laporan dibaca dan dipakai untuk status (kelengkapan, identitas belum pasti, anomali periode); "terekonsiliasi" tidak lagi muncul untuk kasus contoh P13. **Masih terbuka:** angka kasus itu tetap menjumlahkan kedua baris (tanpa bukti identitas), dan aturan P11 menahan penyesuaian bernomor sama bila cakupan teramati bersinggungan — perlakuan finansial penyesuaian bernomor sama perlu keputusan pemilik. Sejak 20 Okt 2026 total yang memuat transaksi ambigu diberi peringatan "Total perlu diverifikasi" di dashboard, PDF, dan Excel | File asli: 4 periode resmi valid, 0 transaksi di luar periode, tidak ada konflik | Putuskan identitas penyesuaian (lihat KAMUS B.1e) | Status terbukti sintetis; angka file asli identik |
 
 ## Belum dapat diverifikasi
 
@@ -396,6 +396,9 @@ Sumber awal: audit menyeluruh 14 Okt 2026 (read-only), ditambah analisis penghit
   Shopee) ditambahkan. Belum ada masalah yang diperbaiki.
 - 14 Okt 2026: hasil validasi export pesanan Shopee (tanpa angka bisnis); temuan penghitungan ganda variasi (H1/H3,
   High); aturan SKU opsional; acceptance criteria seller tanpa SKU; ketergantungan H1/H2/H3 diperbarui.
+- 20 Okt 2026: P13 penyajian (lokal): peringatan "Total perlu diverifikasi" (identitas belum pasti, tetap dihitung) dan
+  "Total belum lengkap" (ditahan) di dashboard, PDF, dan Excel. Angka tidak berubah. Identitas transaksi P13 **belum
+  selesai**: keputusan aturan identitas (pilihan A/B) masih terbuka.
 - 20 Okt 2026: P13 (lokal): periode resmi TikTok dipakai untuk status cakupan; keputusan identitas penyesuaian
   bernomor sama masih terbuka.
 - 20 Okt 2026: pemeriksaan rilis (lokal): total yang belum lengkap karena transaksi ditahan kini dinyatakan di

@@ -90,9 +90,9 @@ const CekReport = (() => {
     const excludedAll = cak ? cak.dikeluarkan.danaDiterima : r.totalReceived - r.knownReceived;
 
     // ringkasan naratif
-    const held = ditahan(r);
+    const held = peringatanTotal(r);
     const narr = [
-      held.n ? `<b>${esc(held.teks)}</b>` : '',
+      held.ada ? `<b>${esc(held.teks)}</b>` : '',
       `Selama periode ${tgl(r.first)} sampai ${tgl(r.last)}, ${esc(store)} mencatat <b>${r.orders.toLocaleString('id-ID')} pesanan</b> dengan penjualan <b>${rp(r.totalSales)}</b> di ${plats.map((k) => PN[k]).join(' dan ')}.`,
       `Marketplace memotong <b>${rp(-r.totalFees)}</b> (${pc(-r.totalFees / r.totalSales)} dari penjualan), sehingga dana yang diterima ${rp(r.totalReceived)}.`,
       r.ready ? `Setelah modal barang${r.totalPacking ? ', packing' : ''}${r.lostCertain ? ' dan barang retur yang hilang' : ''}, laba setelah modal <b>${rp(r.totalMargin)}</b> (${pc(marginPct)} dari penjualan yang modalnya diketahui)${hasOpex ? `; setelah biaya operasional yang tercatat ${rp(r.opex)}, laba dari data tersedia <b>${rp(r.netProfit)}</b>` : ''}.` : 'Modal barang belum diisi, sehingga laba belum dapat dihitung.',
@@ -135,7 +135,7 @@ ${ctx.demo ? '<div class="rwatermark">CONTOH</div>' : ''}
     <p class="rmeta">${plats.map((k) => PN[k]).join(' · ')} · ${esc(periodNote)}${p.owner ? `<br>${esc(p.owner)}` : ''}<br>Dibuat ${esc(created)}</p>
   </div>
   <div class="rkpis">
-    ${kpi('Penjualan', rp(r.totalSales), `${r.orders.toLocaleString('id-ID')} pesanan${held.n ? ' · belum lengkap' : ''}`)}
+    ${kpi('Penjualan', rp(r.totalSales), `${r.orders.toLocaleString('id-ID')} pesanan${held.ada ? ` · ${held.singkat}` : ''}`)}
     ${kpi('Potongan platform', pc(-r.totalFees / r.totalSales), rp(-r.totalFees))}
     ${kpi('Laba setelah modal', rp(r.totalMargin), r.ready ? `margin ${pc(marginPct)} dari penjualan bermodal` : 'modal belum diisi')}
     ${hasOpex ? kpi('Laba dari data tersedia', rp(r.netProfit), `setelah biaya operasional yang tercatat ${short(r.opex)}`, 'hero')
@@ -154,7 +154,7 @@ ${ctx.demo ? '<div class="rwatermark">CONTOH</div>' : ''}
   <table class="rtable">
     <thead><tr><th></th>${plats.map((k) => `<th>${PN[k]}</th>`).join('')}${plats.length > 1 ? '<th>Total</th>' : ''}<th>%</th></tr></thead>
     <tbody>${plRows.map(([label, fn, tot, share, cls = '']) => `<tr class="${cls}"><td>${esc(label)}</td>${plats.map((k) => `<td>${fn(k)}</td>`).join('')}${plats.length > 1 ? `<td>${tot}</td>` : ''}<td class="f">${share}</td></tr>`).join('')}</tbody>
-  </table>${held.n ? `<p class="rnote"><b>${esc(held.teks)}</b></p>` : ''}
+  </table>${held.ada ? `<p class="rnote"><b>${esc(held.teks)}</b></p>` : ''}
   <div class="rgrid2">
     ${plats.map((k) => { const F = r[k].fees; const rows = k === 'shopee'
       ? [['Biaya administrasi', F.admin], ['Gratis Ongkir XTRA', F.xtra], ['Biaya proses pesanan', F.proses], ['Komisi AMS', F.ams], ['Ongkir ditanggung penjual', F.ship], ['Biaya lain', F.lain]]
@@ -239,7 +239,25 @@ ${r.products.length ? `<section class="rpage">
     if (!why.includes('konflik_antar_laporan')) return { n: 0, teks: '' };
     const g = K.gabungan || {};
     const n = ['shopee', 'tiktok'].reduce((a, k) => a + ((g[k] || {}).pesananDitahan || 0) + ((g[k] || {}).penyesuaianDitahan || 0), 0);
-    return { n, teks: `Total belum lengkap: ${n.toLocaleString('id-ID')} transaksi ditahan karena isinya berbeda antar Laporan Penghasilan. Nilainya belum diketahui dan tidak termasuk dalam angka ini (bukan Rp0).` };
+    return { n, teks: `Total belum lengkap. Sebagian transaksi ditahan karena terdapat perbedaan data antar laporan. (${n.toLocaleString('id-ID')} transaksi; nilainya belum diketahui dan tidak dihitung sebagai Rp0.)` };
+  }
+  /**
+   * P13: transaksi yang identitasnya belum dapat dipastikan TETAP dihitung oleh engine (keputusan pemilik 20 Okt 2026:
+   * tidak dihapus, tidak dipilih salah satu versi). Total yang memuatnya perlu diverifikasi. Hanya penyajian.
+   * @returns {{n: number, teks: string}}
+   */
+  function ambigu(r) {
+    const K = r.kepastian || {}, why = (K.laba && K.laba.alasanTidakFinal) || [];
+    if (!why.includes('identitas_transaksi_belum_pasti')) return { n: 0, teks: '' };
+    const g = K.gabungan || {};
+    const n = ['shopee', 'tiktok'].reduce((a, k) => a + ((g[k] || {}).identitasBelumPasti || 0), 0);
+    return { n, teks: `Total perlu diverifikasi. Ada transaksi dengan identitas yang belum dapat dipastikan dan mungkin tercatat lebih dari sekali. (${n.toLocaleString('id-ID')} transaksi.)` };
+  }
+  /** Gabungan peringatan total (ditahan dan/atau ambigu) untuk dashboard, PDF, dan Excel. */
+  function peringatanTotal(r) {
+    const d = ditahan(r), a = ambigu(r);
+    return { ditahan: d, ambigu: a, ada: !!(d.n || a.n), teks: [d.teks, a.teks].filter(Boolean).join(' '),
+      singkat: [d.n ? 'belum lengkap' : '', a.n ? 'perlu diverifikasi' : ''].filter(Boolean).join(', ') };
   }
   function labaBulanan(r) {
     const opex = r.fixedMonthly > 0, dasar = opex ? 'laba_dari_data_tersedia' : 'laba_setelah_modal';
@@ -249,6 +267,6 @@ ${r.products.length ? `<section class="rpage">
     return { jenis: 'periode', label: 'Laba periode data', nilai: periode, dasar };
   }
 
-  return { html, labaBulanan, ditahan };
+  return { html, labaBulanan, ditahan, ambigu, peringatanTotal };
 })();
 if (typeof module !== 'undefined') module.exports = CekReport;

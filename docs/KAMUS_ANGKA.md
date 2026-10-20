@@ -531,6 +531,14 @@ ditahan. Periode resmi dipakai untuk **status**: (1) laporan yang tidak saling l
 dengan isi berbeda yang hanya terlihat dengan periode resmi → `identitas_transaksi_belum_pasti` ("Perlu dicek"); kedua
 baris tetap dihitung karena belum terbukti apakah itu versi lain atau transaksi lain.
 
+Penyajian (keputusan pemilik 20 Okt 2026): transaksi yang identitasnya belum pasti **tetap dihitung** apa adanya (tidak
+dihapus, tidak dipilih salah satu versi, rumus tidak diubah). Dashboard (kartu penjualan dan laba, Kepastian Profit,
+nota, Money Trace), PDF, dan Excel menampilkan: "Total perlu diverifikasi. Ada transaksi dengan identitas yang belum
+dapat dipastikan dan mungkin tercatat lebih dari sekali." Transaksi yang ditahan (konflik) menampilkan: "Total belum
+lengkap. Sebagian transaksi ditahan karena terdapat perbedaan data antar laporan." Semua komponen Money Trace
+marketplace terkait tidak pernah berstatus "terekonsiliasi" selama ada keduanya. **Persoalan identitas transaksi belum
+selesai**: total yang memuat transaksi ambigu bisa menghitung satu transaksi lebih dari sekali.
+
 Keterbatasan identitas penyesuaian: pada file asli, ID penyesuaian TikTok berbeda format dari ID pesanan (19 vs 18
 digit) dan unik di setiap file (12 penyesuaian), tetapi belum ada bukti bahwa unduhan ulang mempertahankan ID yang sama
 untuk transaksi yang sama. Aturan P11 yang sudah ada (nomor sama + isi beda pada tanggal yang dicakup kedua file secara

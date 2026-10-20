@@ -441,8 +441,10 @@
     return COV.map(([k, cls, label, tip]) => ({ k, cls, label, tip, v: c.penjualan[k], n: c.jumlahPesanan[k], share: tot > 0 ? c.penjualan[k] / tot : NaN }));
   }
   /** Kalimat pengingat bahwa persen di atas adalah cakupan, bukan tingkat akurasi (berdasarkan status dari engine). */
-  /** P11: catatan singkat di kartu angka bila ada transaksi yang ditahan (total belum lengkap). */
-  const heldShort = (r) => { const n = CekReport.ditahan(r).n; return n ? ` · Belum lengkap: ${num(n)} transaksi ditahan` : ''; };
+  /** P11/P13: catatan singkat di kartu angka bila total belum lengkap (ditahan) atau perlu diverifikasi (ambigu). */
+  const heldShort = (r) => { const w = CekReport.peringatanTotal(r);
+    return `${w.ditahan.n ? ` · Belum lengkap: ${num(w.ditahan.n)} transaksi ditahan` : ''}${w.ambigu.n ? ` · Perlu verifikasi: ${num(w.ambigu.n)} transaksi belum pasti` : ''}`; };
+  const warnTotal = (r) => { const w = CekReport.peringatanTotal(r); return w.ada ? `<p class="small warn-text">${esc(w.teks)}</p>` : ''; };
   const covCaveat = (c) => (c.penjualan.belum > 0 ? ' Namun sebagian angka masih perlu diperiksa.'
     : c.penjualan.estimasiMinimum > 0 || c.penjualan.estimasi > 0 ? ' Namun sebagian HPP masih perkiraan.' : '');
   const ctaBtn = (c, cls = 'btn sm') => (!c ? '' : c.sheet ? `<button class="${cls}" type="button" data-sheet="${c.sheet}">${c.label}</button>`
@@ -601,7 +603,7 @@
               ${barOk ? `<div class="cov-bar" role="group" aria-label="Kualitas dasar perhitungan, porsi penjualan per status: ${parts.filter((p) => p.v > 0).map((p) => `${p.label} ${pct(p.share)}`).join(', ')}">
                 ${parts.filter((p) => p.v > 0).map((p) => `<button type="button" class="cov-seg ${p.cls}" style="--w:${(p.share * 100).toFixed(3)}%" data-sheet="kepastian" aria-haspopup="dialog" data-tip="${p.label} · ${pct(p.share)}" aria-label="${p.label} ${pct(p.share)}. Buka penjelasan"></button>`).join('')}</div>`
                 : '<p class="small muted">Sebagian penjualan bernilai minus (refund atau potongan), jadi porsinya tidak digambar sebagai batang. Rinciannya ada di daftar.</p>'}
-              <p class="kep-note">${r.ready ? `<b>${pct(r.coverage, 0)}</b> penjualan (${fmt(c.labaTerhitung.dasarPenjualan)}) masuk dalam perhitungan laba.${covCaveat(c)}` : 'Laba belum bisa dihitung karena modal belum diisi.'}${CekReport.ditahan(r).n ? ` ${esc(CekReport.ditahan(r).teks)}` : ''}</p>
+              <p class="kep-note">${r.ready ? `<b>${pct(r.coverage, 0)}</b> penjualan (${fmt(c.labaTerhitung.dasarPenjualan)}) masuk dalam perhitungan laba.${covCaveat(c)}` : 'Laba belum bisa dihitung karena modal belum diisi.'}${CekReport.peringatanTotal(r).ada ? ` ${esc(CekReport.peringatanTotal(r).teks)}` : ''}</p>
               <div class="kep-actions">${cert.length ? `<button type="button" class="kep-count" data-sheet="kepastian" aria-haspopup="dialog"><b>${num(cert.length)}</b><span>hal perlu dilengkapi</span></button>` : '<span class="status verified">Tidak ada yang perlu dilengkapi</span>'}
                 <button type="button" class="btn sm" data-sheet="kepastian" aria-haspopup="dialog">Lihat detail kepastian</button></div>
             </div>
@@ -721,7 +723,7 @@
       <ul class="flow">${rows.map((x) => `<li class="flow-row ${x.cls} ${ok(x.v) && x.v < 0 ? 'is-neg' : ''}"><div class="flow-lbl"><b>${x.label}</b><span>${esc(x.note)}</span></div>
         <div class="flow-track" aria-hidden="true">${ok(x.v) ? `<i style="--w:${((Math.abs(x.v) / max) * 100).toFixed(2)}%"></i>` : ''}</div>
         <span class="flow-val ${ok(x.v) && x.v < 0 ? 'neg' : ''}">${ok(x.v) ? fmt(x.cls === 'cost' ? -x.v : x.v) : 'Belum diketahui'}</span></li>`).join('')}</ul>
-      ${CekReport.ditahan(r).n ? `<p class="small warn-text">${esc(CekReport.ditahan(r).teks)}</p>` : ''}<p class="tiny faint">Komponen tidak dijumlahkan menjadi 100%: sebagian penjualan belum dihitung dan tiap laporan punya definisi sendiri. Berdasarkan laporan yang diunggah. Belum merupakan rekonsiliasi pencairan dana.</p>`;
+      ${warnTotal(r)}<p class="tiny faint">Komponen tidak dijumlahkan menjadi 100%: sebagian penjualan belum dihitung dan tiap laporan punya definisi sendiri. Berdasarkan laporan yang diunggah. Belum merupakan rekonsiliasi pencairan dana.</p>`;
   }
 
   /** Cuplikan produk: urutan dari angka engine (laba produk, status), tanpa status kepastian baru. */
@@ -767,7 +769,7 @@
     } else L('−', 'Modal / HPP', NaN, 'minus', 'modal produk belum diisi', 'modal');
     const total = opex ? r.netProfit : r.totalMargin;
     const label = 'Laba dari data tersedia';
-    const notes = [CekReport.ditahan(r).teks, opex ? 'Setelah biaya operasional yang tercatat.' : 'Biaya operasional belum dicatat.',
+    const notes = [CekReport.peringatanTotal(r).teks, opex ? 'Setelah biaya operasional yang tercatat.' : 'Biaya operasional belum dicatat.',
       r.coverage < 0.995 ? `Dari ${pct(r.coverage, 0)} penjualan yang masuk dalam perhitungan.` : '',
       r.unknownRisk > 0 ? `Bisa turun ${fmt(r.unknownRisk)} bila retur yang belum dicek tidak kembali.` : '',
       rb.risikoTanpaNilai ? `${num(rb.risikoTanpaNilai)} kasus retur yang belum dicek belum punya nilai, jadi risikonya belum bisa dihitung.` : ''].filter(Boolean).join(' ');
@@ -776,7 +778,7 @@
       <dl>${lines.join('')}</dl>
       <div class="nota-total"><span class="lbl"><span class="op" aria-hidden="true">=</span>${label}${qi(opex ? 'laba_bersih' : 'margin_total', label)}</span>
         ${r.ready ? `<span class="big ${total < 0 ? 'neg' : ''}">${fmt(total)}</span><span class="note">${notes}</span>`
-          : `<span class="big faint">Belum dihitung</span><span class="note">${CekReport.ditahan(r).teks} Isi modal produk agar laba bisa dihitung.</span>`
+          : `<span class="big faint">Belum dihitung</span><span class="note">${CekReport.peringatanTotal(r).teks} Isi modal produk agar laba bisa dihitung.</span>`
           + '<button class="btn sm primary" type="button" data-go="data" data-section="modal" style="justify-self:start;margin-top:6px">Isi modal</button>'}
       </div></section>`;
   }
@@ -984,7 +986,7 @@
     }).join('');
     const mp = Object.entries(J.marketplace).filter(([, x]) => x);
     return `<details class="tr-src"><summary>Sumber, tanggal, dan status per marketplace</summary>
-      ${mp.map(([pf, x]) => `<p class="ts-pf">${PLAT_DOT(pf)}${PNAME[pf]} · ${num(x.file.jumlah)} Laporan Penghasilan${x.file.identik ? ` (+${num(x.file.identik)} file sama diabaikan)` : ''}</p>${x.gabungan.ditahan ? `<p class="ts-gab">${trStatus('perlu_rekonsiliasi')} ${num(x.gabungan.ditahan)} transaksi berbeda antarlaporan ditahan, tidak masuk angka di bawah.</p>` : x.gabungan.duplikatDiabaikan ? `<p class="ts-gab">${num(x.gabungan.duplikatDiabaikan)} baris yang sama di beberapa laporan dihitung sekali.</p>` : ''}<ul class="ts-list">${rows(pf, x)}</ul>`).join('')}
+      ${mp.map(([pf, x]) => `<p class="ts-pf">${PLAT_DOT(pf)}${PNAME[pf]} · ${num(x.file.jumlah)} Laporan Penghasilan${x.file.identik ? ` (+${num(x.file.identik)} file sama diabaikan)` : ''}</p>${x.gabungan.ditahan ? `<p class="ts-gab">${trStatus('perlu_rekonsiliasi')} ${num(x.gabungan.ditahan)} transaksi berbeda antarlaporan ditahan, tidak masuk angka di bawah.</p>` : x.gabungan.identitasBelumPasti ? `<p class="ts-gab">${trStatus('perlu_dicek')} ${num(x.gabungan.identitasBelumPasti)} transaksi dengan identitas belum pasti tetap dihitung; total perlu diverifikasi.</p>` : x.gabungan.duplikatDiabaikan ? `<p class="ts-gab">${num(x.gabungan.duplikatDiabaikan)} baris yang sama di beberapa laporan dihitung sekali.</p>` : ''}<ul class="ts-list">${rows(pf, x)}</ul>`).join('')}
       <p class="tiny faint">Angka pesanan dikelompokkan menurut tanggal pesanan, sedangkan periode Laporan Penghasilan mengikuti tanggal dana dilepas atau dibayar. Penyesuaian memakai tanggalnya sendiri. Jadi tidak semua angka di atas memakai basis tanggal yang sama.</p></details>`;
   }
   function moneyTrace(r) {
@@ -1021,7 +1023,7 @@
         </ul>
       </div>
       ${traceSources(J)}
-      ${CekReport.ditahan(r).n ? `<p class="small warn-text">${esc(CekReport.ditahan(r).teks)}</p>` : ''}<p class="tiny faint">Berdasarkan laporan yang diunggah. Dana dilepas belum tentu sama dengan dana yang sudah masuk rekening.</p>`;
+      ${warnTotal(r)}<p class="tiny faint">Berdasarkan laporan yang diunggah. Dana dilepas belum tentu sama dengan dana yang sudah masuk rekening.</p>`;
   }
   /** Satu baris rincian biaya: label, nilai, arti singkat, dan sumbernya (teks dari penjelasan.js). */
   function costRow(label, v, key, src, share) {
@@ -1746,8 +1748,9 @@
     const known = (k) => st[k] !== 'tidak_diketahui';
     const RH = (k, v) => (known(k) && ok(v) ? Math.round(v) : UNK);
     const wb = XLSX.utils.book_new();
-    const held = CekReport.ditahan(r);   // P11: total belum lengkap bila ada transaksi yang ditahan
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([['Cek Untung', prof().store || ''], ['Periode data', `${r.first} s.d. ${r.last}`], ...(held.n ? [['Status total', held.teks]] : []), [], ['Komponen', ...plats.map((k) => PNAME[k]), 'Total'],
+    const held = CekReport.peringatanTotal(r);   // P11/P13: total belum lengkap (ditahan) / perlu diverifikasi (ambigu)
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([['Cek Untung', prof().store || ''], ['Periode data', `${r.first} s.d. ${r.last}`],
+      ...[held.ditahan, held.ambigu].filter((x) => x.n).map((x) => ['Status total', x.teks]), [], ['Komponen', ...plats.map((k) => PNAME[k]), 'Total'],
       ['Pesanan terjual', ...plats.map((k) => r[k].orders), r.orders], ['Penjualan', ...plats.map((k) => R(r[k].sales)), R(r.totalSales)],
       ['Potongan marketplace', ...plats.map((k) => R(r[k].feeTotal)), R(r.totalFees)], ['Dana diterima', ...plats.map((k) => R(r[k].received)), R(r.totalReceived)],
       ['Modal', ...plats.map((k) => RH(k, -r[k].modal)), RH('total', -r.totalModal)], ['Packing', ...plats.map((k) => RH(k, -r[k].knownPacking)), RH('total', -r.knownPacking)],
