@@ -272,6 +272,12 @@ test('FR-1 konflik antarlaporan: PDF, Excel, dan dashboard menyatakan total BELU
   truthy((appJs.match(/heldShort\(r\)/g) || []).length >= 5, 'dashboard: kartu laba, penjualan, dan nota memuat catatan');
   truthy((appJs.match(/CekReport\.ditahan\(r\)\.n \? `<p class="small warn-text">/g) || []).length >= 2, 'dashboard: "Ke mana uang pergi" dan Jejak uang');
 });
+test('P13 tampilan: periode resmi vs transaksi teramati dibedakan; identitas belum pasti tidak disebut konflik', () => {
+  truthy(/, periode \$\{tgl\(per\.from\)\} sampai \$\{tgl\(per\.to\)\}/.test(appJs) && /transaksi teramati \$\{tgl\(p\.check\.from\)\}/.test(appJs), 'daftar file: periode resmi vs teramati');
+  truthy(/'Rekonsiliasi antarlaporan belum pasti'/.test(appJs) && /semuanya tetap dihitung apa adanya/.test(appJs), 'item kepastian identitas belum pasti');
+  truthy(/'Periode laporan TikTok perlu dicek'/.test(appJs), 'item kepastian periode');
+  for (const k of ['identitas_transaksi_belum_pasti', 'periode_resmi_rusak', 'baris_di_luar_periode_resmi', 'cakupan_teramati']) truthy(new RegExp(`${k}: '`).test(labaSrc), `alasan ${k} punya teks`);
+});
 test('U3 Produk: status = warna + simbol + teks; label cari/urutkan; header tabel semantik; tanpa count-up', () => {
   truthy(/HEALTH = \{ sehat: 'Sehat', tipis: 'Tipis', rugi: 'Rugi', unknown: 'Modal belum ada' \}/.test(prodSrc), 'label teks status');
   const css = src('app.css');

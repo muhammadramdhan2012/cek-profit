@@ -512,6 +512,31 @@ sheet Laporan TikTok sebenarnya memuat periode resmi (baris "Periode", basis tan
 KNOWN_ISSUES P13. Total yang tampil saat ada transaksi ditahan dinyatakan "belum lengkap" di dashboard, PDF, dan Excel.
 Diuji di `tests/engine.test.js` (MG-P11-*).
 
+### B.1e Periode resmi Laporan Penghasilan TikTok (P13, 20 Okt 2026)
+
+Status: **penerapan izin terbatas pemilik 20 Okt 2026**. Hanya cakupan dan status; tidak ada angka yang berubah.
+
+| Hal | Isi |
+|---|---|
+| Sumber | Sheet `Laporan`, baris berlabel `Periode` (nilai di sel terakhir baris itu); baris `Zona waktu` |
+| Format yang ditemukan | `YYYY/MM/DD-YYYY/MM/DD` di semua 7 file asli (4 unik); zona `UTC+7`. Spasi di sekitar tanda hubung diterima; format lain **tidak ditebak** → "rusak" |
+| Batas | Inklusif di kedua ujung (file asli punya transaksi tepat di tanggal awal dan tanggal akhir) |
+| Basis | Tanggal pembayaran: semua baris di file asli berada di dalam periode resmi |
+| Tanpa periode | Rentang tanggal transaksi dipakai sebagai **cakupan teramati**, tidak disebut resmi. Gabungan beberapa file tanpa periode → "berdasarkan laporan" (`cakupan_teramati`) |
+| Periode rusak | Status "Perlu dicek" (`periode_resmi_rusak`), cadangan cakupan teramati |
+| Transaksi di luar periode | Anomali "Perlu dicek" (`baris_di_luar_periode_resmi`); transaksi tetap dihitung |
+
+Penggunaan: **penahanan konflik** (P11) tetap memakai cakupan teramati, jadi periode resmi tidak pernah membuat transaksi
+ditahan. Periode resmi dipakai untuk **status**: (1) laporan yang tidak saling lengkap, dan (2) nomor transaksi sama
+dengan isi berbeda yang hanya terlihat dengan periode resmi → `identitas_transaksi_belum_pasti` ("Perlu dicek"); kedua
+baris tetap dihitung karena belum terbukti apakah itu versi lain atau transaksi lain.
+
+Keterbatasan identitas penyesuaian: pada file asli, ID penyesuaian TikTok berbeda format dari ID pesanan (19 vs 18
+digit) dan unik di setiap file (12 penyesuaian), tetapi belum ada bukti bahwa unduhan ulang mempertahankan ID yang sama
+untuk transaksi yang sama. Aturan P11 yang sudah ada (nomor sama + isi beda pada tanggal yang dicakup kedua file secara
+teramati → ditahan) tetap berlaku dan **perlu keputusan pemilik** untuk penyesuaian (KNOWN_ISSUES P13). Kondisi yang
+belum teruji dengan file asli: periode rusak, transaksi di luar periode, file tanpa periode, periode tumpang tindih.
+
 ### B.2 Catatan nama
 
 UI menyebut `totalMargin` sebagai "Margin kotor" atau "Margin setelah modal", dan `netProfit` sebagai "Laba bersih".

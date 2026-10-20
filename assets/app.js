@@ -485,6 +485,16 @@
       add('pending', 'Laporan tidak saling lengkap', `${num(tl)} transaksi tercatat di satu Laporan Penghasilan, tetapi tidak ada di laporan lain yang mencakup tanggal yang sama. Transaksi tetap dihitung; pastikan rentang tanggal unduhan benar.`,
         { label: 'Lihat file', go: 'data', section: 'unggah' }, 58);
     }
+    // P13: perbedaan yang hanya terlihat dengan periode resmi → identitas transaksi belum pasti (angka tidak diubah).
+    const bp = ['shopee', 'tiktok'].reduce((a, k) => a + ((gb[k] || {}).identitasBelumPasti || 0), 0);
+    if (bp > 0) {
+      add('pending', 'Rekonsiliasi antarlaporan belum pasti', `${num(bp)} transaksi punya nomor yang sama di beberapa Laporan Penghasilan dengan periode yang tumpang tindih, tetapi isinya berbeda. Belum bisa dipastikan apakah itu versi berbeda dari transaksi yang sama atau transaksi yang memang berbeda, jadi semuanya tetap dihitung apa adanya. Cek di Seller Centre.`,
+        { label: 'Lihat file', go: 'data', section: 'unggah' }, 59);
+    }
+    if (why.includes('periode_laporan_perlu_dicek')) {
+      add('pending', 'Periode laporan TikTok perlu dicek', 'Periode resmi di sheet Laporan tidak terbaca, atau ada transaksi yang tanggal pembayarannya di luar periode itu. Semua transaksi tetap dihitung.',
+        { label: 'Lihat file', go: 'data', section: 'unggah' }, 57);
+    }
     // R4: refund susulan TikTok yang pesanan asalnya tidak ada di laporan yang diunggah.
     const rsx = (K.refundTiktok || {}).refundSusulanTidakCocok || { baris: 0 };
     if (rsx.baris > 0) {
@@ -937,6 +947,11 @@
     sheet_penyesuaian_tidak_ada: 'sheet Adjustment tidak ada di file',
     filter_tanggal: 'filter bulan sedang aktif, sedangkan ringkasan resmi mencakup seluruh periode file',
     konflik_antar_laporan: 'ada transaksi dengan isi berbeda di beberapa laporan; transaksi itu ditahan dan tidak dihitung',
+    identitas_transaksi_belum_pasti: 'ada nomor transaksi yang sama dengan isi berbeda pada periode resmi yang tumpang tindih; belum pasti versi lain atau transaksi lain, jadi tetap dihitung',
+    periode_resmi_rusak: 'periode resmi di sheet Laporan tidak terbaca',
+    baris_di_luar_periode_resmi: 'ada transaksi dengan tanggal pembayaran di luar periode resmi file',
+    zona_waktu_berbeda: 'zona waktu antarlaporan berbeda',
+    cakupan_teramati: 'sebagian laporan tidak mencantumkan periode resmi; cakupannya hanya dari tanggal transaksi yang terlihat',
     laporan_tidak_saling_lengkap: 'ada transaksi yang tidak muncul di laporan lain yang mencakup tanggal yang sama',
     baris_non_pesanan: 'ringkasan file ikut memuat baris non-pesanan',
     hubungan_refund_belum_terbukti: 'kolom subtotal setelah diskon tidak ada, jadi hubungan refund dengan penjualan belum bisa dibuktikan',
@@ -1550,7 +1565,13 @@
       const n = p.kind === 'shopee_income' ? `${num(p.orders.length)} pesanan` : `${num(p.rows.length)} transaksi`;
       const chk = ref === null ? '<span class="warn">Ringkasan tidak ditemukan, total tidak bisa dicocokkan</span>'
         : Math.abs(ref - p.check.sum) <= 1 ? `<span class="ok">Cocok dengan ringkasan resmi (${fmt(p.check.sum)})</span>` : `<span class="warn">Selisih ${fmt(p.check.sum - ref)} dengan ringkasan resmi</span>`;
-      return `${n}${p.check.from ? `, ${tgl(p.check.from)} sampai ${tgl(p.check.to)}` : ''}<br>${chk}`;
+      // P13: TikTok membedakan periode resmi (sheet Laporan) dari rentang tanggal transaksi yang teramati.
+      const per = p.check.periode;
+      const range = p.kind === 'tiktok_income' && per
+        ? (per.status === 'resmi' ? `, periode ${tgl(per.from)} sampai ${tgl(per.to)}${per.diLuar ? ` <span class="warn">(${num(per.diLuar)} transaksi di luar periode)</span>` : ''}`
+          : `${p.check.from ? `, transaksi teramati ${tgl(p.check.from)} sampai ${tgl(p.check.to)}` : ''}${per.status === 'rusak' ? ' <span class="warn">(periode resmi tidak terbaca)</span>' : ''}`)
+        : p.check.from ? `, ${tgl(p.check.from)} sampai ${tgl(p.check.to)}` : '';
+      return `${n}${range}<br>${chk}`;
     }
     if (p.kind === 'shopee_orders' || p.kind === 'tiktok_orders') return `${num(p.lines.length)} baris produk`;
     if (p.kind === 'shopee_return' || p.kind === 'tiktok_return') return `${p.cases.length} pengajuan retur atau refund`;

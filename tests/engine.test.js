@@ -872,11 +872,11 @@ test('U15–U18 regresi: reseller, modal rata-rata, Shopee tanpa export tidak me
 
 /* ===== H2-B3a: kepastian.cakupan + refund penuh tanpa catatan fisik (metadata; angka tidak berubah) ===== */
 /** Laporan penghasilan TikTok SINTETIS (struktur kolom saja; semua isi fiktif). */
-const ttPenghasilan = (rows) => E.parseWorkbook({ name: 'tt-penghasilan-sintetis.xlsx', sheets: {
+const ttPenghasilan = (rows, period = null) => E.parseWorkbook({ name: 'tt-penghasilan-sintetis.xlsx', sheets: {
   'Detail pesanan': [['ID Pesanan/Penyesuaian', 'Jenis transaksi', 'Waktu pemesanan', 'Waktu pembayaran pesanan', 'Jumlah penyelesaian pembayaran',
     'Total Pendapatan', 'Subtotal sebelum diskon', 'Total pengembalian dana sebelum diskon', 'Total Biaya', 'Detail produk terjual', 'Sumber pesanan'],
   ...rows.map((x) => [x.id, 'Pesanan', '2026/01/10', x.pay || '2026/01/15', x.settle, x.sales, x.sub, x.refund || 0, x.settle - x.sales, x.detail || '', 'TikTok Shop'])],
-  Laporan: [['', 'Jumlah penyelesaian pembayaran', '', '', '', rows.reduce((a, x) => a + x.settle, 0)]] } });
+  Laporan: [...(period ? [['', 'Periode', '', '', '', period]] : []), ['', 'Jumlah penyelesaian pembayaran', '', '', '', rows.reduce((a, x) => a + x.settle, 0)]] } });
 /** File retur TikTok SINTETIS dengan nomor pesanan & SKU yang bisa diatur. reason 'missing' → tidak dikirim. */
 const ttRetur = (rows) => E.parseWorkbook({ name: 'tt-retur-sintetis.xlsx', sheets: { S: [['Return Order ID', 'Order ID', 'SKU ID', 'Product Name', 'SKU Name',
   'Return Quantity', 'Return unit price', 'Refund Time', 'Return Type', 'Return Reason', 'Return Logistics Tracking ID', 'Buyer Note', 'Return Status', 'Time Requested'],
@@ -1378,7 +1378,8 @@ const A1sh = (orders, { summary = {}, adj = null, withRefundCol = true, name = '
   return E.parseWorkbook({ name, sheets });
 };
 // TikTok: sub = Subtotal setelah diskon penjual; refund = Total pengembalian dana setelah diskon; full = refund penuh (pre = 0).
-const A1tt = (rows, { laporan = {}, cols = true, subCol = true, name = 'tt-a1.xlsx' } = {}) => {
+// period: 'auto' = baris "Periode" resmi dari tanggal bayar terawal–terakhir; null = tanpa baris Periode; atau teks apa adanya.
+const A1tt = (rows, { laporan = {}, cols = true, subCol = true, name = 'tt-a1.xlsx', period = 'auto' } = {}) => {
   const head = ['ID Pesanan/Penyesuaian', 'Jenis transaksi', 'Waktu pemesanan', 'Waktu pembayaran pesanan', 'Jumlah penyelesaian pembayaran', 'Total Pendapatan',
     ...(subCol ? ['Subtotal setelah diskon penjual'] : []), ...(cols ? ['Total pengembalian dana setelah diskon'] : []), 'Subtotal sebelum diskon', 'Total pengembalian dana sebelum diskon', 'Total Biaya'];
   const R = rows.map((x) => { const sales = x.sales ?? (x.sub || 0) + (x.refund || 0); return { ...x, jenis: x.jenis || 'Pesanan', sales, settle: sales + (x.biaya || 0) + (x.lain || 0) }; });
@@ -1386,7 +1387,10 @@ const A1tt = (rows, { laporan = {}, cols = true, subCol = true, name = 'tt-a1.xl
     x.jenis === 'Pesanan' ? x.preGross ?? x.sub : 0, x.full ? -(x.preGross ?? x.sub) : 0, x.biaya || 0])];
   const sum = (f) => R.reduce((a, x) => a + f(x), 0);
   const v = { settle: sum((x) => x.settle), sales: sum((x) => x.sales), refund: sum((x) => x.refund || 0), biaya: sum((x) => x.biaya || 0), ...laporan };
-  const Laporan = [['', 'Jumlah penyelesaian pembayaran', '', '', '', v.settle], ['', 'Total Pendapatan', '', '', '', v.sales],
+  const pays = R.map((x) => x.pay || '2026/01/15').sort();
+  const per = period === 'auto' ? `${pays[0]}-${pays[pays.length - 1]}` : period;
+  const Laporan = [...(per === null ? [] : [['', 'Periode', '', '', '', per], ['', 'Zona waktu', '', '', '', 'UTC+7']]),
+    ['', 'Jumlah penyelesaian pembayaran', '', '', '', v.settle], ['', 'Total Pendapatan', '', '', '', v.sales],
     ...(v.refund === null ? [] : [['', 'Total pengembalian dana setelah diskon', '', '', '', v.refund]]), ['', 'Total Biaya', '', '', '', v.biaya]];
   return E.parseWorkbook({ name, sheets: { 'Detail pesanan': aoa, Laporan } });
 };
@@ -1542,7 +1546,7 @@ test('TT-R4-2/3/8 refund parsial pada baris susulan (file sama, tanpa bukti unit
 test('TT-R4-4 refund susulan di file berbeda dicocokkan sama seperti di file yang sama', () => {
   const satu = E.compute([ttPenghasilan([ttOrder('6104', 0), susulan('6104', -50000)])], stTT);
   // Laporan Januari memuat pesanan asal; laporan Februari memuat refund susulan yang dibayar 3 Feb.
-  const dua = E.compute([ttPenghasilan([ttOrder('6104', 0)]), ttPenghasilan([{ ...susulan('6104', -50000), pay: '2026/02/03' }])], stTT);
+  const dua = E.compute([ttPenghasilan([ttOrder('6104', 0)], '2026/01/01-2026/01/31'), ttPenghasilan([{ ...susulan('6104', -50000), pay: '2026/02/03' }], '2026/02/01-2026/02/28')], stTT);
   for (const k of ['totalSales', 'totalReceived', 'totalModal', 'orders']) eq(dua[k], satu[k], k);
   eq(JSON.stringify(ck(dua).dikeluarkan), JSON.stringify(ck(satu).dikeluarkan), 'cakupan sama');
   eq(R4m(dua).refundSusulanCocok.baris, 1);
@@ -1724,6 +1728,85 @@ test('FR-3 cakupan periode TikTok: transaksi di hari pertama & terakhir, dan fil
   const sebagian = ju([A1tt(FULL.slice(0, 2), { name: 'awal.xlsx' }), A1tt(FULL)]);
   sameTot(one.r, sebagian.r, 'FR-3 file sebagian'); eq(sebagian.J.marketplace.tiktok.gabungan.status, 'bebas_konflik');
   eq(sebagian.J.marketplace.tiktok.dana.status, 'terekonsiliasi');
+});
+
+/* ---------- P13: periode resmi Laporan Penghasilan TikTok (data SINTETIS) ----------
+ * Periode resmi (sheet Laporan, "YYYY/MM/DD-YYYY/MM/DD", inklusif) dipakai untuk STATUS kelengkapan/identitas.
+ * Penahanan konflik tetap memakai cakupan teramati (P11), jadi angka tidak berubah karena periode resmi. */
+const JAN = '2026/01/01-2026/01/31';
+const ADJ = (id, pay, lain) => ({ id, jenis: 'Penggantian Biaya Logistik', sub: 0, sales: 0, lain, pay });
+const per = (x) => x.r.jejakUang.marketplace.tiktok;
+test('P13-1/2/3/4 periode resmi valid; hari awal/akhir tanpa transaksi tidak mengubah apa pun', () => {
+  const rows = [{ id: 'Q-1', sub: 50000, biaya: -5000, pay: '2026/01/05' }, { id: 'Q-2', sub: 60000, biaya: -6000, pay: '2026/01/20' }];
+  const f = A1tt(rows, { period: JAN });
+  eq(JSON.stringify(f.check.periode), JSON.stringify({ status: 'resmi', from: '2026-01-01', to: '2026-01-31', zona: 'UTC+7', diLuar: 0 }));
+  eq(f.check.from, '2026-01-05', 'cakupan teramati tetap dicatat terpisah');
+  for (const [lbl, set] of [['awal kosong', [rows[1]]], ['akhir kosong', [rows[0]]], ['keduanya kosong', rows]]) {
+    const one = ju([A1tt(set, { period: JAN })]), two = ju([A1tt(set, { period: JAN }), A1tt(set, { period: JAN, name: 'ulang.xlsx' })]);
+    sameTot(one.r, two.r, lbl); eq(per(two).gabungan.status, 'bebas_konflik', lbl); eq(per(two).dana.status, 'terekonsiliasi', lbl);
+  }
+  // Batas inklusif: transaksi tepat di hari pertama dan terakhir berada DI DALAM periode.
+  eq(A1tt([{ ...rows[0], pay: '2026/01/01' }, { ...rows[1], pay: '2026/01/31' }], { period: JAN }).check.periode.diLuar, 0);
+});
+test('P13-5/6/7 tanpa periode → cakupan teramati (bukan resmi); periode rusak → perlu dicek; format lain tidak ditebak', () => {
+  const rows = [{ id: 'Q-1', sub: 50000, biaya: -5000, pay: '2026/01/05' }];
+  const tanpa = A1tt(rows, { period: null });
+  eq(tanpa.check.periode.status, 'tidak_ada');
+  const dua = ju([tanpa, A1tt([{ id: 'Q-3', sub: 40000, biaya: -4000, pay: '2026/02/05' }], { period: null, name: 'feb.xlsx' })]);
+  eq(per(dua).gabungan.status, 'cakupan_teramati'); eq(per(dua).dana.status, 'berdasarkan_laporan'); truthy(per(dua).dana.alasan.includes('cakupan_teramati'), 'alasan');
+  eq(ju([tanpa]).J.marketplace.tiktok.dana.status, 'terekonsiliasi', 'satu file tanpa periode tetap cocok dengan ringkasannya');
+  for (const bad of ['abc', '2026/13/01-2026/01/31', '2026/01/31-2026/01/01', '2026-01-01 - 2026-01-31', '01/01/2026-31/01/2026']) {
+    const f = A1tt(rows, { period: bad }); eq(f.check.periode.status, 'rusak', bad);
+    const x = ju([f]); eq(per(x).dana.status, 'perlu_dicek', bad); truthy(x.r.kepastian.laba.alasanTidakFinal.includes('periode_laporan_perlu_dicek'), bad);
+    near(x.r.totalSales, 50000, 0, `${bad}: angka tetap`);
+  }
+  eq(A1tt(rows, { period: '2026/01/01 - 2026/01/31' }).check.periode.status, 'resmi', 'spasi di sekitar tanda hubung diterima');
+});
+test('P13-8 transaksi di luar periode resmi → anomali "perlu dicek", transaksi tetap dihitung', () => {
+  const x = ju([A1tt([{ id: 'Q-1', sub: 50000, biaya: -5000, pay: '2026/01/05' }, { id: 'Q-9', sub: 30000, biaya: -3000, pay: '2026/02/02' }], { period: JAN })]);
+  eq(per(x).gabungan.periode.barisDiLuar, 1); eq(per(x).dana.status, 'perlu_dicek'); eq(x.r.orders, 2); near(x.r.totalSales, 80000, 0);
+});
+test('P13-9/10 periode sama dengan isi identik, dan periode tumpang tindih yang konsisten → bebas konflik, dihitung sekali', () => {
+  const rows = [{ id: 'Q-1', sub: 50000, biaya: -5000, pay: '2026/01/05' }, { id: 'Q-2', sub: 60000, biaya: -6000, pay: '2026/01/25' }];
+  const a = ju([A1tt(rows, { period: JAN }), A1tt(rows, { period: JAN, name: 'b.xlsx' })]);
+  eq(per(a).gabungan.status, 'bebas_konflik'); eq(a.r.orders, 2);
+  const b = ju([A1tt(rows, { period: JAN }), A1tt([rows[1], { id: 'Q-3', sub: 40000, biaya: -4000, pay: '2026/02/05' }], { period: '2026/01/15-2026/02/14', name: 'b.xlsx' })]);
+  eq(per(b).gabungan.status, 'bebas_konflik'); eq(b.r.orders, 3); eq(per(b).dana.status, 'terekonsiliasi');
+});
+test('P13-11 dua penyesuaian berbeda yang sah tetap dihitung; nomor sama + isi beda → identitas belum pasti (tidak ditahan, tidak dihapus)', () => {
+  const base = [{ id: 'Q-1', sub: 50000, biaya: -5000, pay: '2026/01/05' }];
+  const sah = ju([A1tt([...base, ADJ('ADJ-A', '2026/01/21', 5000)], { period: JAN }), A1tt([...base, ADJ('ADJ-A', '2026/01/21', 5000), ADJ('ADJ-B', '2026/01/22', 6000)], { period: JAN, name: 'b.xlsx' })]);
+  eq(sah.r.tiktok.adj, 11000, 'dua penyesuaian berbeda nomor = dua transaksi');
+  eq(per(sah).gabungan.status, 'tidak_lengkap', 'laporan pertama tidak memuat ADJ-B padahal periodenya mencakup');
+  // Contoh P13: nomor sama, tanggal & nilai berbeda, periode resmi sama. Sebelumnya "terekonsiliasi" diam-diam.
+  // (Laporan kedua tidak punya transaksi sebelum 22 Jan, jadi cakupan teramatinya tidak bersinggungan dengan laporan pertama.)
+  const p13 = ju([A1tt([...base, ADJ('ADJ-1', '2026/01/21', 5000)], { period: JAN }), A1tt([ADJ('ADJ-1', '2026/01/22', 6000), { id: 'Q-2', sub: 40000, biaya: -4000, pay: '2026/01/28' }], { period: JAN, name: 'b.xlsx' })]);
+  eq(p13.r.tiktok.adj, 11000, 'angka tidak diubah (keputusan identitas belum disetujui)');
+  eq(p13.r.kepastian.gabungan.tiktok.pesananDitahan, 0, 'tidak ditahan berdasarkan dugaan');
+  eq(per(p13).gabungan.status, 'identitas_belum_pasti'); eq(per(p13).penyesuaian.status, 'perlu_dicek'); eq(per(p13).dana.status, 'perlu_dicek');
+  truthy(p13.r.kepastian.laba.alasanTidakFinal.includes('identitas_transaksi_belum_pasti'), 'alasan di Kepastian Profit');
+});
+test('P13-12 konflik dengan bukti identitas cukup (baris asal pesanan unik) tetap ditahan, apa pun periodenya', () => {
+  const a = A1tt([{ id: 'Q-7', sub: 50000, biaya: -5000, pay: '2026/01/05' }], { period: JAN });
+  const b = A1tt([{ id: 'Q-7', sub: 50000, biaya: -6000, pay: '2026/02/03' }], { period: '2026/02/01-2026/02/28', name: 'feb.xlsx' });
+  const x = ju([a, b]); eq(x.r.kepastian.gabungan.tiktok.pesananDitahan, 1); eq(x.r.orders, 0);
+});
+test('P13-13/14 refund susulan lintas periode resmi bukan konflik; urutan unggah dibalik → hasil sama', () => {
+  const a = A1tt([{ id: 'Q-5', sub: 90000, biaya: -9000, pay: '2026/01/10' }], { period: JAN });
+  const b = A1tt([{ id: 'Q-5', sub: 0, refund: -30000, biaya: -1000, pay: '2026/02/04' }], { period: '2026/02/01-2026/02/28', name: 'feb.xlsx' });
+  const x = ju([a, b]), y = ju([b, a]);
+  eq(per(x).gabungan.status, 'bebas_konflik'); eq(x.r.kepastian.refundTiktok.refundSusulanCocok.baris, 1); eq(x.r.orders, 1);
+  sameTot(x.r, y.r, 'urutan'); eq(per(y).gabungan.status, per(x).gabungan.status); eq(per(y).dana.status, per(x).dana.status);
+});
+test('P13-15 tiga mode modal: periode resmi hanya mengubah status, tidak mengubah penjualan, dana, HPP, atau laba', () => {
+  const rowsA = [{ id: 'Q-1', sub: 50000, biaya: -5000, pay: '2026/01/05' }, ADJ('ADJ-1', '2026/01/21', 5000)];
+  const rowsB = [ADJ('ADJ-1', '2026/01/22', 6000), { id: 'Q-2', sub: 40000, biaya: -4000, pay: '2026/01/28' }];
+  for (const st of [A1ST, { modalMode: 'acuan', mitra: 30, coret: 100, periods: [{ start: '', markup: 0, disc: 0 }], fixedCosts: [] }, { modalMode: 'produk', catalog: [], periods: [{ start: '', markup: 0, disc: 0 }], fixedCosts: [] }]) {
+    const resmi = E.compute([A1tt(rowsA, { period: JAN }), A1tt(rowsB, { period: JAN, name: 'b.xlsx' })], st);
+    const teramati = E.compute([A1tt(rowsA, { period: null }), A1tt(rowsB, { period: null, name: 'b.xlsx' })], st);
+    for (const k of ['totalSales', 'totalFees', 'totalReceived', 'adjustments', 'orders']) eq(resmi[k], teramati[k], `${st.modalMode} ${k}`);
+    eq(String(resmi.totalModal), String(teramati.totalModal), `${st.modalMode} HPP`); eq(String(resmi.totalMargin), String(teramati.totalMargin), `${st.modalMode} laba`);
+  }
 });
 
 test('tanggal dd/mm/yyyy dan serial Excel', () => { eq(E.date('05/06/2026'), '2026-06-05'); eq(E.date(46023), '2026-01-01'); });

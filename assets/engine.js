@@ -196,6 +196,21 @@ const Engine = (() => {
     for (const m of str(v).matchAll(/(\d{6,})\s*\*\s*(\d+)/g)) out.push({ skuId: m[1], qty: +m[2] });
     return out;
   };
+  /**
+   * Periode resmi Laporan Penghasilan TikTok. status: resmi (valid) | tidak_ada (baris "Periode" tidak ada) |
+   * rusak (ada tetapi formatnya tidak dikenali, tanggalnya tidak valid, atau awal > akhir). Tidak menebak format lain.
+   */
+  function parsePeriode(lap) {
+    const row = lap.find((r) => r.some((c) => str(c) === 'Periode'));
+    const zr = lap.find((r) => r.some((c) => str(c) === 'Zona waktu'));
+    const zona = zr ? str(lastValue(zr)) : '';
+    if (!row) return { status: 'tidak_ada', from: '', to: '', zona };
+    const v = str(lastValue(row)), m = v.match(/^(\d{4})\/(\d{2})\/(\d{2})\s*-\s*(\d{4})\/(\d{2})\/(\d{2})$/);
+    const valid = (y, mo, d) => { const t = new Date(Date.UTC(+y, +mo - 1, +d)); return t.getUTCFullYear() === +y && t.getUTCMonth() === +mo - 1 && t.getUTCDate() === +d; };
+    if (!m || !valid(m[1], m[2], m[3]) || !valid(m[4], m[5], m[6])) return { status: 'rusak', from: '', to: '', zona };
+    const from = `${m[1]}-${m[2]}-${m[3]}`, to = `${m[4]}-${m[5]}-${m[6]}`;
+    return from <= to ? { status: 'resmi', from, to, zona } : { status: 'rusak', from: '', to: '', zona };
+  }
   function parseTiktokIncome(wb) {
     const aoa = wb.sheets['Detail pesanan'];
     const h = findHeader(aoa, ['ID Pesanan/Penyesuaian', 'Jenis transaksi']);
@@ -235,6 +250,10 @@ const Engine = (() => {
       if (row.some((c) => str(c) === 'Jumlah penyelesaian pembayaran')) { reportSettle = num(lastValue(row)); break; }
     }
     const dates = rows.map((r) => r.payDate).filter(Boolean).sort();
+    // P13: periode resmi file (sheet Laporan, baris "Periode"). Format yang ditemukan di semua file asli:
+    // "YYYY/MM/DD-YYYY/MM/DD", zona "UTC+7", batas awal & akhir inklusif, basis tanggal pembayaran.
+    const periode = parsePeriode(wb.sheets['Laporan'] || []);
+    if (periode.status === 'resmi') periode.diLuar = rows.filter((r) => r.payDate && (r.payDate < periode.from || r.payDate > periode.to)).length;
     // Money Trace A1: komponen sheet Laporan dan jumlah SEMUA baris file (pesanan + non-pesanan), untuk rekonsiliasi.
     const lap = wb.sheets['Laporan'] || [];
     const sumOf = (list, f) => list.reduce((a, r) => a + f(r), 0);
@@ -247,7 +266,7 @@ const Engine = (() => {
       potongan: sumOf(nonOrder, (r) => r.totalBiaya), dana: sumOf(nonOrder, (r) => r.settle) };
     return { kind: 'tiktok_income', rows,
       check: { reportSettle, sum: rows.reduce((a, r) => a + r.settle, 0), from: dates[0] || '', to: dates[dates.length - 1] || '',
-        ringkasan, jumlah, nonPesanan, kolomRefund: hasRefund, kolomSubtotalSetelahDiskon: hasSubAfter } };
+        ringkasan, jumlah, nonPesanan, kolomRefund: hasRefund, kolomSubtotalSetelahDiskon: hasSubAfter, periode } };
   }
 
   /* ---------- export pesanan (memberi jumlah barang, SKU, varian) ---------- */
@@ -579,8 +598,8 @@ const Engine = (() => {
    * @param covs   cakupan tanggal per indeks file ({from,to} atau null bila tidak diketahui)
    * @returns { kept: rec[] (urutan asli), held: [{gid, versi:[{file, recs}]}], dupes, tidakLengkap }
    */
-  function unionGroups(groups, covs) {
-    const kept = [], held = []; let dupes = 0, tidakLengkap = 0;
+  function unionGroups(groups, covs, statusCovs = null) {
+    const kept = [], held = []; let dupes = 0, tidakLengkap = 0, belumPasti = 0;
     for (const [gid, byFile] of groups) {
       const fs = [...byFile.keys()];
       let conflict = false, incomplete = false;
@@ -594,7 +613,18 @@ const Engine = (() => {
         if (!sameBag(A, B)) { if (byFile.has(b)) conflict = true; else incomplete = true; }
       }
       if (conflict) { held.push({ gid, versi: fs.map((f) => ({ file: f, recs: byFile.get(f).map((x) => x.rec) })) }); continue; }
+      // P13: pemeriksaan tambahan dengan PERIODE RESMI (hanya status; angka tidak berubah). Perbedaan yang hanya terlihat
+      // dengan periode resmi berarti identitas transaksinya belum dapat dipastikan (bisa versi lain, bisa transaksi lain).
+      let unsure = false;
+      if (statusCovs) for (const a of fs) for (let b = 0; b < statusCovs.length; b++) {
+        if (b === a || !statusCovs[a] || !statusCovs[b]) continue;
+        const both = (d) => inCov(d, statusCovs[a]) && inCov(d, statusCovs[b]);
+        const A = byFile.get(a).filter((x) => both(x.date)).map((x) => x.sig);
+        const B = (byFile.get(b) || []).filter((x) => both(x.date)).map((x) => x.sig);
+        if (!sameBag(A, B)) { if (byFile.has(b)) unsure = true; else incomplete = true; }
+      }
       if (incomplete) tidakLengkap++;
+      if (unsure) belumPasti++;
       const best = new Map();
       for (const f of fs) {
         const bag = new Map();
@@ -607,7 +637,7 @@ const Engine = (() => {
       dupes += total - k;
     }
     kept.sort((a, b) => a.seq - b.seq);
-    return { kept: kept.map((x) => x.rec), held, dupes, tidakLengkap };
+    return { kept: kept.map((x) => x.rec), held, dupes, tidakLengkap, belumPasti };
   }
   const R2 = (v) => (isOk(v) ? Math.round(v * 100) / 100 : String(v));
   const sigShopeeOrder = (o, items) => JSON.stringify([o.id, o.orderDate, o.payDate, ...['harga', 'refund', 'voucher', 'ship', 'admin', 'proses', 'xtra', 'ams', 'lain', 'total'].map((k) => R2(o[k])),
@@ -641,7 +671,10 @@ const Engine = (() => {
     const tt = parsed.filter((p) => p.kind === 'tiktok_income'), ttCov = tt.map(covOf);
     const rowGroups = new Map();
     tt.forEach((p, f) => { for (const r of p.rows) push(rowGroups, r.id, f, { sig: sigTiktokRow(r), date: r.payDate, strict: r.isOrder && r.preGross > 0, rec: r }); });
-    const tr = unionGroups(rowGroups, ttCov);
+    // P13: konflik (penahanan) tetap memakai cakupan TERAMATI seperti P11, sehingga tidak ada transaksi yang ditahan
+    // hanya karena periode resmi tumpang tindih. Periode resmi dipakai untuk status kelengkapan dan identitas.
+    const ttCovResmi = tt.map((p) => (p.check.periode && p.check.periode.status === 'resmi' ? { from: p.check.periode.from, to: p.check.periode.to } : covOf(p)));
+    const tr = unionGroups(rowGroups, ttCov, ttCovResmi);
     const used = new Map();
     for (const r of tr.kept) {
       // Baris kembar yang sah dalam satu file tetap dihitung; kuncinya dibuat unik per kemunculan.
@@ -655,7 +688,7 @@ const Engine = (() => {
         duplikat: so.dupes + sa.dupes, tidakLengkap: so.tidakLengkap + sa.tidakLengkap, file: sh.length },
       tiktok: { pesananDitahan: tr.held.map((h) => ({ id: h.gid, versi: h.versi.map((v) => ({ file: v.file, penjualan: v.recs.filter((x) => x.isOrder).reduce((a, x) => a + x.sales, 0), dana: v.recs.reduce((a, x) => a + x.settle, 0),
         tanggalPesanan: (v.recs.find((x) => x.orderDate) || {}).orderDate || '', tanggalBayar: (v.recs[0] || {}).payDate || '', pesanan: v.recs.some((x) => x.isOrder) })) })),
-        duplikat: tr.dupes, tidakLengkap: tr.tidakLengkap, file: tt.length },
+        duplikat: tr.dupes, tidakLengkap: tr.tidakLengkap, identitasBelumPasti: tr.belumPasti, file: tt.length },
     };
   }
 
@@ -1944,6 +1977,9 @@ const Engine = (() => {
       const G = m.gabungan, pfs = ['shopee', 'tiktok'].filter((k) => want.has(k));
       if (pfs.some((k) => G[k].pesananDitahan.length || (G[k].penyesuaianDitahan || []).length)) why.push('konflik_antar_laporan');
       if (pfs.some((k) => G[k].tidakLengkap)) why.push('laporan_tidak_saling_lengkap');
+      if (pfs.some((k) => G[k].identitasBelumPasti)) why.push('identitas_transaksi_belum_pasti');
+      const ttPer = want.has('tiktok') ? parsed.filter((p) => p.kind === 'tiktok_income').map((p) => p.check.periode || { status: 'tidak_ada' }) : [];
+      if (ttPer.some((x) => x.status === 'rusak' || x.diLuar)) why.push('periode_laporan_perlu_dicek');
       // Total tiap Laporan Penghasilan harus cocok dengan ringkasan resmi (toleransi Rp1, sama seperti dashboard).
       for (const p of parsed) {
         if (p.kind !== 'shopee_income' && p.kind !== 'tiktok_income') continue;
@@ -2021,8 +2057,16 @@ const Engine = (() => {
         const heldIn = [...G.pesananDitahan.filter((h) => h.versi.some((v) => inRange(v.tanggalPesanan || v.tanggalBayar))),
           ...(G.penyesuaianDitahan || []).filter((h) => h.versi.some((v) => inRange(v.tanggal)))];
         const overlap = G.duplikat - barisIdentik > 0;   // ada baris sama dari file yang tidak identik → sudah dihitung sekali
-        const gabungan = { status: heldIn.length ? 'konflik' : G.tidakLengkap ? 'tidak_lengkap' : 'bebas_konflik',
-          ditahan: heldIn.length, duplikatDiabaikan: G.duplikat, tidakLengkap: G.tidakLengkap };
+        // P13: periode resmi per file (TikTok). Shopee memakai Dari/ke di Summary (sudah resmi).
+        const per = files.map((p) => (pf === 'tiktok' ? p.check.periode || { status: 'tidak_ada' } : { status: p.check.from && p.check.to ? 'resmi' : 'tidak_ada' }));
+        const periode = { resmi: per.filter((x) => x.status === 'resmi').length, teramati: per.filter((x) => x.status === 'tidak_ada').length,
+          rusak: per.filter((x) => x.status === 'rusak').length, barisDiLuar: per.reduce((a, x) => a + (x.diLuar || 0), 0),
+          zona: [...new Set(per.map((x) => x.zona).filter(Boolean))] };
+        const periodeBermasalah = periode.rusak > 0 || periode.barisDiLuar > 0 || periode.zona.length > 1;
+        const belumPasti = G.identitasBelumPasti || 0;
+        const gabungan = { status: heldIn.length ? 'konflik' : belumPasti ? 'identitas_belum_pasti' : periodeBermasalah ? 'periode_perlu_dicek'
+          : G.tidakLengkap ? 'tidak_lengkap' : files.length > 1 && periode.teramati ? 'cakupan_teramati' : 'bebas_konflik',
+          ditahan: heldIn.length, duplikatDiabaikan: G.duplikat, tidakLengkap: G.tidakLengkap, identitasBelumPasti: belumPasti, periode };
         const P = pf === 'shopee' ? S : T, A = RF[pf];
         // Kolom refund tidak ada di salah satu file → rincian refund belum tersedia (bukan 0).
         const noCol = A.tanpaKolom > 0 || files.some((p) => p.check.kolomRefund === false);
@@ -2037,12 +2081,18 @@ const Engine = (() => {
           if (filterTanggal) why.push('filter_tanggal');
           if (heldIn.length) why.unshift('konflik_antar_laporan');
           if (G.tidakLengkap) why.push('laporan_tidak_saling_lengkap');
+          if (belumPasti) why.push('identitas_transaksi_belum_pasti');
+          if (periode.rusak) why.push('periode_resmi_rusak');
+          if (periode.barisDiLuar) why.push('baris_di_luar_periode_resmi');
+          if (periode.zona.length > 1) why.push('zona_waktu_berbeda');
+          if (files.length > 1 && periode.teramati) why.push('cakupan_teramati');
           if (!why.length && !overlap) {
             // Bukti akhir: jumlah gabungan file = angka yang ditampilkan (bukan hanya tiap file cocok sendiri-sendiri).
             const gab = files.reduce((a, p) => a + p.check.jumlah[comp] - (pf === 'tiktok' && comp !== 'dana' ? p.check.nonPesanan[comp] : 0), 0);
             if (!(Math.abs(gab - tampil[comp]) <= TOL * files.length)) why.push('gabungan_tidak_cocok');
           }
-          const hard = why.some((w) => ['tidak_cocok_ringkasan', 'gabungan_tidak_cocok', 'tanda_refund_tidak_wajar', 'identitas_refund_tidak_cocok', 'laporan_tidak_saling_lengkap'].includes(w));
+          const hard = why.some((w) => ['tidak_cocok_ringkasan', 'gabungan_tidak_cocok', 'tanda_refund_tidak_wajar', 'identitas_refund_tidak_cocok', 'laporan_tidak_saling_lengkap',
+            'identitas_transaksi_belum_pasti', 'periode_resmi_rusak', 'baris_di_luar_periode_resmi', 'zona_waktu_berbeda'].includes(w));
           // Intrafile (tiap file vs ringkasannya) dan gabungan (lintas file) dicatat terpisah; status akhir butuh keduanya.
           const rekonsiliasiFile = why.includes('tidak_cocok_ringkasan') ? 'tidak_cocok' : why.includes('ringkasan_resmi_tidak_ada') ? 'tanpa_ringkasan' : 'cocok';
           return { status: why.includes('konflik_antar_laporan') ? 'perlu_rekonsiliasi' : hard ? 'perlu_dicek' : why.length ? 'berdasarkan_laporan' : 'terekonsiliasi',
