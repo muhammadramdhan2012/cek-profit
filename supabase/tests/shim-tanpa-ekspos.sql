@@ -12,12 +12,18 @@ grant execute on function auth.uid() to anon, authenticated;
 -- Sama dengan perintah dasbor Supabase saat opsi ekspos otomatis dimatikan.
 alter default privileges in schema public revoke select, insert, update, delete on tables from anon, authenticated, service_role;
 alter default privileges in schema public revoke usage, select on sequences from anon, authenticated, service_role;
--- Tiruan RLS otomatis.
-create function public._tiruan_rls_otomatis() returns event_trigger language plpgsql as $$
+-- Supabase memberi EXECUTE fungsi baru langsung ke anon/authenticated/service_role (opsi ekspos tabel tidak mengubahnya).
+alter default privileges in schema public grant execute on functions to anon, authenticated, service_role;
+-- Peran yang dipakai Supabase Auth saat menulis auth.users (untuk membuktikan trigger profil tetap jalan).
+create role supabase_auth_admin nologin; grant usage on schema auth to supabase_auth_admin;
+grant select, insert, update, delete on auth.users to supabase_auth_admin;
+-- Tiruan RLS otomatis (nama & bentuk mengikuti fungsi yang terlihat di Security Advisor: public.rls_auto_enable,
+-- SECURITY DEFINER, dapat dieksekusi publik).
+create function public.rls_auto_enable() returns event_trigger language plpgsql security definer as $$
 declare o record;
 begin
   for o in select * from pg_event_trigger_ddl_commands() where command_tag = 'CREATE TABLE' and schema_name = 'public' loop
     execute format('alter table %s enable row level security', o.object_identity);
   end loop;
 end $$;
-create event trigger tiruan_rls_otomatis on ddl_command_end when tag in ('CREATE TABLE') execute function public._tiruan_rls_otomatis();
+create event trigger tiruan_rls_otomatis on ddl_command_end when tag in ('CREATE TABLE') execute function public.rls_auto_enable();

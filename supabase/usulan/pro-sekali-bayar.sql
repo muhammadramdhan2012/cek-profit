@@ -154,7 +154,7 @@ returns void language sql security definer set search_path = public, pg_temp as 
   insert into public.pro_audit_log (aksi, payment_id, order_id, lama, baru, alasan, oleh)
   values (p_aksi, p_payment, p_order, p_lama, p_baru, left(coalesce(p_alasan, ''), 500), auth.uid());
 $$;
-create or replace function public._norm_ref(p text) returns text language sql immutable as $$
+create or replace function public._norm_ref(p text) returns text language sql immutable set search_path = '' as $$
   select upper(regexp_replace(coalesce(p, ''), '[^A-Za-z0-9]', '', 'g'));
 $$;
 drop function if exists public._catat_event(bigint, text, text, text);
@@ -486,5 +486,7 @@ begin
 end $$;
 drop trigger if exists batas_riwayat on public.reports;
 create trigger batas_riwayat before insert on public.reports for each row execute function public.cek_batas_riwayat();
+-- Fungsi trigger tidak perlu dieksekusi pengguna (EXECUTE hanya diperiksa saat CREATE TRIGGER, bukan saat berjalan).
+revoke execute on function public.cek_batas_riwayat() from public, anon, authenticated;
 
 notify pgrst, 'reload schema';

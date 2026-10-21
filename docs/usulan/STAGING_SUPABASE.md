@@ -95,6 +95,29 @@ kecil/angka dari Project URL), **Run**. Periksa: `select public.info_lingkungan(
 
 **Tahap 5 — Security Advisor.** Dasbor → **Advisors → Security Advisor** → **Rerun linter**. Tidak boleh ada level
 **ERROR** untuk tabel/fungsi Cek Untung. Peringatan lain kirim ke Claude untuk dinilai.
+Hasil staging 21 Okt 2026: 0 error, 22 peringatan → dianalisis di `docs/usulan/AUDIT_FUNGSI_SUPABASE.md`.
+
+**Tahap 6 — `supabase/usulan/hardening-fungsi.sql`, dijalankan dua kali** (hanya hak fungsi & search_path; tidak
+mengubah tabel, data, atau RLS). Periksa:
+```sql
+select proname,
+       has_function_privilege('anon', oid, 'execute')          as anon_bisa,
+       has_function_privilege('authenticated', oid, 'execute') as login_bisa,
+       array_to_string(proconfig, ',')                         as search_path
+from pg_proc where pronamespace = 'public'::regnamespace
+  and proname in ('_norm_ref', 'handle_new_user', 'cek_batas_riwayat', 'is_admin') order by 1;
+```
+Hasil yang benar:
+
+| proname | anon_bisa | login_bisa | search_path |
+|---|---|---|---|
+| `_norm_ref` | true | true | `search_path=""` |
+| `cek_batas_riwayat` | false | false | `search_path=public, pg_temp` |
+| `handle_new_user` | false | false | `search_path=public, pg_temp` |
+| `is_admin` | false | **true** | `search_path=public, pg_temp` |
+
+Lalu jalankan ulang `periksa-staging.sql` (tetap 14/14) dan **Rerun linter**: perkiraan 0 error, 16 peringatan
+(semuanya diterima, lihat dokumen audit). Bila `schema.sql` atau migrasi pernah dijalankan ulang, jalankan ulang tahap 6.
 
 **Bila RPC belum terbaca** (nanti di website muncul pesan "migrasi belum dijalankan"): jalankan
 `notify pgrst, 'reload schema';` lalu muat ulang halaman.

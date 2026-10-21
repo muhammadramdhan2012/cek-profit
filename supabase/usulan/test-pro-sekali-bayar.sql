@@ -269,7 +269,7 @@ select 'V14 non-admin tidak bisa memakai admin_set_pro (tanpa perubahan, tanpa a
   and (select count(*) from public.pro_audit_log where aksi = 'set_pro_lama') = 1 ok;
 select 'V15 semua fungsi SECURITY DEFINER milik migrasi mengunci search_path dengan pg_temp terakhir' t,
   not exists (select 1 from pg_proc where pronamespace = 'public'::regnamespace and prosecdef
-    and proname not in ('is_admin', 'handle_new_user')
+    and proname not in ('is_admin', 'handle_new_user', 'rls_auto_enable')   -- dua dari schema.sql (diperketat hardening-fungsi.sql), satu milik Supabase
     and coalesce(array_to_string(proconfig, ','), '') <> 'search_path=public, pg_temp') ok;
 select 'V16 tidak ada role pengguna yang boleh menghapus catatan keuangan' t,
   not (has_table_privilege('authenticated', 'public.pro_payments', 'delete') or has_table_privilege('authenticated', 'public.pro_audit_log', 'delete')
