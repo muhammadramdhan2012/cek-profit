@@ -157,7 +157,7 @@ try {
   cek(r.status === 400 && /belum dibuka/.test(r.body.error), 'E20 mode manual: pembuatan QR ditolak dengan pesan jelas');
 
   cek(!logs.join('\n').includes(RAHASIA) && !logs.join('\n').includes(mt.serverKey), 'E21 log Edge Function tanpa server key/rahasia');
-  cek((await jml(`select count(*) from public.pro_payments where sumber = 'midtrans' and kind = 'pembayaran'`)) === 4, 'E22 total dana: 4 pembayaran (A, B, C tidak cocok, D)');
+  cek((await jml(`select count(*) from public.pro_payments where sumber = 'midtrans' and kind = 'pembayaran'`)) === 3, 'E22 buku besar: 3 pembayaran sah (A, B, D); nominal tidak cocok (C) tidak tercatat');
 } catch (e) { gagal++; console.log('GAGAL (galat)', e.message); }
 finally {
   mt.server.close(); bridge.close();

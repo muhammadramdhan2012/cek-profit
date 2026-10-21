@@ -62,12 +62,14 @@ create table if not exists public.pro_gateway_percobaan (
   qr_string        text check (qr_string is null or length(qr_string) <= 1000),
   berlaku_sampai   timestamptz not null,
   payment_id       bigint references public.pro_payments (id) on delete set null,
+  jumlah_diterima  numeric,
   pesan            text not null default '' check (length(pesan) <= 300),
   dicek_pada       timestamptz,
   created_at       timestamptz not null default now(),
   updated_at       timestamptz not null default now()
 );
 -- Satu QR terbuka per pesanan: QR baru hanya dibuat setelah QR lama selesai/kedaluwarsa (tanpa tagihan ganda).
+alter table public.pro_gateway_percobaan add column if not exists jumlah_diterima numeric;   -- nominal yang dilaporkan Midtrans
 create unique index if not exists pro_gateway_satu_terbuka on public.pro_gateway_percobaan (order_id) where status in ('dibuat', 'menunggu');
 create index if not exists pro_gateway_percobaan_order on public.pro_gateway_percobaan (order_id, id desc);
 alter table public.pro_gateway_percobaan enable row level security;
@@ -194,30 +196,40 @@ begin
   update public.pro_gateway_percobaan set dicek_pada = now() where id = g.id;
 
   if ts in ('settlement', 'capture', 'refund', 'partial_refund') then
-    -- (a) Dana tercatat sekali per transaction_id.
+    -- (a) Dana tercatat sekali per transaction_id, HANYA bila sah (nominal, mata uang, fraud) dan transaction_id belum
+    --     dipakai pesanan lain. Selain itu tidak masuk buku besar: dicatat di percobaan (perlu_cek) + audit untuk investigasi.
     if g.payment_id is null then
       if length(txn) < 3 then raise exception 'transaction_id kosong'; end if;
       gross := (p_status ->> 'gross_amount')::numeric;
       sah := gross = g.amount and gross = r.amount and upper(coalesce(p_status ->> 'currency', 'IDR')) = 'IDR'
              and lower(coalesce(p_status ->> 'fraud_status', 'accept')) = 'accept' and gross = trunc(gross);
-      insert into public.pro_payments (order_id, user_id, kind, sumber, reference, amount, note, dihubungkan_pada)
-        values (r.id, r.user_id, 'pembayaran', 'midtrans', txn, gross::integer, 'QRIS Midtrans ' || g.gateway_order_id, now())
-        on conflict (sumber, reference_norm) where kind = 'pembayaran' do nothing returning id into pid;
-      if pid is null then
-        select id into pid from public.pro_payments where kind = 'pembayaran' and sumber = 'midtrans' and reference_norm = public._norm_ref(txn);
-      end if;
-      update public.pro_gateway_percobaan set payment_id = pid, gateway_txn_id = txn, updated_at = now() where id = g.id;
-      g.payment_id := pid;
       if not sah then
-        update public.pro_gateway_percobaan set status = 'perlu_cek', pesan = 'Nominal/mata uang/fraud status tidak cocok', updated_at = now() where id = g.id;
+        update public.pro_gateway_percobaan set status = 'perlu_cek', gateway_txn_id = txn, jumlah_diterima = gross,
+          pesan = 'Nominal/mata uang/fraud status tidak cocok; tidak dicatat sebagai pembayaran', updated_at = now() where id = g.id;
         if r.status in ('baru', 'diproses') then
           update public.upgrade_requests set status = 'perlu_cek', updated_at = now() where id = r.id;
           perform public._catat_event(r.id, r.status, 'perlu_cek', 'Pembayaran sedang diperiksa manual');
         end if;
-        perform public._audit('gateway_nominal_tidak_cocok', pid, r.id, null,
-          jsonb_build_object('gross_amount', gross, 'tagihan', r.amount, 'currency', p_status ->> 'currency', 'fraud_status', p_status ->> 'fraud_status'), g.gateway_order_id);
-        hasil := 'perlu_cek';
-      elsif r.status in ('baru', 'diproses', 'perlu_cek', 'dibatalkan')
+        perform public._audit('gateway_nominal_tidak_cocok', null, r.id, null,
+          jsonb_build_object('transaction_id', txn, 'gross_amount', gross, 'tagihan', r.amount, 'currency', p_status ->> 'currency', 'fraud_status', p_status ->> 'fraud_status'), g.gateway_order_id);
+        return 'perlu_cek';
+      end if;
+      insert into public.pro_payments (order_id, user_id, kind, sumber, reference, amount, note, dihubungkan_pada)
+        values (r.id, r.user_id, 'pembayaran', 'midtrans', txn, gross::integer, 'QRIS Midtrans ' || g.gateway_order_id, now())
+        on conflict (sumber, reference_norm) where kind = 'pembayaran' do nothing returning id into pid;
+      if pid is null then
+        -- transaction_id sudah tercatat: hanya boleh dipakai bila milik pesanan & akun yang sama.
+        select id into pid from public.pro_payments where kind = 'pembayaran' and sumber = 'midtrans' and reference_norm = public._norm_ref(txn)
+          and order_id = r.id and user_id = r.user_id;
+        if pid is null then
+          update public.pro_gateway_percobaan set status = 'perlu_cek', pesan = 'transaction_id sudah tercatat untuk pesanan lain', updated_at = now() where id = g.id;
+          perform public._audit('gateway_transaksi_bentrok', null, r.id, null, jsonb_build_object('transaction_id', txn), g.gateway_order_id);
+          return 'perlu_cek';
+        end if;
+      end if;
+      update public.pro_gateway_percobaan set payment_id = pid, gateway_txn_id = txn, jumlah_diterima = gross, updated_at = now() where id = g.id;
+      g.payment_id := pid;
+      if r.status in ('baru', 'diproses', 'perlu_cek', 'dibatalkan')
             and not exists (select 1 from public.profiles where id = r.user_id and pro_sekali_bayar) then
         hasil := public._aktifkan_dari_pesanan(r, pid, gross::integer, 'Pembayaran QRIS terverifikasi Midtrans (' || txn || ')');
         update public.pro_gateway_percobaan set status = 'lunas', updated_at = now() where id = g.id;

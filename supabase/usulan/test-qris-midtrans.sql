@@ -93,15 +93,34 @@ select public.buat_pesanan_pro('qris');
 create temp table mc as select public.gateway_mulai_percobaan((pg_temp.pesanan('c2000000-0000-0000-0000-0000000000c2')).id) j;
 reset role;
 select public.gateway_terapkan_status(:R, pg_temp.st((select j->'percobaan'->>'gateway_order_id' from mc), 'settlement', 'TXN-C1', '1000.00'));
-select 'Q13 nominal tidak cocok → perlu_cek, Pro TIDAK aktif, dana tercatat, audit' t,
+select 'Q13 nominal tidak cocok → perlu_cek, Pro TIDAK aktif, TIDAK masuk buku besar, tercatat di percobaan + audit' t,
   not (select pro_sekali_bayar from public.profiles where email = 'c@q.id') and (pg_temp.pesanan('c2000000-0000-0000-0000-0000000000c2')).status = 'perlu_cek'
-  and (select status from public.pro_gateway_percobaan where gateway_txn_id = 'TXN-C1') = 'perlu_cek'
-  and exists (select 1 from public.pro_payments where reference = 'TXN-C1' and amount = 1000)
-  and exists (select 1 from public.pro_audit_log where aksi = 'gateway_nominal_tidak_cocok') ok;
+  and (select status = 'perlu_cek' and jumlah_diterima = 1000 and payment_id is null from public.pro_gateway_percobaan where gateway_txn_id = 'TXN-C1')
+  and not exists (select 1 from public.pro_payments where reference = 'TXN-C1')
+  and exists (select 1 from public.pro_audit_log where aksi = 'gateway_nominal_tidak_cocok' and baru ->> 'transaction_id' = 'TXN-C1') ok;
+-- REGRESI (audit ChatGPT 1): fraud "challenge" → tidak masuk buku besar; setelah Midtrans menyatakan accept → aktif sekali.
+select public.gateway_terapkan_status(:R, pg_temp.st((select j->'percobaan'->>'gateway_order_id' from mc), 'settlement', 'TXN-C1', '149000.00', '{"fraud_status":"challenge"}'));
+select 'Q13a fraud challenge: tetap perlu_cek, tanpa baris dana' t, not exists (select 1 from public.pro_payments where reference = 'TXN-C1')
+  and not (select pro_sekali_bayar from public.profiles where email = 'c@q.id') ok;
+create temp table c_ok as select public.gateway_terapkan_status(:R, pg_temp.st((select j->'percobaan'->>'gateway_order_id' from mc), 'settlement', 'TXN-C1')) h;
+select 'Q13b status sah setelah pemeriksaan → aktif, tepat 1 baris dana' t, (select h = 'aktif' from c_ok) and (select pro_sekali_bayar from public.profiles where email = 'c@q.id')
+  and (select count(*) from public.pro_payments where reference = 'TXN-C1' and amount = 149000) = 1 ok;
+-- REGRESI (audit ChatGPT 2): transaction_id milik pesanan A tidak boleh dihubungkan ke pesanan lain.
+set role authenticated; select pg_temp.sebagai('b2000000-0000-0000-0000-0000000000b2');
+select public.buat_pesanan_pro('qris');
+create temp table mb as select public.gateway_mulai_percobaan((pg_temp.pesanan('b2000000-0000-0000-0000-0000000000b2')).id) j;
+reset role;
+create temp table bent as select public.gateway_terapkan_status(:R, pg_temp.st((select j->'percobaan'->>'gateway_order_id' from mb), 'settlement', 'TXN-A1')) h;
+select 'Q13c transaction_id sudah dipakai pesanan lain → perlu_cek, tidak dihubungkan, Pro B tidak aktif, dana A utuh' t, (select h = 'perlu_cek' from bent)
+  and not (select pro_sekali_bayar from public.profiles where email = 'b@q.id')
+  and (select status = 'perlu_cek' and payment_id is null from public.pro_gateway_percobaan where id = (select (j->'percobaan'->>'id')::bigint from mb))
+  and (select count(*) = 1 and bool_and(order_id = (pg_temp.pesanan('a2000000-0000-0000-0000-0000000000a2')).id) from public.pro_payments where reference = 'TXN-A1' and kind = 'pembayaran')
+  and exists (select 1 from public.pro_audit_log where aksi = 'gateway_transaksi_bentrok') ok;
+update public.upgrade_requests set status = 'dibatalkan' where id = (pg_temp.pesanan('b2000000-0000-0000-0000-0000000000b2')).id;   -- B dipakai lagi di Q24
 select public.gateway_terapkan_status(:R, pg_temp.st((select j->'percobaan'->>'gateway_order_id' from mc), 'settlement', 'TXN-C1', '1000.00', '{"currency":"USD"}'));
 create temp table tk as select public.gateway_terapkan_status(:R, pg_temp.st('CU-TIDAKADA-1', 'settlement', 'TXN-X')) h;
-select 'Q14 status ulang tidak mengaktifkan; percobaan tak dikenal dicatat audit tanpa efek' t, (select h = 'tidak_dikenal' from tk)
-  and not (select pro_sekali_bayar from public.profiles where email = 'c@q.id')
+select 'Q14 status ulang tidak menggandakan dana; percobaan tak dikenal dicatat audit tanpa efek' t, (select h = 'tidak_dikenal' from tk)
+  and (select count(*) from public.pro_payments where reference = 'TXN-C1') = 1
   and exists (select 1 from public.pro_audit_log where aksi = 'gateway_tidak_dikenal') ok;
 
 -- dua QR untuk satu pesanan (seller D): QR-1 lewat waktu, QR-2 dibayar, lalu QR-1 ternyata juga dibayar
