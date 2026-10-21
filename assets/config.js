@@ -11,6 +11,16 @@ window.CEK_CONFIG = {
   waMessage: 'Halo, saya ingin berlangganan Cek Untung Pro.',
   waMessageJasa: 'Halo, saya ingin memakai jasa laporan profit toko dari Cek Untung.',
 
+  // Nomor WhatsApp BANTUAN (dukungan pengguna), format sama: '628…' tanpa "+" dan spasi.
+  // TERPISAH dari `whatsapp` di atas: mengisi nomor ini TIDAK membuka alur pembayaran Pro.
+  // Selama kosong, tautan "Bantuan WhatsApp" tidak tampil. Jangan isi nomor contoh/fiktif.
+  waSupport: '',
+  waSupportMessage: 'Halo Cek Untung, saya butuh bantuan menggunakan website',
+
+  // Alamat resmi situs. Bila diisi (mis. 'https://cekuntung.id'), pengunjung alamat lama *.github.io melihat
+  // pemberitahuan pindah alamat. Kosong = tidak ada pemberitahuan. Tidak ada pengalihan otomatis.
+  domainResmi: '',
+
   // Harga yang tampil di halaman depan (teks bebas). GANTI sebelum dipromosikan.
   prices: {
     pro: 'Rp49.000',

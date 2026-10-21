@@ -8,10 +8,11 @@
 <link rel="icon" href="icon-cek-untung.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <script src="assets/theme.js?v=f5317dffb6"></script>
-<link rel="stylesheet" href="assets/base.css?v=1b9d8be2b5">
+<link rel="stylesheet" href="assets/base.css?v=3457c94f09">
 <link rel="stylesheet" href="assets/site.css?v=d75da9f448">
-<script src="assets/config.js?v=dcdd9d44ce"></script>
+<script src="assets/config.js?v=595a2ab5c6"></script>
 <script src="assets/analytics.js?v=26db3465aa" defer></script>
+<script src="assets/situs.js?v=1c3126f7b4" defer></script>
 </head>
 <body>
 <div class="wrap">
@@ -21,7 +22,7 @@
   </nav>
   <main class="prose">
     <h1 style="font-size:clamp(30px,4vw,42px)">Privasi dan ketentuan</h1>
-    <p class="small faint">Berlaku sejak Oktober 2026.</p>
+    <p class="small faint">Berlaku sejak Oktober 2026. Terakhir diperbarui Oktober 2026: nomor HP/WhatsApp dan layanan pihak ketiga.</p>
 
     <h2>File laporan yang Anda unggah</h2>
     <p>File laporan (penghasilan, pesanan, retur, template modal) dibaca dan dihitung di browser Anda. Isi file, data pembeli (nama, alamat, nomor telepon), dan daftar pesanan <b>tidak dikirim</b> ke server Cek Untung atau pihak lain, baik Anda login maupun tidak.</p>
@@ -30,15 +31,31 @@
     <p>Modal produk, pengaturan biaya, profil laporan, status retur, dan kode akses disimpan di penyimpanan lokal browser (localStorage). Data ini hanya ada di browser tersebut dan bisa dihapus lewat tombol <b>Hapus data di browser ini</b> di bagian bawah dashboard.</p>
 
     <h2>Jika Anda membuat akun</h2>
-    <p>Akun dikelola dengan layanan Supabase. Yang disimpan di akun:</p>
+    <p>Akun dan database dikelola dengan layanan Supabase. Yang disimpan di akun:</p>
     <ul>
-      <li>Email, nama, nama toko, dan nomor WhatsApp yang Anda isi.</li>
+      <li>Email, nama lengkap, nama toko, dan nomor HP/WhatsApp yang Anda isi. Kata sandi tidak disimpan di profil; Supabase hanya menyimpannya dalam bentuk teracak (hash).</li>
       <li>Modal per produk, pengaturan biaya, target, serta nama dan logo toko untuk laporan.</li>
       <li>Riwayat yang Anda simpan: ringkasan angka per periode (total penjualan, potongan, margin, laba per bulan, dan nama produk teratas). Tidak termasuk data pesanan atau pembeli.</li>
       <li>Status langganan dan permintaan upgrade.</li>
     </ul>
     <p>Setiap pengguna hanya bisa membaca datanya sendiri; aturan ini ditegakkan di database. Pemilik situs dapat melihat profil akun dan status langganan untuk keperluan pembayaran, tetapi tidak membaca modal produk atau riwayat Anda.</p>
     <p>Untuk menghapus akun beserta seluruh datanya, hubungi kontak di bawah dari email yang terdaftar.</p>
+
+    <h2>Nomor HP/WhatsApp</h2>
+    <ul>
+      <li>Nomor bersifat opsional. Anda dapat mengisinya saat mendaftar atau nanti di halaman Akun, serta mengubah atau mengosongkannya kapan saja.</li>
+      <li>Nomor dipakai hanya untuk menghubungi Anda soal bantuan penggunaan dan konfirmasi pembayaran. Nomor tidak dipakai untuk iklan, tidak dijual, dan tidak dipakai sebagai kode verifikasi (OTP).</li>
+      <li>Nomor tidak diverifikasi otomatis. Pastikan nomor yang Anda isi benar.</li>
+      <li>Bila diisi saat mendaftar, nomor sempat tersimpan sebagai data pendaftaran akun, lalu dipindahkan ke profil Anda setelah Anda pertama kali masuk.</li>
+    </ul>
+
+    <h2>Layanan pihak ketiga</h2>
+    <ul>
+      <li><b>Cloudflare</b> menyajikan website ini (hosting). Seperti layanan hosting pada umumnya, Cloudflare memproses data teknis kunjungan, misalnya alamat IP, jenis browser, dan halaman yang diminta, untuk mengirim halaman dan menjaga keamanan. Selama masa pindah alamat, alamat lama di GitHub Pages juga masih aktif. Isi file laporan tidak dikirim ke layanan hosting karena diolah di browser Anda.</li>
+      <li><b>Supabase</b> mengelola login, akun, dan data yang disimpan di akun seperti dijelaskan di atas.</li>
+      <li><b>Resend</b> mengirim email akun, yaitu konfirmasi pendaftaran dan tautan membuat kata sandi baru. Resend menerima alamat email tujuan dan isi email tersebut.</li>
+      <li id="google-note" hidden><b>Google</b>: bila Anda memilih "Lanjutkan dengan Google", Google membagikan nama, alamat email, dan foto profil akun Google Anda kepada Supabase untuk membuat akun atau masuk. Cek Untung tidak meminta akses ke Gmail, Drive, atau data Google lainnya.</li>
+    </ul>
 
     <h2>Statistik kunjungan</h2>
     <p id="analytics-note">Bila diaktifkan, Cek Untung memakai GoatCounter, layanan statistik tanpa cookie yang tidak melacak individu. Yang tercatat hanya halaman yang dibuka dan nama tombol yang diklik, bukan isi file atau angka toko Anda.</p>
@@ -59,6 +76,7 @@
 
     <h2>Kontak</h2>
     <p id="contact">Pertanyaan, permintaan hapus akun, atau laporan masalah dapat disampaikan melalui kontak di halaman harga.</p>
+    <p class="small muted">Tombol bantuan WhatsApp hanya membuka percakapan di aplikasi WhatsApp Anda. Pesan awalnya hanya menyebut halaman yang sedang Anda buka, tanpa email, nomor, atau angka toko Anda.</p>
   </main>
   <footer class="site"><span>© 2026 Cek Untung</span><nav><a href="./">Beranda</a><a href="dashboard.html">Dashboard</a><a href="akun.html">Akun</a></nav></footer>
 </div>
@@ -66,7 +84,11 @@
 (() => {
   const C = window.CEK_CONFIG || {};
   const bits = [];
-  if (C.whatsapp) bits.push(`WhatsApp <a href="https://wa.me/${C.whatsapp}">+${C.whatsapp}</a>`);
+  // Kontak bantuan diutamakan; nomor pembayaran dipakai bila nomor bantuan belum diatur.
+  const wa = /^62\d{8,13}$/.test(C.waSupport || '') ? C.waSupport : C.whatsapp;
+  if (wa) bits.push(`WhatsApp <a href="https://wa.me/${wa}">+${wa}</a>`);
+  // Paragraf Google hanya tampil setelah login Google diaktifkan di config.js.
+  document.getElementById('google-note').hidden = !C.googleLogin;
   if (C.email) bits.push(`email <a href="mailto:${C.email}">${C.email}</a>`);
   if (bits.length) document.getElementById('contact').innerHTML = `Hubungi kami melalui ${bits.join(' atau ')}.`;
   if (!C.goatcounter) document.getElementById('analytics-note').textContent = 'Saat ini Cek Untung tidak memakai statistik kunjungan. Bila nanti diaktifkan, yang dipakai adalah GoatCounter: tanpa cookie, hanya mencatat halaman yang dibuka dan nama tombol yang diklik, bukan isi file atau angka toko Anda.';

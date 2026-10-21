@@ -695,5 +695,60 @@ test('V1A tampilan: tanpa laba/modal per sumber, keterangan wajib, aturan sembun
   truthy(/<th scope="col">Baris pesanan<\/th>/.test(fn), 'label jujur: baris pesanan');
   truthy(/Tidak perlu mengunggah laporan Tokopedia terpisah untuk pesanan yang sama\./.test(a) && !/Tokopedia (sudah )?didukung/i.test(a), 'status unggah; tanpa klaim Tokopedia mandiri');
 });
+/* ===== Auth V3, bantuan WhatsApp, pindah alamat, service worker Cloudflare ===== */
+test('AUTH-V3 form: placeholder, kolom daftar lengkap, konfirmasi sandi, masuk tanpa aturan sandi baru', () => {
+  const ak = src('akun.js'), html = fs.readFileSync(path.join(__dirname, '..', 'akun.html'), 'utf8');
+  for (const ph of ['Masukkan email Anda', 'Masukkan kata sandi', 'Masukkan nama lengkap', 'contoh@email.com', 'Contoh: 081234567890', 'Buat kata sandi', 'Ulangi kata sandi']) truthy(ak.includes(ph), `placeholder ${ph}`);
+  truthy(/<label for="nm">Nama lengkap<\/label>/.test(ak) && /<label for="hp">Nomor HP\/WhatsApp <span class="opt">\(opsional\)<\/span><\/label>/.test(ak) && /'Konfirmasi kata sandi'/.test(ak), 'label daftar');
+  truthy(/id="nm" [^>]*required/.test(ak) && !/id="hp" [^>]*required/.test(ak), 'nama wajib, nomor HP opsional');
+  truthy(/case 'hp': return A\.normalisasiHp\(v\)\.ok \? '' : A\.PESAN_HP;/.test(ak), 'nomor kosong boleh; divalidasi bila diisi');
+  truthy(/confirmField\('pw2', 'pw'\)/.test(ak) && /confirmField\('pw1b', 'pw1'\)/.test(ak), 'konfirmasi di daftar & ganti sandi');
+  truthy(/pwField\('pw', 'Kata sandi', 'current-password', 'Masukkan kata sandi'\)/.test(ak), 'form masuk: tanpa data-baru (sandi lama tidak dicek aturan baru)');
+  truthy(/return v \? '' : 'Kata sandi wajib diisi\.';/.test(ak), 'kolom sandi masuk hanya wajib diisi');
+  truthy(/<script src="assets\/aturan-akun\.js\?v=\w+"><\/script>\s*<script src="assets\/situs\.js\?v=\w+" defer><\/script>\s*<script src="assets\/akun\.js/.test(html), 'aturan dimuat sebelum akun.js');
+});
+test('AUTH-V3 privasi data: sandi tidak masuk draft/profil/log; nomor hanya ke metadata lalu profiles.whatsapp', () => {
+  const ak = src('akun.js'), cl = src('cloud.js');
+  truthy(/const DRAFT_IDS = \['em', 'nm', 'hp'\];/.test(ak), 'draft tanpa kata sandi');
+  truthy(!/console\.(log|info|debug|warn)/.test(ak + cl + src('aturan-akun.js') + src('situs.js')), 'tanpa log');
+  truthy(/const data = \{ full_name: fullName \|\| '' \};\s*if \(whatsapp\) data\.whatsapp = whatsapp;/.test(cl), 'metadata daftar: nama + nomor saja');
+  truthy(/if \(p && !p\.whatsapp\) await cloud\.db\.updateProfile\(\{ whatsapp: n\.nilai \}\);\s*\}\s*await cloud\.auth\.updateMetadata\(\{ whatsapp: null \}\);/.test(ak), 'salin hanya bila profil kosong, lalu hapus metadata');
+  truthy(/if \(wa\.value\.trim\(\) !== wa\.dataset\.awal\) patch\.whatsapp/.test(ak), 'nomor lama tak berformat tidak diubah/diblokir bila tidak disunting');
+  truthy(/id="wa-ajak"/.test(ak), 'ajakan melengkapi nomor (pengguna Google/lama)');
+});
+test('waSupport: kunci config terpisah & kosong; pembayaran tetap bergantung pada whatsapp; tautan tersembunyi bawaan', () => {
+  const cfg = src('config.js'), appJs = src('app.js');
+  truthy(/waSupport: '',/.test(cfg) && /domainResmi: '',/.test(cfg), 'kosong (tanpa nomor fiktif)');
+  truthy(/const PAY_READY = !!C\.whatsapp;/.test(appJs) && !/waSupport/.test(appJs), 'alur pembayaran tidak membaca waSupport');
+  const pages = { 'index.html': 'Beranda', 'dashboard.html': 'Dashboard', 'akun.html': 'Akun' };
+  for (const [f, nama] of Object.entries(pages)) {
+    const h = fs.readFileSync(path.join(__dirname, '..', f), 'utf8');
+    const links = [...h.matchAll(/<a [^>]*data-wa-support="([^"]+)"[^>]*>/g)];
+    truthy(links.length >= 1 && links.every((m) => m[1] === nama && / hidden[ >]/.test(m[0]) && !/href=/.test(m[0])), `${f}: tautan bantuan tersembunyi tanpa href`);
+    truthy(/<script src="assets\/situs\.js\?v=\w+" defer><\/script>/.test(h), `${f}: memuat situs.js`);
+  }
+});
+test('Privasi: nomor HP & tujuannya, Cloudflare, Supabase, Resend; paragraf Google hanya bila aktif', () => {
+  const pv = fs.readFileSync(path.join(__dirname, '..', 'privasi.html'), 'utf8');
+  truthy(/<h2>Nomor HP\/WhatsApp<\/h2>/.test(pv) && /tidak dipakai untuk iklan, tidak dijual, dan tidak dipakai sebagai kode verifikasi \(OTP\)/.test(pv) && /tidak diverifikasi otomatis/.test(pv), 'nomor HP');
+  for (const s of ['<b>Cloudflare</b>', '<b>Supabase</b>', '<b>Resend</b>']) truthy(pv.includes(s), s);
+  truthy(/<li id="google-note" hidden>/.test(pv) && /getElementById\('google-note'\)\.hidden = !C\.googleLogin;/.test(pv), 'Google hanya bila googleLogin aktif');
+});
+test('Service worker Cloudflare: kunci cache /x, /x.html, /x?q sama; respons redirect dibersihkan; fallback hanya navigasi', () => {
+  const vm = require('vm'), code = fs.readFileSync(path.join(__dirname, '..', 'sw.js'), 'utf8');
+  const make = (origin, scope) => { const ctx = { self: { location: new URL(`${origin}${scope}sw.js`), registration: { scope: `${origin}${scope}` }, addEventListener() {} }, URL, Response: class {} }; ctx.location = ctx.self.location; vm.createContext(ctx); vm.runInContext(code, ctx); return ctx; };
+  const cf = make('https://cekuntung.id', '/');
+  for (const u of ['/dashboard', '/dashboard.html', '/dashboard?demo', '/dashboard.html#x']) eq(cf.kunci(`https://cekuntung.id${u}`), 'https://cekuntung.id/dashboard.html', u);
+  for (const u of ['/', '/index', '/index.html', '/?x=1']) eq(cf.kunci(`https://cekuntung.id${u}`), 'https://cekuntung.id/', u);
+  eq(cf.kunci('https://cekuntung.id/assets/app.css?v=1'), 'https://cekuntung.id/assets/app.css');
+  eq(cf.kunci('dashboard.html'), 'https://cekuntung.id/dashboard.html', 'nama file CORE');
+  const gh = make('https://x.github.io', '/cek-profit/');
+  eq(gh.kunci('https://x.github.io/cek-profit/akun.html?mode=daftar'), 'https://x.github.io/cek-profit/akun.html');
+  eq(gh.kunci('https://x.github.io/cek-profit/'), 'https://x.github.io/cek-profit/');
+  eq(gh.kunci('./'), 'https://x.github.io/cek-profit/', 'CORE ./');
+  truthy(/if \(!res\.redirected\) return res;/.test(code) && /nav \? caches\.match\(kunci\('dashboard\.html'\)\) : Response\.error\(\)/.test(code), 'redirect dibersihkan; fallback dashboard hanya untuk navigasi');
+  truthy(/'assets\/aturan-akun\.js', 'assets\/situs\.js'/.test(code), 'file baru ikut cache offline');
+});
+
 console.log(failed ? `\n${failed} uji GAGAL` : '\nSemua uji lulus');
 process.exitCode = failed ? 1 : 0;

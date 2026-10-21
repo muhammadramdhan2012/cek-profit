@@ -977,6 +977,8 @@ body.app { --dur-reveal: 340ms; --reveal-y: 10px; background: var(--surface-0); 
 .side .count.attn { background: rgb(233 182 80 / 20%); color: var(--side-warn); }
 .nav button[aria-current="page"] .count { background: rgb(255 255 255 / 14%); color: #fff; }
 .side-theme { color: var(--side-muted); }
+.side-help { display: block; padding: 4px 6px; font-size: 13px; color: var(--side-muted); text-decoration: underline; text-underline-offset: 3px; }
+.side-help:hover { color: #fff; }
 .side .theme-seg { background: rgb(255 255 255 / 6%); }
 .side .theme-seg button { color: var(--side-muted); }
 .side .theme-seg button:hover { color: #fff; }

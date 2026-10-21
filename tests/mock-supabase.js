@@ -5,7 +5,13 @@
 const http = require('http');
 const crypto = require('crypto');
 
-function createMock({ confirmEmail = false, tokenTtl = 3600 } = {}) {
+// strongPasswords: meniru pengaturan Supabase yang direkomendasikan (min. 8, huruf kecil, kapital, angka) untuk daftar
+// dan ganti sandi. Masuk dengan sandi lama yang lemah TETAP berhasil, dengan penanda weak_password (meniru Supabase
+// Auth; perilaku server sungguhan tetap harus diuji di Supabase).
+function createMock({ confirmEmail = false, tokenTtl = 3600, strongPasswords = false } = {}) {
+  const weak = (pw) => !pw || pw.length < 8 || (strongPasswords && !(/[a-z]/.test(pw) && /[A-Z]/.test(pw) && /[0-9]/.test(pw)));
+  const weakMsg = (pw) => (!pw || pw.length < 8 ? 'Password should be at least 8 characters.' : 'Password should contain at least one character of each: abcdefghijklmnopqrstuvwxyz, ABCDEFGHIJKLMNOPQRSTUVWXYZ, 0123456789.');
+  const signupBodies = [];
   const users = new Map();      // id → {id,email,password,meta}
   const tokens = new Map();     // access → {uid, exp}
   const codes = new Map();      // kode PKCE → {id, challenge, method}
@@ -46,7 +52,8 @@ function createMock({ confirmEmail = false, tokenTtl = 3600 } = {}) {
     /* ---- auth ---- */
     if (p === '/auth/v1/signup') {
       if ([...users.values()].some((u) => u.email === body.email)) return send(422, { msg: 'User already registered' });
-      if (!body.password || body.password.length < 8) return send(422, { msg: 'Password should be at least 8 characters.' });
+      signupBodies.push(body);
+      if (weak(body.password)) return send(422, { code: 'weak_password', msg: weakMsg(body.password) });
       const id = addUser(body.email, body.password, body.data || {});
       return confirmEmail ? send(200, { id, email: body.email }) : send(200, issue(id));
     }
@@ -54,7 +61,9 @@ function createMock({ confirmEmail = false, tokenTtl = 3600 } = {}) {
       const u = [...users.values()].find((x) => x.email === body.email && x.password === body.password);
       if (!u) return send(400, { error: 'invalid_grant', error_description: 'Invalid login credentials' });
       if (!u.confirmed) return send(400, { error_description: 'Email not confirmed' });
-      return send(200, issue(u.id));
+      const s = issue(u.id);
+      if (weak(u.password)) s.weak_password = { reasons: ['characters'] };
+      return send(200, s);
     }
     if (p === '/auth/v1/token' && q.get('grant_type') === 'refresh_token') {
       const id = refresh.get(body.refresh_token); refresh.delete(body.refresh_token);
@@ -62,7 +71,14 @@ function createMock({ confirmEmail = false, tokenTtl = 3600 } = {}) {
     }
     if (p === '/auth/v1/user') {
       if (!uid) return send(401, { message: 'invalid JWT' });
-      if (req.method === 'PUT') users.get(uid).password = body.password;
+      if (req.method === 'PUT' && body.password !== undefined) {
+        if (weak(body.password)) return send(422, { code: 'weak_password', msg: weakMsg(body.password) });
+        users.get(uid).password = body.password;
+      }
+      if (req.method === 'PUT' && body.data) {
+        const meta = users.get(uid).meta;
+        for (const [k, v] of Object.entries(body.data)) { if (v === null) delete meta[k]; else meta[k] = v; }
+      }
       const u = users.get(uid); return send(200, { id: uid, email: u.email, user_metadata: u.meta });
     }
     if (p === '/auth/v1/logout') { tokens.delete(bearer); return send(204); }
@@ -133,7 +149,7 @@ function createMock({ confirmEmail = false, tokenTtl = 3600 } = {}) {
     }
     return send(404, { message: 'not found' });
   });
-  return { server, users, profiles, userData, reports, requests, addUser, makeAdmin: (email) => { const u = [...users.values()].find((x) => x.email === email); profiles.get(u.id).is_admin = true; }, confirmAll: () => users.forEach((u) => { u.confirmed = true; }), today };
+  return { server, users, signupBodies, profiles, userData, reports, requests, addUser, makeAdmin: (email) => { const u = [...users.values()].find((x) => x.email === email); profiles.get(u.id).is_admin = true; }, confirmAll: () => users.forEach((u) => { u.confirmed = true; }), today };
 }
 module.exports = createMock;
 if (require.main === module) {

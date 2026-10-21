@@ -150,6 +150,85 @@ const memStore = () => { const m = new Map(); return { getItem: (k) => (m.has(k)
     try { await C9.auth.signIn({ email: 'b@toko.id', password: 'sandiku123' }); throw new Error('harus gagal'); } catch (e) { truthy(/belum dikonfirmasi/.test(e.message), e.message); }
     m2.server.close();
   });
+  /* ---------- Auth V3: aturan sandi baru, nomor HP, metadata — server TIRUAN; Supabase sungguhan belum teruji ---------- */
+  const R = require('../assets/aturan-akun.js');
+  await t('V3 sandi baru: min 8, kapital, kecil, angka; simbol boleh; maks 72', async () => {
+    for (const ok of ['Sandiku123', 'Abcdefg1', 'Toko#Ani_2026!', 'aB3' + 'x'.repeat(69)]) truthy(R.cekSandi(ok).ok && R.pesanSandi(ok) === '', ok);
+    const kasus = { sandiku123: 'huruf kapital', SANDIKU123: 'huruf kecil', Sandikuuu: 'angka', Ab1: 'minimal 8 karakter', '': 'wajib' };
+    for (const [pw, kurang] of Object.entries(kasus)) truthy(!R.cekSandi(pw).ok && R.pesanSandi(pw).includes(kurang), `${pw}: ${R.pesanSandi(pw)}`);
+    truthy(!R.cekSandi('aB3' + 'x'.repeat(70)).ok && /maksimal 72/.test(R.pesanSandi('aB3' + 'x'.repeat(70))), 'lebih dari 72 ditolak');
+    const h = R.cekSandi('abcdefgh'); truthy(h.panjang && h.kecil && !h.kapital && !h.angka, 'status per syarat untuk daftar centang');
+  });
+  await t('V3 nomor HP: dinormalkan ke +62; kosong boleh; format salah ditolak', async () => {
+    const ok = { '081234567890': '+6281234567890', '0812-3456-7890': '+6281234567890', '0812 3456 7890': '+6281234567890', '6281234567890': '+6281234567890',
+      '+62 812 3456 7890': '+6281234567890', '+62 0812 3456 7890': '+6281234567890', '81234567890': '+6281234567890', '(0812) 3456.7890': '+6281234567890', '0812345678': '+62812345678' };
+    for (const [inp, out] of Object.entries(ok)) { const n = R.normalisasiHp(inp); truthy(n.ok && n.nilai === out, `${inp} → ${n.nilai}`); }
+    truthy(R.normalisasiHp('').ok && R.normalisasiHp('   ').nilai === '', 'kosong boleh (pengguna Google melengkapi nanti)');
+    for (const bad of ['0212345678', '+6581234567', '08123', '0812345678901234', 'nomor saya 0812', '08-12<script>', '++6281234567890', '62 21 1234567'])
+      truthy(!R.normalisasiHp(bad).ok, `ditolak: ${bad}`);
+  });
+  await t('V3 daftar: nomor ikut metadata; sandi tidak pernah masuk metadata/profil; sandi lemah ditolak server dengan pesan Indonesia', async () => {
+    const m3 = createMock({ confirmEmail: true, strongPasswords: true }); await new Promise((r) => m3.server.listen(0, r));
+    const u3 = `http://127.0.0.1:${m3.server.address().port}`;
+    const D = fresh().init({ url: u3, key: 'anon', store: memStore() });
+    try { await D.auth.signUp({ email: 'c@toko.id', password: 'sandiku123' }); throw new Error('harus gagal'); }
+    catch (e) { truthy(/huruf kapital, huruf kecil, dan angka/.test(e.message), e.message); }
+    const r = await D.auth.signUp({ email: 'c@toko.id', password: 'Sandiku123', fullName: 'Citra', whatsapp: '+6281234567890' });
+    truthy(!r.session && r.confirm, 'perlu konfirmasi email');
+    const meta = [...m3.users.values()].find((x) => x.email === 'c@toko.id').meta;
+    truthy(meta.whatsapp === '+6281234567890' && meta.full_name === 'Citra', 'metadata pendaftaran');
+    truthy(!JSON.stringify(m3.signupBodies.map((b) => b.data)).includes('Sandiku123') && !JSON.stringify([...m3.profiles.values()]).includes('Sandiku123'), 'sandi tidak di metadata/profil');
+    const r2 = await D.auth.signUp({ email: 'd@toko.id', password: 'Sandiku123', fullName: 'Dodi' });
+    truthy(r2.confirm && !('whatsapp' in [...m3.users.values()].find((x) => x.email === 'd@toko.id').meta), 'tanpa nomor → tidak ada kunci whatsapp');
+    // Salin ke profil lalu hapus dari metadata (langkah yang dijalankan akun.js setelah masuk pertama).
+    m3.confirmAll(); await D.auth.signIn({ email: 'c@toko.id', password: 'Sandiku123' });
+    truthy(D.auth.user().user_metadata.whatsapp === '+6281234567890', 'nomor terbaca dari sesi');
+    await D.db.updateProfile({ whatsapp: D.auth.user().user_metadata.whatsapp });
+    await D.auth.updateMetadata({ whatsapp: null });
+    truthy((await D.db.profile()).whatsapp === '+6281234567890', 'tersimpan di profiles.whatsapp');
+    truthy(!('whatsapp' in D.auth.user().user_metadata) && !('whatsapp' in meta), 'dihapus dari metadata & sesi diperbarui');
+    m3.server.close();
+  });
+  await t('V3 pengguna lama dengan sandi lemah tetap bisa masuk; ganti sandi memakai aturan baru', async () => {
+    const m4 = createMock({ strongPasswords: true }); await new Promise((r) => m4.server.listen(0, r));
+    m4.addUser('lama@toko.id', 'sandilama1', { full_name: 'Lama' });   // dibuat sebelum aturan baru
+    const L = fresh().init({ url: `http://127.0.0.1:${m4.server.address().port}`, key: 'anon', store: memStore() });
+    await L.auth.signIn({ email: 'lama@toko.id', password: 'sandilama1' });
+    truthy(L.auth.user() && L.auth.user().email === 'lama@toko.id', 'masuk tidak diblokir');
+    try { await L.auth.updatePassword('sandibaru1'); throw new Error('harus gagal'); } catch (e) { truthy(/belum memenuhi syarat/.test(e.message), e.message); }
+    await L.auth.updatePassword('SandiBaru1');
+    await L.auth.signOut(); await L.auth.signIn({ email: 'lama@toko.id', password: 'SandiBaru1' }); truthy(L.auth.user(), 'sandi baru berlaku');
+    m4.server.close();
+  });
+  await t('V3 pesan server lain diterjemahkan (sandi bocor, sama dengan lama, terlalu panjang)', async () => {
+    const X = fresh();
+    const msg = (m) => new X.CloudError(422, { msg: m }).message;
+    truthy(/pernah bocor/.test(msg('Password is known to be weak and easy to guess, please choose a different one. (pwned)')), 'bocor');
+    truthy(/berbeda dari kata sandi lama/.test(msg('New password should be different from the old password.')), 'sama');
+    truthy(/maksimal 72/.test(msg('Password cannot be longer than 72 characters')), 'panjang');
+    truthy(/memenuhi syarat/.test(msg('Password should contain at least one character of each: abc')), 'syarat');
+  });
+  /* ---------- Bantuan WhatsApp & pindah alamat (assets/situs.js) ---------- */
+  const S = require('../assets/situs.js');
+  await t('waSupport: tersembunyi bila kosong/salah; terpisah dari nomor pembayaran; pesan hanya nama halaman', async () => {
+    truthy(S.waSupportUrl({}, 'Dashboard') === '' && S.waSupportUrl({ waSupport: '' }, 'Akun') === '', 'kosong → tidak ada tautan');
+    truthy(S.waSupportUrl({ whatsapp: '6281234567890' }, 'Akun') === '', 'nomor pembayaran tidak dipakai sebagai nomor bantuan');
+    for (const bad of ['081234567890', '+6281234567890', '62 812', 'abc', '62812345678901234']) truthy(S.waSupportUrl({ waSupport: bad }, 'Akun') === '', `format salah: ${bad}`);
+    const u = new URL(S.waSupportUrl({ waSupport: '6281234567890' }, 'Dashboard'));
+    truthy(u.origin === 'https://wa.me' && u.pathname === '/6281234567890', u.href);
+    truthy(u.searchParams.get('text') === 'Halo Cek Untung, saya butuh bantuan menggunakan website (halaman: Dashboard).', u.searchParams.get('text'));
+    truthy(/halaman: Beranda/.test(decodeURIComponent(S.waSupportUrl({ waSupport: '6281234567890' }, '<b>x</b>'))), 'nama halaman di luar daftar → Beranda');
+  });
+  await t('pindah alamat: hanya di *.github.io bila domainResmi diisi; tanpa query/hash', async () => {
+    const gh = (path) => ({ hostname: 'muhammadramdhan2012.github.io', pathname: path });
+    truthy(S.alamatPindah({}, gh('/cek-profit/')) === '', 'domainResmi kosong → tidak tampil');
+    const cfg = { domainResmi: 'https://cekuntung.id' };
+    truthy(S.alamatPindah(cfg, gh('/cek-profit/dashboard.html')) === 'https://cekuntung.id/dashboard.html');
+    truthy(S.alamatPindah(cfg, gh('/cek-profit/')) === 'https://cekuntung.id/' && S.alamatPindah(cfg, gh('/cek-profit')) === 'https://cekuntung.id/');
+    truthy(S.alamatPindah(cfg, { hostname: 'cekuntung.id', pathname: '/dashboard' }) === '', 'di domain resmi tidak tampil');
+    truthy(S.alamatPindah(cfg, { hostname: 'cekuntung.pages.dev', pathname: '/' }) === '' && S.alamatPindah(cfg, { hostname: 'localhost', pathname: '/' }) === '', 'staging/lokal tidak tampil');
+    truthy(S.alamatPindah({ domainResmi: 'http://cekuntung.id' }, gh('/cek-profit/')) === '' && S.alamatPindah({ domainResmi: 'bukan url' }, gh('/cek-profit/')) === '', 'hanya https');
+  });
   mock.server.close();
   console.log(failed ? `${failed} uji GAGAL` : 'Semua uji lulus');
   process.exitCode = failed ? 1 : 0;

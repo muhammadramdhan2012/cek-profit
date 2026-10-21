@@ -31,7 +31,12 @@ const CekCloud = (() => {
     if (m.includes('email not confirmed')) return 'Email belum dikonfirmasi. Buka tautan konfirmasi di kotak masuk email Anda.';
     // Tidak menyebut apakah email terdaftar (mencegah enumerasi akun).
     if (m.includes('already registered') || m.includes('already been registered') || m.includes('already exists')) return 'Pendaftaran dengan email ini tidak dapat diproses. Jika Anda sudah punya akun, silakan masuk atau pakai "Lupa kata sandi".';
-    if (m.includes('password should be at least') || m.includes('weak')) return 'Kata sandi minimal 8 karakter dan sulit ditebak.';
+    if (m.includes('pwned') || m.includes('leaked') || m.includes('compromised')) return 'Kata sandi ini pernah bocor di situs lain. Silakan buat kata sandi lain.';
+    if (m.includes('longer than 72')) return 'Kata sandi maksimal 72 karakter.';
+    if (m.includes('should be different')) return 'Kata sandi baru harus berbeda dari kata sandi lama.';
+    // Aturan sandi baru (sama dengan pengaturan Supabase yang direkomendasikan). Hanya untuk daftar/ganti sandi;
+    // masuk dengan sandi lama tidak memakai pesan ini.
+    if (m.includes('password should') || m.includes('weak')) return 'Kata sandi belum memenuhi syarat: minimal 8 karakter, ada huruf kapital, huruf kecil, dan angka.';
     if (m.includes('rate limit') || status === 429) return 'Terlalu banyak percobaan. Coba lagi beberapa menit lagi.';
     if (m.includes('invalid email') || m.includes('unable to validate email')) return 'Format email tidak valid.';
     if (m.includes('jwt expired')) return 'Sesi berakhir. Silakan masuk lagi.';
@@ -95,9 +100,16 @@ const CekCloud = (() => {
 
   /* ---------- auth ---------- */
   const auth = {
-    async signUp({ email, password, fullName, redirectTo }) {
+    /**
+     * Daftar. `whatsapp` (sudah dinormalkan +62…) ikut sebagai metadata pendaftaran karena dengan konfirmasi email belum
+     * ada sesi untuk menulis ke profiles; akun.js menyalinnya ke profiles.whatsapp setelah masuk pertama, lalu
+     * menghapusnya dari metadata. Kata sandi tidak pernah masuk metadata/profil.
+     */
+    async signUp({ email, password, fullName, whatsapp, redirectTo }) {
       const q = redirectTo ? `?redirect_to=${encodeURIComponent(redirectTo)}` : '';
-      const res = await http(`/auth/v1/signup${q}`, { method: 'POST', auth: false, body: { email, password, data: { full_name: fullName || '' } } });
+      const data = { full_name: fullName || '' };
+      if (whatsapp) data.whatsapp = whatsapp;
+      const res = await http(`/auth/v1/signup${q}`, { method: 'POST', auth: false, body: { email, password, data } });
       if (res && res.access_token) { setSession(res); return { session: true }; }
       return { session: false, confirm: true };      // perlu konfirmasi email
     },
@@ -146,6 +158,12 @@ const CekCloud = (() => {
       await http(`/auth/v1/recover?redirect_to=${encodeURIComponent(redirectTo)}`, { method: 'POST', auth: false, body: { email } });
     },
     async updatePassword(password) { await http('/auth/v1/user', { method: 'PUT', body: { password } }); },
+    /** Mengubah metadata pengguna (mis. menghapus nomor sementara dari pendaftaran). Sesi diperbarui dengan data terbaru. */
+    async updateMetadata(data) {
+      const u = await http('/auth/v1/user', { method: 'PUT', body: { data } });
+      if (session && u && u.id) { session.user = u; write(session); emit(); }
+      return u;
+    },
     async signOut() {
       try { if (session) await http('/auth/v1/logout', { method: 'POST' }); } catch (e) { /* tetap keluar lokal */ }
       setSession(null);

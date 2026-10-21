@@ -349,7 +349,7 @@ Sumber awal: audit menyeluruh 14 Okt 2026 (read-only), ditambah analisis penghit
 | L2 | Terbuka | `assets/engine.js:273`, `assets/engine.js:298` | `returnStatus` dibaca tetapi tidak dipakai (ditemukan pada data uji pemilik: status retur TikTok tersedia) | Isi status barang otomatis dari `returnStatus` | S |
 | L3 | Terbuka | `assets/engine.js:149` | Parser penyesuaian Shopee berhenti di baris kosong pertama | Ganti `break` dengan `continue` | S |
 | L4 | Terbuka | `assets/engine.js:329`, `assets/engine.js:339` | Duplikat Shopee memakai versi pertama; dua baris export identik yang sah dianggap satu | Simpan versi dengan tanggal dilepas terbaru; tambahkan nomor baris ke kunci duplikat | S |
-| L5 | Terbuka | `sw.js:23` | Saat offline, aset yang gagal dimuat dibalas `dashboard.html`; tidak ada batas waktu jaringan | Fallback HTML hanya untuk navigasi; batas waktu jaringan sekitar 4 detik | S |
+| L5 | Terbuka (sebagian ditangani 21 Okt 2026, branch `feature/auth-v3-staging`, belum dirilis) | `sw.js` (`fetch`) | Saat offline, aset yang gagal dimuat dibalas `dashboard.html`; tidak ada batas waktu jaringan. **Sudah:** fallback `dashboard.html` kini hanya untuk navigasi halaman (`tests/tampilan.test.js` "Service worker Cloudflare"). **Belum:** batas waktu jaringan | Batas waktu jaringan sekitar 4 detik | S |
 | L6 | Terbuka | `supabase/schema.sql:93`, `supabase/schema.sql:99-100` | `upgrade_requests.note` tanpa batas panjang dan tanpa batas jumlah permintaan | `check (length(note) < 500)` dan batas permintaan per hari | S |
 | L7 | Terbuka | `assets/engine.js:573` | Tarif efektif: biaya logistik TikTok ikut masuk bagian persen | Pisahkan biaya logistik sebagai biaya tetap | S |
 | L8 | Terbuka | `assets/engine.js:472` vs `assets/engine.js:492` | Penjualan per produk dihitung sebelum voucher, total sesudah voucher; jumlah per produk ≠ total | Samakan definisinya, atau beri label kolomnya | S |
@@ -373,22 +373,31 @@ Sumber awal: audit menyeluruh 14 Okt 2026 (read-only), ditambah analisis penghit
 
 | P11 | Medium | `assets/engine.js` (`mergeIncome`) | **Sebagian ditangani (20 Okt 2026, lokal):** identitas baris berdasarkan isi; duplikat identik dihitung sekali; konflik versi ditahan dan ditandai "Perlu rekonsiliasi"; laporan tidak saling lengkap ditandai "Perlu dicek" (`docs/KAMUS_ANGKA.md` B.1d) | Audit 20 Okt 2026 (7 file): 3.278 ID di beberapa file, semuanya duplikat identik; tidak ada versi berbeda | Validasi aturan konflik dengan unduhan ulang asli setelah refund/perubahan; tinjau aturan cakupan | Aturan konflik baru diuji sintetis |
 | P12 | Low | Money Trace A1 | Rekonsiliasi per komponen hanya terhadap ringkasan di file yang sama. Pencairan, saldo, dan dana yang masih tertahan belum dicocokkan; refund setelah dana dilepas (P10) tidak terlihat di Jejak uang | — | Fase A2/A3 (saldo dan riwayat penarikan) setelah disetujui | Belum diverifikasi |
+| P14 | **High bila dirilis tanpa perbaikan** | `sw.js` | Di Cloudflare Pages, `/x.html` dialihkan (308) ke `/x`. Service worker lama menyimpan respons hasil pengalihan; browser menolaknya untuk navigasi, sehingga **mode offline gagal total** (terbukti pada server tiruan Cloudflare, 21 Okt 2026: 21/21 alamat gagal). GitHub Pages tidak terdampak. **Diperbaiki di branch `feature/auth-v3-staging` (belum dirilis):** kunci cache dinormalkan ke nama file, respons hasil pengalihan disalin ulang | Tiruan Cloudflare dan subfolder GitHub Pages: 21/21 alamat terbuka offline, dashboard contoh tampil | Uji di Cloudflare Pages preview dengan HTTPS sungguhan sebelum dirilis | Belum diuji di Cloudflare sungguhan |
+| P15 | Medium | localStorage per alamat situs | Pindah dari `*.github.io` ke `cekuntung.id`: data di browser tidak ikut pindah. Yang tersimpan di akun (modal, pengaturan, profil laporan) termuat lagi setelah masuk; **tanda retur (`cekprofit.cases`), kode akses, dan data pengguna tanpa akun tidak pindah**. Tanda retur memengaruhi kerugian retur di laba | — | Pemberitahuan pindah alamat sudah disiapkan (nonaktif, `CEK_CONFIG.domainResmi`). Alat ekspor/impor data lokal belum ada; perlu keputusan | Belum diverifikasi |
+| P16 | Medium | Supabase Auth (konfigurasi dashboard) | Aturan sandi baru (min. 8, huruf kapital, huruf kecil, angka) ditegakkan di browser sejak Auth V3 (`assets/aturan-akun.js`). Selama pengaturan Supabase belum disamakan, aturan bisa dilewati lewat API. Perilaku Supabase untuk pengguna lama bersandi lemah saat masuk belum diuji (server tiruan: tetap bisa masuk) | — | Atur *Password requirements* di Supabase (`supabase/PANDUAN.md` §3b), lalu uji daftar, ganti sandi, dan masuk dengan akun lama | Belum diuji di Supabase sungguhan |
+| P17 | Low | `supabase/schema.sql` (`profiles.whatsapp`) | Kolom tanpa batas panjang/format (uji lokal: 100.000 karakter diterima). Website kini menormalkan nomor ke `+62…` (opsional), tetapi API tetap menerima isian bebas. Hanya pemilik akun dan admin yang dapat membaca | Ditemukan pada uji RLS lokal (PostgreSQL 16) | Batasi panjang (mis. ≤ 20 karakter) dan format (`''` atau `+62…`) dengan `check` setelah data lama dicek; migrasi butuh izin | S |
 | P13 | Medium | `assets/engine.js` (`parsePeriode`, `mergeIncome`) | **Sebagian ditangani (20 Okt 2026, lokal):** periode resmi sheet Laporan dibaca dan dipakai untuk status (kelengkapan, identitas belum pasti, anomali periode); "terekonsiliasi" tidak lagi muncul untuk kasus contoh P13. **Masih terbuka:** angka kasus itu tetap menjumlahkan kedua baris (tanpa bukti identitas), dan aturan P11 menahan penyesuaian bernomor sama bila cakupan teramati bersinggungan — perlakuan finansial penyesuaian bernomor sama perlu keputusan pemilik. Sejak 20 Okt 2026 total yang memuat transaksi ambigu diberi peringatan "Total perlu diverifikasi" di dashboard, PDF, dan Excel | File asli: 4 periode resmi valid, 0 transaksi di luar periode, tidak ada konflik | Putuskan identitas penyesuaian (lihat KAMUS B.1e) | Status terbukti sintetis; angka file asli identik |
 
 ## Belum dapat diverifikasi
 
 1. Pengaturan Supabase Auth: konfirmasi email, kebijakan sandi, perlindungan sandi bocor, rate limit, Site URL dan
-   Redirect URL.
+   Redirect URL (termasuk `https://cekuntung.id/akun` dan `/akun.html`, lihat `supabase/PANDUAN.md` §3), serta SMTP
+   Resend (SPF/DKIM).
 2. Apakah skema di produksi sama persis dengan `supabase/schema.sql`.
 3. Kesetaraan definisi penjualan Shopee dan TikTok (`docs/KAMUS_ANGKA.md` C.1, C.2).
 4. Parser export pesanan Shopee/TikTok (Beta). Export Shopee baru dicocokkan dengan satu file asli dari data uji
    pemilik (19 Okt 2026); export TikTok asli belum diuji. Label Beta dipertahankan karena format export bisa berubah.
 5. Hasil PDF lewat `window.print()` di Safari iOS dan Android.
-6. Mode offline nyata di HTTPS (service worker hanya aktif di HTTPS).
+6. Mode offline nyata di HTTPS (service worker hanya aktif di HTTPS), terutama di Cloudflare Pages (P14).
 7. Ketepatan tarif umum di `assets/tarif.js` (sumber sekunder, dicek 14 Okt 2026).
 
 ## Riwayat perubahan dokumen
 
+- 21 Okt 2026: Auth V3 dan persiapan pindah domain (branch lokal `feature/auth-v3-staging`, belum dirilis): P14
+  (offline gagal di Cloudflare, diperbaiki di branch), P15 (data browser tidak ikut pindah alamat), P16 (aturan sandi
+  baru perlu disamakan di Supabase), P17 (kolom `whatsapp` tanpa batas) ditambahkan; L5 sebagian ditangani. Nomor
+  HP/WhatsApp saat daftar bersifat opsional dan tidak diverifikasi. Mesin hitung tidak berubah.
 - 14 Okt 2026: dibuat dari audit read-only + analisis penghitungan ganda. Belum ada masalah yang diperbaiki.
 - 14 Okt 2026: angka bisnis asli dihapus (repo publik); rekomendasi dan kompleksitas audit dipulihkan; path dibuat
   lengkap; P4 dikembalikan ke Low–Medium; M7 dikoreksi ke baris 14–16.
