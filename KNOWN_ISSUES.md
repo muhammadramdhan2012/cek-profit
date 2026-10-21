@@ -400,6 +400,9 @@ Sumber awal: audit menyeluruh 14 Okt 2026 (read-only), ditambah analisis penghit
 
 ## Riwayat perubahan dokumen
 
+- 22 Okt 2026: pembayaran otomatis QRIS dinamis Midtrans (branch lokal `feature/qris-midtrans`, belum dijalankan di
+  Supabase, tanpa `service_role`): `supabase/usulan/qris-midtrans.sql`, Edge Functions `supabase/functions/qris-*`,
+  checkout QR + admin refund. Uji: `tests/qris.test.js`, Q1–Q28, E2E E1–E22, QA browser. Rincian: `docs/usulan/QRIS_MIDTRANS.md`.
 - 21 Okt 2026: isolasi staging fail-closed (branch `feature/pro-pricing`, lokal): host preview (`*.cekuntung.pages.dev`
   atau terdaftar) tidak pernah jatuh ke Supabase produksi bila konfigurasi staging kosong/salah; host produksi tidak bisa
   dialihkan; pita STAGING hanya setelah database menjawab `info_lingkungan()` (`supabase/staging/penanda-staging.sql`).

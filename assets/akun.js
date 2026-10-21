@@ -50,6 +50,7 @@
   const heading = (title, sub) => `<div class="acct-head"><h1>${title}</h1>${sub ? `<p class="muted">${sub}</p>` : ''}</div>`;
 
   function render() {
+    hentikanQris();   // timer & polling QRIS hanya hidup selama panel QR tampil
     const card = $('#card');
     if (!cloud.enabled) {
       // Di alamat staging yang konfigurasinya belum siap, akun sengaja dimatikan (fail-closed) agar tidak menulis ke database produksi.
@@ -210,6 +211,7 @@
     const bisaKlaim = (o) => !open && o.status === 'dibatalkan' && o.expired_at && Date.now() - new Date(o.expired_at).getTime() < 30 * 864e5;
     const riwayat = lama.length ? `<details class="riwayat" ${lama.some(bisaKlaim) ? 'open' : ''}><summary class="small">Riwayat pesanan</summary><ul>${lama.map((o) => `<li><span class="mono">${esc(o.order_code || '-')}</span> · ${tglWaktu(o.created_at)} · ${esc(STATUS_PESANAN[o.status] || o.status)}${o.expired_at ? ' (kedaluwarsa)' : ''}${bisaKlaim(o) ? ` <button class="btn link sm" type="button" data-konfirmasi="${o.id}">Saya sudah membayar pesanan ini</button>` : ''}</li>`).join('')}</ul></details>` : '';
     const kontak = s && s.kontak_bantuan ? `<p class="tiny faint">Butuh bantuan pembayaran? Hubungi ${esc(s.kontak_bantuan)}. Jangan kirim file laporan toko atau data pembeli.</p>` : '';
+    if (s && s.mode === 'otomatis') { renderOtomatis(card, { head, s, open, kontak, riwayat, kembali }); return; }
     const siap = !!(s && s.aktif && (tersedia.transfer || tersedia.qris));
     if (open) { card.innerHTML = `${head}${panelPesanan(open, s || {}, tersedia)}${kontak}${riwayat}${kembali}`; return; }
     if (!siap) { card.innerHTML = `${head}${hargaBlok()}${SIAPKAN}${riwayat}${kembali}`; return; }
@@ -223,6 +225,95 @@
       <button class="btn primary" type="button" id="buat-pesanan">Buat pesanan</button>
       <p class="tiny faint">Bayar dalam ${Number(s.batas_jam) || 48} jam setelah pesanan dibuat. Pro aktif setelah dana kami verifikasi di mutasi resmi.</p>
       ${kontak}${riwayat}${kembali}`;
+  }
+  /* ---------------- Pembayaran otomatis: QRIS dinamis (Midtrans, lewat Edge Function) ----------------
+   * Nominal Rp149.000 sudah terisi di QR; Pro aktif otomatis setelah server memvalidasi pembayaran ke Midtrans.
+   * Browser hanya menampilkan QR dari server dan menanyakan status; tidak pernah menentukan lunas/tidaknya. */
+  let qris = null;   // { order, g, tick, poll, cek }
+  function hentikanQris() { if (qris) { clearInterval(qris.tick); clearInterval(qris.poll); } qris = null; }
+  const mmss = (ms) => { const d = Math.max(0, Math.round(ms / 1000)); return `${String(Math.floor(d / 60)).padStart(2, '0')}:${String(d % 60).padStart(2, '0')}`; };
+  function qrisHtml(g, o) {
+    const sisa = g ? new Date(g.berlaku_sampai).getTime() - Date.now() : 0;
+    const cekBtn = '<button class="btn sm" type="button" data-qris-cek>Saya sudah bayar, cek sekarang</button>';
+    if (g && g.status === 'menunggu' && sisa > 0 && /^https:\/\//.test(g.qr_url || '')) {
+      return `<img class="qris" src="${esc(g.qr_url)}" alt="Kode QRIS pembayaran ${rupiah(g.amount)}" width="240" height="240" referrerpolicy="no-referrer">
+        <p class="small qr-timer">Berlaku <b id="qr-sisa">${mmss(sisa)}</b> lagi · kode pesanan <b class="mono">${esc(o.order_code)}</b></p>
+        <ol class="steps"><li>Buka aplikasi bank atau dompet digital, pilih bayar dengan QRIS, lalu pindai kode ini.</li>
+        <li>Nominal <b>${rupiah(g.amount)}</b> sudah terisi otomatis. Periksa, lalu bayar.</li>
+        <li>Tetap di halaman ini. Pro aktif otomatis setelah pembayaran terkonfirmasi, biasanya kurang dari 1 menit.</li></ol>
+        <div class="row-gap">${cekBtn}</div>
+        <p class="tiny faint">Jangan membayar kode yang sudah kedaluwarsa. Pembayaran diproses Midtrans; kami tidak menerima nomor kartu, PIN, atau kode OTP.</p>`;
+    }
+    if (g && g.status === 'menunggu' && sisa > 0) return `<p class="msg err" role="alert">Kode QRIS belum dapat ditampilkan.</p><div class="row-gap"><button class="btn primary" type="button" data-qris-baru>Buat QR baru</button>${cekBtn}</div>`;
+    return `<p class="msg info">Kode QRIS sudah tidak berlaku. Bila Anda sempat membayar, tekan <b>Cek pembayaran</b>; dana tidak hangus.</p>
+      <div class="row-gap"><button class="btn primary" type="button" data-qris-baru>Buat QR baru</button><button class="btn sm" type="button" data-qris-cek>Cek pembayaran</button></div>`;
+  }
+  function tampilQris() { const b = $('#qris-box'); if (b && qris) b.innerHTML = qrisHtml(qris.g, qris.order); }
+  function qrisLunas() { hentikanQris(); toast('Pembayaran berhasil. Pro sudah aktif.'); render(); }
+  function renderOtomatis(card, { head, s, open, kontak, riwayat, kembali }) {
+    if (!s.aktif) { card.innerHTML = `${head}${hargaBlok()}${SIAPKAN}${riwayat}${kembali}`; return; }
+    if (!open) {
+      card.innerHTML = `${head}${hargaBlok(s.harga_pro)}
+        <ul class="benefits"><li>Laporan PDF dengan nama dan logo toko</li><li>Semua produk dan saran harga</li><li>Semua temuan, ekspor Excel, riwayat tanpa batas</li></ul>
+        <p class="tiny faint">Akses Pro berlaku untuk akun ini selama layanan Cek Untung beroperasi. Fitur berbayar baru di masa depan tidak otomatis termasuk. <a href="privasi.html">Ketentuan</a></p>
+        <button class="btn primary" type="button" id="bayar-qris">Bayar dengan QRIS</button>
+        <p class="tiny faint">Nominal ${rupiah(s.harga_pro)} terisi otomatis di aplikasi pembayaran. Kode QRIS berlaku ${Number(s.qr_berlaku_menit) || 15} menit; Pro aktif otomatis setelah pembayaran terkonfirmasi.</p>
+        ${kontak}${riwayat}${kembali}`;
+      return;
+    }
+    const info = open.status === 'perlu_cek' ? '<p class="msg info">Pembayaran Anda sedang diperiksa manual (misalnya nominal tidak sesuai). Pro aktif setelah pemeriksaan selesai; bila tidak cocok, dana dikembalikan sesuai kebijakan refund.</p>'
+      : open.status === 'diproses' ? '<p class="msg info">Kami sedang memverifikasi pembayaran Anda.</p>' : '';
+    card.innerHTML = `${head}<section class="order" aria-label="Pesanan ${esc(open.order_code)}">
+      <div class="order-head"><span class="small muted">Pesanan</span><b class="mono">${esc(open.order_code)}</b><span class="badge st-${esc(open.status)}">${esc(STATUS_PESANAN[open.status] || open.status)}</span></div>
+      <dl class="pay-dl"><div><dt>Total dibayar</dt><dd><b>${rupiah(open.amount)}</b></dd></div><div><dt>Metode</dt><dd>QRIS</dd></div></dl>
+      ${open.status === 'baru' ? '<div id="qris-box" class="pay-box qris-box" aria-live="polite"><p class="muted" role="status">Menyiapkan kode QRIS…</p></div>' : info}
+      </section>${kontak}${riwayat}${kembali}`;
+    if (open.status === 'baru') mulaiQris(open);
+  }
+  async function mulaiQris(order) {
+    hentikanQris();
+    const st = { order, g: null };
+    qris = st;
+    if (!online()) { const b = $('#qris-box'); if (b) b.innerHTML = `<p class="msg err" role="alert">${OFFLINE}</p><button class="btn" type="button" data-qris-baru>Coba lagi</button>`; return; }
+    try {
+      const r = await cloud.db.qrisBuat(order.id);
+      if (qris !== st) return;
+      if (r && r.status === 'selesai') return qrisLunas();
+      st.g = r.percobaan; tampilQris();
+    } catch (err) {
+      if (qris !== st) return;
+      const b = $('#qris-box');
+      if (b) b.innerHTML = `<p class="msg err" role="alert">${esc(err.message)}</p><button class="btn" type="button" data-qris-baru>Coba lagi</button>`;
+      return;
+    }
+    st.tick = setInterval(() => {
+      if (!st.g) return;
+      const sisa = new Date(st.g.berlaku_sampai).getTime() - Date.now();
+      const el = $('#qr-sisa'); if (el) el.textContent = mmss(sisa);
+      if (sisa <= 0 && st.g.status === 'menunggu') { st.g = { ...st.g, status: 'lewat' }; tampilQris(); cekQris(false); }
+    }, 1000);
+    st.poll = setInterval(() => cekQris(false), 5000);
+  }
+  async function cekQris(paksa) {
+    const st = qris;
+    if (!st || st.cek) return;
+    if (!online()) { if (paksa) toast(OFFLINE); return; }
+    st.cek = true;
+    try {
+      const r = await cloud.db.qrisCek(st.order.id, paksa);
+      if (qris !== st) return;
+      if (r.pro || (r.pesanan && r.pesanan.status === 'selesai')) return qrisLunas();
+      if (r.pesanan && r.pesanan.status !== 'baru') { hentikanQris(); render(); return; }
+      if (r.percobaan) {
+        const lama = st.g && st.g.status;
+        // Waktu habis di browser tetap dianggap habis walau server belum sempat mencatatnya.
+        st.g = r.percobaan.status === 'menunggu' && new Date(r.percobaan.berlaku_sampai).getTime() <= Date.now() ? { ...r.percobaan, status: 'lewat' } : r.percobaan;
+        if (lama !== st.g.status) tampilQris();
+        if (st.g.status !== 'menunggu') clearInterval(st.poll);
+      }
+      if (paksa) toast(st.g && st.g.status === 'menunggu' ? 'Pembayaran belum kami terima. Bila sudah membayar, tunggu sebentar.' : 'Status pembayaran diperbarui.');
+    } catch (err) { if (paksa) toast(err.message); }
+    finally { st.cek = false; }
   }
   async function aksiPro(btn, fn, sukses) {
     if (!online()) { toast(OFFLINE); return; }
@@ -375,6 +466,9 @@
     if (!t) return;
     if (t.id === 'buat-pesanan') { const m = ($('input[name="metode"]:checked') || {}).value; return aksiPro(t, () => cloud.db.buatPesanan(m), 'Pesanan dibuat. Ikuti instruksi pembayaran.'); }
     if (t.dataset.beli) return aksiPro(t, () => cloud.db.buatPesanan(t.dataset.beli), 'Pesanan diperbarui.');
+    if (t.id === 'bayar-qris') return aksiPro(t, () => cloud.db.buatPesanan('qris'), '');
+    if (t.hasAttribute('data-qris-baru')) { if (qris) return mulaiQris(qris.order); return render(); }
+    if (t.hasAttribute('data-qris-cek')) { busy(t, true, 'Mengecek…'); await cekQris(true); if (document.contains(t)) busy(t, false); return; }
     if (t.dataset.konfirmasi) return aksiPro(t, () => cloud.db.konfirmasiBayar(+t.dataset.konfirmasi, ($('#k-catatan') || {}).value || ''), 'Terima kasih. Kami akan memverifikasi pembayaran Anda.');
     if (t.dataset.batal) { if (!confirm('Batalkan pesanan ini? Jangan batalkan bila Anda sudah membayar.')) return; return aksiPro(t, () => cloud.db.batalkanPesanan(+t.dataset.batal), 'Pesanan dibatalkan.'); }
     if (t.dataset.salin) { try { await navigator.clipboard.writeText(t.dataset.salin); toast('Disalin.'); } catch (err) { toast('Tidak bisa menyalin otomatis. Salin manual.'); } return; }

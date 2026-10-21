@@ -12,7 +12,7 @@ const crypto = require('crypto');
 // false = database produksi saat ini (tabel/fungsi belum ada → 404).
 function createMock({ confirmEmail = false, tokenTtl = 3600, strongPasswords = false, proMigrasi = true } = {}) {
   const proPayments = [], events = [], audit = [];
-  const pengaturan = { id: 1, aktif: false, harga_pro: 149000, batas_jam: 48, bank_nama: '', bank_nomor: '', bank_pemilik: '', qris_merchant: '', qris_nmid: '', qris_gambar: '', kontak_bantuan: '' };
+  const pengaturan = { id: 1, aktif: false, harga_pro: 149000, batas_jam: 48, bank_nama: '', bank_nomor: '', bank_pemilik: '', qris_merchant: '', qris_nmid: '', qris_gambar: '', kontak_bantuan: '', mode: 'manual', qr_berlaku_menit: 15 };
   let paySeq = 1;
   const norm = (v) => String(v || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
   const weak = (pw) => !pw || pw.length < 8 || (strongPasswords && !(/[a-z]/.test(pw) && /[A-Z]/.test(pw) && /[0-9]/.test(pw)));
@@ -154,7 +154,7 @@ function createMock({ confirmEmail = false, tokenTtl = 3600, strongPasswords = f
     if (table === 'pengaturan_pembayaran' && req.method === 'PATCH') {
       if (!isAdmin(uid)) return send(200, []);
       const lama = { ...pengaturan }; const baru = { ...pengaturan, ...body };
-      const lengkap = (x) => (x.bank_nama && x.bank_nomor && x.bank_pemilik) || (x.qris_merchant && x.qris_gambar);
+      const lengkap = (x) => x.mode === 'otomatis' || (x.bank_nama && x.bank_nomor && x.bank_pemilik) || (x.qris_merchant && x.qris_gambar);
       if (baru.aktif && !(baru.kontak_bantuan && lengkap(baru))) return send(400, { code: '23514', message: 'new row for relation "pengaturan_pembayaran" violates check constraint "pengaturan_siap"' });
       Object.assign(pengaturan, body); audit.push({ aksi: 'ubah_pengaturan', lama, baru: { ...pengaturan }, oleh: uid }); return send(200, [pengaturan]);
     }
@@ -169,7 +169,8 @@ function createMock({ confirmEmail = false, tokenTtl = 3600, strongPasswords = f
       const now = () => new Date().toISOString();
       const ev = (r, lama, baru, cat, internal = false) => events.push({ order_id: r.id, status_lama: lama, status_baru: baru, oleh: uid, catatan: cat, internal, waktu: now() });
       const fn = table.slice(4);
-      const tersedia = (m) => (m === 'transfer' ? !!(pengaturan.bank_nama && pengaturan.bank_nomor && pengaturan.bank_pemilik) : m === 'qris' ? !!(pengaturan.qris_merchant && pengaturan.qris_gambar) : false);
+      // Mode otomatis (usulan/qris-midtrans.sql): pembeli hanya bisa memesan QRIS dinamis.
+      const tersedia = (m) => (pengaturan.mode === 'otomatis' ? m === 'qris' : m === 'transfer' ? !!(pengaturan.bank_nama && pengaturan.bank_nomor && pengaturan.bank_pemilik) : m === 'qris' ? !!(pengaturan.qris_merchant && pengaturan.qris_gambar) : false);
       const lewat = (r) => Date.now() - Date.parse(r.created_at) > pengaturan.batas_jam * 36e5;
       const TERBUKA = ['baru', 'diproses', 'perlu_cek'];
       const dupRef = (sumber, ref) => proPayments.find((x) => x.kind === 'pembayaran' && x.sumber === sumber && x.reference_norm === ref);

@@ -10,7 +10,7 @@
 <script src="assets/theme.js?v=f5317dffb6"></script>
 <link rel="stylesheet" href="assets/base.css?v=cf60f9cdf6">
 <link rel="stylesheet" href="assets/account.css?v=0d3f4d5a76">
-<script src="assets/config.js?v=ce3f296b8d"></script>
+<script src="assets/config.js?v=89468fac81"></script>
 </head>
 <body class="admin">
 <div class="wrap">
@@ -21,7 +21,7 @@
   <main class="admin-grid" id="main" aria-live="polite"><p class="muted">Memuat…</p></main>
 </div>
 <div id="toast" class="toast" role="status" hidden></div>
-<script src="assets/cloud.js?v=4fd4d99c40"></script>
+<script src="assets/cloud.js?v=b38922792b"></script>
 <script src="assets/situs.js?v=3e66447e85" defer></script>
 <script>
 (() => {
@@ -68,13 +68,18 @@
   const aksiDana = (x) => {
     if (x.kind !== 'pembayaran') return '';
     const sisa = x.amount - (payments || []).filter((y) => y.refund_of === x.id).reduce((a, y) => a + y.amount, 0);
-    return `<div class="row-gap">${!x.dihubungkan_pada ? `<button class="btn sm" data-hubungkan-dana="${x.id}">Hubungkan ke pesanan</button>` : ''}${sisa > 0 ? `<button class="btn sm quiet danger" data-refund="${x.id}" data-sisa="${sisa}">Refund</button>` : ''}<button class="btn sm quiet" data-koreksi="${x.id}">Koreksi referensi</button></div>`;
+    // Dana QRIS Midtrans: refund lewat Midtrans (tercatat otomatis dari status Midtrans). Refund manual tetap ada untuk
+    // kasus di luar masa refund penyedia; koreksi referensi tidak berlaku (referensi = transaction_id Midtrans).
+    const qris = x.sumber === 'midtrans';
+    return `<div class="row-gap">${!x.dihubungkan_pada ? `<button class="btn sm" data-hubungkan-dana="${x.id}">Hubungkan ke pesanan</button>` : ''}${sisa > 0 && qris ? `<button class="btn sm danger" data-refund-qris="${x.id}" data-sisa="${sisa}">Refund lewat Midtrans</button>` : ''}${sisa > 0 ? `<button class="btn sm quiet danger" data-refund="${x.id}" data-sisa="${sisa}">${qris ? 'Refund manual (transfer)' : 'Refund'}</button>` : ''}${qris ? '' : `<button class="btn sm quiet" data-koreksi="${x.id}">Koreksi referensi</button>`}</div>`;
   };
   const F = [['bank_nama', 'Nama bank'], ['bank_nomor', 'Nomor rekening (angka)'], ['bank_pemilik', 'Nama pemilik rekening'], ['qris_merchant', 'Nama merchant QRIS'], ['qris_nmid', 'NMID QRIS'], ['qris_gambar', 'Gambar QRIS (img/nama.png)'], ['kontak_bantuan', 'Kontak bantuan (email resmi)']];
   const formSetelan = () => (setelan === null ? '<p class="small muted">Belum tersedia: migrasi <code>supabase/usulan/pro-sekali-bayar.sql</code> belum dijalankan.</p>'
     : `<form id="f-setelan" class="setelan">${F.map(([k, l]) => `<label class="field"><span class="small">${l}</span><input class="plain" name="${k}" value="${esc(setelan[k])}" maxlength="200" autocomplete="off"></label>`).join('')}
       <label class="field"><span class="small">Harga (rupiah, dari server)</span><input class="plain" name="harga_pro" inputmode="numeric" value="${esc(setelan.harga_pro)}"></label>
       <label class="field"><span class="small">Batas bayar (jam)</span><input class="plain" name="batas_jam" inputmode="numeric" value="${esc(setelan.batas_jam)}"></label>
+      ${'mode' in setelan ? `<label class="field"><span class="small">Cara bayar pembeli</span><select class="plain" name="mode"><option value="manual" ${setelan.mode === 'manual' ? 'selected' : ''}>Manual: transfer/QRIS statis, diverifikasi admin</option><option value="otomatis" ${setelan.mode === 'otomatis' ? 'selected' : ''}>Otomatis: QRIS dinamis Midtrans</option></select></label>
+      <label class="field"><span class="small">Masa berlaku QR otomatis (menit, 5–60)</span><input class="plain" name="qr_berlaku_menit" inputmode="numeric" value="${esc(setelan.qr_berlaku_menit)}"></label>` : ''}
       <label style="display:flex;gap:8px;align-items:center"><input type="checkbox" name="aktif" ${setelan.aktif ? 'checked' : ''}> <b>Buka pembelian</b> (database menolak bila kontak/metode belum lengkap)</label>
       <button class="btn primary" type="submit">Simpan pengaturan</button><p class="tiny faint">Isi hanya dengan data resmi. Setiap perubahan tercatat (siapa & kapan).</p></form>`);
   function render() {
@@ -152,6 +157,16 @@
         const ket = (prompt('Keterangan (wajib):') || '').trim(); if (!ket) return;
         await cloud.db.adminCatatTambahan(r.id, d.sumber, d.ref, d.nominal, ket); toast('Pembayaran tambahan tercatat. Hak akses tidak berubah.'); return load();
       }
+      if (t.dataset.refundQris) {
+        const x = (payments || []).find((y) => y.id === +t.dataset.refundQris) || {};
+        const nominal = angka(prompt(`REFUND LEWAT MIDTRANS atas pembayaran #${x.id} (transaksi ${x.reference}, sisa ${rp(t.dataset.sisa)}).\nNominal yang dikembalikan (angka saja):`, t.dataset.sisa));
+        if (!nominal) return;
+        const alasan = (prompt('Alasan refund (wajib, tercatat):') || '').trim(); if (!alasan) return;
+        if (!confirm(`Kirim refund ${rp(nominal)} lewat Midtrans?\n\nUang dikembalikan ke pembayar. Bila seluruh dana pesanan sudah kembali, Pro dicabut otomatis.`)) return;
+        t.disabled = true;   // cegah klik ganda; kunci refund di database juga mencegah refund ganda
+        const r = await cloud.db.adminRefundQris(x.id, nominal, alasan);
+        toast(r && r.hasil === 'direfund' ? 'Refund berhasil. Seluruh dana kembali; Pro dicabut.' : 'Refund berhasil dan tercatat.'); return load();
+      }
       if (t.dataset.refund) {
         const x = (payments || []).find((y) => y.id === +t.dataset.refund) || {}, o = requests.find((r) => r.id === x.order_id);
         const nominal = angka(prompt(`REFUND atas pembayaran #${x.id} (${x.sumber} · ${x.reference}, sisa ${rp(t.dataset.sisa)}).\nNominal yang dikembalikan (angka saja):`));
@@ -216,6 +231,7 @@
     for (const [k] of F) patch[k] = String(f.get(k) || '').trim();
     patch.bank_nomor = patch.bank_nomor.replace(/\D/g, '');
     patch.harga_pro = angka(f.get('harga_pro')); patch.batas_jam = angka(f.get('batas_jam')); patch.aktif = f.get('aktif') === 'on';
+    if (f.has('mode')) { patch.mode = f.get('mode') === 'otomatis' ? 'otomatis' : 'manual'; patch.qr_berlaku_menit = angka(f.get('qr_berlaku_menit')); }
     if (patch.aktif && !confirm('Buka pembelian Pro untuk umum? Pastikan rekening/QRIS, kontak bantuan, dan kebijakan refund resmi sudah siap.')) return;
     try { setelan = await cloud.db.adminPengaturan(patch); toast('Pengaturan tersimpan.'); render(); } catch (err) { toast(err.message); }
   });

@@ -16,6 +16,7 @@ jobs:
           node tests/tarif.test.js
           node tests/license.test.js
           node tests/cloud.test.js
+          node tests/qris.test.js
       - name: Gambar QRIS simulasi tidak boleh masuk main (rilis produksi)
         if: github.ref == 'refs/heads/main' || github.base_ref == 'main'
         run: |

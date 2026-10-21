@@ -57,7 +57,7 @@ window.CEK_CONFIG = {
   staging: {
     supabaseUrl: 'https://epyhhazihfolbdtjxxfd.supabase.co',             // project cekuntung-staging
     supabaseAnonKey: 'sb_publishable_yJi7jb0iFM-5ElAbhB2Zxg_helb36Yg',      // publishable key STAGING (publik)
-    hosts: ['feature-pro-pricing.cekuntung.pages.dev'],
+    hosts: ['feature-pro-pricing.cekuntung.pages.dev', 'feature-qris-midtrans.cekuntung.pages.dev'],
     proPembayaranAktif: true,
   },
 };

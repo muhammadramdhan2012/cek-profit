@@ -46,6 +46,7 @@ const CekCloud = (() => {
     if (m.includes('code verifier') || m.includes('flow state') || m.includes('auth code')) return 'Proses masuk dengan Google kedaluwarsa. Silakan ulangi dari awal.';
     if (m.includes('pengaturan_siap')) return 'Pembelian belum bisa dibuka: lengkapi kontak bantuan dan minimal satu metode pembayaran.';
     if (m.includes('could not find the function') || (body && body.code === 'PGRST202')) return 'Fitur ini belum aktif di database (migrasi belum dijalankan).';
+    if (m.includes('function not found') || m.includes('requested function was not found')) return 'Pembayaran otomatis belum dipasang di server.';
     if (status === 0) return 'Tidak bisa terhubung ke server. Periksa koneksi internet.';
     return raw || `Permintaan gagal (${status}).`;
   }
@@ -218,6 +219,10 @@ const CekCloud = (() => {
     buatPesanan: (metode) => http('/rest/v1/rpc/buat_pesanan_pro', { method: 'POST', body: { p_metode: metode } }),
     konfirmasiBayar: (id, catatan = '') => http('/rest/v1/rpc/konfirmasi_sudah_bayar', { method: 'POST', body: { p_order: id, p_catatan: catatan } }),
     batalkanPesanan: (id) => http('/rest/v1/rpc/batalkan_pesanan', { method: 'POST', body: { p_order: id } }),
+    /* ---- Pembayaran otomatis QRIS (Edge Functions Supabase; butuh supabase/usulan/qris-midtrans.sql + fungsi terpasang).
+       Browser hanya mengirim nomor pesanan; nominal, QR, dan status ditentukan server/Midtrans. ---- */
+    qrisBuat: (order) => http('/functions/v1/qris-buat', { method: 'POST', body: { pesanan: order } }),
+    qrisCek: (order, paksa = false) => http('/functions/v1/qris-cek', { method: 'POST', body: { pesanan: order, paksa: !!paksa } }),
     /* admin */
     adminProfiles: () => http('/rest/v1/profiles?select=*&order=created_at.desc&limit=500'),
     adminRequests: () => http('/rest/v1/upgrade_requests?select=*&order=created_at.desc&limit=200'),
@@ -235,6 +240,7 @@ const CekCloud = (() => {
     adminTolak: (order, alasan, status = 'ditolak') => http('/rest/v1/rpc/admin_tolak_pesanan', { method: 'POST', body: { p_order: order, p_alasan: alasan, p_status: status } }),
     adminCabutPro: (target, catatan) => http('/rest/v1/rpc/admin_cabut_pro', { method: 'POST', body: { target, catatan } }),
     adminPayments: () => http('/rest/v1/pro_payments?select=*&order=created_at.desc&limit=200'),
+    adminRefundQris: (payment, nominal, alasan) => http('/functions/v1/qris-refund', { method: 'POST', body: { pembayaran: payment, nominal, alasan } }),
   };
 
   /**

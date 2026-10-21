@@ -22,15 +22,21 @@ select 'H2 fungsi trigger & internal tidak bisa dieksekusi anon/login' t,
     and (has_function_privilege('anon', p.oid, 'execute') or has_function_privilege('authenticated', p.oid, 'execute'))) ok;
 select 'H3 is_admin: login bisa (dibutuhkan RLS), anon tidak' t,
   has_function_privilege('authenticated', 'public.is_admin()', 'execute') and not has_function_privilege('anon', 'public.is_admin()', 'execute') ok;
-select 'H4 anon: satu-satunya SECURITY DEFINER yang bisa dieksekusi adalah rls_auto_enable milik Supabase' t,
+-- Bila migrasi QRIS (qris-midtrans.sql) sudah terpasang, dua fungsi bergerbang RAHASIA GATEWAY memang boleh dipanggil anon
+-- (Edge Function memakai anon key), dan dua fungsi pembeli QRIS ikut daftar pengguna login.
+create or replace function pg_temp.qris() returns boolean language sql as $$ select to_regprocedure('public.gateway_terapkan_status(text, jsonb)') is not null $$;
+select 'H4 anon: SECURITY DEFINER yang bisa dieksekusi hanya rls_auto_enable (Supabase) [+ 2 fungsi bergerbang rahasia QRIS]' t,
   (select coalesce(array_agg(proname::text order by proname), '{}') from pg_proc p where p.pronamespace = 'public'::regnamespace and p.prosecdef
-     and has_function_privilege('anon', p.oid, 'execute')) = array['rls_auto_enable'] ok;
-select 'H5 login: SECURITY DEFINER yang bisa dieksekusi = 13 RPC (10 admin + 3 pembeli) + is_admin (+ rls_auto_enable Supabase)' t,
-  (select count(*) from pg_proc p where p.pronamespace = 'public'::regnamespace and p.prosecdef
-     and has_function_privilege('authenticated', p.oid, 'execute')
-     and (p.proname like 'admin\_%' or p.proname in ('buat_pesanan_pro','konfirmasi_sudah_bayar','batalkan_pesanan','is_admin'))) = 14
-  and (select count(*) from pg_proc p where p.pronamespace = 'public'::regnamespace and p.prosecdef
-     and has_function_privilege('authenticated', p.oid, 'execute')) = 15 ok;
+     and has_function_privilege('anon', p.oid, 'execute'))
+  = case when pg_temp.qris() then array['gateway_simpan_qr', 'gateway_terapkan_status', 'rls_auto_enable'] else array['rls_auto_enable'] end ok;
+select 'H5 login: SECURITY DEFINER yang bisa dieksekusi = RPC admin + 3 pembeli + is_admin + rls_auto_enable [+ 4 fungsi QRIS]' t,
+  (select array_agg(proname::text order by proname) from pg_proc p where p.pronamespace = 'public'::regnamespace and p.prosecdef
+     and has_function_privilege('authenticated', p.oid, 'execute'))
+  = (select array_agg(n order by n) from (
+       select proname::text n from pg_proc where pronamespace = 'public'::regnamespace and proname like 'admin\_%'
+       union select unnest(array['buat_pesanan_pro', 'konfirmasi_sudah_bayar', 'batalkan_pesanan', 'is_admin', 'rls_auto_enable'])
+       union select unnest(case when pg_temp.qris() then array['gateway_mulai_percobaan', 'gateway_percobaan_saya', 'gateway_simpan_qr', 'gateway_terapkan_status'] else '{}'::text[] end)) x)
+  and (select count(*) from pg_proc where pronamespace = 'public'::regnamespace and proname like 'admin\_%') >= 10 ok;
 select 'H6 search_path: _norm_ref kosong; semua SECURITY DEFINER Cek Untung public, pg_temp' t,
   (select array_to_string(proconfig, ',') from pg_proc where proname = '_norm_ref') = 'search_path=""'
   and not exists (select 1 from pg_proc p where p.pronamespace = 'public'::regnamespace and p.prosecdef and p.proname <> 'rls_auto_enable'
@@ -54,8 +60,9 @@ begin
   end loop;
 end $$;
 reset role;
-select 'H8 semua (10) RPC admin menolak seller dengan "Hanya admin" (bukan error lain, tidak ada yang lolos)' t,
-  (select count(*) from pg_temp.hasil_admin) = 10 and (select count(*) from pg_proc where pronamespace = 'public'::regnamespace and proname like 'admin\_%') = 10 and not exists (select 1 from pg_temp.hasil_admin where pesan <> 'Hanya admin') ok;
+select 'H8 semua RPC admin (10, atau 11 dengan QRIS) menolak seller dengan "Hanya admin" (bukan error lain, tidak ada yang lolos)' t,
+  (select count(*) from pg_temp.hasil_admin) = case when pg_temp.qris() then 11 else 10 end
+  and (select count(*) from pg_proc where pronamespace = 'public'::regnamespace and proname like 'admin\_%') = (select count(*) from pg_temp.hasil_admin) and not exists (select 1 from pg_temp.hasil_admin where pesan <> 'Hanya admin') ok;
 select fungsi, pesan from pg_temp.hasil_admin where pesan <> 'Hanya admin';
 
 -- ---------- RLS dengan is_admin tetap bekerja ----------
