@@ -53,7 +53,13 @@ window.CEK_CONFIG = {
   // ---------- Lingkungan STAGING ----------
   // Panduan: docs/usulan/STAGING_SUPABASE.md. Isi dengan project Supabase STAGING terpisah: URL + publishable key
   // (sb_publishable_…). JANGAN isi secret/service_role. Host yang didaftarkan HANYA memakai staging.
-  staging: { supabaseUrl: '', supabaseAnonKey: '', hosts: [] },
+  // proPembayaranAktif di sini hanya berlaku setelah host terbukti staging yang valid; produksi tetap memakai nilai di atas.
+  staging: {
+    supabaseUrl: '',
+    supabaseAnonKey: '',
+    hosts: ['feature-pro-pricing.cekuntung.pages.dev'],
+    proPembayaranAktif: true,
+  },
 };
 /*
  * Pemilihan database menurut alamat halaman (fail-closed). Hanya membaca nama host halaman; tidak membaca parameter URL,
@@ -83,7 +89,12 @@ window.CEK_CONFIG = {
   if (!preview && !daftar.includes(host)) return;
   const valid = daftar.includes(host) && /^https:\/\/[a-z0-9]{20}\.supabase\.co$/.test(st.supabaseUrl || '')
     && st.supabaseUrl !== PROD_URL && kunciPublik(st.supabaseAnonKey) && st.supabaseAnonKey !== PROD_KEY;
-  if (valid) { C.supabaseUrl = st.supabaseUrl; C.supabaseAnonKey = st.supabaseAnonKey; C.lingkungan = 'staging'; return; }
-  C.supabaseUrl = ''; C.supabaseAnonKey = ''; C.lingkungan = 'staging-belum-siap';
+  if (valid) {
+    C.supabaseUrl = st.supabaseUrl; C.supabaseAnonKey = st.supabaseAnonKey; C.lingkungan = 'staging';
+    // Uji checkout di staging. Database staging tetap punya saklar sendiri (pengaturan_pembayaran.aktif, diatur admin staging).
+    C.proPembayaranAktif = st.proPembayaranAktif === true;
+    return;
+  }
+  C.supabaseUrl = ''; C.supabaseAnonKey = ''; C.proPembayaranAktif = false; C.lingkungan = 'staging-belum-siap';
   C.konfigurasiBelumSiap = 'Konfigurasi database staging belum siap. Fitur akun dan pembayaran dimatikan di alamat ini agar tidak tersambung ke database produksi.';
 })(window.CEK_CONFIG);

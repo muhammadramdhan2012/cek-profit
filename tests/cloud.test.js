@@ -287,12 +287,12 @@ const memStore = () => { const m = new Map(); return { getItem: (k) => (m.has(k)
   });
   await t('Lingkungan staging fail-closed: host staging tidak pernah jatuh ke produksi; host produksi tidak bisa dialihkan', async () => {
     const vm = require('vm'), code = require('fs').readFileSync(require('path').join(__dirname, '..', 'assets', 'config.js'), 'utf8');
-    const KOSONG = "staging: { supabaseUrl: '', supabaseAnonKey: '', hosts: [] },";
-    truthy(code.includes(KOSONG), 'config.js bawaan: staging kosong');
+    const BLOK = /staging: \{[\s\S]*?\n  \},/;
+    truthy(BLOK.test(code), 'config.js punya blok staging');
     // Konteks sengaja diberi URL berparameter + localStorage berisi "staging" untuk membuktikan keduanya diabaikan.
     const muat = (host, isi) => {
       const w = {}; const ls = { getItem: () => JSON.stringify(isi), setItem() {} };
-      vm.runInNewContext(code.replace(KOSONG, `staging: ${JSON.stringify(isi)},`), { window: w, atob: (x) => Buffer.from(x, 'base64').toString('binary'),
+      vm.runInNewContext(code.replace(BLOK, `staging: ${JSON.stringify(isi)},`), { window: w, atob: (x) => Buffer.from(x, 'base64').toString('binary'),
         localStorage: ls, location: { hostname: host, search: `?supabaseUrl=${isi.supabaseUrl}&env=staging`, hash: '#staging' } });
       return w.CEK_CONFIG;
     };
@@ -339,6 +339,18 @@ const memStore = () => { const m = new Map(); return { getItem: (k) => (m.has(k)
     truthy(produksi(muat('127.0.0.1', kosong)), 'localhost tanpa staging → produksi (perilaku lama)');
     truthy(muat('localhost', ok).lingkungan === 'staging', 'localhost yang sengaja didaftarkan → staging');
     truthy(produksi(muat('cekuntung.id.evil.id', ok)), 'domain tiruan bukan preview → bukan staging (dan tidak terdaftar)');
+    // Saklar pembayaran khusus staging: hanya berlaku pada staging yang valid; produksi & belum-siap selalu nonaktif.
+    const bayar = { ...ok, proPembayaranAktif: true };
+    truthy(muat(PV, bayar).proPembayaranAktif === true, 'staging valid + proPembayaranAktif → checkout uji terbuka');
+    truthy(muat(PV, ok).proPembayaranAktif === false, 'staging valid tanpa saklar → tetap nonaktif');
+    for (const h of ['cekuntung.id', 'www.cekuntung.id', 'cekuntung.pages.dev', 'muhammadramdhan2012.github.io'])
+      truthy(muat(h, { ...bayar, hosts: [h, PV] }).proPembayaranAktif === false, `${h}: saklar staging diabaikan, pembayaran tetap nonaktif`);
+    truthy(muat(PV, { ...bayar, supabaseUrl: '' }).proPembayaranAktif === false, 'staging belum siap: pembayaran nonaktif');
+    truthy(muat('lain.cekuntung.pages.dev', bayar).proPembayaranAktif === false, 'preview tak terdaftar: pembayaran nonaktif');
+    // Isi config.js yang akan di-commit: pembayaran produksi nonaktif, host preview terdaftar, hanya kunci publik.
+    const asli = (h) => { const w = {}; vm.runInNewContext(code, { window: w, atob: (x) => Buffer.from(x, 'base64').toString('binary'), location: { hostname: h } }); return w.CEK_CONFIG; };
+    truthy(/proPembayaranAktif: false,/.test(code) && asli('cekuntung.id').proPembayaranAktif === false && asli('cekuntung.id').lingkungan === 'produksi', 'config.js asli: produksi tanpa pembayaran');
+    const pvAsli = asli(PV); truthy(['staging', 'staging-belum-siap'].includes(pvAsli.lingkungan) && !PROD.test(pvAsli.supabaseUrl), 'config.js asli: preview tidak pernah ke produksi');
     truthy(!/location\.(search|hash)|localStorage|sessionStorage|document\.cookie/.test(code), 'config.js tidak membaca URL, localStorage, atau cookie');
     truthy(!/sb_secret_[A-Za-z0-9]|eyJ[A-Za-z0-9_-]{20,}/.test(code), 'tanpa secret key');
   });
