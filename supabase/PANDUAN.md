@@ -84,29 +84,34 @@ berstatus *Verified* (SPF dan DKIM). Uji dengan mendaftar akun penguji dan memin
 2. Di Supabase: **Table Editor** → tabel **profiles** → baris dengan email Anda → kolom **is_admin** → ubah menjadi `true` → **Save**.
 3. Buka `https://muhammadramdhan2012.github.io/cek-profit/admin.html`.
 
-## Alur pembayaran manual (Transfer Bank + QRIS)
+## Alur pembayaran manual (Transfer Bank + QRIS Statis)
 
-Pro dijual **sekali bayar** (Rp149.000, harga peluncuran). Pembelian **belum dibuka**. Rancangan lengkap ada di
-`docs/usulan/PRO_SEKALI_BAYAR.md`. Ringkasnya:
+Pro dijual **sekali bayar** (Rp149.000, harga peluncuran). Pembelian **belum dibuka**.
+- Rancangan lengkap: `docs/usulan/PRO_SEKALI_BAYAR.md`.
+- Uji dulu di staging: `docs/usulan/STAGING_SUPABASE.md`.
 
-1. Setelah migrasi `supabase/usulan/pro-sekali-bayar.sql` disetujui dan dijalankan (uji di project staging dulu),
-   isi tabel **pengaturan_pembayaran** lewat Table Editor sebagai admin:
-   - nama bank, nomor rekening, nama pemilik;
-   - dan/atau nama merchant QRIS, NMID, dan path gambar QRIS (`img/…`, file diunggah ke repo lewat rilis yang disetujui);
-   - kontak bantuan.
-   Jangan isi data contoh.
-2. Ubah `aktif` menjadi `true`. Database menolak bila kontak bantuan atau metode belum lengkap.
-3. Seller membuat pesanan di **akun.html?view=pro**: kode pesanan dan nominal dibuat server. Tombol "Saya sudah
-   membayar" hanya mengubah status menjadi *Menunggu verifikasi*.
-4. Anda membuka **mutasi rekening / dasbor QRIS merchant**. Bila dana masuk, buka **admin.html** → **Pesanan Pro** →
-   **Verifikasi dana**, lalu isi sumber, referensi persis dari mutasi, dan nominal yang terlihat. **Tangkapan layar
-   pembeli bukan bukti.**
-5. Kurang bayar ditolak sistem. Kelebihan bayar dan transfer ganda dicatat lalu direfund dari baris pesanan. Semua
-   tercatat di **Buku besar pembayaran**.
+Ringkasnya:
+
+1. Setelah migrasi `supabase/usulan/pro-sekali-bayar.sql` disetujui dan dijalankan, buka **admin.html** →
+   **Pengaturan pembayaran**. Isi hanya data resmi:
+   - rekening (bank, nomor, pemilik) dan/atau QRIS statis (merchant, NMID, gambar `img/…`);
+   - kontak bantuan (email resmi);
+   - batas bayar 48 jam.
+
+   Centang **Buka pembelian** hanya bila semuanya siap. Database menolak bila kontak atau metode belum lengkap, dan
+   setiap perubahan tercatat.
+2. Seller membuat pesanan di **akun.html?view=pro**. Kode pesanan dan nominal dibuat server. "Saya sudah membayar" hanya
+   mengubah status menjadi *Menunggu verifikasi*, atau *Perlu pemeriksaan* bila lewat 48 jam.
+3. Anda memeriksa **mutasi rekening / dasbor QRIS merchant**. **Tangkapan layar pembeli bukan bukti.**
+   - **Dana cocok dengan satu pesanan:** Pesanan Pro → **Verifikasi dana**. Isi sumber, referensi persis dari mutasi,
+     dan nominal yang terlihat.
+   - **Pemilik dana belum pasti** (mis. dua QRIS Rp149.000 berdekatan): **Catat dana masuk tanpa pesanan**, lalu
+     **Catatan / periksa** pada pesanan terkait. Setelah bukti cocok (jam, nama), klik **Hubungkan ke pesanan**. Jangan menebak.
+4. Kurang bayar ditolak sistem. Kelebihan bayar dan transfer ganda direfund lewat **Refund** di baris pembayaran asal,
+   tanpa mencabut Pro. Salah ketik referensi diperbaiki lewat **Koreksi referensi**, yang tercatat.
 
 Checkout website baru aktif bila `proPembayaranAktif: true` di `assets/config.js`. Sebelum migrasi, tombol admin
-menampilkan "migrasi belum dijalankan" dan tidak mengubah apa pun. Pro berjangka lama (`pro_until`) tetap berlaku dan
-bisa dimatikan dengan "Matikan Pro lama".
+menampilkan "migrasi belum dijalankan" dan tidak mengubah apa pun. Pro berjangka lama (`pro_until`) tetap berlaku.
 
 ## Opsional
 

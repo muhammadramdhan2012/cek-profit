@@ -400,6 +400,11 @@ Sumber awal: audit menyeluruh 14 Okt 2026 (read-only), ditambah analisis penghit
 
 ## Riwayat perubahan dokumen
 
+- 21 Okt 2026: Manual Payment V1 v3 (branch `feature/pro-pricing`, lokal): batas bayar 48 jam, status Perlu
+  pemeriksaan, dana belum teridentifikasi + hubungkan dana (QRIS statis), refund menunjuk pembayaran asal, koreksi
+  referensi & perubahan pengaturan tercatat (audit), `admin_set_pro` diperbaiki agar tidak menutup pesanan sekali bayar,
+  pilihan Supabase staging per host preview. Uji lokal O1–O24, V1–V12, T1–T12 (kontrak baru), konkurensi 12 sesi.
+  Pembayaran tetap nonaktif; tidak ada SQL dijalankan di produksi. Mesin hitung tidak berubah.
 - 21 Okt 2026: checkout manual Transfer Bank + QRIS (branch `feature/pro-pricing`, belum dirilis): usulan SQL v2
   (pesanan berbasis akun, histori status, buku besar dana, verifikasi admin atomik; uji lokal O1–O24). Pembayaran
   tetap nonaktif. Mesin hitung tidak berubah.

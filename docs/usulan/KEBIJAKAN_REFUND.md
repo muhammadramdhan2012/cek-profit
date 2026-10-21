@@ -1,71 +1,109 @@
-# DRAF — Kebijakan Pengembalian Dana (Refund) Cek Untung Pro
+# DRAF v2 — Kebijakan Pengembalian Dana (Refund) Cek Untung Pro
 
-Status: **DRAF UNTUK DITINJAU PEMILIK — BELUM DITERBITKAN.** Bukan nasihat hukum. Sebelum terbit, sebaiknya ditinjau
-oleh konsultan hukum untuk memastikan kesesuaiannya dengan aturan yang berlaku. Bagian yang perlu dicek:
-- UU No. 8 Tahun 1999 tentang Perlindungan Konsumen, termasuk larangan klausula baku yang mengalihkan tanggung jawab
-  pelaku usaha;
+Status: **DRAF UNTUK DITINJAU PEMILIK — BELUM DITERBITKAN.**
+
+Ini bukan nasihat hukum dan **tidak mengklaim kepatuhan hukum penuh**. Sebelum terbit, sebaiknya ditinjau konsultan
+hukum terhadap:
+- UU No. 8 Tahun 1999 tentang Perlindungan Konsumen, termasuk larangan klausula baku yang mengalihkan tanggung jawab;
 - PP No. 80 Tahun 2019 tentang Perdagangan Melalui Sistem Elektronik;
-- UU No. 27 Tahun 2022 tentang Pelindungan Data Pribadi, untuk data yang dicatat saat refund.
+- UU No. 27 Tahun 2022 tentang Pelindungan Data Pribadi.
 
-Bagian bertanda **[PILIH]** adalah keputusan pemilik.
+Bagian **[PILIH]** adalah keputusan pemilik. Bagian **[KONTAK]** diisi email resmi; jangan pakai alamat karangan.
 
 ---
 
 ## Kebijakan Pengembalian Dana Cek Untung Pro
 
-Cek Untung Pro dibeli dengan **sekali bayar** dan aktif di akun yang membeli. Kebijakan ini menjelaskan kapan Anda
-berhak mendapat pengembalian dana dan bagaimana prosesnya. Kebijakan ini tidak mengurangi hak Anda sebagai konsumen
-menurut hukum yang berlaku.
+Cek Untung Pro dibeli dengan **sekali bayar Rp149.000** lewat transfer bank atau QRIS, dan aktif di akun yang membeli
+selama layanan Cek Untung beroperasi. Kebijakan ini tidak mengurangi hak Anda sebagai konsumen menurut hukum yang
+berlaku.
 
-### 1. Pengembalian dana penuh
+### 1. Kapan Anda berhak atas pengembalian dana
 
-Anda berhak atas pengembalian dana penuh bila:
-1. **Pembayaran ganda atau kelebihan bayar.** Kelebihannya dikembalikan.
-2. **Pro tidak dapat diaktifkan** di akun Anda dalam **[PILIH: 2] hari kerja** setelah pembayaran Anda kami terima dan verifikasi.
-3. **Fitur Pro inti tidak berfungsi** sesuai yang tercantum di halaman harga saat pembelian, dan tidak dapat kami perbaiki
-   dalam **[PILIH: 14] hari** sejak Anda melaporkannya. Fitur inti: laporan PDF, analisis semua produk, semua temuan,
-   ekspor Excel, dan riwayat tanpa batas.
-4. **[PILIH: ya/tidak] Garansi [7] hari:** Anda dapat meminta pengembalian dana tanpa alasan dalam **[7] hari** sejak
-   Pro aktif. Garansi berlaku satu kali per pembeli.
+| Kondisi | Yang dikembalikan | Status Pro |
+|---|---|---|
+| Pembayaran ganda (membayar dua kali) | Pembayaran kedua, penuh | Tetap aktif |
+| Kelebihan bayar | Selisih di atas Rp149.000 | Tetap aktif |
+| Kekurangan bayar dan tidak dilunasi | Seluruh dana yang masuk | Tidak diaktifkan |
+| Salah transfer (bukan untuk membeli Pro), terbukti dari mutasi | Seluruh dana | Tidak diaktifkan / dicabut |
+| Pembayaran setelah pesanan kedaluwarsa (lewat 48 jam) dan Anda tidak ingin melanjutkan | Seluruh dana | Tidak diaktifkan |
+| Pro tidak dapat diaktifkan dalam **[PILIH: 2] hari kerja** setelah dana kami temukan | Seluruh dana | — |
+| Fitur Pro inti tidak berfungsi sesuai halaman harga saat pembelian, dan tidak dapat kami perbaiki dalam **[PILIH: 14] hari** sejak dilaporkan | Seluruh dana | Dicabut |
+| **[PILIH: ya/tidak]** Garansi **[PILIH: 7] hari** tanpa alasan sejak Pro aktif (satu kali per pembeli) | Seluruh dana | Dicabut |
 
-### 2. Bila layanan dihentikan
+Fitur Pro inti: laporan PDF, analisis semua produk, semua temuan, ekspor Excel, dan riwayat tanpa batas.
 
-Kami akan memberi tahu lewat email akun paling lambat **[PILIH: 30] hari** sebelum layanan Cek Untung dihentikan
-permanen. **[PILIH: ya/tidak]** Bila penghentian terjadi dalam **[PILIH: 12] bulan** sejak pembelian, kami
-mengembalikan dana secara proporsional sesuai sisa bulan dari periode tersebut.
+**Pembayaran setelah 48 jam tidak hangus.** Pembayaran Anda kami periksa manual. Hasilnya Pro diaktifkan atau dana
+dikembalikan, sesuai pilihan Anda.
+
+### 2. Bila layanan tidak dapat digunakan atau dihentikan
+
+- **Gangguan sementara** (pemeliharaan, gangguan jaringan) bukan alasan pengembalian dana, kecuali berlangsung lebih
+  dari **[PILIH: 14] hari berturut-turut**.
+- **Penghentian permanen:** kami memberi tahu lewat email akun paling lambat **[PILIH: 30] hari** sebelumnya.
+- **[PILIH: ya/tidak]** Bila penghentian terjadi dalam **[PILIH: 12] bulan** sejak pembelian, dana dikembalikan secara
+  proporsional sesuai sisa bulan.
 
 ### 3. Yang tidak termasuk pengembalian dana
 
-Di luar ketentuan pada bagian 1 dan 2:
+Di luar ketentuan di atas:
 - perubahan pikiran setelah masa garansi (bila garansi berlaku);
 - fitur atau layanan yang tidak tercantum saat pembelian, termasuk fitur berbayar baru di masa depan;
-- hasil perhitungan yang berbeda karena data atau modal yang Anda isi tidak lengkap atau tidak tepat. Cek Untung
-  menandai angka yang belum pasti, dan hasilnya adalah perkiraan, bukan laporan keuangan yang diaudit;
+- perbedaan hasil karena data atau modal yang Anda isi tidak lengkap. Cek Untung menandai angka yang belum pasti, dan
+  hasilnya adalah perkiraan, bukan laporan keuangan yang diaudit;
 - akun yang dinonaktifkan karena pelanggaran ketentuan, misalnya akun dipakai bersama atau dijual kembali. Hak Anda
   menurut hukum tetap berlaku.
 
 ### 4. Cara mengajukan
 
-1. Hubungi **[kanal bantuan resmi]** dari **email yang terdaftar di akun** Anda.
-2. Sertakan email akun, tanggal pembayaran, nominal, referensi transaksi bila ada, dan alasan singkat.
-   **Jangan kirim file laporan toko atau data pembeli**; data itu tidak diperlukan.
-3. Kami menjawab dalam **[PILIH: 3] hari kerja**.
-4. Bila disetujui, dana dikembalikan dalam **[PILIH: 7–14] hari kerja** ke rekening atau metode yang sama dengan
-   pembayaran. Bila tidak memungkinkan, ke rekening atas nama pembayar.
-5. Saat refund disetujui, akses Pro di akun dicabut. Setiap refund dan pencabutan dicatat beserta waktu, nominal,
-   dan alasannya.
+1. Kirim email ke **[KONTAK]** **dari email yang terdaftar di akun** Anda.
+2. Sertakan:
+   - kode pesanan (`CU-…`);
+   - tanggal dan jam pembayaran;
+   - nominal dan metode (transfer/QRIS);
+   - nama pengirim atau nama di aplikasi pembayar;
+   - alasan singkat;
+   - rekening tujuan pengembalian, hanya bila berbeda dari rekening pengirim.
+3. **Jangan kirim** PIN, kode OTP, nomor kartu, kata sandi, file laporan toko, atau data pembeli.
 
-### 5. Kontak
+### 5. Waktu proses
 
-Pertanyaan atau keluhan tentang pembayaran dan pengembalian dana: **[kanal bantuan resmi]**.
+| Tahap | Waktu |
+|---|---|
+| Tanggapan pertama | **[PILIH: 3] hari kerja** |
+| Pemeriksaan mutasi | **[PILIH: 5] hari kerja** |
+| Dana dikembalikan setelah disetujui | **[PILIH: 7–14] hari kerja**, ke rekening/metode pengirim atau rekening atas nama pembayar |
+
+Biaya transfer pengembalian: **[PILIH: ditanggung Cek Untung / dipotong dari dana]**.
+
+### 6. Pencabutan Pro
+
+Pada refund penuh, akses Pro di akun dicabut saat refund diproses. Refund kelebihan atau pembayaran ganda tidak
+mencabut Pro.
+
+### 7. Privasi dan pencatatan
+
+- Setiap pembayaran, refund, dan pencabutan dicatat beserta waktu, nominal, referensi transaksi, dan petugas yang memproses.
+- Catatan keuangan disimpan untuk pembukuan selama **[PILIH: … tahun]**. Bila akun dihapus, catatan ini dipisahkan dari
+  identitas akun.
+- Data pembayaran yang tidak diperlukan (nomor kartu, PIN, tangkapan layar) tidak kami simpan.
+
+### 8. Kontak
+
+Pertanyaan atau keluhan tentang pembayaran dan pengembalian dana: **[KONTAK]**.
 
 ---
 
 ## Catatan untuk pemilik (tidak ikut diterbitkan)
 
 - **Klausula yang dihindari:** jangan memakai kalimat seperti "dana tidak dapat dikembalikan dalam kondisi apa pun".
-  Klausula yang mengalihkan tanggung jawab pelaku usaha berisiko tidak berlaku.
-- **Garansi 7 hari:** opsi paling sederhana dan membangun kepercayaan. Untuk produk digital, ada risiko pembeli
-  mengunduh PDF lalu meminta refund. Batasi satu kali per pembeli dan catat setiap refund.
-- **Pencatatan:** setiap refund memakai `admin_cabut_pro(jenis = 'refund')` sehingga tercatat di `pro_payments`.
-- **Tempat terbit:** halaman `privasi.html` (bagian Pro) dan FAQ harga. Terbitkan sebelum tombol beli diaktifkan.
+- **Keputusan yang perlu diambil:**
+  - garansi 7 hari (ya/tidak);
+  - batas waktu proses;
+  - biaya transfer refund;
+  - refund proporsional bila layanan berhenti;
+  - lama penyimpanan catatan;
+  - email resmi.
+- **Pencatatan teknis:** refund memakai "Refund" pada baris pembayaran asal di admin.html (`admin_refund_pembayaran`),
+  sehingga selalu menunjuk transaksi asal.
+- **Tempat terbit:** halaman Privasi & ketentuan dan FAQ harga. Terbitkan **sebelum** tombol beli diaktifkan.

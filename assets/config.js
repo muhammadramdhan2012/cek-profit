@@ -49,4 +49,18 @@ window.CEK_CONFIG = {
   supabaseUrl: 'https://ikjcbgfexhpksbewkpym.supabase.co',
   supabaseAnonKey: 'sb_publishable_KC8qxwwQKwnYe2k-fjeEYw_HNxiscEt',    // "anon public" / "publishable" key — aman untuk publik, dilindungi aturan RLS
   googleLogin: false,     // true setelah login Google diaktifkan di Supabase (Authentication → Providers)
+
+  // ---------- Lingkungan STAGING (opsional) ----------
+  // Preview Cloudflare memakai Supabase PRODUKSI, kecuali host preview terdaftar di `hosts` di bawah. Isi dengan project
+  // Supabase STAGING terpisah (URL + publishable key; BUKAN secret/service_role). Domain produksi tidak pernah dialihkan.
+  // Panduan: docs/usulan/STAGING_SUPABASE.md
+  staging: { supabaseUrl: '', supabaseAnonKey: '', hosts: [] },
 };
+// Pilih database menurut alamat halaman. Kosong = selalu produksi.
+(function pilihLingkungan(C) {
+  const st = C.staging || {};
+  const host = typeof location !== 'undefined' ? location.hostname : '';
+  const pakaiStaging = !!(st.supabaseUrl && st.supabaseAnonKey && Array.isArray(st.hosts) && st.hosts.includes(host) && !/(^|\.)cekuntung\.id$/.test(host));
+  if (pakaiStaging) { C.supabaseUrl = st.supabaseUrl; C.supabaseAnonKey = st.supabaseAnonKey; }
+  C.lingkungan = pakaiStaging ? 'staging' : 'produksi';
+})(window.CEK_CONFIG);

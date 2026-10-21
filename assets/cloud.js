@@ -44,6 +44,7 @@ const CekCloud = (() => {
     if (m === 'tautan_kedaluwarsa') return 'Tautan sudah tidak berlaku. Silakan minta tautan baru.';
     if (m === 'oauth_gagal') return 'Masuk dengan Google gagal. Silakan coba lagi beberapa saat lagi.';
     if (m.includes('code verifier') || m.includes('flow state') || m.includes('auth code')) return 'Proses masuk dengan Google kedaluwarsa. Silakan ulangi dari awal.';
+    if (m.includes('pengaturan_siap')) return 'Pembelian belum bisa dibuka: lengkapi kontak bantuan dan minimal satu metode pembayaran.';
     if (m.includes('could not find the function') || (body && body.code === 'PGRST202')) return 'Fitur ini belum aktif di database (migrasi belum dijalankan).';
     if (status === 0) return 'Tidak bisa terhubung ke server. Periksa koneksi internet.';
     return raw || `Permintaan gagal (${status}).`;
@@ -213,7 +214,7 @@ const CekCloud = (() => {
     /* ---- Checkout Pro manual (butuh migrasi supabase/usulan/pro-sekali-bayar.sql). Nominal & kode pesanan dibuat server. ---- */
     pengaturanPembayaran: () => http('/rest/v1/pengaturan_pembayaran?select=*&id=eq.1').then((r) => (r && r[0]) || null),
     pesananSaya: () => http('/rest/v1/upgrade_requests?select=*&plan=eq.pro_sekali&order=created_at.desc&limit=10'),
-    historiPesanan: (id) => http(`/rest/v1/pro_order_events?select=status_lama,status_baru,catatan,waktu&order_id=eq.${enc(id)}&order=waktu.asc`),
+    historiPesanan: (id) => http(`/rest/v1/pro_order_events?select=status_lama,status_baru,catatan,internal,waktu&order_id=eq.${enc(id)}&order=waktu.asc`),
     buatPesanan: (metode) => http('/rest/v1/rpc/buat_pesanan_pro', { method: 'POST', body: { p_metode: metode } }),
     konfirmasiBayar: (id, catatan = '') => http('/rest/v1/rpc/konfirmasi_sudah_bayar', { method: 'POST', body: { p_order: id, p_catatan: catatan } }),
     batalkanPesanan: (id) => http('/rest/v1/rpc/batalkan_pesanan', { method: 'POST', body: { p_order: id } }),
@@ -224,7 +225,13 @@ const CekCloud = (() => {
     /* Admin pesanan Pro: semua lewat fungsi server (is_admin() dari login); sebelum migrasi server menjawab "fungsi tidak ada". */
     adminVerifikasi: (order, sumber, referensi, nominal, catatan = '') => http('/rest/v1/rpc/admin_verifikasi_pesanan', { method: 'POST', body: { p_order: order, p_sumber: sumber, p_referensi: referensi, p_nominal: nominal, p_catatan: catatan } }),
     adminCatatTambahan: (order, sumber, referensi, nominal, catatan) => http('/rest/v1/rpc/admin_catat_pembayaran_tambahan', { method: 'POST', body: { p_order: order, p_sumber: sumber, p_referensi: referensi, p_nominal: nominal, p_catatan: catatan } }),
-    adminRefund: (order, nominal, alasan, cabutPro) => http('/rest/v1/rpc/admin_refund_pesanan', { method: 'POST', body: { p_order: order, p_nominal: nominal, p_alasan: alasan, p_cabut_pro: !!cabutPro } }),
+    adminRefund: (payment, nominal, alasan, cabutPro) => http('/rest/v1/rpc/admin_refund_pembayaran', { method: 'POST', body: { p_payment: payment, p_nominal: nominal, p_alasan: alasan, p_cabut_pro: !!cabutPro } }),
+    adminCatatDana: (sumber, referensi, nominal, catatan) => http('/rest/v1/rpc/admin_catat_dana_masuk', { method: 'POST', body: { p_sumber: sumber, p_referensi: referensi, p_nominal: nominal, p_catatan: catatan } }),
+    adminHubungkanDana: (payment, order, alasan) => http('/rest/v1/rpc/admin_hubungkan_dana', { method: 'POST', body: { p_payment: payment, p_order: order, p_alasan: alasan } }),
+    adminKoreksiRef: (payment, referensi, alasan) => http('/rest/v1/rpc/admin_koreksi_referensi', { method: 'POST', body: { p_payment: payment, p_referensi_baru: referensi, p_alasan: alasan } }),
+    adminCatatan: (order, catatan, perluCek) => http('/rest/v1/rpc/admin_catatan_pesanan', { method: 'POST', body: { p_order: order, p_catatan: catatan, p_perlu_cek: !!perluCek } }),
+    adminPengaturan: (patch) => http('/rest/v1/pengaturan_pembayaran?id=eq.1', { method: 'PATCH', body: patch, headers: { Prefer: 'return=representation' } }).then((r) => {
+      if (!r || !r[0]) throw new CloudError(403, { message: 'Pengaturan tidak tersimpan (bukan admin?)' }); return r[0]; }),
     adminTolak: (order, alasan, status = 'ditolak') => http('/rest/v1/rpc/admin_tolak_pesanan', { method: 'POST', body: { p_order: order, p_alasan: alasan, p_status: status } }),
     adminCabutPro: (target, catatan) => http('/rest/v1/rpc/admin_cabut_pro', { method: 'POST', body: { target, catatan } }),
     adminPayments: () => http('/rest/v1/pro_payments?select=*&order=created_at.desc&limit=200'),

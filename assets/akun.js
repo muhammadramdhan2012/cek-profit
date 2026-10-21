@@ -121,9 +121,9 @@
   /* ---------------- Pembelian Pro (checkout manual: transfer bank / QRIS) ----------------
    * Kode pesanan, nominal, dan status dibuat server (supabase/usulan/pro-sekali-bayar.sql). Browser hanya menampilkan.
    * "Saya sudah membayar" hanya klaim pembeli (Menunggu verifikasi); Pro aktif setelah admin menemukan dana di mutasi. */
-  const STATUS_PESANAN = { baru: 'Menunggu pembayaran', diproses: 'Menunggu verifikasi', selesai: 'Aktif', ditolak: 'Gagal', dibatalkan: 'Dibatalkan', direfund: 'Dana dikembalikan' };
+  const STATUS_PESANAN = { baru: 'Menunggu pembayaran', diproses: 'Menunggu verifikasi', perlu_cek: 'Perlu pemeriksaan', selesai: 'Aktif', ditolak: 'Gagal', dibatalkan: 'Dibatalkan', direfund: 'Dana dikembalikan' };
   const METODE = { transfer: 'Transfer bank', qris: 'QRIS' };
-  const GAMBAR_QRIS = /^img\/[A-Za-z0-9._-]+\.(png|jpg|jpeg|webp|svg)$/;
+  const GAMBAR_QRIS = /^img\/[A-Za-z0-9._-]+\.(png|jpg|jpeg|webp)$/;
   const rupiah = (n) => `Rp${Number(n || 0).toLocaleString('id-ID')}`;
   const tglWaktu = (d) => new Date(d).toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' });
   /** Harga dari server bila ada (nominal tagihan resmi); label & harga reguler yang direncanakan dari config. */
@@ -140,41 +140,48 @@
     qris: !!(s && s.qris_merchant && GAMBAR_QRIS.test(s.qris_gambar || '')),
   });
   const SIAPKAN = '<p class="msg info">Metode pembayaran sedang disiapkan. Semua fitur gratis tetap bisa Anda pakai.</p>';
+  const salin = (v, label) => `<button class="btn link sm" type="button" data-salin="${esc(v)}" aria-label="Salin ${label}">Salin</button>`;
   function instruksi(o, s) {
-    const langkahAkhir = o.status === 'baru' ? '<li>Setelah berhasil, tekan <b>Saya sudah membayar</b>.</li>' : '';
+    const langkahAkhir = o.status === 'baru' ? '<li>Setelah berhasil, tekan <b>Saya sudah membayar</b> dan isi waktu bayar serta nama pengirim.</li>' : '';
+    const kode = `<div><dt>Kode pesanan</dt><dd><b class="mono">${esc(o.order_code)}</b> ${salin(o.order_code, 'kode pesanan')}</dd></div>`;
     if (o.metode === 'qris') {
       return `<div class="pay-box"><img class="qris" src="${esc(s.qris_gambar)}" alt="Kode QRIS ${esc(s.qris_merchant)}" width="220" height="220">
-        <p class="small">Merchant: <b>${esc(s.qris_merchant)}</b>${s.qris_nmid ? ` · NMID ${esc(s.qris_nmid)}` : ''}</p>
+        <p class="small">Merchant: <b>${esc(s.qris_merchant)}</b>${s.qris_nmid ? ` · NMID ${esc(s.qris_nmid)}` : ''} · <a href="${esc(s.qris_gambar)}" download>Unduh QRIS</a></p>
+        <dl class="pay-dl">${kode}</dl>
         <ol class="steps"><li>Pindai dengan aplikasi bank atau dompet digital. Pastikan nama merchant sama dengan di atas.</li>
-        <li>Masukkan nominal tepat <b>${rupiah(o.amount)}</b>.</li>${langkahAkhir}</ol></div>`;
+        <li>Ketik nominal sendiri, tepat <b>${rupiah(o.amount)}</b>.</li>${langkahAkhir}</ol>
+        <p class="tiny faint">QRIS ini statis dan sama untuk semua pembeli, jadi gambar ini memang boleh dilihat dan diunduh siapa pun. Kode pesanan tidak muncul di laporan QRIS; karena itu kami mencocokkan pembayaran dari waktu dan nama yang Anda isi saat konfirmasi.</p></div>`;
     }
     return `<div class="pay-box"><dl class="pay-dl"><div><dt>Bank</dt><dd>${esc(s.bank_nama)}</dd></div>
-        <div><dt>Nomor rekening</dt><dd><b class="mono">${esc(s.bank_nomor)}</b> <button class="btn link sm" type="button" data-salin="${esc(s.bank_nomor)}">Salin</button></dd></div>
-        <div><dt>Atas nama</dt><dd>${esc(s.bank_pemilik)}</dd></div></dl>
-      <ol class="steps"><li>Transfer tepat <b>${rupiah(o.amount)}</b>.</li><li>Tulis kode <b class="mono">${esc(o.order_code)}</b> di berita/keterangan transfer.</li>
-        ${langkahAkhir}</ol></div>`;
+        <div><dt>Nomor rekening</dt><dd><b class="mono">${esc(s.bank_nomor)}</b> ${salin(s.bank_nomor, 'nomor rekening')}</dd></div>
+        <div><dt>Atas nama</dt><dd>${esc(s.bank_pemilik)}</dd></div>${kode}</dl>
+      <ol class="steps"><li>Transfer tepat <b>${rupiah(o.amount)}</b>.</li><li>Bila aplikasi bank Anda mendukung, tulis kode pesanan di berita/keterangan transfer.</li>${langkahAkhir}</ol></div>`;
   }
   function panelPesanan(o, s, tersedia) {
-    const batas = new Date(new Date(o.created_at).getTime() + (Number(s && s.batas_hari) || 3) * 864e5);
+    const batas = new Date(new Date(o.created_at).getTime() + (Number(s && s.batas_jam) || 48) * 36e5);
     const lewat = o.status === 'baru' && batas < new Date();
     const lain = o.metode === 'transfer' ? 'qris' : 'transfer';
     let aksi = '';
     if (o.status === 'baru' && !lewat) {
-      aksi = `<div class="field"><label for="k-catatan">Catatan untuk admin (opsional)</label><input class="plain" id="k-catatan" maxlength="200" placeholder="Misalnya nama pengirim transfer">
+      aksi = `<div class="field"><label for="k-catatan">Waktu bayar dan nama pengirim (disarankan)</label><input class="plain" id="k-catatan" maxlength="200" placeholder="Contoh: 21 Okt 14.05, a.n. Siti Aminah">
           <span class="hint">Jangan menulis nomor kartu, PIN, atau kode OTP.</span></div>
         <button class="btn primary" type="button" data-konfirmasi="${o.id}">Saya sudah membayar</button>
         <p class="tiny faint">Tombol ini hanya memberi tahu kami. Pro aktif setelah dana kami temukan di mutasi ${o.metode === 'qris' ? 'QRIS' : 'rekening'}; tangkapan layar saja tidak cukup.</p>
         <div class="row-gap">${tersedia[lain] ? `<button class="btn sm" type="button" data-beli="${lain}">Ganti ke ${METODE[lain]}</button>` : ''}<button class="btn sm quiet" type="button" data-batal="${o.id}">Batalkan pesanan</button></div>`;
     } else if (lewat) {
-      aksi = `<p class="msg info">Batas waktu pembayaran pesanan ini sudah lewat.</p><button class="btn primary" type="button" data-beli="${esc(o.metode)}">Buat pesanan baru</button>`;
+      aksi = `<p class="msg info">Batas waktu pembayaran (${Number(s && s.batas_jam) || 48} jam) sudah lewat. Bila Anda sudah membayar, beri tahu kami agar diperiksa manual; dana Anda tidak hangus. Bila belum, buat pesanan baru.</p>
+        <div class="field"><label for="k-catatan">Waktu bayar dan nama pengirim</label><input class="plain" id="k-catatan" maxlength="200" placeholder="Contoh: 23 Okt 09.10, a.n. Siti Aminah"></div>
+        <div class="row-gap"><button class="btn" type="button" data-konfirmasi="${o.id}">Saya sudah membayar</button><button class="btn primary" type="button" data-beli="${esc(o.metode)}">Buat pesanan baru</button></div>`;
     } else if (o.status === 'diproses') {
       aksi = '<p class="msg info">Terima kasih. Kami sedang mencocokkan pembayaran Anda dengan mutasi. Konfirmasi Anda belum berarti pembayaran berhasil; Pro aktif setelah dana ditemukan.</p>';
+    } else if (o.status === 'perlu_cek') {
+      aksi = '<p class="msg info">Pembayaran Anda sedang diperiksa manual (misalnya karena dibayar setelah batas waktu atau ada beberapa pembayaran serupa). Pro aktif setelah pemeriksaan selesai; bila tidak cocok, dana dikembalikan sesuai kebijakan refund. Kami mungkin menghubungi Anda lewat email akun.</p>';
     }
     return `<section class="order" aria-label="Pesanan ${esc(o.order_code)}">
       <div class="order-head"><span class="small muted">Pesanan</span><b class="mono">${esc(o.order_code)}</b><span class="badge st-${esc(o.status)}">${esc(STATUS_PESANAN[o.status] || o.status)}</span></div>
       <dl class="pay-dl"><div><dt>Total dibayar</dt><dd><b>${rupiah(o.amount)}</b></dd></div><div><dt>Metode</dt><dd>${esc(METODE[o.metode] || '-')}</dd></div>
         ${o.status === 'baru' ? `<div><dt>Bayar sebelum</dt><dd>${tglWaktu(batas)}</dd></div>` : ''}</dl>
-      ${(o.status === 'baru' && !lewat) || o.status === 'diproses' ? instruksi(o, s) : ''}
+      ${(o.status === 'baru' && !lewat) || o.status === 'diproses' || o.status === 'perlu_cek' ? instruksi(o, s) : ''}
       ${aksi}</section>`;
   }
   async function renderPro(card, user) {
@@ -194,9 +201,11 @@
     let s = null, orders = [];
     try { [s, orders] = await Promise.all([cloud.db.pengaturanPembayaran(), cloud.db.pesananSaya()]); } catch (e) { s = null; orders = []; }
     const tersedia = metodeTersedia(s);
-    const open = (orders || []).find((o) => o.status === 'baru' || o.status === 'diproses');
+    const open = (orders || []).find((o) => ['baru', 'diproses', 'perlu_cek'].includes(o.status));
     const lama = (orders || []).filter((o) => o !== open).slice(0, 5);
-    const riwayat = lama.length ? `<details class="riwayat"><summary class="small">Riwayat pesanan</summary><ul>${lama.map((o) => `<li><span class="mono">${esc(o.order_code || '-')}</span> · ${tglWaktu(o.created_at)} · ${esc(STATUS_PESANAN[o.status] || o.status)}</li>`).join('')}</ul></details>` : '';
+    // Pesanan yang kedaluwarsa otomatis masih bisa diklaim "sudah membayar" (≤ 30 hari) → diperiksa manual, dana tidak hangus.
+    const bisaKlaim = (o) => !open && o.status === 'dibatalkan' && o.expired_at && Date.now() - new Date(o.expired_at).getTime() < 30 * 864e5;
+    const riwayat = lama.length ? `<details class="riwayat" ${lama.some(bisaKlaim) ? 'open' : ''}><summary class="small">Riwayat pesanan</summary><ul>${lama.map((o) => `<li><span class="mono">${esc(o.order_code || '-')}</span> · ${tglWaktu(o.created_at)} · ${esc(STATUS_PESANAN[o.status] || o.status)}${o.expired_at ? ' (kedaluwarsa)' : ''}${bisaKlaim(o) ? ` <button class="btn link sm" type="button" data-konfirmasi="${o.id}">Saya sudah membayar pesanan ini</button>` : ''}</li>`).join('')}</ul></details>` : '';
     const kontak = s && s.kontak_bantuan ? `<p class="tiny faint">Butuh bantuan pembayaran? Hubungi ${esc(s.kontak_bantuan)}. Jangan kirim file laporan toko atau data pembeli.</p>` : '';
     const siap = !!(s && s.aktif && (tersedia.transfer || tersedia.qris));
     if (open) { card.innerHTML = `${head}${panelPesanan(open, s || {}, tersedia)}${kontak}${riwayat}${kembali}`; return; }
@@ -209,7 +218,7 @@
         ${pilihan.map((m, i) => `<label class="plan-opt"><input type="radio" name="metode" value="${m}" ${i === 0 ? 'checked' : ''}><span><b>${METODE[m]}</b></span><span class="small muted">${m === 'qris' ? 'Pindai kode QRIS' : 'Transfer ke rekening resmi'}</span></label>`).join('')}
       </fieldset>
       <button class="btn primary" type="button" id="buat-pesanan">Buat pesanan</button>
-      <p class="tiny faint">Pesanan berlaku ${Number(s.batas_hari) || 3} hari. Pro aktif setelah dana kami verifikasi di mutasi resmi.</p>
+      <p class="tiny faint">Bayar dalam ${Number(s.batas_jam) || 48} jam setelah pesanan dibuat. Pro aktif setelah dana kami verifikasi di mutasi resmi.</p>
       ${kontak}${riwayat}${kembali}`;
   }
   async function aksiPro(btn, fn, sukses) {

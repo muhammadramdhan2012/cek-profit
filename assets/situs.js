@@ -28,7 +28,15 @@ const CekSitus = (() => {
   }
 
   const TUTUP_KEY = 'cekprofit.pindahTutup';
+  /** Penanda STAGING yang selalu terlihat agar data uji tidak tertukar dengan layanan sungguhan. */
+  function tandaStaging(doc, cfg) {
+    if (!cfg || cfg.lingkungan !== 'staging' || doc.getElementById('tanda-staging')) return;
+    const el = doc.createElement('div'); el.id = 'tanda-staging'; el.className = 'tanda-staging'; el.setAttribute('role', 'note');
+    el.textContent = 'STAGING: database uji, bukan layanan Cek Untung sungguhan. Jangan membayar dengan uang sungguhan di sini.';
+    doc.body.prepend(el);
+  }
   function pasang(doc, cfg, loc, store) {
+    tandaStaging(doc, cfg);
     doc.querySelectorAll('[data-wa-support]').forEach((el) => {
       const url = waSupportUrl(cfg, el.dataset.waSupport);
       if (url) { el.href = url; el.target = '_blank'; el.rel = 'noopener'; el.hidden = false; }
@@ -57,6 +65,6 @@ const CekSitus = (() => {
     const run = () => { let st = null; try { st = sessionStorage; } catch (e) { /* abaikan */ } pasang(document, window.CEK_CONFIG || {}, location, st); };
     if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', run); else run();
   }
-  return { waSupportUrl, alamatPindah, pasang };
+  return { waSupportUrl, alamatPindah, pasang, tandaStaging };
 })();
 if (typeof module !== 'undefined') module.exports = CekSitus;

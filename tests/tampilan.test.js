@@ -535,7 +535,14 @@ test('Status Pro sekali bayar & checkout: kolom eksplisit, harga/kode/status dar
   truthy(/buatPesanan: \(metode\) => http\('\/rest\/v1\/rpc\/buat_pesanan_pro', \{ method: 'POST', body: \{ p_metode: metode \} \}\)/.test(cl), 'browser hanya mengirim metode (tanpa nominal/kode)');
   truthy(/<b>\$\{rupiah\(o\.amount\)\}<\/b>/.test(akun) && /esc\(o\.order_code\)/.test(akun), 'nominal & kode pesanan dari data server');
   truthy(/Tombol ini hanya memberi tahu kami\. Pro aktif setelah dana kami temukan di mutasi/.test(akun) && /Konfirmasi Anda belum berarti pembayaran berhasil/.test(akun), 'klaim bayar dijelaskan sebagai pemberitahuan');
-  truthy(/const GAMBAR_QRIS = \/\^img\\\/\[A-Za-z0-9\._-\]\+\\\.\(png\|jpg\|jpeg\|webp\|svg\)\$\/;/.test(akun) && /src="\$\{esc\(s\.qris_gambar\)\}"/.test(akun), 'gambar QRIS hanya dari folder img situs');
+  truthy(/const GAMBAR_QRIS = \/\^img\\\/\[A-Za-z0-9\._-\]\+\\\.\(png\|jpg\|jpeg\|webp\)\$\/;/.test(akun) && /src="\$\{esc\(s\.qris_gambar\)\}"/.test(akun), 'gambar QRIS hanya dari folder img situs');
+  truthy(/s\.batas_jam\) \|\| 48\) \* 36e5/.test(akun) && !/batas_hari/.test(akun + adm), 'batas bayar 48 jam (dari server)');
+  truthy(/perlu_cek: 'Perlu pemeriksaan'/.test(akun) && /dana Anda tidak hangus/.test(akun) && /Saya sudah membayar pesanan ini/.test(akun), 'bayar setelah batas waktu → pemeriksaan manual, dana tidak hangus');
+  truthy(/salin\(o\.order_code, 'kode pesanan'\)/.test(akun) && /salin\(s\.bank_nomor, 'nomor rekening'\)/.test(akun) && /Bila aplikasi bank Anda mendukung, tulis kode pesanan/.test(akun), 'transfer: salin rekening & kode; berita transfer opsional');
+  truthy(/download>Unduh QRIS<\/a>/.test(akun) && /QRIS ini statis dan sama untuk semua pembeli/.test(akun) && /Kode pesanan tidak muncul di laporan QRIS/.test(akun), 'QRIS statis dijelaskan jujur');
+  truthy(/adminHubungkanDana\(dana, o\.id, alasan\)/.test(adm) && /adminCatatDana\(/.test(adm) && /adminKoreksiRef\(/.test(adm) && /adminCatatan\(r\.id, cat, cek\)/.test(adm) && /Jangan menebak/.test(adm), 'admin: dana ambigu, hubungkan dengan bukti, koreksi, catatan internal');
+  truthy(/cloud\.db\.adminRefund\(x\.id, nominal, alasan, cabut\)/.test(adm), 'refund dari baris pembayaran asal');
+  truthy(/C\.lingkungan === 'staging'|cfg\.lingkungan !== 'staging'/.test(src('situs.js')) && /<script src="assets\/situs\.js\?v=\w+" defer><\/script>/.test(adm), 'penanda STAGING juga di admin');
   truthy(/cloud\.db\.adminVerifikasi\(r\.id, d\.sumber, d\.ref, d\.nominal/.test(adm) && /Nominal TIDAK diisi otomatis/.test(adm) && /bukan dari tangkapan layar pembeli/.test(adm), 'admin: data dari mutasi, nominal diketik admin');
   truthy(/cloud\.db\.adminRefund\(/.test(adm) && /cloud\.db\.adminTolak\(/.test(adm) && /cloud\.db\.adminCatatTambahan\(/.test(adm) && /cloud\.db\.adminCabutPro\(t\.dataset\.cabut, alasan\)/.test(adm), 'admin: refund/tolak/tambahan/cabut lewat fungsi');
   truthy(/belum aktif di database \(migrasi belum dijalankan\)/.test(cl), 'pesan jelas sebelum migrasi');
