@@ -285,6 +285,15 @@ table.data tr.total td { font-weight: 750; border-top: 1.5px solid var(--ink); }
 .benefits { margin: 0; padding: 0; list-style: none; display: grid; gap: 7px; font-size: 14px; color: var(--ink-2); }
 .benefits li { display: flex; gap: 8px; }
 .benefits li::before { content: "✓"; color: var(--accent); font-weight: 800; flex: none; }
+/* Harga Pro (dialog & kartu samping): harga peluncuran + harga reguler yang direncanakan (dicoret, berlabel). */
+.harga-pro { display: grid; gap: 4px; padding: 12px 14px; border: 1px solid var(--border); border-radius: 14px; background: var(--surface-2); }
+.harga-pro .hp-label { justify-self: start; font-size: 11.5px; font-weight: 700; letter-spacing: .02em; color: var(--accent-ink); background: var(--accent); border-radius: 999px; padding: 2px 9px; }
+.harga-pro .hp-was { font-size: 12.5px; color: var(--ink-2); }
+.harga-pro .hp-was s { color: var(--ink-3); margin-left: 3px; }
+.harga-pro .hp-now { font-size: 14px; color: var(--ink-2); } .harga-pro .hp-now b { font-size: 24px; color: var(--ink); letter-spacing: -0.02em; }
+.harga-pro .hp-note { font-size: 12.5px; color: var(--ink-3); }
+.harga-pro.mini { padding: 0; border: 0; background: none; gap: 2px; }
+.harga-pro.mini .hp-now b { font-size: 16px; } .harga-pro.mini .hp-note { display: none; }
 textarea.code { font-family: ui-monospace, Menlo, monospace; font-size: 12.5px; min-height: 70px; resize: vertical; }
 .acct-box .who { text-align: left; justify-items: start; }
 
@@ -985,6 +994,7 @@ body.app { --dur-reveal: 340ms; --reveal-y: 10px; background: var(--surface-0); 
 .side .theme-seg button[aria-checked="true"] { background: rgb(255 255 255 / 14%); color: #fff; box-shadow: none; }
 .side .upsell { background: linear-gradient(150deg, rgb(242 182 50 / 18%), rgb(255 255 255 / 3%)); border: 1px solid rgb(242 182 50 / 24%); border-radius: 14px; }
 .side .upsell b { color: #fff; } .side .upsell p { color: var(--side-muted); }
+.side .harga-pro .hp-was, .side .harga-pro .hp-now { color: var(--side-muted); } .side .harga-pro .hp-was s { color: var(--side-muted); } .side .harga-pro .hp-now b { color: #fff; }
 .side .acct-cta { border-color: var(--side-line); background: rgb(255 255 255 / 3%); border-radius: 14px; }
 .side .acct-cta p { color: var(--side-muted); }
 .side .acct-cta .btn:not(.primary), .side .btn.quiet { background: transparent; color: var(--side-ink); border-color: rgb(255 255 255 / 16%); box-shadow: none; }

@@ -41,7 +41,8 @@
   };
   // Export pesanan Shopee/TikTok: parser belum diuji dengan semua format file asli (CLAUDE.md §2.5).
   // Pembayaran Pro manual hanya bisa diselesaikan bila kontak WhatsApp sudah diisi (config.js).
-  const PAY_READY = !!C.whatsapp;
+  // Pembelian Pro dibuka hanya bila kontak pembayaran diisi DAN proPembayaranAktif = true (config.js).
+  const PAY_READY = !!(C.whatsapp && C.proPembayaranAktif === true);
   const BETA_NOTE = 'Format export marketplace dapat berubah. Hasil pencocokan ditandai bila belum dapat diverifikasi.';
   const track = (e) => { try { window.cekTrack && window.cekTrack(e); } catch (err) { /* abaikan */ } };
   /* Pengumuman: #toast selalu ada di halaman sebagai area status (role=status). Isi dikosongkan dulu lalu diisi,
@@ -253,12 +254,14 @@
       + `<button type="button" class="bn" data-sheet="more" aria-haspopup="dialog" ${moreActive ? 'aria-current="page"' : ''}>${svg('lainnya')}<span class="lbl">Lainnya</span></button>`;
     if (renderNav.bottom !== bottom) { $('#bnav').innerHTML = bottom; renderNav.bottom = bottom; }
   }
+  /** Teks status Pro dari akun: sekali bayar (tanggal penanda) atau sampai tanggal tertentu (Pro lama). */
+  const proText = (p) => (CekCloud.isProSekaliBayar(p) ? 'Pro sekali bayar' : `Pro sampai ${tgl(p.pro_until)}`);
   const initials = (s) => (s || '?').trim().split(/\s+/).slice(0, 2).map((w) => w[0]).join('').toUpperCase();
   function renderAccount() {
     const p = account.profile, u = account.user;
     const pro = isPro();
-    const planText = demo ? 'Mode contoh' : CekCloud.isPro(p) ? `Pro sampai ${tgl(p.pro_until)}` : license.ok ? `Pro (kode)${license.exp ? ` sampai ${tgl(license.exp)}` : ''}` : 'Paket gratis';
-    $('#plan-box').innerHTML = pro ? `<div class="plan-pro"><span class="badge pro">PRO</span><span>${demo ? 'Mode contoh: semua fitur terbuka' : 'Semua fitur Pro aktif'}</span></div>` : `<div class="upsell"><span class="badge pro">PRO</span><b>Cek Untung Pro</b><p>Laporan PDF, analisis semua produk, dan saran harga.</p><button class="btn sm primary" type="button" data-upgrade>Lihat paket</button></div>`;
+    const planText = demo ? 'Mode contoh' : CekCloud.isPro(p) ? proText(p) : license.ok ? `Pro (kode)${license.exp ? ` sampai ${tgl(license.exp)}` : ''}` : 'Paket gratis';
+    $('#plan-box').innerHTML = pro ? `<div class="plan-pro"><span class="badge pro">PRO</span><span>${demo ? 'Mode contoh: semua fitur terbuka' : 'Semua fitur Pro aktif'}</span></div>` : `<div class="upsell"><span class="badge pro">PRO</span><b>Cek Untung Pro</b><p>Laporan PDF, analisis semua produk, dan saran harga.</p>${hargaPro('mini')}<button class="btn sm primary" type="button" data-upgrade>Lihat paket</button></div>`;
     if (!cloud.enabled) {
       $('#account-box').innerHTML = `<div class="acct-box"><div class="avatar" style="background:var(--surface-3);color:var(--ink-2)">${svg('data', 16)}</div><div class="who"><b>${planText}</b><span>Tersimpan di browser ini</span></div></div>`;
       $('#account-sm').innerHTML = pro ? '<span class="badge pro">PRO</span>' : '<button class="btn sm" type="button" data-upgrade>Pro</button>';
@@ -376,7 +379,7 @@
   /** Ringkasan akun untuk lembar "Lainnya" (di HP menu samping tidak tampil). */
   function accountSheet() {
     const p = account.profile, u = account.user, pro = isPro();
-    const plan = demo ? 'Mode contoh' : CekCloud.isPro(p) ? `Pro sampai ${tgl(p.pro_until)}` : license.ok ? 'Pro (kode akses)' : 'Paket gratis';
+    const plan = demo ? 'Mode contoh' : CekCloud.isPro(p) ? proText(p) : license.ok ? 'Pro (kode akses)' : 'Paket gratis';
     const up = pro ? '' : '<button class="btn sm" type="button" data-upgrade>Lihat paket Pro</button>';
     if (!cloud.enabled) return `<div class="sheet-acct"><span class="small">${plan}. Tersimpan di browser ini.</span>${up}</div>`;
     if (!u) return `<div class="sheet-acct"><a class="btn sm primary" href="akun.html?mode=daftar&next=dashboard.html">Daftar gratis</a><a class="btn sm" href="akun.html?next=dashboard.html">Masuk</a>${up}</div>`;
@@ -1686,7 +1689,17 @@
 
   /* ================= 6. dialog ================= */
   const dlg = () => $('#dlg');
-  const PLANS = () => { const p = C.prices || {}; return [['pro_bulanan', 'Pro bulanan', `${p.pro || ''} ${p.proUnit || ''}`.trim()], ['pro_tahunan', 'Pro tahunan', (p.proNote || '').replace(/^atau\s+/i, '')]]; };
+  // Satu paket Pro, sekali bayar. Nama paket lama tetap dikenali untuk permintaan yang sudah tercatat.
+  const PLAN_PRO = 'pro_sekali';
+  const planName = (k) => ({ pro_sekali: 'Pro sekali bayar', pro_bulanan: 'Pro bulanan (paket lama)', pro_tahunan: 'Pro tahunan (paket lama)' }[k] || 'Pro');
+  /** Harga Pro dari config: harga peluncuran + harga reguler yang direncanakan (dicoret, berlabel). Tidak menampilkan hitung mundur maupun jumlah slot promosi. */
+  function hargaPro(gaya = '') {
+    const pr = C.prices || {};
+    if (!pr.pro) return '';
+    return `<div class="harga-pro ${gaya}">${pr.proLabel ? `<span class="hp-label">${esc(pr.proLabel)}</span>` : ''}
+      ${pr.proRegular ? `<span class="hp-was">Harga reguler yang direncanakan <s>${esc(pr.proRegular)}</s></span>` : ''}
+      <span class="hp-now"><b>${esc(pr.pro)}</b> ${esc(pr.proUnit || '')}</span><span class="hp-note">Bayar satu kali, tanpa tagihan bulanan atau tahunan.</span></div>`;
+  }
   const waLink = (msg) => (C.whatsapp ? `https://wa.me/${C.whatsapp}?text=${encodeURIComponent(msg)}` : '');
   const dHead = (t, s) => `<div class="d-head"><div><h2 style="font-size:22px">${t}</h2>${s ? `<p class="small muted" style="margin-top:4px">${s}</p>` : ''}</div><button class="x" type="button" data-close aria-label="Tutup">×</button></div>`;
   async function openUpgrade() {
@@ -1696,7 +1709,7 @@
     let pending = null;
     if (account.user && !isPro()) { try { pending = (await cloud.db.myRequests()).find((x) => x.status === 'baru' || x.status === 'diproses'); } catch (e) { /* abaikan */ } }
     if (isPro() && !demo) {
-      d.innerHTML = `${dHead('Pro aktif', CekCloud.isPro(p) ? `Sampai ${tgl(p.pro_until)}` : license.ok ? `Kode atas nama ${esc(license.name || '-')}${license.exp ? `, sampai ${tgl(license.exp)}` : ''}` : '')}
+      d.innerHTML = `${dHead('Pro aktif', CekCloud.isPro(p) ? (CekCloud.isProSekaliBayar(p) ? 'Sekali bayar, aktif selama layanan Cek Untung beroperasi' : `Sampai ${tgl(p.pro_until)}`) : license.ok ? `Kode atas nama ${esc(license.name || '-')}${license.exp ? `, sampai ${tgl(license.exp)}` : ''}` : '')}
         <div class="d-body"><ul class="benefits"><li>Laporan PDF dengan nama dan logo toko</li><li>Analisis semua produk dan saran harga</li><li>Semua temuan, ekspor Excel, riwayat tanpa batas</li></ul>
         ${license.ok ? '<button class="btn quiet" type="button" id="code-remove">Hapus kode dari browser ini</button>' : ''}</div>`;
     } else {
@@ -1706,16 +1719,16 @@
       let action;
       // P0 rilis: pembayaran Pro baru bisa diselesaikan bila kontak WhatsApp sudah diisi di config.js. Selama kosong,
       // tombol yang mengarah ke pembayaran tidak ditampilkan (kode alurnya tetap ada; otomatis aktif setelah diisi).
-      const SOON = '<p class="note-box"><span class="badge">Segera hadir</span> Pembayaran Pro sedang kami siapkan. Semua fitur gratis tetap bisa Anda pakai. Bila sudah punya kode akses, aktifkan di bawah.</p>';
-      if (!PAY_READY) action = pending ? `<p class="note-box">Permintaan <b>${pending.plan === 'pro_tahunan' ? 'Pro tahunan' : 'Pro bulanan'}</b> tercatat ${tgl(pending.created_at)}. Pro aktif setelah pembayaran dikonfirmasi.</p>${SOON}` : SOON;
-      else if (pending) action = `<p class="note-box">Permintaan <b>${pending.plan === 'pro_tahunan' ? 'Pro tahunan' : 'Pro bulanan'}</b> tercatat ${tgl(pending.created_at)} dan sedang diproses. Pro aktif setelah pembayaran dikonfirmasi.</p>
-        ${C.whatsapp ? `<a class="btn primary" href="${esc(waLink(`${C.waMessage} Email akun: ${account.user.email}. Paket: ${pending.plan === 'pro_tahunan' ? 'Pro tahunan' : 'Pro bulanan'}.`))}" target="_blank" rel="noopener">Kirim bukti bayar lewat WhatsApp</a>` : ''}`;
-      else if (cloud.enabled && !account.user) action = '<a class="btn primary" href="akun.html?mode=daftar&next=dashboard.html%23upgrade">Daftar atau masuk untuk berlangganan</a>';
-      else if (cloud.enabled) action = '<button class="btn primary" type="button" id="req-upgrade">Lanjut ke pembayaran</button><p class="tiny faint">Kami catat permintaan Anda, lalu Anda membayar lewat transfer atau QRIS melalui WhatsApp. Pro aktif di akun ini setelah dikonfirmasi.</p>';
+      const SOON = '<p class="note-box"><span class="badge">Segera hadir</span> Pembelian Pro belum dibuka. Semua fitur gratis tetap bisa Anda pakai. Bila sudah punya kode akses, aktifkan di bawah.</p>';
+      if (!PAY_READY) action = pending ? `<p class="note-box">Permintaan <b>${esc(planName(pending.plan))}</b> tercatat ${tgl(pending.created_at)}. Pro aktif setelah pembayaran diverifikasi.</p>${SOON}` : SOON;
+      else if (pending) action = `<p class="note-box">Permintaan <b>${esc(planName(pending.plan))}</b> tercatat ${tgl(pending.created_at)} dan sedang diproses. Pro aktif setelah pembayaran diverifikasi.</p>
+        ${C.whatsapp ? `<a class="btn primary" href="${esc(waLink(`${C.waMessage} Email akun: ${account.user.email}. Paket: ${planName(pending.plan)}.`))}" target="_blank" rel="noopener">Hubungi kami soal pembayaran</a>` : ''}`;
+      else if (cloud.enabled && !account.user) action = '<a class="btn primary" href="akun.html?mode=daftar&next=dashboard.html%23upgrade">Daftar atau masuk untuk membeli Pro</a>';
+      else if (cloud.enabled) action = '<button class="btn primary" type="button" id="req-upgrade">Lanjut ke pembayaran</button><p class="tiny faint">Kami catat permintaan Anda lalu memberi petunjuk pembayaran. Pro aktif di akun ini setelah pembayaran diverifikasi.</p>';
       else action = C.whatsapp ? `<a class="btn primary" href="${esc(waLink(C.waMessage))}" target="_blank" rel="noopener" data-track="beli-wa">Pesan lewat WhatsApp</a>` : '<p class="small warn">Kontak pembelian belum diatur.</p>';
       d.innerHTML = `${dHead('Cek Untung Pro', 'Untuk keputusan harga dan produk yang berbasis angka.')}
         <div class="d-body"><ul class="benefits"><li>Laporan PDF siap kirim, dengan nama dan logo toko</li><li>Semua produk dengan status rugi, tipis, atau sehat</li><li>Harga impas dan harga target per produk</li><li>Semua temuan, ekspor Excel, riwayat tanpa batas</li></ul>
-        ${pending || !PAY_READY ? '' : `<div class="plans">${PLANS().map(([k, l, pr], i) => `<label class="plan-opt"><input type="radio" name="plan" value="${k}" ${i === 0 ? 'checked' : ''}><span><b>${l}</b></span><span class="p">${esc(pr)}</span></label>`).join('')}</div>`}
+        ${hargaPro()}<p class="tiny faint">Akses Pro berlaku untuk akun ini selama layanan Cek Untung beroperasi. Fitur berbayar baru di masa depan tidak otomatis termasuk.</p>
         ${action}${codeBlock}</div>`;
     }
     if (!d.open) d.showModal();
@@ -1886,12 +1899,12 @@
     }
     if (t.id === 'code-remove') { store.del(KEYS.license); license = { ok: false }; dlg().close(); render(); return; }
     if (t.id === 'req-upgrade') {
-      const plan = (document.querySelector('input[name="plan"]:checked') || {}).value || 'pro_bulanan';
+      const plan = PLAN_PRO;
       busy(t, true);
       try {
         await cloud.db.requestUpgrade(plan, '');
         track('minta-upgrade');
-        if (C.whatsapp) window.open(waLink(`${C.waMessage} Email akun: ${account.user.email}. Paket: ${plan === 'pro_tahunan' ? 'Pro tahunan' : 'Pro bulanan'}.`), '_blank', 'noopener');
+        if (C.whatsapp) window.open(waLink(`${C.waMessage} Email akun: ${account.user.email}. Paket: ${planName(plan)}.`), '_blank', 'noopener');
         openUpgrade();
       } catch (err) { toast(err.message); busy(t, false); }
       return;

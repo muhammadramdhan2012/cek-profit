@@ -44,6 +44,7 @@ const CekCloud = (() => {
     if (m === 'tautan_kedaluwarsa') return 'Tautan sudah tidak berlaku. Silakan minta tautan baru.';
     if (m === 'oauth_gagal') return 'Masuk dengan Google gagal. Silakan coba lagi beberapa saat lagi.';
     if (m.includes('code verifier') || m.includes('flow state') || m.includes('auth code')) return 'Proses masuk dengan Google kedaluwarsa. Silakan ulangi dari awal.';
+    if (m.includes('could not find the function') || (body && body.code === 'PGRST202')) return 'Fitur ini belum aktif di database (migrasi belum dijalankan).';
     if (status === 0) return 'Tidak bisa terhubung ke server. Periksa koneksi internet.';
     return raw || `Permintaan gagal (${status}).`;
   }
@@ -214,11 +215,19 @@ const CekCloud = (() => {
     adminProfiles: () => http('/rest/v1/profiles?select=*&order=created_at.desc&limit=500'),
     adminRequests: () => http('/rest/v1/upgrade_requests?select=*&order=created_at.desc&limit=200'),
     adminSetPro: (target, until) => http('/rest/v1/rpc/admin_set_pro', { method: 'POST', body: { target, until } }),
+    /* Pro sekali bayar (butuh migrasi supabase/usulan/pro-sekali-bayar.sql; sebelum itu server menjawab "fungsi tidak ada"). */
+    adminAktifkanPro: (target, nominal, referensi, catatan = '') => http('/rest/v1/rpc/admin_aktifkan_pro_sekali', { method: 'POST', body: { target, nominal, referensi, catatan } }),
+    adminCabutPro: (target, jenis, nominal, catatan) => http('/rest/v1/rpc/admin_cabut_pro', { method: 'POST', body: { target, jenis, nominal, catatan } }),
     adminSetRequestStatus: (id, status) => http(`/rest/v1/upgrade_requests?id=eq.${enc(id)}`, { method: 'PATCH', body: { status } }),
   };
 
-  /** Pro aktif bila pro_until >= hari ini (zona waktu pengguna). */
-  const isPro = (profile, today = new Date().toLocaleDateString('sv-SE')) => !!(profile && profile.pro_until && profile.pro_until >= today);
+  /**
+   * Pro aktif bila (a) Pro sekali bayar: kolom eksplisit profiles.pro_sekali_bayar = true, atau (b) Pro berjangka lama:
+   * pro_until >= hari ini (zona waktu pengguna). Kolom (a) baru ada setelah migrasi supabase/usulan/pro-sekali-bayar.sql;
+   * sebelum itu nilainya undefined dan hanya (b) yang berlaku, jadi akun Pro lama tetap berfungsi.
+   */
+  const isProSekaliBayar = (profile) => !!(profile && profile.pro_sekali_bayar === true);
+  const isPro = (profile, today = new Date().toLocaleDateString('sv-SE')) => isProSekaliBayar(profile) || !!(profile && profile.pro_until && profile.pro_until >= today);
 
   function init({ url, key, store } = {}) {
     cfg = { url: String(url || '').replace(/\/+$/, ''), key: key || '' };
@@ -226,7 +235,7 @@ const CekCloud = (() => {
     session = cfg.url ? read() : null;
     return api;
   }
-  const api = { init, auth, db, isPro, CloudError, get enabled() { return !!cfg.url; } };
+  const api = { init, auth, db, isPro, isProSekaliBayar, CloudError, get enabled() { return !!cfg.url; } };
   return api;
 })();
 if (typeof module !== 'undefined') module.exports = CekCloud;

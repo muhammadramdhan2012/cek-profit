@@ -208,6 +208,41 @@ const memStore = () => { const m = new Map(); return { getItem: (k) => (m.has(k)
     truthy(/maksimal 72/.test(msg('Password cannot be longer than 72 characters')), 'panjang');
     truthy(/memenuhi syarat/.test(msg('Password should contain at least one character of each: abc')), 'syarat');
   });
+  /* ---------- Pro sekali bayar: kolom eksplisit + aktivasi admin tercatat (server TIRUAN meniru usulan SQL) ---------- */
+  await t('Pro sekali bayar: status dari akun; seller tidak bisa menaikkan sendiri; aktivasi admin wajib nominal + referensi unik', async () => {
+    const m5 = createMock(); await new Promise((r) => m5.server.listen(0, r)); const u5 = `http://127.0.0.1:${m5.server.address().port}`;
+    const sellerId = m5.addUser('seller@toko.id', 'Sandiku123', {}); const lamaId = m5.addUser('lama@toko.id', 'Sandiku123', {});
+    m5.profiles.get(lamaId).pro_until = '2099-01-31'; m5.addUser('admin@toko.id', 'Sandiku123', {}); m5.makeAdmin('admin@toko.id');
+    const S1 = fresh().init({ url: u5, key: 'anon', store: memStore() }); await S1.auth.signIn({ email: 'seller@toko.id', password: 'Sandiku123' });
+    try { await S1.db.updateProfile({ pro_sekali_bayar: true }); throw new Error('harus ditolak'); } catch (e) { truthy(e.status === 403, e.message); }
+    try { await S1.db.adminAktifkanPro(sellerId, 149000, 'TRX-SENDIRI'); throw new Error('harus ditolak'); } catch (e) { truthy(/Hanya admin/.test(e.message), e.message); }
+    truthy(!S1.isPro(await S1.db.profile()), 'tetap gratis');
+    const AD = fresh().init({ url: u5, key: 'anon', store: memStore() }); await AD.auth.signIn({ email: 'admin@toko.id', password: 'Sandiku123' });
+    try { await AD.db.adminAktifkanPro(sellerId, 149000, ''); throw new Error('harus ditolak'); } catch (e) { truthy(/Referensi/.test(e.message), e.message); }
+    try { await AD.db.adminAktifkanPro(sellerId, 0, 'TRX-1'); throw new Error('harus ditolak'); } catch (e) { truthy(/Nominal/.test(e.message), e.message); }
+    await AD.db.adminAktifkanPro(sellerId, 149000, 'TRX-1');
+    try { await AD.db.adminAktifkanPro(sellerId, 149000, 'TRX-2'); throw new Error('harus ditolak'); } catch (e) { truthy(/sudah Pro/.test(e.message), e.message); }
+    try { await AD.db.adminAktifkanPro(lamaId, 149000, 'TRX-1'); throw new Error('harus ditolak'); } catch (e) { truthy(e.status === 409, e.message); }
+    truthy(m5.proPayments.filter((x) => x.kind === 'aktivasi').length === 1, 'satu aktivasi tercatat');
+    const S2 = fresh().init({ url: u5, key: 'anon', store: memStore() }); await S2.auth.signIn({ email: 'seller@toko.id', password: 'Sandiku123' });
+    const pr = await S2.db.profile();
+    truthy(S2.isPro(pr) && S2.isProSekaliBayar(pr) && pr.pro_until === null, 'login ulang: Pro sekali bayar dari database, tanpa tanggal');
+    const L = fresh().init({ url: u5, key: 'anon', store: memStore() }); await L.auth.signIn({ email: 'lama@toko.id', password: 'Sandiku123' });
+    const pl = await L.db.profile(); truthy(L.isPro(pl) && !L.isProSekaliBayar(pl), 'Pro lama (berjangka) tetap berfungsi');
+    try { await AD.db.adminCabutPro(sellerId, 'refund', 149000, ''); throw new Error('harus ditolak'); } catch (e) { truthy(/Alasan/.test(e.message), e.message); }
+    await AD.db.adminCabutPro(sellerId, 'refund', 149000, 'refund atas permintaan');
+    truthy(!S2.isPro(await S2.db.profile()) && m5.proPayments.some((x) => x.kind === 'refund'), 'refund: Pro dicabut, tercatat');
+    m5.server.close();
+  });
+  await t('Pro sekali bayar: sebelum migrasi, fungsi admin memberi pesan jelas; Pro lama tetap terbaca', async () => {
+    const m6 = createMock({ proMigrasi: false }); await new Promise((r) => m6.server.listen(0, r)); const u6 = `http://127.0.0.1:${m6.server.address().port}`;
+    const id = m6.addUser('x@toko.id', 'Sandiku123', {}); m6.profiles.get(id).pro_until = '2099-01-31'; m6.addUser('adm@toko.id', 'Sandiku123', {}); m6.makeAdmin('adm@toko.id');
+    const AD = fresh().init({ url: u6, key: 'anon', store: memStore() }); await AD.auth.signIn({ email: 'adm@toko.id', password: 'Sandiku123' });
+    try { await AD.db.adminAktifkanPro(id, 149000, 'TRX-1'); throw new Error('harus gagal'); } catch (e) { truthy(/migrasi belum dijalankan/.test(e.message), e.message); }
+    const X = fresh().init({ url: u6, key: 'anon', store: memStore() }); await X.auth.signIn({ email: 'x@toko.id', password: 'Sandiku123' });
+    const px = await X.db.profile(); truthy(!('pro_sekali_bayar' in px) && X.isPro(px) && !X.isProSekaliBayar(px), 'tanpa kolom baru: Pro lama tetap Pro');
+    m6.server.close();
+  });
   /* ---------- Bantuan WhatsApp & pindah alamat (assets/situs.js) ---------- */
   const S = require('../assets/situs.js');
   await t('waSupport: tersembunyi bila kosong/salah; terpisah dari nomor pembayaran; pesan hanya nama halaman', async () => {

@@ -80,6 +80,10 @@
       <p class="switch">${daftar ? 'Sudah punya akun?' : 'Belum punya akun?'} <button class="btn link" type="button" data-view="${daftar ? 'masuk' : 'daftar'}">${daftar ? 'Masuk' : 'Daftar gratis'}</button></p>`;
   }
 
+  // Pembelian Pro dibuka hanya bila kontak pembayaran diisi DAN proPembayaranAktif = true (sama dengan dashboard).
+  const PAY_READY = !!(C.whatsapp && C.proPembayaranAktif === true);
+  /** Ringkasan harga Pro dari config (tidak menampilkan hitung mundur maupun jumlah slot promosi). */
+  const hargaSingkat = () => { const pr = C.prices || {}; return pr.pro ? `Pro ${pr.pro} ${pr.proUnit || ''}${pr.proLabel ? ` (${pr.proLabel.toLowerCase()})` : ''}. Laporan PDF dan analisis lengkap.`.replace(/\s+\./, '.') : 'Laporan PDF & analisis lengkap ada di Pro'; };
   async function renderAccount(card, user) {
     card.innerHTML = '<p class="muted" role="status">Memuat akun…</p>';
     const salin = await salinHpDaftar();
@@ -97,8 +101,8 @@
       : !wa ? '<p class="msg info" id="wa-ajak">Lengkapi nomor WhatsApp Anda agar kami bisa membantu bila ada kendala atau saat konfirmasi pembayaran.</p>' : '';
     const pending = (reqs || []).find((r) => r.status === 'baru' || r.status === 'diproses');
     card.innerHTML = `${heading('Akun saya', esc(user.email || ''))}${msgHtml()}${ajakWa}
-      <div class="plan"><div><b>${pro ? 'Pro' : 'Gratis'}</b><span class="small muted">${pro ? `Aktif sampai ${fmtDate(p.pro_until)}` : pending ? 'Permintaan upgrade sedang diproses' : 'Laporan PDF & analisis lengkap ada di Pro'}</span></div>
-        ${pro ? '<span class="badge pro">PRO</span>' : pending ? '<a class="btn sm" href="dashboard.html#upgrade">Lihat status</a>' : C.whatsapp ? '<a class="btn sm" href="dashboard.html#upgrade">Upgrade</a>' : '<span class="badge">Pro segera hadir</span>'}</div>
+      <div class="plan"><div><b>${pro ? (cloud.isProSekaliBayar(p) ? 'Pro sekali bayar' : 'Pro') : 'Gratis'}</b><span class="small muted">${pro ? (cloud.isProSekaliBayar(p) ? 'Aktif selama layanan Cek Untung beroperasi' : `Aktif sampai ${fmtDate(p.pro_until)}`) : pending ? 'Permintaan Pro sedang diproses' : esc(hargaSingkat())}</span></div>
+        ${pro ? '<span class="badge pro">PRO</span>' : pending ? '<a class="btn sm" href="dashboard.html#upgrade">Lihat status</a>' : PAY_READY ? '<a class="btn sm" href="dashboard.html#upgrade">Beli Pro</a>' : '<span class="badge">Pro segera hadir</span>'}</div>
       <form id="f-profile">
         <div class="field"><label for="pf-name">Nama lengkap</label><input class="plain" id="pf-name" value="${esc(p && p.full_name)}" autocomplete="name" maxlength="100" placeholder="Masukkan nama lengkap"></div>
         <div class="field"><label for="pf-store">Nama toko</label><input class="plain" id="pf-store" value="${esc(p && p.store_name)}" placeholder="Tampil di sampul laporan PDF"></div>

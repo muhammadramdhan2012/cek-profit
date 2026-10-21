@@ -86,13 +86,22 @@ berstatus *Verified* (SPF dan DKIM). Uji dengan mendaftar akun penguji dan memin
 
 ## Alur pembayaran manual
 
-1. Pengguna klik **Berlangganan Pro** → pilih paket → **Lanjut ke pembayaran**.
-   Permintaannya tercatat, dan WhatsApp Anda terbuka dengan pesan yang sudah berisi email akun dan paket.
-2. Anda kirim nomor rekening atau QRIS, lalu pengguna membayar.
-3. Buka **admin.html** → bagian **Permintaan upgrade** → klik **Aktifkan 1 bulan** atau **1 tahun**.
-4. Pro aktif di akun pengguna begitu halamannya dimuat ulang.
+Pro dijual **sekali bayar** (Rp149.000, harga peluncuran). Pembelian **belum dibuka**: tombol beli baru aktif bila
+`whatsapp` terisi **dan** `proPembayaranAktif: true` di `assets/config.js`. Jangan aktifkan sebelum metode pembayaran
+diputuskan dan migrasi `supabase/usulan/pro-sekali-bayar.sql` disetujui, dijalankan, dan diuji.
 
-Untuk memperpanjang, klik **+1 bln** atau **+1 thn** di daftar pengguna. Masa berlaku dihitung dari tanggal berakhir yang lama, jadi sisa hari tidak hilang.
+Setelah dibuka (alur manual):
+1. Pengguna yang sudah masuk menekan **Beli Pro** → **Lanjut ke pembayaran**. Permintaan `pro_sekali` tercatat
+   (butuh migrasi di atas; tanpa itu database menolak paket baru).
+2. Anda memberi petunjuk pembayaran. **Aktifkan hanya setelah dana benar-benar masuk** (cek mutasi rekening atau dasbor
+   penyedia pembayaran), bukan dari tangkapan layar.
+3. **admin.html** → **Aktifkan Pro sekali bayar**. Pro aktif di akun pembeli begitu halamannya dimuat ulang, dan tetap
+   aktif saat login ulang dari perangkat mana pun.
+
+Tombol admin memanggil `admin_aktifkan_pro_sekali` (wajib nominal + referensi unik dari mutasi, tercatat di
+`pro_payments`) dan `admin_cabut_pro` (refund/pencabutan dengan alasan). **Sebelum migrasi dijalankan, tombol itu
+menampilkan "migrasi belum dijalankan"** dan tidak mengaktifkan apa pun. Pro berjangka lama (`pro_until`) tidak
+berubah dan tetap bisa dimatikan dengan "Matikan Pro lama". Rancangan lengkap: `docs/usulan/PRO_SEKALI_BAYAR.md`.
 
 ## Opsional
 

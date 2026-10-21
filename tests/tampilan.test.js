@@ -503,15 +503,39 @@ test('P0 Excel & dashboard: memakai status HPP dari engine, bukan Rp0/0 untuk HP
   truthy(/\['Modal \/ HPP', \(P, k\) => \(hppOk\(k\) \?/.test(appJs), 'tabel Laba dashboard: status per kolom');
   truthy(!/\['Modal', \.\.\.plats\.map\(\(k\) => R\(-r\[k\]\.modal\)\)/.test(appJs), 'pola lama Excel tidak ada lagi');
 });
-test('P0 Pro: tanpa kontak pembayaran, CTA bayar tidak tampil dan status "Segera hadir"; kode lama tetap ada', () => {
+test('P0 Pro: pembelian hanya dibuka bila kontak pembayaran DAN proPembayaranAktif; tanpa itu "Segera hadir"', () => {
   const appJs = src('app.js'), idx = fs.readFileSync(path.join(__dirname, '..', 'index.html'), 'utf8'), akun = src('akun.js'), cfg = src('config.js');
-  truthy(/const PAY_READY = !!C\.whatsapp;/.test(appJs), 'dashboard: status siap bayar dari config');
+  const GATE = /!!\(C\.whatsapp && C\.proPembayaranAktif === true\)/;
+  truthy(GATE.test(appJs) && GATE.test(akun) && /if \(!\(C\.whatsapp && C\.proPembayaranAktif === true\)\) \{[^]*?'Segera hadir'/.test(idx), 'gerbang sama di dashboard, akun, halaman depan');
+  truthy(/proPembayaranAktif: false,/.test(cfg) && /  whatsapp: '',/.test(cfg), 'pembayaran nonaktif di config');
   truthy(/if \(!PAY_READY\) action = pending \?/.test(appJs) && /Segera hadir/.test(appJs), 'dialog Pro: Segera hadir saat belum siap');
-  truthy(/\$\{pending \|\| !PAY_READY \? '' : `<div class="plans">/.test(appJs), 'pilihan paket disembunyikan saat belum siap');
-  truthy(/id="req-upgrade">Lanjut ke pembayaran/.test(appJs) && /t\.id === 'req-upgrade'/.test(appJs), 'alur pembayaran lama tetap ada');
-  truthy(/data-pay="pro"/.test(idx) && /if \(!C\.whatsapp\) \{[^]*?'Segera hadir'/.test(idx), 'halaman depan: tombol Pro → Segera hadir');
-  truthy(/C\.whatsapp \? '<a class="btn sm" href="dashboard\.html#upgrade">Upgrade<\/a>' : '<span class="badge">Pro segera hadir<\/span>'/.test(akun), 'halaman akun');
-  truthy(/prices: \{\s*pro: 'Rp49\.000'/.test(cfg) && /whatsapp: '',/.test(cfg), 'harga dan config tidak diubah');
+  truthy(/id="req-upgrade">Lanjut ke pembayaran/.test(appJs) && /const plan = PLAN_PRO;/.test(appJs) && /const PLAN_PRO = 'pro_sekali';/.test(appJs), 'alur permintaan tetap ada, satu paket pro_sekali');
+  truthy(/PAY_READY \? '<a class="btn sm" href="dashboard\.html#upgrade">Beli Pro<\/a>' : '<span class="badge">Pro segera hadir<\/span>'/.test(akun), 'halaman akun');
+});
+test('Harga Pro sekali bayar: Rp149.000 peluncuran, Rp299.000 reguler direncanakan (dicoret, berlabel), tanpa harga lama/kuota', () => {
+  const cfg = src('config.js'), idx = fs.readFileSync(path.join(__dirname, '..', 'index.html'), 'utf8'), appJs = src('app.js'), akun = src('akun.js'), pv = fs.readFileSync(path.join(__dirname, '..', 'privasi.html'), 'utf8');
+  truthy(/prices: \{\s*pro: 'Rp149\.000',\s*proRegular: 'Rp299\.000',\s*proLabel: 'Harga Peluncuran',\s*proUnit: 'sekali bayar',\s*\}/.test(cfg), 'config harga');
+  truthy(/<p class="price-was">Harga reguler yang direncanakan <s data-price="proRegular">Rp299\.000<\/s><\/p>/.test(idx) && /data-price="pro">Rp149\.000</.test(idx) && /data-price="proLabel">Harga Peluncuran</.test(idx), 'landing: label + coret + harga utama');
+  truthy(/Bayar satu kali\. Tanpa tagihan bulanan atau tahunan\./.test(idx), 'landing: sekali bayar dijelaskan');
+  truthy(/Harga reguler yang direncanakan <s>\$\{esc\(pr\.proRegular\)\}<\/s>/.test(appJs) && /tanpa tagihan bulanan atau tahunan/.test(appJs), 'dashboard: label + coret');
+  truthy(/const hargaSingkat = /.test(akun), 'akun: harga dari config');
+  const semua = cfg + idx + appJs + akun + pv + fs.readFileSync(path.join(__dirname, '..', 'admin.html'), 'utf8');
+  for (const lama of ['Rp49.000', 'Rp199.000', 'Rp399.000', 'Berlangganan', 'Jasa laporan</h3>', "'pro_bulanan', 'Pro bulanan'"]) truthy(!semua.includes(lama), `tanpa ${lama}`);
+  truthy(!/sisa (slot|kuota)|tersisa \d|countdown|\b50 pembeli/i.test(idx + appJs + akun), 'tanpa countdown/sisa kuota/klaim 50 pembeli');
+  for (const s of ['id="faq-pro"', 'Apa yang tidak termasuk dalam Pro?', 'Bagaimana cara membeli, dan kapan Pro aktif?', 'Apakah data toko saya ikut dikirim saat membeli Pro?', 'Bagaimana menghubungi bantuan?', 'Ini bukan jaminan bahwa layanan akan beroperasi selamanya.']) truthy(idx.includes(s), `FAQ: ${s}`);
+  truthy(/<h2>Cek Untung Pro \(sekali bayar\)<\/h2>/.test(pv) && /bukan langganan/.test(pv), 'privasi: ketentuan sekali bayar');
+});
+test('Status Pro sekali bayar: kolom eksplisit, Pro lama tetap, admin hanya lewat fungsi tercatat, tanpa kode akses baru', () => {
+  const cl = src('cloud.js'), adm = fs.readFileSync(path.join(__dirname, '..', 'admin.html'), 'utf8'), appJs = src('app.js'), akun = src('akun.js');
+  const Cc = require('../assets/cloud.js');
+  truthy(Cc.isPro({ pro_sekali_bayar: true, pro_until: null }) && Cc.isProSekaliBayar({ pro_sekali_bayar: true }), 'kolom eksplisit = Pro sekali bayar');
+  truthy(Cc.isPro({ pro_until: '2099-01-31' }) && !Cc.isProSekaliBayar({ pro_until: '2099-01-31' }), 'Pro lama berjangka tetap Pro');
+  truthy(!Cc.isPro({ pro_until: '2000-01-01' }) && !Cc.isPro({ pro_sekali_bayar: 'true' }) && !Cc.isPro(null) && !Cc.isPro({}), 'bukan Pro: kedaluwarsa, nilai bukan boolean, kosong');
+  truthy(!/9999|PRO_SEUMUR/.test(cl + adm + appJs + akun), 'tanpa tanggal penanda 9999');
+  truthy(/const proText = \(p\) => \(CekCloud\.isProSekaliBayar\(p\) \? 'Pro sekali bayar'/.test(appJs) && /cloud\.isProSekaliBayar\(p\) \? 'Aktif selama layanan Cek Untung beroperasi'/.test(akun), 'label dashboard & akun');
+  truthy(/cloud\.db\.adminAktifkanPro\(t\.dataset\.pro, nominal, ref\)/.test(adm) && /cloud\.db\.adminCabutPro\(/.test(adm) && /bukan tangkapan layar/.test(adm), 'admin: aktivasi/cabut lewat fungsi tercatat, referensi dari mutasi');
+  truthy(!/adminSetPro\([^)]*(PRO_SEUMUR|9999)/.test(adm), 'admin tidak lagi menulis tanggal penanda');
+  truthy(/belum aktif di database \(migrasi belum dijalankan\)/.test(cl), 'pesan jelas sebelum migrasi');
 });
 test('P0 laba bulanan PDF: Belum diketahui / sebagian (*) / Rp0 aktual / lengkap; tanpa NaN', () => {
   const inc = E.parseWorkbook(Sint.penghasilan([
@@ -727,7 +751,7 @@ test('AUTH-V3 privasi data: sandi tidak masuk draft/profil/log; nomor hanya ke m
 test('waSupport: kunci config terpisah & kosong; pembayaran tetap bergantung pada whatsapp; tautan tersembunyi bawaan', () => {
   const cfg = src('config.js'), appJs = src('app.js');
   truthy(/waSupport: '',/.test(cfg) && /domainResmi: '',/.test(cfg), 'kosong (tanpa nomor fiktif)');
-  truthy(/const PAY_READY = !!C\.whatsapp;/.test(appJs) && !/waSupport/.test(appJs), 'alur pembayaran tidak membaca waSupport');
+  truthy(/const PAY_READY = !!\(C\.whatsapp && C\.proPembayaranAktif === true\);/.test(appJs) && !/waSupport/.test(appJs), 'alur pembayaran tidak membaca waSupport');
   const pages = { 'index.html': 'Beranda', 'dashboard.html': 'Dashboard', 'akun.html': 'Akun' };
   for (const [f, nama] of Object.entries(pages)) {
     const h = fs.readFileSync(path.join(__dirname, '..', f), 'utf8');

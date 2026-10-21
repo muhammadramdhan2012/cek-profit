@@ -10,6 +10,9 @@ Website untuk menghitung **laba toko Shopee, TikTok Shop, dan Tokopedia dari dat
 
 ## Fitur
 
+Pro: **Rp149.000 sekali bayar** (harga peluncuran; harga reguler yang direncanakan Rp299.000). Bukan langganan. Pembelian
+belum dibuka (`proPembayaranAktif: false`).
+
 | Gratis | Pro |
 |---|---|
 | Nota laba: penjualan, potongan, modal, biaya operasional, laba bersih | Laporan PDF dengan nama dan logo toko |
@@ -48,13 +51,19 @@ Hal lain yang sudah disiapkan:
 
 Buka `assets/config.js` di GitHub, klik ikon pensil, ubah isinya, lalu **Commit changes**:
 
-- `whatsapp`: nomor untuk pembelian, misalnya `'6281234567890'`. Selama kosong, tombol beli menampilkan "kontak segera tersedia".
-- `prices`: harga yang tampil di halaman depan.
+- `whatsapp`: nomor untuk konfirmasi pembayaran Pro, misalnya `'628…'`.
+- `proPembayaranAktif`: tombol beli Pro hanya aktif bila `true` **dan** `whatsapp` terisi. Biarkan `false` sampai alur
+  pembayaran dan aktivasi di server (`supabase/usulan/pro-sekali-bayar.sql`) disetujui dan diuji.
+- `waSupport`: nomor WhatsApp bantuan (terpisah dari pembayaran). Kosong = tombol bantuan tidak tampil.
+- `prices`: harga Pro (`pro`, `proRegular` = harga reguler yang direncanakan, `proLabel`, `proUnit`).
 - `goatcounter`: kode situs dari goatcounter.com (statistik tanpa cookie). Kosong berarti statistik mati.
 - `publicKey`: kunci publik untuk memeriksa kode akses.
 - `supabaseUrl`, `supabaseAnonKey`, `googleLogin`: pengaturan akun (lihat panduan Supabase).
 
 ## Kode akses Pro (alternatif tanpa akun)
+
+**Tidak lagi diterbitkan** (keputusan pemilik 21 Okt 2026): Pro baru hanya berbasis akun. Kode lama yang sudah
+diterbitkan tetap diterima.
 
 - Kode ditandatangani dengan **ECDSA P-256**. Halaman hanya memegang kunci publik, jadi kode tidak bisa dipalsukan, dan masa berlaku tidak bisa diubah sendiri oleh pembeli.
 - Kode dibuat dengan alat pembuat kode dan file kunci privat yang **tidak disimpan di repo ini**.

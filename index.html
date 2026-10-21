@@ -24,8 +24,8 @@
 <script src="assets/theme.js?v=f5317dffb6"></script>
 <script src="assets/motion.js?v=9e6864196f"></script>
 <link rel="stylesheet" href="assets/base.css?v=3457c94f09">
-<link rel="stylesheet" href="assets/site.css?v=d75da9f448">
-<script src="assets/config.js?v=595a2ab5c6"></script>
+<link rel="stylesheet" href="assets/site.css?v=542261448c">
+<script src="assets/config.js?v=cf02051fb0"></script>
 <script src="assets/analytics.js?v=26db3465aa" defer></script>
 <script src="assets/situs.js?v=1c3126f7b4" defer></script>
 </head>
@@ -263,19 +263,20 @@
     <div class="wrap">
       <div class="sec-head center" data-reveal>
         <p class="kicker">Harga</p>
-        <h2 id="h-harga">Mulai gratis. Bayar saat perlu laporan lengkap.</h2>
+        <h2 id="h-harga">Mulai gratis. Bayar sekali saat perlu laporan lengkap.</h2>
       </div>
       <div class="prices" data-stagger="90">
         <div class="price spot" data-spotlight data-reveal><h3>Gratis</h3><div><span class="amount">Rp0</span></div><p class="small muted">Melihat kondisi toko dengan cepat.</p>
           <ul class="ticks"><li>Nota laba dan grafik per bulan</li><li>Modal per produk dan template</li><li>Biaya dan potongan per platform</li><li>5 produk teratas, 2 temuan</li><li>3 riwayat tersimpan (dengan akun)</li><li class="no">Laporan PDF dan Excel</li></ul>
           <a class="btn" href="akun.html?mode=daftar&amp;next=dashboard.html" data-track="harga-gratis">Daftar gratis</a></div>
-        <div class="price featured spot" data-spotlight data-reveal><span class="price-flag">Paling lengkap</span><h3>Pro</h3><div><span class="amount" data-price="pro">Rp49.000</span> <span class="muted" data-price="proUnit">/ bulan</span><div class="small faint" data-price="proNote">atau Rp399.000 / tahun</div></div>
+        <div class="price featured spot" data-spotlight data-reveal><span class="price-flag" data-price="proLabel">Harga Peluncuran</span><h3>Pro</h3>
+          <div class="price-tag"><p class="price-was">Harga reguler yang direncanakan <s data-price="proRegular">Rp299.000</s></p>
+            <div><span class="amount" data-price="pro">Rp149.000</span> <span class="muted" data-price="proUnit">sekali bayar</span></div>
+            <p class="small faint">Bayar satu kali. Tanpa tagihan bulanan atau tahunan.</p></div>
           <p class="small muted">Keputusan harga dan produk berbasis angka.</p>
           <ul class="ticks"><li>Semua fitur Gratis</li><li>Laporan PDF dengan nama dan logo toko</li><li>Semua produk dan saran harga</li><li>Semua temuan dan saran</li><li>Ekspor Excel, riwayat tanpa batas</li></ul>
-          <a class="btn primary" href="dashboard.html#upgrade" data-track="harga-pro" data-pay="pro">Berlangganan Pro<svg class="arr" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg></a></div>
-        <div class="price spot" data-spotlight data-reveal><h3>Jasa laporan</h3><div><span class="amount" data-price="jasa">Rp199.000</span> <span class="muted" data-price="jasaUnit">/ toko / bulan</span></div><p class="small muted">Tidak sempat? Kami yang kerjakan.</p>
-          <ul class="ticks"><li>Anda kirim file, kami olah</li><li>Bantu menyusun modal per produk</li><li>Laporan PDF bulanan</li><li>Rekomendasi harga dan produk</li><li>Sesi tanya jawab</li></ul>
-          <a class="btn" data-wa="jasa" href="#faq" data-track="harga-jasa">Hubungi lewat WhatsApp</a></div>
+          <p class="tiny faint">Akses Pro berlaku untuk akun Anda selama layanan Cek Untung beroperasi. <a href="#faq-pro">Lihat ketentuan</a></p>
+          <a class="btn primary" href="dashboard.html#upgrade" data-track="harga-pro" data-pay="pro">Beli Pro<svg class="arr" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg></a></div>
       </div>
     </div>
   </section>
@@ -289,12 +290,17 @@
       </div>
       <div class="faq" data-reveal>
         <details><summary>Apakah data toko saya aman?</summary><p>File laporan dibaca dan dihitung di browser Anda, tidak dikirim ke server. Bila Anda membuat akun, yang disimpan hanya modal produk, pengaturan, profil toko, dan ringkasan angka untuk riwayat. Data pembeli tidak pernah disimpan.</p></details>
-        <details><summary>Harus daftar akun?</summary><p>Tidak. Anda bisa langsung memakai Cek Untung di website; modal dan pengaturan tersimpan di browser. Akun berguna agar modal produk dan riwayat bisa dibuka dari laptop atau HP lain, dan untuk berlangganan Pro.</p></details>
+        <details><summary>Harus daftar akun?</summary><p>Tidak. Anda bisa langsung memakai Cek Untung di website; modal dan pengaturan tersimpan di browser. Akun berguna agar modal produk dan riwayat bisa dibuka dari laptop atau HP lain, dan diperlukan untuk membeli Pro.</p></details>
         <details><summary>Laporan apa yang perlu diunduh?</summary><p>Wajib: Laporan Penghasilan Shopee dan/atau TikTok Shop. Disarankan: export pesanan (Beta), untuk jumlah barang dan SKU; format export marketplace dapat berubah, dan hasil pencocokan ditandai bila belum dapat diverifikasi. Opsional: file retur. Panduannya ada di menu Unggah data pada dashboard.</p></details>
         <details><summary>Apakah Tokopedia didukung?</summary><p>Ya. Pesanan Tokopedia tercatat di laporan penghasilan TikTok Shop, dan hasilnya dipisahkan per sumber pesanan. Lazada belum didukung.</p></details>
         <details><summary>Apakah terhubung langsung ke akun Shopee atau TikTok Shop saya?</summary><p>Tidak. Cek Untung tidak terhubung otomatis ke marketplace. Anda mengunduh laporan dari Seller Centre, lalu mengunggahnya ke dashboard.</p></details>
         <details><summary>Seberapa bisa dipercaya hasilnya?</summary><p>Penjualan dan potongan diambil dari laporan resmi, dan total setiap file dicocokkan dengan ringkasan resmi platform. Laba bergantung pada modal yang Anda isi. Pesanan tanpa modal tidak dihitung, bukan dianggap nol, dan Kepastian Profit menunjukkan bagian mana yang sudah kuat dan mana yang masih perlu dilengkapi.</p></details>
-        <details><summary>Bagaimana cara berlangganan Pro?</summary><p data-pay="faq">Masuk ke akun, klik Berlangganan Pro, pilih paket, lalu lanjutkan pembayaran lewat transfer atau QRIS melalui WhatsApp. Pro aktif di akun Anda setelah pembayaran dikonfirmasi.</p></details>
+        <details><summary>Berapa harga Pro? Apakah ada tagihan bulanan?</summary><p>Cek Untung Pro dibayar satu kali: Rp149.000 (harga peluncuran). Tidak ada tagihan bulanan atau tahunan, dan tidak ada perpanjangan otomatis. Harga reguler yang kami rencanakan setelah masa peluncuran adalah Rp299.000.</p></details>
+        <details><summary>Bagaimana cara membeli, dan kapan Pro aktif?</summary><p data-pay="faq">Pembelian Pro belum dibuka; semua fitur gratis tetap bisa Anda pakai. Setelah dibuka, Anda membeli dari akun Cek Untung Anda, dan Pro diaktifkan di akun itu setelah pembayaran benar-benar kami terima dan verifikasi. Bukti tangkapan layar saja tidak cukup untuk mengaktifkan Pro.</p></details>
+        <details id="faq-pro"><summary>Apa arti "sekali bayar" untuk akses Pro?</summary><p>Akses Pro melekat pada akun yang membeli dan berlaku selama layanan Cek Untung beroperasi. Anda tidak perlu membeli ulang saat masuk dari perangkat lain. Ini bukan jaminan bahwa layanan akan beroperasi selamanya.</p></details>
+        <details><summary>Apa yang tidak termasuk dalam Pro?</summary><p>Pro mencakup fitur yang tercantum di kartu harga. Fitur atau layanan baru yang membutuhkan biaya tambahan, misalnya fitur berbasis AI, integrasi marketplace baru, atau jasa pembuatan laporan, tidak otomatis termasuk.</p></details>
+        <details><summary>Apakah data toko saya ikut dikirim saat membeli Pro?</summary><p>Tidak. Pembelian Pro tidak memerlukan file laporan atau data pembeli. Untuk memverifikasi pembayaran, yang kami catat hanya akun Anda, nominal, status, waktu, dan referensi transaksi.</p></details>
+        <details><summary>Bagaimana menghubungi bantuan?</summary><p id="faq-kontak">Kontak bantuan resmi sedang disiapkan dan akan dicantumkan di halaman ini.</p></details>
         <details><summary>Apakah ini menggantikan akuntan atau laporan pajak?</summary><p>Tidak. Cek Untung membantu keputusan usaha sehari-hari seperti harga, produk, dan promosi. Untuk laporan keuangan resmi dan pajak, tetap gunakan akuntan.</p></details>
       </div>
     </div>
@@ -348,15 +354,21 @@
   if (!C.supabaseUrl) { member = true; }
   document.querySelectorAll('[data-guest]').forEach((el) => { el.hidden = member; });
   document.querySelectorAll('[data-member]').forEach((el) => { el.hidden = !member; });
-  document.querySelectorAll('[data-wa]').forEach((el) => {
-    if (C.whatsapp) { el.href = `https://wa.me/${C.whatsapp}?text=${encodeURIComponent(C.waMessageJasa || '')}`; el.target = '_blank'; el.rel = 'noopener'; }
-    else { el.removeAttribute('href'); el.setAttribute('aria-disabled', 'true'); el.textContent = 'Kontak segera tersedia'; el.style.opacity = '.55'; el.style.cursor = 'default'; }
-  });
-  // Pembayaran Pro manual butuh kontak WhatsApp di config.js. Selama kosong, tombol berlangganan tidak mengarah ke
-  // pembayaran yang belum bisa diselesaikan; teks aslinya kembali otomatis setelah kontak diisi.
-  if (!C.whatsapp) {
+  // Pembelian Pro baru dibuka bila kontak pembayaran diisi DAN proPembayaranAktif = true (lihat config.js).
+  // Selama belum, tombol beli tidak mengarah ke pembayaran yang belum bisa diselesaikan.
+  if (!(C.whatsapp && C.proPembayaranAktif === true)) {
     document.querySelectorAll('[data-pay="pro"]').forEach((el) => { el.removeAttribute('href'); el.setAttribute('aria-disabled', 'true'); el.textContent = 'Segera hadir'; el.style.cursor = 'default'; });
-    document.querySelectorAll('[data-pay="faq"]').forEach((el) => { el.textContent = 'Pembayaran Pro segera hadir. Sementara itu, semua fitur gratis tetap bisa Anda pakai, termasuk menyimpan modal di akun.'; });
+  }
+  // Kontak bantuan hanya dari config (nomor bantuan atau email resmi); tanpa kontak, teks bawaan tetap tampil.
+  const kontak = document.getElementById('faq-kontak');
+  const waBantuan = /^62\d{8,13}$/.test(C.waSupport || '') ? C.waSupport : '';
+  if (kontak && (waBantuan || C.email)) {
+    kontak.textContent = 'Hubungi kami melalui ';
+    const link = (href, text) => { const a = document.createElement('a'); a.href = href; a.textContent = text; if (href.startsWith('https:')) { a.target = '_blank'; a.rel = 'noopener'; } return a; };
+    if (waBantuan) kontak.append(link(`https://wa.me/${waBantuan}`, 'WhatsApp bantuan'));
+    if (waBantuan && C.email) kontak.append(' atau ');
+    if (C.email) kontak.append(link(`mailto:${C.email}`, C.email));
+    kontak.append('.');
   }
   document.getElementById('yr').textContent = new Date().getFullYear();
 

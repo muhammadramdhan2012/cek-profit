@@ -5,11 +5,14 @@
 window.CEK_CONFIG = {
   brand: 'Cek Untung',
 
-  // Nomor WhatsApp untuk membeli kode akses, format internasional TANPA "+" dan spasi.
-  // Contoh: '6281234567890'. Selama kosong, tombol beli menampilkan pesan "nomor belum diatur".
+  // Nomor WhatsApp untuk konfirmasi PEMBAYARAN Pro, format internasional TANPA "+" dan spasi (mis. '628…').
   whatsapp: '',
-  waMessage: 'Halo, saya ingin berlangganan Cek Untung Pro.',
-  waMessageJasa: 'Halo, saya ingin memakai jasa laporan profit toko dari Cek Untung.',
+  waMessage: 'Halo, saya ingin membeli Cek Untung Pro (sekali bayar).',
+
+  // Tombol pembelian Pro hanya aktif bila KEDUANYA terpenuhi: `whatsapp` diisi DAN `proPembayaranAktif: true`.
+  // Biarkan false sampai alur pembayaran, aktivasi Pro di server (supabase/usulan/pro-sekali-bayar.sql), dan uji
+  // keamanan selesai serta disetujui pemilik.
+  proPembayaranAktif: false,
 
   // Nomor WhatsApp BANTUAN (dukungan pengguna), format sama: '628…' tanpa "+" dan spasi.
   // TERPISAH dari `whatsapp` di atas: mengisi nomor ini TIDAK membuka alur pembayaran Pro.
@@ -21,13 +24,14 @@ window.CEK_CONFIG = {
   // pemberitahuan pindah alamat. Kosong = tidak ada pemberitahuan. Tidak ada pengalihan otomatis.
   domainResmi: '',
 
-  // Harga yang tampil di halaman depan (teks bebas). GANTI sebelum dipromosikan.
+  // Harga Cek Untung Pro (sekali bayar, bukan langganan). Keputusan pemilik 21 Okt 2026.
+  // `proRegular` = harga reguler YANG DIRENCANAKAN, tampil dicoret sebagai pembanding dengan keterangan itu.
+  // Tidak ada countdown atau sisa kuota yang ditampilkan: kuota promosi belum bisa dicatat/ditegakkan di server.
   prices: {
-    pro: 'Rp49.000',
-    proUnit: '/ bulan',
-    proNote: 'atau Rp399.000 / tahun',
-    jasa: 'Rp199.000',
-    jasaUnit: '/ toko / bulan',
+    pro: 'Rp149.000',
+    proRegular: 'Rp299.000',
+    proLabel: 'Harga Peluncuran',
+    proUnit: 'sekali bayar',
   },
 
   // Analytics ramah privasi (GoatCounter, gratis, tanpa cookie).

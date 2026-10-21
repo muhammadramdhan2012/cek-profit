@@ -121,7 +121,7 @@ section.blk.alt { background: var(--surface); border-block: 1px solid var(--line
 .ticks li::before { content: "✓"; color: var(--accent); font-weight: 800; flex: none; }
 
 /* ---------- harga ---------- */
-.prices { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; align-items: stretch; }
+.prices { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; align-items: stretch; max-width: 860px; margin-inline: auto; }
 @media (max-width: 960px) { .prices { grid-template-columns: 1fr; max-width: 520px; margin-inline: auto; } }
 .price { position: relative; display: grid; gap: 16px; align-content: start; padding: 28px; border: 1px solid var(--line); border-radius: 20px; background: var(--surface);
   transition: transform var(--dur-slow) var(--ease), box-shadow var(--dur-slow) var(--ease), border-color var(--dur-slow) var(--ease); }
@@ -131,6 +131,10 @@ section.blk.alt { background: var(--surface); border-block: 1px solid var(--line
 .price .ticks { font-size: 14.5px; }
 .price .ticks li.no { color: var(--ink-3); } .price .ticks li.no::before { content: "–"; color: var(--ink-3); }
 .price .btn { margin-top: auto; }
+.price-tag { display: grid; gap: 6px; }
+.price-tag p { margin: 0; }
+.price-was { font-size: 13px; color: var(--ink-2); }
+.price-was s { margin-left: 4px; color: var(--ink-3); text-decoration-thickness: 1.5px; }
 @media (hover: hover) and (pointer: fine) { .price:hover { transform: translateY(-4px); box-shadow: var(--shadow-md); border-color: var(--line-strong); } .price.featured:hover { border-color: var(--accent); } }
 
 /* ---------- FAQ ---------- */

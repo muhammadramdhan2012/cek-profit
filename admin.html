@@ -10,7 +10,7 @@
 <script src="assets/theme.js?v=f5317dffb6"></script>
 <link rel="stylesheet" href="assets/base.css?v=3457c94f09">
 <link rel="stylesheet" href="assets/account.css?v=fd4bbc1f3f">
-<script src="assets/config.js?v=595a2ab5c6"></script>
+<script src="assets/config.js?v=cf02051fb0"></script>
 </head>
 <body class="admin">
 <div class="wrap">
@@ -21,7 +21,7 @@
   <main class="admin-grid" id="main" aria-live="polite"><p class="muted">Memuat…</p></main>
 </div>
 <div id="toast" class="toast" role="status" hidden></div>
-<script src="assets/cloud.js?v=b5b1b84fd8"></script>
+<script src="assets/cloud.js?v=0019095793"></script>
 <script>
 (() => {
   const C = window.CEK_CONFIG || {};
@@ -30,9 +30,12 @@
   const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   const toast = (m) => { const t = $('#toast'); t.textContent = m; t.hidden = false; clearTimeout(toast.t); toast.t = setTimeout(() => { t.hidden = true; }, 3200); };
   const today = () => new Date().toLocaleDateString('sv-SE');
-  const plus = (months, from) => { const d = from && from > today() ? new Date(`${from}T00:00:00`) : new Date(); d.setMonth(d.getMonth() + months); return d.toLocaleDateString('sv-SE'); };
   const tgl = (d) => (d ? new Date(d.length > 10 ? d : `${d}T00:00:00`).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' }) : '—');
-  const PLAN = { pro_bulanan: 'Pro bulanan', pro_tahunan: 'Pro tahunan', jasa: 'Jasa laporan' };
+  const PLAN = { pro_sekali: 'Pro sekali bayar', pro_bulanan: 'Pro bulanan (paket lama)', pro_tahunan: 'Pro tahunan (paket lama)', jasa: 'Jasa laporan (paket lama)' };
+  // Pro sekali bayar = kolom profiles.pro_sekali_bayar (setelah migrasi usulan); Pro berjangka lama = pro_until.
+  // Aktivasi/pencabutan hanya lewat fungsi server yang mencatat nominal, referensi unik, dan admin (pro_payments).
+  const HARGA_PRO = 149000;
+  const proCell = (p) => (cloud.isProSekaliBayar(p) ? '<span class="badge pro">Sekali bayar</span>' : cloud.isPro(p) ? `<span class="badge pro">${tgl(p.pro_until)}</span>` : p.pro_until ? `<span class="small faint">berakhir ${tgl(p.pro_until)}</span>` : '<span class="faint">—</span>');
   let profiles = [], requests = [], q = '';
 
   async function load() {
@@ -63,14 +66,14 @@
         ${requests.length ? `<div class="tablewrap"><table class="tbl"><thead><tr><th>Tanggal</th><th>Pengguna</th><th>Paket</th><th>Catatan</th><th>Status</th><th></th></tr></thead><tbody>
           ${requests.map((r) => { const p = byId.get(r.user_id) || {}; return `<tr><td>${tgl(r.created_at)}</td><td><b>${esc(p.email || r.user_id)}</b><br><span class="tiny faint">${esc(p.store_name || '')} ${esc(p.whatsapp || '')}</span></td>
             <td>${PLAN[r.plan] || esc(r.plan)}</td><td class="small">${esc(r.note)}</td><td><span class="badge ${r.status === 'selesai' ? 'ok' : r.status === 'ditolak' ? 'bad' : 'todo'}">${esc(r.status)}</span></td>
-            <td>${r.status === 'baru' || r.status === 'diproses' ? `<div class="row-gap"><button class="btn sm primary" data-pro="${esc(r.user_id)}" data-months="${r.plan === 'pro_tahunan' ? 12 : 1}">Aktifkan ${r.plan === 'pro_tahunan' ? '1 tahun' : '1 bulan'}</button><button class="btn sm quiet" data-reject="${r.id}">Tolak</button></div>` : ''}</td></tr>`; }).join('')}
+            <td>${r.status === 'baru' || r.status === 'diproses' ? `<div class="row-gap"><button class="btn sm primary" data-pro="${esc(r.user_id)}">Aktifkan Pro sekali bayar</button><button class="btn sm quiet" data-reject="${r.id}">Tolak</button></div>` : ''}</td></tr>`; }).join('')}
           </tbody></table></div>` : '<p class="muted small">Belum ada permintaan.</p>'}
       </section>
       <section class="panel"><div style="display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:12px"><h3>Pengguna</h3><input class="plain" id="q" type="search" placeholder="Cari email, nama, toko…" value="${esc(q)}" style="max-width:280px"></div>
-        <div class="tablewrap"><table class="tbl"><thead><tr><th>Pengguna</th><th>Daftar</th><th>Pro sampai</th><th>Atur Pro</th></tr></thead><tbody>
+        <div class="tablewrap"><table class="tbl"><thead><tr><th>Pengguna</th><th>Daftar</th><th>Status Pro</th><th>Atur Pro</th></tr></thead><tbody>
         ${list.map((p) => `<tr><td><b>${esc(p.email)}</b>${p.is_admin ? ' <span class="badge">admin</span>' : ''}<br><span class="tiny faint">${esc(p.full_name)} ${p.store_name ? `· ${esc(p.store_name)}` : ''} ${esc(p.whatsapp)}</span></td>
-          <td class="small">${tgl(p.created_at)}</td><td>${cloud.isPro(p) ? `<span class="badge pro">${tgl(p.pro_until)}</span>` : p.pro_until ? `<span class="small faint">berakhir ${tgl(p.pro_until)}</span>` : '<span class="faint">—</span>'}</td>
-          <td><div class="row-gap"><button class="btn sm" data-pro="${esc(p.id)}" data-months="1">+1 bln</button><button class="btn sm" data-pro="${esc(p.id)}" data-months="12">+1 thn</button>${p.pro_until ? `<button class="btn sm quiet danger" data-off="${esc(p.id)}">Matikan</button>` : ''}</div></td></tr>`).join('') || '<tr><td colspan="4" class="muted">Tidak ada pengguna yang cocok.</td></tr>'}
+          <td class="small">${tgl(p.created_at)}</td><td>${proCell(p)}</td>
+          <td><div class="row-gap">${cloud.isProSekaliBayar(p) ? `<button class="btn sm quiet danger" data-cabut="${esc(p.id)}">Cabut / refund</button>` : `<button class="btn sm" data-pro="${esc(p.id)}">Aktifkan sekali bayar</button>`}${p.pro_until ? `<button class="btn sm quiet danger" data-off="${esc(p.id)}">Matikan Pro lama</button>` : ''}</div></td></tr>`).join('') || '<tr><td colspan="4" class="muted">Tidak ada pengguna yang cocok.</td></tr>'}
         </tbody></table></div></section>`;
   }
   document.addEventListener('click', async (e) => {
@@ -80,9 +83,21 @@
       if (t.id === 'reload') return load();
       if (t.dataset.pro) {
         const p = profiles.find((x) => x.id === t.dataset.pro) || {};
-        const until = plus(+t.dataset.months, p.pro_until);
-        if (!confirm(`Aktifkan Pro untuk ${p.email || 'pengguna'} sampai ${tgl(until)}?`)) return;
-        await cloud.db.adminSetPro(t.dataset.pro, until); toast(`Pro aktif sampai ${tgl(until)}.`); return load();
+        // Aktivasi hanya setelah dana benar-benar masuk (cek mutasi rekening/QRIS), bukan dari tangkapan layar.
+        const ref = (prompt(`Aktifkan Pro sekali bayar untuk ${p.email || 'pengguna'}.\n\nReferensi transaksi dari MUTASI rekening/QRIS (bukan tangkapan layar). Wajib, unik:`) || '').trim();
+        if (!ref) return;
+        const nominal = Number(String(prompt('Nominal yang benar-benar masuk (rupiah, angka saja):', String(HARGA_PRO)) || '').replace(/\D/g, ''));
+        if (!nominal) return;
+        if (!confirm(`Konfirmasi: dana Rp${nominal.toLocaleString('id-ID')} dengan referensi "${ref}" sudah tercatat di mutasi. Tangkapan layar transfer saja bukan bukti.\n\nAktifkan Pro sekali bayar untuk ${p.email || 'pengguna'}?`)) return;
+        await cloud.db.adminAktifkanPro(t.dataset.pro, nominal, ref); toast('Pro sekali bayar aktif dan tercatat.'); return load();
+      }
+      if (t.dataset.cabut) {
+        const p = profiles.find((x) => x.id === t.dataset.cabut) || {};
+        const refund = confirm(`Cabut Pro sekali bayar ${p.email || 'pengguna'}.\n\nOK = karena REFUND (dana dikembalikan). Batal = pencabutan tanpa refund.`);
+        const nominal = refund ? Number(String(prompt('Nominal yang dikembalikan (rupiah):', String(HARGA_PRO)) || '').replace(/\D/g, '')) : 0;
+        const alasan = (prompt('Alasan (wajib, tercatat):') || '').trim();
+        if (!alasan) return;
+        await cloud.db.adminCabutPro(t.dataset.cabut, refund ? 'refund' : 'pencabutan', nominal || 0, alasan); toast('Pro dicabut dan tercatat.'); return load();
       }
       if (t.dataset.off) { if (!confirm('Matikan Pro pengguna ini?')) return; await cloud.db.adminSetPro(t.dataset.off, null); toast('Pro dimatikan.'); return load(); }
       if (t.dataset.reject) { await cloud.db.adminSetRequestStatus(+t.dataset.reject, 'ditolak'); toast('Permintaan ditolak.'); return load(); }

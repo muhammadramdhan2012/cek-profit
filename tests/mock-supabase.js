@@ -8,7 +8,10 @@ const crypto = require('crypto');
 // strongPasswords: meniru pengaturan Supabase yang direkomendasikan (min. 8, huruf kecil, kapital, angka) untuk daftar
 // dan ganti sandi. Masuk dengan sandi lama yang lemah TETAP berhasil, dengan penanda weak_password (meniru Supabase
 // Auth; perilaku server sungguhan tetap harus diuji di Supabase).
-function createMock({ confirmEmail = false, tokenTtl = 3600, strongPasswords = false } = {}) {
+// proMigrasi: meniru database SETELAH supabase/usulan/pro-sekali-bayar.sql (kolom pro_sekali_bayar + fungsi admin tercatat).
+// false = database produksi saat ini (fungsi belum ada → 404 PGRST202).
+function createMock({ confirmEmail = false, tokenTtl = 3600, strongPasswords = false, proMigrasi = true } = {}) {
+  const proPayments = [];
   const weak = (pw) => !pw || pw.length < 8 || (strongPasswords && !(/[a-z]/.test(pw) && /[A-Z]/.test(pw) && /[0-9]/.test(pw)));
   const weakMsg = (pw) => (!pw || pw.length < 8 ? 'Password should be at least 8 characters.' : 'Password should contain at least one character of each: abcdefghijklmnopqrstuvwxyz, ABCDEFGHIJKLMNOPQRSTUVWXYZ, 0123456789.');
   const signupBodies = [];
@@ -28,7 +31,7 @@ function createMock({ confirmEmail = false, tokenTtl = 3600, strongPasswords = f
   const addUser = (email, password, meta = {}) => {
     const id = crypto.randomUUID();
     users.set(id, { id, email, password, meta, confirmed: !confirmEmail });
-    profiles.set(id, { id, email, full_name: meta.full_name || meta.name || '', store_name: '', whatsapp: '', pro_until: null, is_admin: false, created_at: new Date().toISOString() });
+    profiles.set(id, { id, email, full_name: meta.full_name || meta.name || '', store_name: '', whatsapp: '', pro_until: null, is_admin: false, created_at: new Date().toISOString(), ...(proMigrasi ? { pro_sekali_bayar: false } : {}) });
     return id;
   };
   const isAdmin = (uid) => !!(profiles.get(uid) || {}).is_admin;
@@ -141,6 +144,27 @@ function createMock({ confirmEmail = false, tokenTtl = 3600, strongPasswords = f
       if (req.method === 'POST') { const r = { id: reqSeq++, user_id: uid, plan: body.plan, note: body.note || '', status: 'baru', created_at: new Date().toISOString() }; requests.push(r); return send(201, [r]); }
       if (req.method === 'PATCH') { if (!isAdmin(uid)) return send(200, []); const r = requests.find((x) => x.id === +eq('id')); if (r) r.status = body.status; return send(204); }
     }
+    if (table === 'rpc/admin_aktifkan_pro_sekali' || table === 'rpc/admin_cabut_pro') {
+      if (!proMigrasi) return send(404, { code: 'PGRST202', message: `Could not find the function public.${table.slice(4)} in the schema cache` });
+      if (!isAdmin(uid)) return send(400, { message: 'Hanya admin' });
+      const r = profiles.get(body.target); if (!r) return send(400, { message: 'Akun tidak ditemukan' });
+      if (table === 'rpc/admin_aktifkan_pro_sekali') {
+        if (!(body.nominal > 0)) return send(400, { message: 'Nominal pembayaran wajib diisi' });
+        if (!body.referensi || String(body.referensi).trim().length < 3) return send(400, { message: 'Referensi transaksi wajib diisi' });
+        if (r.pro_sekali_bayar) return send(400, { message: 'Akun ini sudah Pro sekali bayar' });
+        if (proPayments.some((x) => x.kind === 'aktivasi' && x.reference === String(body.referensi).trim())) return send(409, { code: '23505', message: 'duplicate key value violates unique constraint "pro_payments_ref_aktivasi"' });
+        proPayments.push({ user_id: r.id, kind: 'aktivasi', amount: body.nominal, reference: String(body.referensi).trim(), created_by: uid });
+        r.pro_sekali_bayar = true;
+        requests.filter((x) => x.user_id === r.id && ['baru', 'diproses'].includes(x.status)).forEach((x) => { x.status = 'selesai'; });
+        return send(200, null);
+      }
+      if (!['pencabutan', 'refund'].includes(body.jenis)) return send(400, { message: 'Jenis harus pencabutan atau refund' });
+      if (!body.catatan || String(body.catatan).trim().length < 3) return send(400, { message: 'Alasan wajib diisi' });
+      if (!r.pro_sekali_bayar) return send(400, { message: 'Akun ini tidak memiliki Pro sekali bayar' });
+      proPayments.push({ user_id: r.id, kind: body.jenis, amount: body.nominal || 0, note: body.catatan, created_by: uid });
+      r.pro_sekali_bayar = false;
+      return send(200, null);
+    }
     if (table === 'rpc/admin_set_pro') {
       if (!isAdmin(uid)) return send(400, { message: 'Hanya admin' });
       const r = profiles.get(body.target); if (r) r.pro_until = body.until;
@@ -149,7 +173,7 @@ function createMock({ confirmEmail = false, tokenTtl = 3600, strongPasswords = f
     }
     return send(404, { message: 'not found' });
   });
-  return { server, users, signupBodies, profiles, userData, reports, requests, addUser, makeAdmin: (email) => { const u = [...users.values()].find((x) => x.email === email); profiles.get(u.id).is_admin = true; }, confirmAll: () => users.forEach((u) => { u.confirmed = true; }), today };
+  return { server, users, signupBodies, proPayments, profiles, userData, reports, requests, addUser, makeAdmin: (email) => { const u = [...users.values()].find((x) => x.email === email); profiles.get(u.id).is_admin = true; }, confirmAll: () => users.forEach((u) => { u.confirmed = true; }), today };
 }
 module.exports = createMock;
 if (require.main === module) {

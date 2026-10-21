@@ -268,6 +268,8 @@ Sumber awal: audit menyeluruh 14 Okt 2026 (read-only), ditambah analisis penghit
 - **Dampak (bisnis):** pengguna gratis bisa menyimpan riwayat tanpa batas lewat API.
 - **Rekomendasi (audit):** trigger `before insert` pada `reports` yang menolak bila pengguna bukan Pro dan sudah
   punya ≥ 3 riwayat.
+- **21 Okt 2026:** rancangan SQL siap di `supabase/usulan/pro-sekali-bayar.sql` §5 (diuji lokal: P16–P17), **belum
+  dijalankan** di produksi.
 
 ### M6 · Status Pro dan kode akses hanya dikunci di browser
 - **Status:** Terbuka (keterbatasan desain yang sudah diketahui) · **Kompleksitas:** M
@@ -278,6 +280,10 @@ Sumber awal: audit menyeluruh 14 Okt 2026 (read-only), ditambah analisis penghit
   - Validasi fitur bernilai tinggi (riwayat, PDF bermerek, perbandingan) di server (RLS/Edge Function), sementara
     perhitungan tetap di browser.
   - Perlu keputusan produk dan pembayaran.
+- **21 Okt 2026 (branch `feature/pro-pricing`, lokal):** usulan kolom eksplisit `profiles.pro_sekali_bayar` (tidak
+  bisa diubah pengguna; usulan P1–P3, P19); Pro berjangka lama di `pro_until` tetap berlaku. Rancangan aktivasi admin yang tercatat dan anti-aktivasi-ganda di
+  `supabase/usulan/pro-sekali-bayar.sql` (uji lokal P1–P15). **Tetap terbuka:** PDF, Excel, dan analisis dibuat di
+  browser, jadi fitur Pro tetap bisa dibuka lewat DevTools; kode akses lama tetap diterima.
 
 ### M7 · Tes tidak memakai format file asli
 - **Status:** Terbuka · **Kompleksitas:** M (2 hari)
@@ -394,6 +400,9 @@ Sumber awal: audit menyeluruh 14 Okt 2026 (read-only), ditambah analisis penghit
 
 ## Riwayat perubahan dokumen
 
+- 21 Okt 2026: harga Pro sekali bayar (branch lokal `feature/pro-pricing`, belum dirilis): M5 dan M6 diberi catatan
+  rancangan SQL `supabase/usulan/pro-sekali-bayar.sql` (diuji lokal, belum dijalankan). Pembelian Pro tetap nonaktif.
+  Mesin hitung tidak berubah.
 - 21 Okt 2026: Auth V3 dan persiapan pindah domain (branch lokal `feature/auth-v3-staging`, belum dirilis): P14
   (offline gagal di Cloudflare, diperbaiki di branch), P15 (data browser tidak ikut pindah alamat), P16 (aturan sandi
   baru perlu disamakan di Supabase), P17 (kolom `whatsapp` tanpa batas) ditambahkan; L5 sebagian ditangani. Nomor
