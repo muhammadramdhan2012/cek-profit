@@ -28,15 +28,34 @@ const CekSitus = (() => {
   }
 
   const TUTUP_KEY = 'cekprofit.pindahTutup';
-  /** Penanda STAGING yang selalu terlihat agar data uji tidak tertukar dengan layanan sungguhan. */
-  function tandaStaging(doc, cfg) {
-    if (!cfg || cfg.lingkungan !== 'staging' || doc.getElementById('tanda-staging')) return;
-    const el = doc.createElement('div'); el.id = 'tanda-staging'; el.className = 'tanda-staging'; el.setAttribute('role', 'note');
-    el.textContent = 'STAGING: database uji, bukan layanan Cek Untung sungguhan. Jangan membayar dengan uang sungguhan di sini.';
-    doc.body.prepend(el);
+  /**
+   * Penanda lingkungan. Pita "STAGING" hanya tampil setelah database MENJAWAB bahwa ia staging (fungsi info_lingkungan()
+   * yang hanya dibuat di project staging: supabase/staging/penanda-staging.sql) dengan ref project yang sama dengan URL.
+   * Tanpa jawaban itu, yang tampil peringatan.
+   */
+  function pita(doc, teks, jenis) {
+    let el = doc.getElementById('tanda-staging');
+    if (!el) { el = doc.createElement('div'); el.id = 'tanda-staging'; el.setAttribute('role', 'note'); doc.body.prepend(el); }
+    el.className = `tanda-staging ${jenis}`; el.textContent = teks;
+  }
+  async function tandaStaging(doc, cfg, fetcher) {
+    if (!cfg) return '';
+    if (cfg.lingkungan === 'staging-belum-siap') { pita(doc, cfg.konfigurasiBelumSiap || 'Konfigurasi staging belum siap.', 'bahaya'); return 'belum-siap'; }
+    if (cfg.lingkungan !== 'staging') return '';
+    let ok = false;
+    try {
+      const res = await (fetcher || fetch)(`${cfg.supabaseUrl}/rest/v1/rpc/info_lingkungan`, { method: 'POST', headers: { apikey: cfg.supabaseAnonKey, 'Content-Type': 'application/json' }, body: '{}' });
+      const isi = res.ok ? await res.json() : null;
+      // Ref harus cocok dengan URL yang benar-benar dipakai, agar database lain yang kebetulan punya fungsi ini tidak lolos.
+      const ref = (/^https:\/\/([a-z0-9]{20})\.supabase\.co$/.exec(cfg.supabaseUrl || '') || [])[1];
+      ok = !!(isi && isi.lingkungan === 'staging' && ref && isi.ref === ref);
+    } catch (e) { ok = false; }
+    pita(doc, ok ? 'STAGING: database uji, bukan layanan Cek Untung sungguhan. Jangan membayar dengan uang sungguhan di sini.'
+      : 'PERINGATAN: database di alamat ini belum terverifikasi sebagai staging. Jangan memakai data atau uang sungguhan.', ok ? 'staging' : 'bahaya');
+    return ok ? 'staging' : 'tidak-terverifikasi';
   }
   function pasang(doc, cfg, loc, store) {
-    tandaStaging(doc, cfg);
+    tandaStaging(doc, cfg);   // asinkron; tidak menunda elemen lain
     doc.querySelectorAll('[data-wa-support]').forEach((el) => {
       const url = waSupportUrl(cfg, el.dataset.waSupport);
       if (url) { el.href = url; el.target = '_blank'; el.rel = 'noopener'; el.hidden = false; }

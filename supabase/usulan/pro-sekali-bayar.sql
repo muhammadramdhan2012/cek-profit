@@ -145,12 +145,12 @@ grant select on public.pro_audit_log to authenticated;
 
 -- Fungsi bantu internal (tidak diberikan ke pengguna).
 create or replace function public._catat_event(p_order bigint, p_lama text, p_baru text, p_catatan text, p_internal boolean default false)
-returns void language sql security definer set search_path = public as $$
+returns void language sql security definer set search_path = public, pg_temp as $$
   insert into public.pro_order_events (order_id, status_lama, status_baru, oleh, catatan, internal)
   values (p_order, p_lama, p_baru, auth.uid(), left(coalesce(p_catatan, ''), 500), coalesce(p_internal, false));
 $$;
 create or replace function public._audit(p_aksi text, p_payment bigint, p_order bigint, p_lama jsonb, p_baru jsonb, p_alasan text)
-returns void language sql security definer set search_path = public as $$
+returns void language sql security definer set search_path = public, pg_temp as $$
   insert into public.pro_audit_log (aksi, payment_id, order_id, lama, baru, alasan, oleh)
   values (p_aksi, p_payment, p_order, p_lama, p_baru, left(coalesce(p_alasan, ''), 500), auth.uid());
 $$;
@@ -163,7 +163,7 @@ revoke all on function public._audit(text, bigint, bigint, jsonb, jsonb, text) f
 
 -- Perubahan pengaturan pembayaran tercatat (siapa, kapan, sebelum/sesudah).
 create or replace function public._audit_pengaturan() returns trigger
-language plpgsql security definer set search_path = public as $$
+language plpgsql security definer set search_path = public, pg_temp as $$
 begin
   new.diubah_pada := now();
   perform public._audit('ubah_pengaturan', null, null, to_jsonb(old) - 'diubah_pada', to_jsonb(new) - 'diubah_pada', '');
@@ -175,10 +175,16 @@ create trigger audit_pengaturan before update on public.pengaturan_pembayaran fo
 -- 6. PERBAIKAN fungsi lama: admin_set_pro (Pro berjangka lama) tidak boleh menutup pesanan Pro sekali bayar,
 --    karena itu akan menandai pesanan "Aktif" tanpa dana tercatat.
 create or replace function public.admin_set_pro(target uuid, until date) returns void
-language plpgsql security definer set search_path = public as $$
+language plpgsql security definer set search_path = public, pg_temp as $$
+declare lama date;
 begin
   if not public.is_admin() then raise exception 'Hanya admin'; end if;
+  select pro_until into lama from public.profiles where id = target for update;
+  if not found then raise exception 'Akun tidak ditemukan'; end if;
   update public.profiles set pro_until = until where id = target;
+  -- Jalur Pro lama tidak mencatat dana; setiap perubahannya tetap masuk jejak audit agar tidak ada aktivasi tanpa jejak.
+  perform public._audit('set_pro_lama', null, null, jsonb_build_object('user_id', target, 'pro_until', lama),
+    jsonb_build_object('user_id', target, 'pro_until', until), 'admin_set_pro');
   if until is not null then
     update public.upgrade_requests set status = 'selesai' where user_id = target and status in ('baru', 'diproses') and plan <> 'pro_sekali';
   end if;
@@ -186,7 +192,7 @@ end $$;
 
 -- 7. SELLER: buat pesanan (atau kembalikan pesanan terbuka). Nominal dari harga resmi di server.
 create or replace function public.buat_pesanan_pro(p_metode text)
-returns public.upgrade_requests language plpgsql security definer set search_path = public as $$
+returns public.upgrade_requests language plpgsql security definer set search_path = public, pg_temp as $$
 declare
   s public.pengaturan_pembayaran; r public.upgrade_requests; kode text; uid uuid := auth.uid();
 begin
@@ -227,7 +233,7 @@ end $$;
 -- 8. SELLER: konfirmasi sudah membayar. Hanya klaim → Menunggu Verifikasi, atau Perlu Pemeriksaan bila lewat batas
 --    waktu / pesanan sudah kedaluwarsa. TIDAK pernah mengaktifkan Pro.
 create or replace function public.konfirmasi_sudah_bayar(p_order bigint, p_catatan text default '')
-returns public.upgrade_requests language plpgsql security definer set search_path = public as $$
+returns public.upgrade_requests language plpgsql security definer set search_path = public, pg_temp as $$
 declare r public.upgrade_requests; s public.pengaturan_pembayaran; lewat boolean; baru text; cat text := left(coalesce(p_catatan, ''), 300);
 begin
   select * into r from public.upgrade_requests where id = p_order and user_id = auth.uid() and plan = 'pro_sekali' for update;
@@ -251,7 +257,7 @@ end $$;
 
 -- 9. SELLER: batalkan pesanan yang belum dikonfirmasi dibayar.
 create or replace function public.batalkan_pesanan(p_order bigint)
-returns public.upgrade_requests language plpgsql security definer set search_path = public as $$
+returns public.upgrade_requests language plpgsql security definer set search_path = public, pg_temp as $$
 declare r public.upgrade_requests;
 begin
   select * into r from public.upgrade_requests where id = p_order and user_id = auth.uid() and plan = 'pro_sekali' for update;
@@ -264,7 +270,7 @@ end $$;
 
 -- Bantu: aktifkan Pro dari pesanan + tautkan dana, dalam transaksi pemanggil (dipakai fungsi 10 & 12).
 create or replace function public._aktifkan_dari_pesanan(r public.upgrade_requests, p_payment bigint, p_nominal integer, p_ket text)
-returns text language plpgsql security definer set search_path = public as $$
+returns text language plpgsql security definer set search_path = public, pg_temp as $$
 begin
   if r.status not in ('baru', 'diproses', 'perlu_cek', 'dibatalkan', 'ditolak') then raise exception 'Pesanan tidak dapat diaktifkan dari status %', r.status; end if;
   if p_nominal < r.amount then raise exception 'Nominal kurang dari tagihan. Pro tidak diaktifkan'; end if;
@@ -281,7 +287,7 @@ revoke all on function public._aktifkan_dari_pesanan(public.upgrade_requests, bi
 
 -- 10. ADMIN: verifikasi dana dari mutasi → catat + aktifkan, atomik. Ulang dengan referensi sama = aman.
 create or replace function public.admin_verifikasi_pesanan(p_order bigint, p_sumber text, p_referensi text, p_nominal integer, p_catatan text default '')
-returns text language plpgsql security definer set search_path = public as $$
+returns text language plpgsql security definer set search_path = public, pg_temp as $$
 declare r public.upgrade_requests; ref text := public._norm_ref(p_referensi); pid bigint; ada public.pro_payments;
 begin
   if not public.is_admin() then raise exception 'Hanya admin'; end if;
@@ -307,7 +313,7 @@ end $$;
 -- 11. ADMIN: catat dana masuk yang BELUM bisa dipastikan pemiliknya (mis. dua QRIS Rp149.000 berdekatan).
 --     Dana tercatat (tidak hilang), Pro tidak aktif, sampai dihubungkan ke pesanan setelah pemeriksaan.
 create or replace function public.admin_catat_dana_masuk(p_sumber text, p_referensi text, p_nominal integer, p_catatan text)
-returns bigint language plpgsql security definer set search_path = public as $$
+returns bigint language plpgsql security definer set search_path = public, pg_temp as $$
 declare pid bigint;
 begin
   if not public.is_admin() then raise exception 'Hanya admin'; end if;
@@ -324,7 +330,7 @@ end $$;
 
 -- 12. ADMIN: hubungkan dana belum teridentifikasi ke pesanan → aktifkan Pro, atomik.
 create or replace function public.admin_hubungkan_dana(p_payment bigint, p_order bigint, p_alasan text)
-returns text language plpgsql security definer set search_path = public as $$
+returns text language plpgsql security definer set search_path = public, pg_temp as $$
 declare d public.pro_payments; r public.upgrade_requests;
 begin
   if not public.is_admin() then raise exception 'Hanya admin'; end if;
@@ -341,7 +347,7 @@ end $$;
 
 -- 13. ADMIN: catat pembayaran tambahan pada pesanan (transfer ganda / kelebihan terpisah) tanpa mengubah hak akses.
 create or replace function public.admin_catat_pembayaran_tambahan(p_order bigint, p_sumber text, p_referensi text, p_nominal integer, p_catatan text)
-returns bigint language plpgsql security definer set search_path = public as $$
+returns bigint language plpgsql security definer set search_path = public, pg_temp as $$
 declare r public.upgrade_requests; pid bigint;
 begin
   if not public.is_admin() then raise exception 'Hanya admin'; end if;
@@ -360,7 +366,7 @@ end $$;
 
 -- 14. ADMIN: refund yang MENUNJUK pembayaran asal. Nominal ≤ sisa dana pembayaran itu. Pro dicabut hanya bila diminta.
 create or replace function public.admin_refund_pembayaran(p_payment bigint, p_nominal integer, p_alasan text, p_cabut_pro boolean)
-returns void language plpgsql security definer set search_path = public as $$
+returns void language plpgsql security definer set search_path = public, pg_temp as $$
 declare d public.pro_payments; r public.upgrade_requests; sisa integer;
 begin
   if not public.is_admin() then raise exception 'Hanya admin'; end if;
@@ -388,7 +394,7 @@ end $$;
 
 -- 15. ADMIN: koreksi referensi yang salah ketik. Nilai lama & baru tercatat di audit; keunikan tetap dijaga.
 create or replace function public.admin_koreksi_referensi(p_payment bigint, p_referensi_baru text, p_alasan text)
-returns void language plpgsql security definer set search_path = public as $$
+returns void language plpgsql security definer set search_path = public, pg_temp as $$
 declare d public.pro_payments;
 begin
   if not public.is_admin() then raise exception 'Hanya admin'; end if;
@@ -405,7 +411,7 @@ end $$;
 
 -- 16. ADMIN: tandai Perlu Pemeriksaan / tambah catatan internal (tidak terlihat pembeli).
 create or replace function public.admin_catatan_pesanan(p_order bigint, p_catatan text, p_perlu_cek boolean default false)
-returns void language plpgsql security definer set search_path = public as $$
+returns void language plpgsql security definer set search_path = public, pg_temp as $$
 declare r public.upgrade_requests;
 begin
   if not public.is_admin() then raise exception 'Hanya admin'; end if;
@@ -421,7 +427,7 @@ end $$;
 
 -- 17. ADMIN: tolak / batalkan pesanan (dana tidak ditemukan, dll.). Berlaku juga untuk permintaan lama.
 create or replace function public.admin_tolak_pesanan(p_order bigint, p_alasan text, p_status text default 'ditolak')
-returns void language plpgsql security definer set search_path = public as $$
+returns void language plpgsql security definer set search_path = public, pg_temp as $$
 declare r public.upgrade_requests;
 begin
   if not public.is_admin() then raise exception 'Hanya admin'; end if;
@@ -436,7 +442,7 @@ end $$;
 
 -- 18. ADMIN: cabut Pro sekali bayar tanpa refund (mis. pelanggaran ketentuan), tercatat.
 create or replace function public.admin_cabut_pro(target uuid, catatan text)
-returns void language plpgsql security definer set search_path = public as $$
+returns void language plpgsql security definer set search_path = public, pg_temp as $$
 begin
   if not public.is_admin() then raise exception 'Hanya admin'; end if;
   if length(trim(coalesce(catatan, ''))) < 3 then raise exception 'Alasan wajib diisi'; end if;
@@ -470,7 +476,7 @@ revoke all on function public._audit_pengaturan() from public, anon, authenticat
 
 -- 19. (OPSIONAL, keputusan pemilik) Batas 3 riwayat untuk akun gratis ditegakkan di database (M5).
 create or replace function public.cek_batas_riwayat() returns trigger
-language plpgsql security definer set search_path = public as $$
+language plpgsql security definer set search_path = public, pg_temp as $$
 begin
   if exists (select 1 from public.profiles where id = new.user_id and (pro_sekali_bayar or pro_until >= current_date)) then return new; end if;
   if (select count(*) from public.reports where user_id = new.user_id) >= 3 then

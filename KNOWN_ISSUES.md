@@ -400,6 +400,10 @@ Sumber awal: audit menyeluruh 14 Okt 2026 (read-only), ditambah analisis penghit
 
 ## Riwayat perubahan dokumen
 
+- 21 Okt 2026: isolasi staging fail-closed (branch `feature/pro-pricing`, lokal): host preview (`*.cekuntung.pages.dev`
+  atau terdaftar) tidak pernah jatuh ke Supabase produksi bila konfigurasi staging kosong/salah; host produksi tidak bisa
+  dialihkan; pita STAGING hanya setelah database menjawab `info_lingkungan()` (`supabase/staging/penanda-staging.sql`).
+  `admin_set_pro` tercatat di audit; `search_path = public, pg_temp`. Uji: `tests/cloud.test.js`, V13–V16, QA browser.
 - 21 Okt 2026: Manual Payment V1 v3 (branch `feature/pro-pricing`, lokal): batas bayar 48 jam, status Perlu
   pemeriksaan, dana belum teridentifikasi + hubungkan dana (QRIS statis), refund menunjuk pembayaran asal, koreksi
   referensi & perubahan pengaturan tercatat (audit), `admin_set_pro` diperbaiki agar tidak menutup pesanan sekali bayar,

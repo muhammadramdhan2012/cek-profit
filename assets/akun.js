@@ -52,7 +52,9 @@
   function render() {
     const card = $('#card');
     if (!cloud.enabled) {
-      card.innerHTML = `${heading('Akun belum aktif', 'Pemilik situs belum menghubungkan layanan akun. Anda tetap bisa memakai Cek Untung tanpa login; modal dan pengaturan tersimpan di browser ini.')}
+      // Di alamat staging yang konfigurasinya belum siap, akun sengaja dimatikan (fail-closed) agar tidak menulis ke database produksi.
+      const belumSiap = C.lingkungan === 'staging-belum-siap';
+      card.innerHTML = `${heading(belumSiap ? 'Konfigurasi staging belum siap' : 'Akun belum aktif', belumSiap ? 'Alamat ini adalah lingkungan uji. Fitur akun dan pembayaran dimatikan sampai database staging terhubung dengan benar, agar tidak tersambung ke database produksi. Anda tetap bisa mencoba dashboard tanpa login.' : 'Pemilik situs belum menghubungkan layanan akun. Anda tetap bisa memakai Cek Untung tanpa login; modal dan pengaturan tersimpan di browser ini.')}
         <a class="btn primary" href="dashboard.html">Buka dashboard</a>`;
       return;
     }

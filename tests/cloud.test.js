@@ -285,16 +285,77 @@ const memStore = () => { const m = new Map(); return { getItem: (k) => (m.has(k)
     truthy((await H.db.pesananSaya())[0].id === oh.id && (await H.db.pesananSaya())[0].status === 'baru', 'admin_set_pro tidak menutup pesanan sekali bayar');
     m7.server.close();
   });
-  await t('Lingkungan staging: hanya host yang terdaftar memakai Supabase staging; cekuntung.id selalu produksi', async () => {
+  await t('Lingkungan staging fail-closed: host staging tidak pernah jatuh ke produksi; host produksi tidak bisa dialihkan', async () => {
     const vm = require('vm'), code = require('fs').readFileSync(require('path').join(__dirname, '..', 'assets', 'config.js'), 'utf8');
-    const muat = (host, isi) => { const w = {}; vm.runInNewContext(code.replace("staging: { supabaseUrl: '', supabaseAnonKey: '', hosts: [] },", `staging: ${JSON.stringify(isi)},`), { window: w, location: { hostname: host } }); return w.CEK_CONFIG; };
-    const prod = muat('cekuntung.id', { supabaseUrl: '', supabaseAnonKey: '', hosts: [] });
-    truthy(prod.lingkungan === 'produksi' && /ikjcbgfexhpksbewkpym/.test(prod.supabaseUrl), 'bawaan: produksi');
-    const isi = { supabaseUrl: 'https://staging-uji.supabase.co', supabaseAnonKey: 'sb_publishable_UJI', hosts: ['feature-pro-pricing.cekuntung.pages.dev', 'cekuntung.id'] };
-    const pv = muat('feature-pro-pricing.cekuntung.pages.dev', isi); truthy(pv.lingkungan === 'staging' && pv.supabaseUrl === isi.supabaseUrl, 'preview terdaftar → staging');
-    const lain = muat('cekuntung.pages.dev', isi); truthy(lain.lingkungan === 'produksi', 'host tidak terdaftar → produksi');
-    const p2 = muat('cekuntung.id', isi); truthy(p2.lingkungan === 'produksi' && /ikjcbgfexhpksbewkpym/.test(p2.supabaseUrl), 'cekuntung.id tidak pernah dialihkan ke staging');
-    truthy(!/sb_secret_|eyJ[A-Za-z0-9_-]{20,}/.test(code), 'tanpa secret key');
+    const KOSONG = "staging: { supabaseUrl: '', supabaseAnonKey: '', hosts: [] },";
+    truthy(code.includes(KOSONG), 'config.js bawaan: staging kosong');
+    // Konteks sengaja diberi URL berparameter + localStorage berisi "staging" untuk membuktikan keduanya diabaikan.
+    const muat = (host, isi) => {
+      const w = {}; const ls = { getItem: () => JSON.stringify(isi), setItem() {} };
+      vm.runInNewContext(code.replace(KOSONG, `staging: ${JSON.stringify(isi)},`), { window: w, atob: (x) => Buffer.from(x, 'base64').toString('binary'),
+        localStorage: ls, location: { hostname: host, search: `?supabaseUrl=${isi.supabaseUrl}&env=staging`, hash: '#staging' } });
+      return w.CEK_CONFIG;
+    };
+    const PROD = /^https:\/\/ikjcbgfexhpksbewkpym\.supabase\.co$/;
+    const jwt = (role) => `eyJhbGciOiJIUzI1NiJ9.${Buffer.from(JSON.stringify({ role })).toString('base64url')}.c2lnbmF0dXJl`;
+    const URL_ST = 'https://abcdefghijklmnopqrst.supabase.co', KEY_ST = 'sb_publishable_UJIstaging1234';
+    const PV = 'feature-pro-pricing.cekuntung.pages.dev';
+    const ok = { supabaseUrl: URL_ST, supabaseAnonKey: KEY_ST, hosts: [PV, 'cekuntung.id', 'www.cekuntung.id', 'cekuntung.pages.dev', 'muhammadramdhan2012.github.io', 'localhost'] };
+    const kosong = { supabaseUrl: '', supabaseAnonKey: '', hosts: [] };
+    const produksi = (c) => c.lingkungan === 'produksi' && PROD.test(c.supabaseUrl) && c.supabaseAnonKey.length > 0;
+    const mati = (c) => c.lingkungan === 'staging-belum-siap' && c.supabaseUrl === '' && c.supabaseAnonKey === '' && /belum siap/.test(c.konfigurasiBelumSiap);
+    // 1. Host produksi: selalu produksi, walau didaftarkan di staging.hosts, dan walau URL/localStorage berisi staging.
+    for (const h of ['cekuntung.id', 'www.cekuntung.id', 'CEKUNTUNG.ID', 'cekuntung.pages.dev', 'muhammadramdhan2012.github.io']) {
+      truthy(produksi(muat(h, ok)), `${h} + staging valid & terdaftar → tetap produksi`);
+      truthy(produksi(muat(h, kosong)), `${h} + staging kosong → produksi`);
+    }
+    // 2. Host staging: valid → staging; selain itu fail-closed.
+    const st = muat(PV, ok); truthy(st.lingkungan === 'staging' && st.supabaseUrl === URL_ST && st.supabaseAnonKey === KEY_ST, 'preview terdaftar + konfigurasi valid → staging');
+    truthy(muat(PV.toUpperCase(), ok).lingkungan === 'staging', 'nama host tidak peka huruf besar');
+    truthy(muat(PV, { ...ok, supabaseAnonKey: jwt('anon') }).lingkungan === 'staging', 'kunci anon lama (JWT role anon) diterima');
+    const prodCfg = muat('cekuntung.id', kosong);
+    const salah = {
+      'staging kosong': kosong,
+      'host tidak terdaftar': { ...ok, hosts: ['lain.cekuntung.pages.dev'] },
+      'URL kosong': { ...ok, supabaseUrl: '' },
+      'kunci kosong': { ...ok, supabaseAnonKey: '' },
+      'URL = produksi': { ...ok, supabaseUrl: prodCfg.supabaseUrl },
+      'kunci = produksi': { ...ok, supabaseAnonKey: prodCfg.supabaseAnonKey },
+      'URL http': { ...ok, supabaseUrl: 'http://abcdefghijklmnopqrst.supabase.co' },
+      'URL domain lain': { ...ok, supabaseUrl: 'https://abcdefghijklmnopqrst.supabase.co.evil.id' },
+      'URL bergaris miring': { ...ok, supabaseUrl: URL_ST + '/' },
+      'secret key': { ...ok, supabaseAnonKey: 'sb_secret_abcdefghijklmnop' },
+      'JWT service_role': { ...ok, supabaseAnonKey: jwt('service_role') },
+      'JWT rusak': { ...ok, supabaseAnonKey: 'eyJxx.yy.zz' },
+      'hosts bukan array': { ...ok, hosts: PV },
+      'tipe salah': { supabaseUrl: 123, supabaseAnonKey: null, hosts: [PV] },
+    };
+    for (const [nama, isi] of Object.entries(salah)) truthy(mati(muat(PV, isi)), `preview + ${nama} → fitur akun mati, bukan produksi`);
+    truthy(mati(muat('cabang-lain.cekuntung.pages.dev', ok)), 'preview Cloudflare lain (tidak terdaftar) → mati, bukan produksi');
+    truthy(mati(muat('a.b.cekuntung.pages.dev', kosong)), 'sub-subdomain preview → mati');
+    truthy(mati(muat('staging.contoh.id', { ...ok, hosts: ['staging.contoh.id'], supabaseAnonKey: 'sb_secret_x1234567890' })), 'host staging kustom + kunci salah → mati');
+    truthy(muat('staging.contoh.id', { ...ok, hosts: ['staging.contoh.id'] }).lingkungan === 'staging', 'host staging kustom terdaftar + valid → staging');
+    // 3. Host lain (pengembangan lokal): perilaku lama.
+    truthy(produksi(muat('127.0.0.1', kosong)), 'localhost tanpa staging → produksi (perilaku lama)');
+    truthy(muat('localhost', ok).lingkungan === 'staging', 'localhost yang sengaja didaftarkan → staging');
+    truthy(produksi(muat('cekuntung.id.evil.id', ok)), 'domain tiruan bukan preview → bukan staging (dan tidak terdaftar)');
+    truthy(!/location\.(search|hash)|localStorage|sessionStorage|document\.cookie/.test(code), 'config.js tidak membaca URL, localStorage, atau cookie');
+    truthy(!/sb_secret_[A-Za-z0-9]|eyJ[A-Za-z0-9_-]{20,}/.test(code), 'tanpa secret key');
+  });
+  await t('Pita STAGING hanya tampil setelah database menjawab staging', async () => {
+    const S = require('../assets/situs.js');
+    const dok = () => { const el = { id: '', className: '', textContent: '', setAttribute() {} }; let ada = null;
+      return { el, getElementById: () => ada, createElement: () => el, body: { prepend: (x) => { ada = x; } } }; };
+    const cfg = { lingkungan: 'staging', supabaseUrl: 'https://abcdefghijklmnopqrst.supabase.co', supabaseAnonKey: 'sb_publishable_x' };
+    let dipanggil = '';
+    const jawab = (status, isi) => async (url) => { dipanggil = url; return { ok: status === 200, json: async () => isi }; };
+    let d = dok(); truthy((await S.tandaStaging(d, cfg, jawab(200, { lingkungan: 'staging', ref: 'abcdefghijklmnopqrst' }))) === 'staging' && /^STAGING/.test(d.el.textContent) && /\/rest\/v1\/rpc\/info_lingkungan$/.test(dipanggil), 'terverifikasi → pita STAGING');
+    d = dok(); truthy((await S.tandaStaging(d, cfg, jawab(404, {}))) === 'tidak-terverifikasi' && /PERINGATAN/.test(d.el.textContent) && !/^STAGING/.test(d.el.textContent), 'RPC tidak ada (mis. database produksi) → peringatan, bukan STAGING');
+    d = dok(); truthy((await S.tandaStaging(d, cfg, jawab(200, 'staging'))) === 'tidak-terverifikasi', 'jawaban format lama/lain → peringatan');
+    d = dok(); truthy((await S.tandaStaging(d, cfg, jawab(200, { lingkungan: 'staging', ref: 'zzzzzzzzzzzzzzzzzzzz' }))) === 'tidak-terverifikasi', 'ref database berbeda dari URL → peringatan');
+    d = dok(); truthy((await S.tandaStaging(d, cfg, async () => { throw new Error('offline'); })) === 'tidak-terverifikasi', 'offline → peringatan');
+    d = dok(); truthy((await S.tandaStaging(d, { lingkungan: 'staging-belum-siap', konfigurasiBelumSiap: 'Konfigurasi database staging belum siap.' })) === 'belum-siap' && /belum siap/.test(d.el.textContent), 'belum siap → pita peringatan');
+    d = dok(); let panggil = 0; truthy((await S.tandaStaging(d, { lingkungan: 'produksi' }, async () => { panggil++; })) === '' && panggil === 0 && d.el.textContent === '', 'produksi → tanpa pita & tanpa permintaan jaringan');
   });
   await t('Checkout: sebelum migrasi, pesan jelas dan Pro lama tetap terbaca', async () => {
     const m6 = createMock({ proMigrasi: false }); await new Promise((r) => m6.server.listen(0, r)); const u6 = `http://127.0.0.1:${m6.server.address().port}`;

@@ -1,76 +1,159 @@
 # Panduan — Supabase STAGING untuk menguji Manual Payment V1
 
-Status: **PANDUAN; belum dijalankan.** Semua langkah dilakukan pemilik di dasbor Supabase. Claude tidak membuat project
-dan tidak memakai kredensial produksi.
+Status: **PANDUAN; belum dijalankan.** Semua langkah di Supabase dan Cloudflare dilakukan pemilik. Claude tidak membuat
+project, tidak memakai kredensial produksi, dan tidak menjalankan SQL di produksi.
 
-## Kenapa staging perlu
+## 1. Kenapa staging perlu, dan bagaimana website memisahkannya
 
-- Saat ini **preview Cloudflare (`*.cekuntung.pages.dev`) memakai Supabase PRODUKSI**, karena `assets/config.js` sama untuk
-  semua alamat. Jadi tes pesanan atau pembayaran di preview akan menulis ke database pengguna sungguhan.
-- File tes SQL membuat akun sintetis di `auth.users`, sehingga **tidak boleh dijalankan di produksi**.
+File tes SQL dan uji pembayaran membuat akun sintetis serta catatan dana. Keduanya **tidak boleh** menyentuh database
+pengguna sungguhan. Karena website statis (tanpa build step), pilihan database ditentukan `assets/config.js` dari
+**nama host halaman saja**:
 
-## Biaya dan batasan
+| Host | Database yang dipakai |
+|---|---|
+| `cekuntung.id`, `www.cekuntung.id`, `cekuntung.pages.dev`, `muhammadramdhan2012.github.io` | **Selalu produksi.** Blok `staging` diabaikan, walau host ini ikut didaftarkan |
+| `*.cekuntung.pages.dev` (preview Cloudflare) atau host di `staging.hosts` | **Hanya staging yang valid.** Bila kosong atau salah, fitur akun dan pembayaran **dimatikan** (fail-closed), tidak pernah jatuh ke produksi |
+| Host lain (mis. `localhost` saat pengembangan) | Perilaku lama: produksi, kecuali sengaja didaftarkan di `staging.hosts` |
 
-- **Paket Free Supabase** cukup untuk staging. Saat dokumen ini ditulis, satu organisasi bisa punya beberapa project
-  gratis. Cek batas terbaru di halaman harga Supabase.
-- **Project gratis yang tidak dipakai bisa dijeda** setelah beberapa hari. Buka dasbornya sebelum pengujian.
-- **Email:** staging memakai SMTP bawaan Supabase. Jumlah email per jam terbatas dan email bisa masuk spam.
-  - Jangan pakai SMTP Resend produksi, kecuali Anda memang ingin.
-  - Alternatif: matikan "Confirm email" di staging. Ini hanya untuk staging.
+Konfigurasi staging dianggap **valid** hanya bila semua terpenuhi:
+- host halaman tercantum di `staging.hosts`;
+- `supabaseUrl` berbentuk `https://<ref 20 karakter>.supabase.co` dan **bukan** URL produksi;
+- `supabaseAnonKey` berupa publishable key (`sb_publishable_…`) atau anon key lama (JWT ber-role `anon`), **bukan**
+  secret/service_role, dan **bukan** kunci produksi.
 
-## Langkah
+Yang **tidak** bisa mengalihkan database: parameter URL (`?supabaseUrl=…`), `localStorage`, cookie. `config.js` tidak
+membacanya sama sekali (ada tesnya).
 
-1. **Buat project baru.** supabase.com → **New project**.
-   - **Name:** `cekuntung-staging`.
-   - **Region:** Singapore.
-   - **Password:** buat password baru (jangan sama dengan produksi), lalu simpan.
-2. **Skema dasar.** SQL Editor → tempel isi `supabase/schema.sql` → **Run**.
-3. **Migrasi Manual Payment V1.** SQL Editor → tempel isi `supabase/usulan/pro-sekali-bayar.sql` → **Run**.
-   Jalankan sekali lagi untuk membuktikan file ini aman dijalankan ulang.
-4. **Tes database di staging.** Tes lokal memakai shim `auth.uid()`; di Supabase sungguhan tes ini perlu disesuaikan.
-   Cara paling sederhana adalah pengujian lewat website preview (langkah 8) dengan akun sintetis. Bila ingin
-   menjalankan file tes SQL, gunakan **project staging saja**.
-5. **URL Configuration** (Authentication → URL Configuration) di staging:
+**Pita penanda di bagian atas halaman:**
+- **"STAGING: database uji…"** (oranye) hanya tampil setelah database **menjawab** fungsi `info_lingkungan()` dengan
+  `lingkungan = staging` dan `ref` yang **sama** dengan URL yang dipakai. Fungsi ini hanya dibuat di project staging.
+- **"PERINGATAN: database … belum terverifikasi"** (merah): konfigurasi valid, tetapi database tidak menjawab dengan benar.
+  Jangan lanjut menguji; cek langkah 5.
+- **"Konfigurasi database staging belum siap…"** (merah): alamat preview, tetapi konfigurasi staging kosong/salah.
+  Halaman akun dan admin menampilkan pesan yang sama; dashboard tetap bisa dipakai tanpa login.
+
+Catatan: `supabase/PANDUAN.md` menyebut `cekuntung.pages.dev` sebagai "staging Cloudflare". Secara teknis alamat itu
+adalah alamat bawaan **branch `main` (produksi)**, jadi website memperlakukannya sebagai produksi. Uji staging memakai
+alamat **preview per branch**, bukan `cekuntung.pages.dev`.
+
+## 2. Biaya dan batasan
+
+- **Paket Free Supabase** cukup untuk staging. Cek batas jumlah project gratis terbaru di halaman harga Supabase.
+- **Project gratis yang lama tidak dipakai bisa dijeda.** Buka dasbornya sebelum menguji.
+- **Email:** staging memakai SMTP bawaan Supabase (jumlah email per jam terbatas, bisa masuk spam). Jangan pakai SMTP
+  Resend produksi. Alternatif khusus staging: matikan "Confirm email".
+
+## 3. Membuat project staging dari nol (tanpa data produksi)
+
+1. **Buat project.** supabase.com → **New project**.
+   - **Name:** `cekuntung-staging`. **Region:** Singapore.
+   - **Database password:** buat baru (jangan sama dengan produksi), simpan di pengelola sandi Anda.
+   - Tunggu sampai status project **Healthy**.
+2. **Catat ref dan publishable key staging.** **Project Settings → API**:
+   - **Project URL**: `https://<ref-staging>.supabase.co`. `<ref-staging>` = 20 huruf/angka. Pastikan **berbeda** dari
+     `ikjcbgfexhpksbewkpym` (produksi).
+   - **Publishable key** (`sb_publishable_…`). **Jangan** salin secret key / service_role.
+3. **Skema dasar.** **SQL Editor → New query** → tempel seluruh isi `supabase/schema.sql` → **Run**.
+4. **Migrasi Manual Payment V1.** Query baru → tempel isi `supabase/usulan/pro-sekali-bayar.sql` → **Run**. Lalu **Run
+   sekali lagi** untuk membuktikan aman dijalankan ulang (hasil kedua tidak boleh error).
+5. **Penanda staging.** Query baru → tempel isi `supabase/staging/penanda-staging.sql`.
+   - Ganti `GANTI_DENGAN_REF_STAGING` dengan `<ref-staging>` dari langkah 2 → **Run**.
+   - File ini menolak placeholder dan menolak ref produksi. **Jangan pernah** jalankan di project produksi.
+   - Cek: `select public.info_lingkungan();` → `{"ref": "<ref-staging>", "lingkungan": "staging"}`.
+6. **Pemeriksaan keamanan cepat** (query baru, hanya membaca katalog):
+   ```sql
+   select proname, prosecdef, proconfig from pg_proc
+   where pronamespace = 'public'::regnamespace and prosecdef order by 1;          -- semua: search_path=public, pg_temp
+                                                                                   -- (kecuali is_admin, handle_new_user dari schema.sql)
+   select relname, relrowsecurity from pg_class
+   where relnamespace = 'public'::regnamespace and relkind = 'r' order by 1;      -- semua rls = true
+   select has_table_privilege('authenticated', 'public.pro_payments', 'delete');  -- false
+   ```
+7. **Auth.** **Authentication → Sign In / Providers → Email**: biarkan aktif. Google tetap **nonaktif**.
+8. **URL Configuration** (**Authentication → URL Configuration**) di project **staging**:
    - **Site URL:** `https://feature-pro-pricing.cekuntung.pages.dev/akun`
-   - **Redirect URLs:** `https://feature-pro-pricing.cekuntung.pages.dev/akun` dan `https://feature-pro-pricing.cekuntung.pages.dev/akun.html`
-6. **Admin staging.** Daftar akun admin uji di preview, lalu di staging: Table Editor → `profiles` → `is_admin = true`.
-   - Admin staging **terpisah** dari admin produksi, karena project dan database-nya berbeda.
-   - Pakai email yang berbeda dari akun admin produksi agar tidak tertukar.
-7. **Hubungkan preview ke staging** (perlu commit dan push yang Anda setujui). Di `assets/config.js`, isi:
+   - **Redirect URLs:** `https://feature-pro-pricing.cekuntung.pages.dev/akun` dan
+     `https://feature-pro-pricing.cekuntung.pages.dev/akun.html`
+   - URL Configuration produksi **tidak perlu diubah**.
+9. **Tidak ada data produksi yang disalin.** Jangan memakai fitur backup/restore/clone dari project produksi. Semua akun di
+   staging adalah akun uji baru.
+
+## 4. Menghubungkan preview Cloudflare ke staging
+
+Website statis tidak memakai environment variable Cloudflare; konfigurasinya ada di `assets/config.js` yang ikut
+di-commit. Karena itu staging dihubungkan **lewat commit di branch preview**, bukan lewat dasbor Cloudflare.
+
+1. **Alamat preview yang dipakai:** alias branch `https://feature-pro-pricing.cekuntung.pages.dev` (dibuat otomatis
+   Cloudflare Pages untuk branch `feature/pro-pricing`). Alamat preview per commit (`https://<hash>.cekuntung.pages.dev`)
+   **tidak** didaftarkan, sehingga di sana fitur akun mati (aman).
+2. **Kirim ke Claude** (boleh di chat; keduanya memang publik): Project URL staging dan publishable key staging.
+   **Jangan kirim** secret key, service_role, atau password database.
+3. Claude mengisi (setelah Anda menyetujui commit dan push ke branch `feature/pro-pricing` saja):
    ```js
    staging: {
      supabaseUrl: 'https://<ref-staging>.supabase.co',
-     supabaseAnonKey: 'sb_publishable_…',   // publishable/anon key STAGING, bukan secret
+     supabaseAnonKey: 'sb_publishable_…',              // publishable key STAGING
      hosts: ['feature-pro-pricing.cekuntung.pages.dev'],
    },
    ```
-   - **Hanya host yang terdaftar** memakai staging. `cekuntung.id` tidak pernah dialihkan; ini ada tesnya.
-   - Halaman di host staging menampilkan pita **"STAGING: database uji"**.
-   - Sebelum `main` dirilis, kosongkan `hosts` atau biarkan. Host produksi tetap aman karena tidak terdaftar.
-8. **Pengaturan pembayaran uji.** Di admin.html (preview), isi pengaturan pembayaran.
-   - Pakai rekening dan QRIS **milik Anda sendiri** untuk uji dana kecil, atau data uji yang jelas bukan rekening
-     orang lain.
-   - **Tidak ada data pelanggan asli** yang disalin ke staging.
-9. **Smoke test** dengan akun sintetis:
+4. **Tunggu deploy preview** (Cloudflare → Workers & Pages → `cekuntung` → **Deployments**, cari branch
+   `feature/pro-pricing`, status **Success**). Buka `https://feature-pro-pricing.cekuntung.pages.dev/akun`, tekan
+   Cmd+Shift+R.
+5. **Pastikan pita oranye "STAGING: database uji"** tampil. Bila merah, **berhenti**: periksa langkah 3.2 dan 3.5.
 
-   | # | Skenario | Hasil yang diharapkan |
-   |---|---|---|
-   | 1 | Daftar → konfirmasi email → masuk | Berhasil masuk (Auth V3) |
-   | 2 | Beli Pro: pilih transfer → buat pesanan | Kode `CU-…`, Rp149.000, batas 48 jam |
-   | 3 | Tekan "Saya sudah membayar" | Status **Menunggu verifikasi**, Pro **tidak** aktif |
-   | 4 | Admin → Verifikasi dana (referensi uji) | Pro aktif; login ulang → tetap Pro |
-   | 5 | Ulangi verifikasi dengan referensi sama | "Sudah aktif sebelumnya", tidak ada entri ganda |
-   | 6 | QRIS: dua akun membuat pesanan; admin catat "dana masuk tanpa pesanan" | Dana tercatat, Pro belum aktif |
-   | 7 | Hubungkan dana ke pesanan dengan bukti | Pro aktif untuk akun yang benar |
-   | 8 | Refund penuh | Pro dicabut, histori tetap ada |
-   | 9 | Seller lain mencoba membuka pesanan akun pertama | Tidak terlihat |
+**Dampak ke produksi:** tidak ada.
+- Produksi (`cekuntung.id`, `www`, `cekuntung.pages.dev`, GitHub Pages) **mengabaikan** blok `staging`, walau nanti blok
+  itu ikut ter-merge ke `main` (ada tesnya). Publishable key staging memang publik; tidak membuka akses ke produksi.
+- Bila ingin bersih, sebelum merge ke `main` blok `staging` bisa dikosongkan lagi. Keduanya aman; keputusan Anda.
+- Tidak ada perubahan Cloudflare (DNS, domain, environment variable) yang diperlukan.
 
-10. **Rollback staging.** Paling mudah: hapus project staging dan buat ulang. Alternatifnya, jalankan bagian
-    rollback di `docs/usulan/PRO_SEKALI_BAYAR.md` §7.
+## 5. Admin staging
 
-## Yang dibutuhkan dari pemilik
+1. Daftar akun admin uji di `https://feature-pro-pricing.cekuntung.pages.dev/akun` (email berbeda dari admin produksi).
+2. Supabase **staging** → **Table Editor → profiles** → baris akun itu → `is_admin = true` → **Save**.
+3. Buka `/admin` di preview. Admin staging terpisah total dari admin produksi.
 
-- Membuat project staging dan memberikan **URL serta publishable key staging**. Key ini memang publik; jangan kirim
-  secret atau service_role.
-- Izin commit dan push untuk mengisi `staging` di `config.js`.
-- Rekening/QRIS uji untuk transaksi kecil (opsional, bila ingin uji dana sungguhan di staging).
+## 6. Daftar tes nyata di staging sebelum migrasi produksi
+
+Pengaturan pembayaran diisi lewat `/admin` di preview dengan data **uji** yang jelas bukan rekening orang lain
+(mis. `BANK UJI`, `0000000000`, `PEMILIK UJI`, QRIS gambar uji). Rekening/QRIS asli hanya dengan persetujuan Anda.
+
+| # | Skenario | Hasil yang diharapkan |
+|---|---|---|
+| S0 | Buka `/akun`, `/admin`, `/dashboard`, `/` di preview | Pita oranye STAGING di semua halaman |
+| S1 | DevTools → Network saat login | Semua permintaan ke `<ref-staging>.supabase.co`, **tidak ada** ke `ikjcbgfexhpksbewkpym` |
+| S2 | Daftar (dengan nomor HP) → konfirmasi email → masuk; lupa sandi | Berhasil; tautan email kembali ke alamat preview |
+| S3 | Pengaturan pembayaran: coba aktifkan tanpa kontak bantuan | Ditolak dengan pesan jelas |
+| S4 | Isi data uji + kontak bantuan → aktifkan | Pembelian terbuka di staging saja |
+| S5 | Seller A: Beli Pro → transfer → buat pesanan; ulangi | Kode `CU-…`, Rp149.000, batas 48 jam; pesanan kedua = pesanan yang sama |
+| S6 | Seller A: "Saya sudah membayar" | **Menunggu verifikasi**; Pro **tidak** aktif |
+| S7 | Admin: verifikasi (referensi `UJI-001`) | Pro aktif; keluar–masuk lagi tetap Pro |
+| S8 | Admin: verifikasi ulang referensi sama / referensi `uji 001` di pesanan lain | "Sudah aktif"/ditolak duplikat; tidak ada entri ganda |
+| S9 | QRIS: seller B & C membuat pesanan; admin "Catat dana masuk tanpa pesanan" | Dana tercatat belum teridentifikasi; tidak ada Pro aktif |
+| S10 | Admin: hubungkan dana ke pesanan B dengan alasan | Pro aktif hanya untuk B; histori & audit tercatat |
+| S11 | Klaim bayar setelah 48 jam (ubah `expired_at` pesanan uji di Table Editor staging) | **Perlu pemeriksaan**; teks "dana tidak hangus" |
+| S12 | Refund penuh dari baris pembayaran asal | Pro dicabut; histori tetap; sisa dana tidak bisa direfund lagi |
+| S13 | Refund kelebihan bayar (pembayaran tambahan) | Pro tetap aktif |
+| S14 | Koreksi referensi dengan alasan | Tercatat di audit (nilai lama & baru) |
+| S15 | Admin "Atur Pro lama" (`admin_set_pro`) pada akun uji | Pro lama aktif; pesanan sekali bayar **tidak** ikut "Aktif"; tercatat `set_pro_lama` di audit |
+| S16 | Seller B membuka pesanan/pembayaran seller A (ubah id di DevTools) | Tidak terlihat |
+| S17 | Seller biasa memanggil fungsi admin dari console | "Hanya admin" |
+| S18 | Akun gratis menyimpan riwayat ke-4 (bila trigger opsional dipasang) | Ditolak; akun Pro tanpa batas |
+| S19 | Hapus akun uji (Authentication → Users) | Baris `pro_payments` tetap ada dengan `user_id` kosong |
+| S20 | Matikan internet setelah halaman terbuka | Dashboard tetap memproses file; akun gagal dengan sopan |
+| S21 | Buka `https://<hash-commit>.cekuntung.pages.dev/akun` | Pita merah "belum siap"; tidak ada permintaan ke Supabase mana pun |
+| S22 | Buka `https://cekuntung.id/akun?supabaseUrl=…` (tanpa login, tanpa transaksi) | Tidak ada pita; tetap produksi |
+| S23 | 375px, tema terang & gelap di checkout dan admin | Rapi, tanpa scroll horizontal |
+
+**Jangan** menjalankan S2–S21 di produksi. S22 hanya membuka halaman, tanpa login atau transaksi.
+
+## 7. Rollback staging
+
+Paling mudah: hapus project staging (**Project Settings → General → Delete project**) dan buat ulang dari langkah 3.
+Alternatifnya, jalankan bagian rollback di `docs/usulan/PRO_SEKALI_BAYAR.md` §7 **di project staging saja**.
+
+## 8. Yang dibutuhkan dari pemilik
+
+- Membuat project staging (langkah 3) lalu memberikan **Project URL** dan **publishable key** staging.
+- Izin commit dan push **hanya** ke branch `feature/pro-pricing` untuk mengisi blok `staging`.
+- Data rekening/QRIS uji (opsional). Rekening/QRIS asli hanya dengan persetujuan terpisah.

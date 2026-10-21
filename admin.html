@@ -8,9 +8,9 @@
 <link rel="icon" href="icon-cek-untung.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <script src="assets/theme.js?v=f5317dffb6"></script>
-<link rel="stylesheet" href="assets/base.css?v=36fbb1f6a0">
+<link rel="stylesheet" href="assets/base.css?v=4a0d133232">
 <link rel="stylesheet" href="assets/account.css?v=0d3f4d5a76">
-<script src="assets/config.js?v=e93bbdbe6f"></script>
+<script src="assets/config.js?v=5be738581d"></script>
 </head>
 <body class="admin">
 <div class="wrap">
@@ -22,7 +22,7 @@
 </div>
 <div id="toast" class="toast" role="status" hidden></div>
 <script src="assets/cloud.js?v=4fd4d99c40"></script>
-<script src="assets/situs.js?v=748c79547d" defer></script>
+<script src="assets/situs.js?v=85635986e8" defer></script>
 <script>
 (() => {
   const C = window.CEK_CONFIG || {};
@@ -45,6 +45,7 @@
 
   async function load() {
     const main = $('#main');
+    if (!cloud.enabled && C.lingkungan === 'staging-belum-siap') { main.innerHTML = '<p class="panel">Konfigurasi staging belum siap. Admin dimatikan di alamat ini agar tidak tersambung ke database produksi. Isi <code>staging</code> di <code>assets/config.js</code> dengan URL dan publishable key project STAGING (lihat <code>docs/usulan/STAGING_SUPABASE.md</code>).</p>'; return; }
     if (!cloud.enabled) { main.innerHTML = '<p class="panel">Akun belum diaktifkan. Isi <code>supabaseUrl</code> dan <code>supabaseAnonKey</code> di <code>assets/config.js</code>.</p>'; return; }
     if (!cloud.auth.user()) { main.innerHTML = '<div class="panel" style="display:grid;gap:12px;justify-items:start"><h2>Masuk sebagai admin</h2><p class="muted">Halaman ini hanya untuk pemilik situs.</p><a class="btn primary" href="akun.html?next=admin.html">Masuk</a></div>'; return; }
     try {

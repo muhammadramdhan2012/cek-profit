@@ -50,17 +50,40 @@ window.CEK_CONFIG = {
   supabaseAnonKey: 'sb_publishable_KC8qxwwQKwnYe2k-fjeEYw_HNxiscEt',    // "anon public" / "publishable" key — aman untuk publik, dilindungi aturan RLS
   googleLogin: false,     // true setelah login Google diaktifkan di Supabase (Authentication → Providers)
 
-  // ---------- Lingkungan STAGING (opsional) ----------
-  // Preview Cloudflare memakai Supabase PRODUKSI, kecuali host preview terdaftar di `hosts` di bawah. Isi dengan project
-  // Supabase STAGING terpisah (URL + publishable key; BUKAN secret/service_role). Domain produksi tidak pernah dialihkan.
-  // Panduan: docs/usulan/STAGING_SUPABASE.md
+  // ---------- Lingkungan STAGING ----------
+  // Panduan: docs/usulan/STAGING_SUPABASE.md. Isi dengan project Supabase STAGING terpisah: URL + publishable key
+  // (sb_publishable_…). JANGAN isi secret/service_role. Host yang didaftarkan HANYA memakai staging.
   staging: { supabaseUrl: '', supabaseAnonKey: '', hosts: [] },
 };
-// Pilih database menurut alamat halaman. Kosong = selalu produksi.
+/*
+ * Pemilihan database menurut alamat halaman (fail-closed). Hanya membaca nama host halaman; tidak membaca parameter URL,
+ * penyimpanan browser, atau cookie, sehingga tidak bisa dialihkan dari browser.
+ *  1. Host produksi (cekuntung.id, www, cekuntung.pages.dev, GitHub Pages lama) → SELALU Supabase produksi; `staging`
+ *     diabaikan walau host itu ikut didaftarkan.
+ *  2. Host staging terdaftar atau preview Cloudflare (*.cekuntung.pages.dev) → hanya Supabase STAGING yang valid
+ *     (https://<ref>.supabase.co, bukan URL produksi, kunci publishable/anon, bukan kunci produksi). Bila kosong/salah,
+ *     fitur akun dimatikan (supabaseUrl kosong) dan pesan "konfigurasi staging belum siap" tampil — TIDAK pernah jatuh ke produksi.
+ *  3. Host lain (mis. localhost saat pengembangan) → perilaku lama (produksi).
+ */
 (function pilihLingkungan(C) {
+  const PROD_URL = C.supabaseUrl, PROD_KEY = C.supabaseAnonKey;
+  const HOST_PRODUKSI = ['cekuntung.id', 'www.cekuntung.id', 'cekuntung.pages.dev', 'muhammadramdhan2012.github.io'];
+  const host = String((typeof location !== 'undefined' && location.hostname) || '').toLowerCase();
   const st = C.staging || {};
-  const host = typeof location !== 'undefined' ? location.hostname : '';
-  const pakaiStaging = !!(st.supabaseUrl && st.supabaseAnonKey && Array.isArray(st.hosts) && st.hosts.includes(host) && !/(^|\.)cekuntung\.id$/.test(host));
-  if (pakaiStaging) { C.supabaseUrl = st.supabaseUrl; C.supabaseAnonKey = st.supabaseAnonKey; }
-  C.lingkungan = pakaiStaging ? 'staging' : 'produksi';
+  const daftar = Array.isArray(st.hosts) ? st.hosts.map((h) => String(h).toLowerCase()) : [];
+  const kunciPublik = (k) => {
+    k = String(k || '');
+    if (/^sb_publishable_[A-Za-z0-9_-]{10,}$/.test(k)) return true;
+    if (!/^eyJ[\w-]+\.[\w-]+\.[\w-]+$/.test(k)) return false;   // kunci anon lama (JWT): wajib role "anon"
+    try { return JSON.parse(atob(k.split('.')[1].replace(/-/g, '+').replace(/_/g, '/'))).role === 'anon'; } catch (e) { return false; }
+  };
+  C.lingkungan = 'produksi'; C.konfigurasiBelumSiap = '';
+  if (HOST_PRODUKSI.includes(host)) return;
+  const preview = /\.cekuntung\.pages\.dev$/.test(host);
+  if (!preview && !daftar.includes(host)) return;
+  const valid = daftar.includes(host) && /^https:\/\/[a-z0-9]{20}\.supabase\.co$/.test(st.supabaseUrl || '')
+    && st.supabaseUrl !== PROD_URL && kunciPublik(st.supabaseAnonKey) && st.supabaseAnonKey !== PROD_KEY;
+  if (valid) { C.supabaseUrl = st.supabaseUrl; C.supabaseAnonKey = st.supabaseAnonKey; C.lingkungan = 'staging'; return; }
+  C.supabaseUrl = ''; C.supabaseAnonKey = ''; C.lingkungan = 'staging-belum-siap';
+  C.konfigurasiBelumSiap = 'Konfigurasi database staging belum siap. Fitur akun dan pembayaran dimatikan di alamat ini agar tidak tersambung ke database produksi.';
 })(window.CEK_CONFIG);

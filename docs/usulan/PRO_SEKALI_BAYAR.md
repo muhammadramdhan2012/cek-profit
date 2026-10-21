@@ -89,14 +89,19 @@ Semua lulus di PostgreSQL 16 lokal dengan shim `auth.uid()`; ini bukan Supabase 
   maupun `pro_sekali_bayar`.
 - **Isolasi antar-seller:** seller hanya membaca pesanan, histori non-internal, dan dana miliknya.
 - **Anonim:** tidak punya akses ke tabel maupun fungsi pembayaran.
-- **Fungsi admin:** semua memeriksa `is_admin()` dari identitas login. Semua `security definer` memakai
-  `search_path = public` yang terkunci. Hak eksekusi dicabut dari `public`/`anon` dan diberikan ke `authenticated`.
+- **Fungsi admin:** semua memeriksa `is_admin()` dari identitas login. Semua `security definer` milik migrasi memakai
+  `search_path = public, pg_temp` yang terkunci (`pg_temp` terakhir agar tabel sementara tidak bisa membayangi tabel asli;
+  tes V15). Hak eksekusi dicabut dari `public`/`anon` dan diberikan ke `authenticated`.
   Fungsi internal (`_catat_event`, `_audit`, `_aktifkan_dari_pesanan`) tidak bisa dipanggil pengguna.
 - **Konkurensi:** baris profil dan pesanan dikunci (`FOR UPDATE`), ditambah indeks unik pesanan terbuka dan referensi.
   Uji 12 sesi paralel: 1 pesanan dan 1 pembayaran.
 - **Refund:** wajib menunjuk pembayaran asal (`refund_of`), dan nominalnya tidak boleh melebihi sisa dana pembayaran itu.
 - **Perbaikan fungsi lama:** `admin_set_pro` tidak lagi menutup pesanan Pro sekali bayar. Sebelumnya, setelah migrasi,
-  fungsi ini akan menandai pesanan "Aktif" tanpa dana tercatat.
+  fungsi ini akan menandai pesanan "Aktif" tanpa dana tercatat. Setiap pemakaiannya kini tercatat di `pro_audit_log`
+  (aksi `set_pro_lama`, nilai `pro_until` lama dan baru; tes V13–V14), karena jalur Pro lama tidak mencatat dana.
+- **Catatan keuangan tidak bisa dihapus pengguna:** tidak ada hak DELETE untuk `anon`/`authenticated` pada
+  `pro_payments`, `pro_audit_log`, `pro_order_events`, `upgrade_requests`, dan tidak ada RPC yang menghapus (tes V16).
+  Penghapusan hanya mungkin lewat dasbor Supabase oleh pemilik project.
 - **Kontrak tes lama T6, T9, T10** diganti di `test-rls-setelah-migrasi.sql`, dengan alasan tertulis di kepala file.
 
 ## 6. Retensi saat akun dihapus

@@ -258,6 +258,23 @@ select pg_temp.sebagai('d0000000-0000-0000-0000-00000000000d'); select public.ad
 reset role;
 select 'V10 admin_set_pro tidak menandai pesanan sekali bayar "Aktif" tanpa dana' t,
   (select status from public.upgrade_requests where user_id = 'f0000000-0000-0000-0000-00000000000f' and status in ('baru','diproses','perlu_cek','selesai') ) = 'baru' ok;
+select 'V13 admin_set_pro (jalur Pro lama) tercatat di audit dengan nilai lama & baru' t,
+  (select count(*) from public.pro_audit_log where aksi = 'set_pro_lama' and oleh = 'd0000000-0000-0000-0000-00000000000d'
+     and baru->>'pro_until' = '2099-01-01' and baru->>'user_id' = 'f0000000-0000-0000-0000-00000000000f') = 1 ok;
+set role authenticated; select pg_temp.sebagai('f0000000-0000-0000-0000-00000000000f');
+select public.admin_set_pro('e0000000-0000-0000-0000-00000000000e', '2099-01-01');
+reset role;
+select 'V14 non-admin tidak bisa memakai admin_set_pro (tanpa perubahan, tanpa audit)' t,
+  (select pro_until is null from public.profiles where id = 'e0000000-0000-0000-0000-00000000000e')
+  and (select count(*) from public.pro_audit_log where aksi = 'set_pro_lama') = 1 ok;
+select 'V15 semua fungsi SECURITY DEFINER milik migrasi mengunci search_path dengan pg_temp terakhir' t,
+  not exists (select 1 from pg_proc where pronamespace = 'public'::regnamespace and prosecdef
+    and proname not in ('is_admin', 'handle_new_user')
+    and coalesce(array_to_string(proconfig, ','), '') <> 'search_path=public, pg_temp') ok;
+select 'V16 tidak ada role pengguna yang boleh menghapus catatan keuangan' t,
+  not (has_table_privilege('authenticated', 'public.pro_payments', 'delete') or has_table_privilege('authenticated', 'public.pro_audit_log', 'delete')
+    or has_table_privilege('authenticated', 'public.pro_order_events', 'delete') or has_table_privilege('authenticated', 'public.upgrade_requests', 'delete')
+    or has_table_privilege('anon', 'public.pro_payments', 'delete')) ok;
 -- Seller tidak bisa menulis audit
 set role authenticated; select pg_temp.sebagai('e0000000-0000-0000-0000-00000000000e');
 insert into public.pro_audit_log (aksi) values ('palsu');
