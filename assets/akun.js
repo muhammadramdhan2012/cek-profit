@@ -35,8 +35,10 @@
   };
   const emailField = (ph = 'Masukkan email Anda') => `<div class="field"><label for="em">Email</label><input class="plain" id="em" type="email" autocomplete="email" inputmode="email" placeholder="${ph}" required aria-describedby="em-err">${errSpan('em')}</div>`;
   const nameField = () => `<div class="field"><label for="nm">Nama lengkap</label><input class="plain" id="nm" autocomplete="name" placeholder="Masukkan nama lengkap" maxlength="100" required aria-describedby="nm-err">${errSpan('nm')}</div>`;
-  const phoneField = () => `<div class="field"><label for="hp">Nomor HP/WhatsApp <span class="opt">(opsional)</span></label><input class="plain" id="hp" type="tel" autocomplete="tel" inputmode="tel" placeholder="Contoh: 081234567890" maxlength="20" aria-describedby="hp-h hp-err">
-    <span class="hint" id="hp-h">Boleh dikosongkan. Untuk menghubungi Anda soal bantuan dan pembayaran; tidak dipakai untuk iklan.</span>${errSpan('hp')}</div>`;
+  // Wajib untuk daftar dengan email + kata sandi (keputusan pemilik 21 Okt 2026). Pengguna Google dan akun lama tidak
+  // diwajibkan; mereka bisa melengkapinya di halaman Akun. Nomor tidak pernah ditandai terverifikasi.
+  const phoneField = () => `<div class="field"><label for="hp">Nomor HP/WhatsApp <span class="req" aria-hidden="true">*</span></label><input class="plain" id="hp" type="tel" autocomplete="tel" inputmode="tel" placeholder="Contoh: 081234567890" maxlength="20" required aria-describedby="hp-h hp-err">
+    <span class="hint" id="hp-h">Untuk menghubungi Anda soal bantuan dan pembayaran. Tidak dipakai untuk iklan dan tidak diverifikasi otomatis.</span>${errSpan('hp')}</div>`;
   const confirmField = (id, of) => pwField(id, 'Konfirmasi kata sandi', 'new-password', 'Ulangi kata sandi', { eyeLabel: 'konfirmasi kata sandi' }).replace('<input ', `<input data-sama="${of}" `);
   const msgHtml = () => (message ? `<p class="msg ${message.ok ? 'ok' : 'err'}" role="${message.ok ? 'status' : 'alert'}">${esc(message.text)}</p>` : '');
   const heading = (title, sub) => `<div class="acct-head"><h1>${title}</h1>${sub ? `<p class="muted">${sub}</p>` : ''}</div>`;
@@ -78,15 +80,19 @@
 
   async function renderAccount(card, user) {
     card.innerHTML = '<p class="muted" role="status">Memuat akun…</p>';
-    try { await salinHpDaftar(); } catch (e) { /* dicoba lagi nanti */ }
+    const salin = await salinHpDaftar();
     let p = null, reqs = [];
     try { [p, reqs] = await Promise.all([cloud.db.profile(), cloud.db.myRequests().catch(() => [])]); } catch (e) { message = { text: e.message }; }
     // Sesi ditolak server (mis. kedaluwarsa) → kembali ke halaman masuk, bukan tampil seolah masih masuk.
     if (!cloud.auth.user()) { view = 'masuk'; return render(); }
     const pro = cloud.isPro(p);
-    const wa = (p && p.whatsapp) || '';
-    // Pengguna Google (atau akun lama) belum punya nomor: ajak melengkapi, tidak memblokir.
-    const ajakWa = !wa ? '<p class="msg info" id="wa-ajak">Lengkapi nomor WhatsApp Anda agar kami bisa membantu bila ada kendala atau saat konfirmasi pembayaran.</p>' : '';
+    const gagalSalin = salin.status === 'gagal' && !(p && p.whatsapp);
+    // Nomor dari pendaftaran yang belum tersimpan diisikan ulang di kolom (belum tersimpan, jadi data-awal kosong).
+    const wa = (p && p.whatsapp) || '', waIsi = gagalSalin ? salin.nomor : wa;
+    const ajakWa = gagalSalin
+      ? '<p class="msg err" id="wa-ajak" role="alert">Nomor HP/WhatsApp dari pendaftaran belum tersimpan ke akun Anda. Periksa nomor di bawah, lalu tekan Simpan profil.</p>'
+      // Pengguna Google (atau akun lama) belum punya nomor: ajak melengkapi, tidak memblokir.
+      : !wa ? '<p class="msg info" id="wa-ajak">Lengkapi nomor WhatsApp Anda agar kami bisa membantu bila ada kendala atau saat konfirmasi pembayaran.</p>' : '';
     const pending = (reqs || []).find((r) => r.status === 'baru' || r.status === 'diproses');
     card.innerHTML = `${heading('Akun saya', esc(user.email || ''))}${msgHtml()}${ajakWa}
       <div class="plan"><div><b>${pro ? 'Pro' : 'Gratis'}</b><span class="small muted">${pro ? `Aktif sampai ${fmtDate(p.pro_until)}` : pending ? 'Permintaan upgrade sedang diproses' : 'Laporan PDF & analisis lengkap ada di Pro'}</span></div>
@@ -94,7 +100,7 @@
       <form id="f-profile">
         <div class="field"><label for="pf-name">Nama lengkap</label><input class="plain" id="pf-name" value="${esc(p && p.full_name)}" autocomplete="name" maxlength="100" placeholder="Masukkan nama lengkap"></div>
         <div class="field"><label for="pf-store">Nama toko</label><input class="plain" id="pf-store" value="${esc(p && p.store_name)}" placeholder="Tampil di sampul laporan PDF"></div>
-        <div class="field"><label for="pf-wa">Nomor HP/WhatsApp</label><input class="plain" id="pf-wa" type="tel" value="${esc(wa)}" data-awal="${esc(wa)}" inputmode="tel" autocomplete="tel" maxlength="20" placeholder="Contoh: 081234567890" aria-describedby="pf-wa-h pf-wa-err"><span class="hint" id="pf-wa-h">Untuk bantuan dan konfirmasi pembayaran. Tidak dipakai untuk iklan dan tidak diverifikasi otomatis.</span>${errSpan('pf-wa')}</div>
+        <div class="field"><label for="pf-wa">Nomor HP/WhatsApp</label><input class="plain" id="pf-wa" type="tel" value="${esc(waIsi)}" data-awal="${esc(wa)}" inputmode="tel" autocomplete="tel" maxlength="20" placeholder="Contoh: 081234567890" aria-describedby="pf-wa-h pf-wa-err"><span class="hint" id="pf-wa-h">Untuk bantuan dan konfirmasi pembayaran. Tidak dipakai untuk iklan dan tidak diverifikasi otomatis.</span>${errSpan('pf-wa')}</div>
         <button class="btn" type="submit">Simpan profil</button>
       </form>
       <div class="row-gap"><a class="btn primary" href="${esc(next)}" style="flex:1">Buka dashboard</a><button class="btn quiet" type="button" id="logout">Keluar</button></div>
@@ -116,7 +122,7 @@
     switch (input.id) {
       case 'em': return !v.trim() ? 'Email wajib diisi.' : !input.checkValidity() ? 'Format email tidak valid. Contoh: nama@toko.com' : '';
       case 'nm': return v.trim() ? '' : 'Nama lengkap wajib diisi.';
-      case 'hp': return A.normalisasiHp(v).ok ? '' : A.PESAN_HP;   // opsional: kosong boleh, divalidasi bila diisi
+      case 'hp': return !v.trim() ? 'Nomor HP/WhatsApp wajib diisi untuk mendaftar dengan email.' : A.normalisasiHp(v).ok ? '' : A.PESAN_HP;
       case 'pf-wa': return v.trim() === input.dataset.awal ? '' : A.normalisasiHp(v).ok ? '' : A.PESAN_HP;
       default:
         if (input.dataset.sama) { const asal = document.getElementById(input.dataset.sama); return !v ? 'Ulangi kata sandi Anda.' : asal && v !== asal.value ? 'Konfirmasi kata sandi belum sama.' : ''; }
@@ -152,18 +158,30 @@
 
   /**
    * Nomor HP dari pendaftaran ada di metadata akun (belum ada sesi saat daftar dengan konfirmasi email). Setelah masuk,
-   * salin ke profiles.whatsapp bila kolom itu masih kosong, lalu hapus dari metadata agar tidak tersimpan dua kali dan
-   * tidak menimpa nomor yang kemudian diubah/dikosongkan pengguna. Gagal = dicoba lagi saat masuk berikutnya.
+   * salin ke profiles.whatsapp bila kolom itu masih kosong, PASTIKAN tersimpan (dibaca dari respons server), baru hapus
+   * dari metadata. Bila gagal, metadata dibiarkan (dicoba lagi saat masuk berikutnya) dan statusnya dilaporkan,
+   * bukan dianggap berhasil.
+   * @returns {Promise<{status: 'tidak_ada'|'tersimpan'|'sudah_ada'|'gagal', nomor?: string}>}
    */
   async function salinHpDaftar() {
     const u = cloud.auth.user(), meta = (u && u.user_metadata) || {};
-    if (!meta.whatsapp) return;
-    const n = A.normalisasiHp(meta.whatsapp);
-    if (n.ok && n.nilai) {
+    if (!meta.whatsapp) return { status: 'tidak_ada' };
+    const n = A.normalisasiHp(meta.whatsapp), nomor = n.ok ? n.nilai : String(meta.whatsapp);
+    let status;
+    try {
       const p = await cloud.db.profile();
-      if (p && !p.whatsapp) await cloud.db.updateProfile({ whatsapp: n.nilai });
-    }
-    await cloud.auth.updateMetadata({ whatsapp: null });
+      if (!p) return { status: 'gagal', nomor };
+      if (p.whatsapp) status = 'sudah_ada';   // nomor di profil diutamakan (bisa sudah diubah pengguna)
+      else {
+        if (!n.ok || !n.nilai) return { status: 'gagal', nomor };
+        const saved = await cloud.db.updateProfile({ whatsapp: n.nilai });
+        if (!saved || saved.whatsapp !== n.nilai) return { status: 'gagal', nomor };
+        status = 'tersimpan';
+      }
+    } catch (e) { return { status: 'gagal', nomor }; }
+    // Data sudah aman di profil; penghapusan metadata yang gagal hanya diulang saat masuk berikutnya.
+    try { await cloud.auth.updateMetadata({ whatsapp: null }); } catch (e) { /* abaikan */ }
+    return { status };
   }
 
   document.addEventListener('submit', async (e) => {
@@ -197,7 +215,12 @@
         // Nomor lama yang belum berformat +62 tetap dipertahankan apa adanya bila tidak diubah.
         if (wa.value.trim() !== wa.dataset.awal) patch.whatsapp = A.normalisasiHp(wa.value).nilai;
         const saved = await cloud.db.updateProfile(patch);
-        if (saved && 'whatsapp' in patch) { wa.value = saved.whatsapp || ''; wa.dataset.awal = wa.value; const aj = $('#wa-ajak'); if (aj && wa.value) aj.remove(); }
+        if (!saved || ('whatsapp' in patch && saved.whatsapp !== patch.whatsapp)) throw new Error('Silakan coba lagi.');
+        if ('whatsapp' in patch) {
+          wa.value = saved.whatsapp || ''; wa.dataset.awal = wa.value; const aj = $('#wa-ajak'); if (aj && wa.value) aj.remove();
+          // Nomor sementara dari pendaftaran tidak diperlukan lagi setelah profil menyimpan nomor.
+          const u = cloud.auth.user(); if (u && u.user_metadata && u.user_metadata.whatsapp) cloud.auth.updateMetadata({ whatsapp: null }).catch(() => {});
+        }
         toast('Profil tersimpan.'); busy(btn, false); return;
       }
     } catch (err) {
@@ -212,8 +235,14 @@
   /** Pindah ke tujuan hanya bila sesi sudah ada dan penggunanya dikenali server. */
   async function go(text) {
     if (!cloud.auth.user()) { showErr('Sesi tidak dapat diverifikasi. Silakan masuk lagi.'); return; }
-    message = { ok: true, text }; render();
-    try { await salinHpDaftar(); } catch (e) { /* dicoba lagi saat masuk berikutnya; halaman akun tetap mengajak melengkapi nomor */ }
+    $('#card').innerHTML = `<p class="msg ok" role="status">${esc(text)}</p>`;
+    const meta = (cloud.auth.user().user_metadata) || {};
+    // Ada nomor dari pendaftaran yang belum dipindahkan: pastikan tersimpan dulu. Bila gagal, tetap di halaman Akun
+    // dengan status yang jelas (bukan diam-diam ke dashboard); renderAccount mencoba lagi dan menampilkan formnya.
+    if (meta.whatsapp) {
+      const r = await salinHpDaftar();
+      if (r.status === 'gagal') { message = null; render(); return; }
+    }
     ss.del(NEXT_KEY);
     location.href = next;
   }

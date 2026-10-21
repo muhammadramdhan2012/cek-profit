@@ -699,9 +699,11 @@ test('V1A tampilan: tanpa laba/modal per sumber, keterangan wajib, aturan sembun
 test('AUTH-V3 form: placeholder, kolom daftar lengkap, konfirmasi sandi, masuk tanpa aturan sandi baru', () => {
   const ak = src('akun.js'), html = fs.readFileSync(path.join(__dirname, '..', 'akun.html'), 'utf8');
   for (const ph of ['Masukkan email Anda', 'Masukkan kata sandi', 'Masukkan nama lengkap', 'contoh@email.com', 'Contoh: 081234567890', 'Buat kata sandi', 'Ulangi kata sandi']) truthy(ak.includes(ph), `placeholder ${ph}`);
-  truthy(/<label for="nm">Nama lengkap<\/label>/.test(ak) && /<label for="hp">Nomor HP\/WhatsApp <span class="opt">\(opsional\)<\/span><\/label>/.test(ak) && /'Konfirmasi kata sandi'/.test(ak), 'label daftar');
-  truthy(/id="nm" [^>]*required/.test(ak) && !/id="hp" [^>]*required/.test(ak), 'nama wajib, nomor HP opsional');
-  truthy(/case 'hp': return A\.normalisasiHp\(v\)\.ok \? '' : A\.PESAN_HP;/.test(ak), 'nomor kosong boleh; divalidasi bila diisi');
+  truthy(/<label for="nm">Nama lengkap<\/label>/.test(ak) && /<label for="hp">Nomor HP\/WhatsApp <span class="req" aria-hidden="true">\*<\/span><\/label>/.test(ak) && !/opsional/i.test(ak) && /'Konfirmasi kata sandi'/.test(ak), 'label daftar');
+  truthy(/id="nm" [^>]*required/.test(ak) && /id="hp" [^>]*required/.test(ak), 'daftar email: nama dan nomor HP wajib');
+  truthy(/case 'hp': return !v\.trim\(\) \? 'Nomor HP\/WhatsApp wajib diisi untuk mendaftar dengan email\.' : A\.normalisasiHp\(v\)\.ok \? '' : A\.PESAN_HP;/.test(ak), 'nomor wajib + validasi format');
+  truthy(/case 'pf-wa': return v\.trim\(\) === input\.dataset\.awal \? ''/.test(ak), 'halaman Akun: nomor tidak dipaksa (pengguna Google/lama)');
+  truthy(!/user_metadata[^;]*whatsapp[^;]*return 'Nomor/.test(ak) && !/signIn[^;]*whatsapp/.test(ak), 'masuk tidak mensyaratkan nomor');
   truthy(/confirmField\('pw2', 'pw'\)/.test(ak) && /confirmField\('pw1b', 'pw1'\)/.test(ak), 'konfirmasi di daftar & ganti sandi');
   truthy(/pwField\('pw', 'Kata sandi', 'current-password', 'Masukkan kata sandi'\)/.test(ak), 'form masuk: tanpa data-baru (sandi lama tidak dicek aturan baru)');
   truthy(/return v \? '' : 'Kata sandi wajib diisi\.';/.test(ak), 'kolom sandi masuk hanya wajib diisi');
@@ -712,7 +714,11 @@ test('AUTH-V3 privasi data: sandi tidak masuk draft/profil/log; nomor hanya ke m
   truthy(/const DRAFT_IDS = \['em', 'nm', 'hp'\];/.test(ak), 'draft tanpa kata sandi');
   truthy(!/console\.(log|info|debug|warn)/.test(ak + cl + src('aturan-akun.js') + src('situs.js')), 'tanpa log');
   truthy(/const data = \{ full_name: fullName \|\| '' \};\s*if \(whatsapp\) data\.whatsapp = whatsapp;/.test(cl), 'metadata daftar: nama + nomor saja');
-  truthy(/if \(p && !p\.whatsapp\) await cloud\.db\.updateProfile\(\{ whatsapp: n\.nilai \}\);\s*\}\s*await cloud\.auth\.updateMetadata\(\{ whatsapp: null \}\);/.test(ak), 'salin hanya bila profil kosong, lalu hapus metadata');
+  truthy(/if \(!saved \|\| saved\.whatsapp !== n\.nilai\) return \{ status: 'gagal', nomor \};/.test(ak), 'salin: hasil dicek dari respons server');
+  truthy(/catch \(e\) \{ return \{ status: 'gagal', nomor \}; \}\s*\/\/[^\n]*\n\s*try \{ await cloud\.auth\.updateMetadata\(\{ whatsapp: null \}\);/.test(ak), 'metadata dihapus hanya setelah profil tersimpan');
+  truthy(/if \(r\.status === 'gagal'\) \{ message = null; render\(\); return; \}/.test(ak), 'gagal salin: tidak diam-diam ke dashboard');
+  truthy(/belum tersimpan ke akun Anda\. Periksa nomor di bawah, lalu tekan Simpan profil\./.test(ak) && /value="\$\{esc\(waIsi\)\}" data-awal="\$\{esc\(wa\)\}"/.test(ak), 'status gagal + nomor diisikan ulang untuk disimpan');
+  truthy(/saved\.whatsapp !== patch\.whatsapp\)\) throw/.test(ak), 'simpan profil: nomor dicek dari respons server');
   truthy(/if \(wa\.value\.trim\(\) !== wa\.dataset\.awal\) patch\.whatsapp/.test(ak), 'nomor lama tak berformat tidak diubah/diblokir bila tidak disunting');
   truthy(/id="wa-ajak"/.test(ak), 'ajakan melengkapi nomor (pengguna Google/lama)');
 });
@@ -730,6 +736,7 @@ test('waSupport: kunci config terpisah & kosong; pembayaran tetap bergantung pad
 });
 test('Privasi: nomor HP & tujuannya, Cloudflare, Supabase, Resend; paragraf Google hanya bila aktif', () => {
   const pv = fs.readFileSync(path.join(__dirname, '..', 'privasi.html'), 'utf8');
+  truthy(/Nomor wajib diisi bila Anda mendaftar dengan email dan kata sandi/.test(pv) && /nomor tidak wajib untuk masuk/.test(pv) && /Bila pemindahan gagal, halaman Akun memberi tahu Anda/.test(pv) && !/opsional/i.test(pv), 'aturan wajib/opsional');
   truthy(/<h2>Nomor HP\/WhatsApp<\/h2>/.test(pv) && /tidak dipakai untuk iklan, tidak dijual, dan tidak dipakai sebagai kode verifikasi \(OTP\)/.test(pv) && /tidak diverifikasi otomatis/.test(pv), 'nomor HP');
   for (const s of ['<b>Cloudflare</b>', '<b>Supabase</b>', '<b>Resend</b>']) truthy(pv.includes(s), s);
   truthy(/<li id="google-note" hidden>/.test(pv) && /getElementById\('google-note'\)\.hidden = !C\.googleLogin;/.test(pv), 'Google hanya bila googleLogin aktif');

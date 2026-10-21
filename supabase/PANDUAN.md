@@ -123,10 +123,13 @@ Untuk memperpanjang, klik **+1 bln** atau **+1 thn** di daftar pengguna. Masa be
 
 ## Nomor HP/WhatsApp dan bantuan
 
-- Nomor HP/WhatsApp pengguna disimpan di kolom `profiles.whatsapp` yang sudah ada (tidak perlu migrasi). Saat
-  daftar, nomor **opsional**; bila diisi, website menormalkan ke `+62…`, menyimpannya sementara sebagai data
-  pendaftaran, lalu memindahkannya ke profil setelah pengguna pertama kali masuk. Nomor **tidak diverifikasi** dan
-  tidak dipakai untuk OTP.
+- Nomor HP/WhatsApp pengguna disimpan di kolom `profiles.whatsapp` yang sudah ada (tidak perlu migrasi).
+  - Daftar dengan email + kata sandi: nomor **wajib**. Website menormalkan ke `+62…`, menyimpannya sementara sebagai
+    data pendaftaran, lalu memindahkannya ke profil setelah pengguna pertama kali masuk.
+  - Bila pemindahan gagal, pengguna tetap di halaman Akun dengan pesan "belum tersimpan" dan nomornya terisi untuk
+    disimpan ulang; data pendaftaran baru dihapus setelah profil benar-benar tersimpan.
+  - Pengguna Google dan akun lama: nomor **tidak wajib** untuk masuk; dapat dilengkapi di halaman Akun.
+  - Nomor **tidak diverifikasi** dan tidak dipakai untuk OTP.
 - Tombol **Bantuan WhatsApp** memakai `waSupport` di `assets/config.js`, terpisah dari `whatsapp` (pembayaran Pro).
   Isi hanya dengan nomor resmi, format `628…` tanpa `+` dan spasi. Selama kosong, tombol tidak tampil.
 - `domainResmi` di `assets/config.js`: isi `https://cekuntung.id` saat domain siap. Pengunjung alamat lama
