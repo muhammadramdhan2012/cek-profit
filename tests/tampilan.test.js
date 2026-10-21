@@ -793,5 +793,12 @@ test('Service worker Cloudflare: kunci cache /x, /x.html, /x?q sama; respons red
   truthy(/'assets\/aturan-akun\.js', 'assets\/situs\.js'/.test(code), 'file baru ikut cache offline');
 });
 
+test('QRIS simulasi (img/qris-uji*) hanya dipakai di staging terverifikasi dan dicegah masuk main', () => {
+  truthy(/!\/\^img\\\/qris-uji\/i\.test\(s\.qris_gambar\) \|\| C\.lingkungan === 'staging'/.test(src('akun.js')), 'akun.js menolak gambar QRIS uji di luar staging');
+  const ci = fs.readFileSync(path.join(__dirname, '..', '.github', 'workflows', 'periksa.yml'), 'utf8');
+  truthy(/github\.ref == 'refs\/heads\/main' \|\| github\.base_ref == 'main'/.test(ci) && /ls img\/qris-uji\*/.test(ci), 'CI menolak img/qris-uji* di main / PR ke main');
+  truthy(!/qris-uji/.test(fs.readFileSync(path.join(__dirname, '..', 'sw.js'), 'utf8')), 'gambar uji tidak masuk cache offline');
+});
+
 console.log(failed ? `\n${failed} uji GAGAL` : '\nSemua uji lulus');
 process.exitCode = failed ? 1 : 0;

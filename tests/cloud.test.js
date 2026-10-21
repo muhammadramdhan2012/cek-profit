@@ -351,6 +351,10 @@ const memStore = () => { const m = new Map(); return { getItem: (k) => (m.has(k)
     const asli = (h) => { const w = {}; vm.runInNewContext(code, { window: w, atob: (x) => Buffer.from(x, 'base64').toString('binary'), location: { hostname: h } }); return w.CEK_CONFIG; };
     truthy(/proPembayaranAktif: false,/.test(code) && asli('cekuntung.id').proPembayaranAktif === false && asli('cekuntung.id').lingkungan === 'produksi', 'config.js asli: produksi tanpa pembayaran');
     const pvAsli = asli(PV); truthy(['staging', 'staging-belum-siap'].includes(pvAsli.lingkungan) && !PROD.test(pvAsli.supabaseUrl), 'config.js asli: preview tidak pernah ke produksi');
+    const prodAsli = asli('cekuntung.id');
+    truthy(pvAsli.lingkungan === 'staging' && /^https:\/\/epyhhazihfolbdtjxxfd\.supabase\.co$/.test(pvAsli.supabaseUrl) && /^sb_publishable_/.test(pvAsli.supabaseAnonKey)
+      && pvAsli.supabaseAnonKey !== prodAsli.supabaseAnonKey && pvAsli.proPembayaranAktif === true, 'config.js asli: preview → project cekuntung-staging (publishable key, beda dari produksi)');
+    truthy(mati(asli('abc123.cekuntung.pages.dev')), 'config.js asli: preview per commit (tidak terdaftar) → mati');
     truthy(!/location\.(search|hash)|localStorage|sessionStorage|document\.cookie/.test(code), 'config.js tidak membaca URL, localStorage, atau cookie');
     truthy(!/sb_secret_[A-Za-z0-9]|eyJ[A-Za-z0-9_-]{20,}/.test(code), 'tanpa secret key');
   });

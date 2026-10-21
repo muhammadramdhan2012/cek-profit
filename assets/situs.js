@@ -37,6 +37,10 @@ const CekSitus = (() => {
     let el = doc.getElementById('tanda-staging');
     if (!el) { el = doc.createElement('div'); el.id = 'tanda-staging'; el.setAttribute('role', 'note'); doc.body.prepend(el); }
     el.className = `tanda-staging ${jenis}`; el.textContent = teks;
+    // Tinggi pita berubah menurut lebar layar; elemen lain yang menempel di bawah memakai --pita-h.
+    const ukur = () => { try { doc.documentElement.style.setProperty('--pita-h', `${el.offsetHeight}px`); } catch (e) { /* abaikan */ } };
+    ukur();
+    if (el.dataset && !el.dataset.ukur && typeof window !== 'undefined' && window.addEventListener) { el.dataset.ukur = '1'; window.addEventListener('resize', ukur); }
   }
   async function tandaStaging(doc, cfg, fetcher) {
     if (!cfg) return '';

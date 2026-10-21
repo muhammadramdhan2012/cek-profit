@@ -272,7 +272,12 @@ body.acct .acct-side { display: none; }
   body.acct .acct-wrap > .brand { display: none; }
 }
 
-.tanda-staging { position: sticky; top: 0; z-index: 1000; padding: 6px 12px; color: #fff; font-size: 12.5px; font-weight: 700; text-align: center; }
+/* Pita lingkungan: menempel di bawah layar agar tidak ikut menjadi sel grid tata letak halaman (akun/dashboard). */
+.tanda-staging { position: fixed; left: 0; right: 0; bottom: 0; z-index: 1000; padding: 8px 16px calc(8px + env(safe-area-inset-bottom)); color: #fff; font-size: 12.5px; font-weight: 700; line-height: 1.4; text-align: center; box-shadow: 0 -4px 16px rgb(0 0 0 / 18%); }
+/* --pita-h diisi situs.js = tinggi pita; navigasi bawah, CTA mobile, dan toast diangkat di atas pita, halaman diberi ruang. */
+html:has(.tanda-staging) { padding-bottom: var(--pita-h, 0px); }
+html:has(.tanda-staging) .bnav, html:has(.tanda-staging) .m-cta { bottom: var(--pita-h, 0px); }
+html:has(.tanda-staging) .toast { bottom: calc(22px + var(--pita-h, 0px)); }
 .tanda-staging.staging { background: #8a3b00; } .tanda-staging.bahaya { background: #9b1c1c; }
 
 /* Pemberitahuan pindah alamat (assets/situs.js; hanya tampil di alamat lama bila CEK_CONFIG.domainResmi diisi) */

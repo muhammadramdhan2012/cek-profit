@@ -168,6 +168,17 @@ di-commit. Karena itu staging dihubungkan **lewat commit di branch preview**, bu
 - Bila ingin bersih, sebelum merge ke `main` blok `staging` bisa dikosongkan lagi. Keduanya aman; keputusan Anda.
 - Tidak ada perubahan Cloudflare (DNS, domain, environment variable) yang diperlukan.
 
+**Status 21 Okt 2026 (commit lokal, belum di-push):** `staging` di `config.js` berisi URL
+`https://epyhhazihfolbdtjxxfd.supabase.co`, publishable key staging, host `feature-pro-pricing.cekuntung.pages.dev`,
+dan `proPembayaranAktif: true` (hanya berlaku di staging terverifikasi; produksi tetap `false`). Pita lingkungan menempel
+di **bawah** layar; navigasi bawah dashboard dan tombol HP beranda diangkat di atasnya.
+
+**Gambar QRIS simulasi:** `img/qris-uji.png` (440×440, tulisan "QRIS UJI — BUKAN UNTUK PEMBAYARAN", **tanpa** kode QR).
+Di admin staging isi `qris_gambar` = `img/qris-uji.png`. Pengaman agar tidak ikut produksi:
+- `assets/akun.js` tidak menawarkan QRIS bila gambarnya `img/qris-uji*` dan lingkungan bukan staging terverifikasi;
+- CI (`periksa.yml`) gagal bila `img/qris-uji*` ada di `main` atau di PR ke `main`;
+- **Sebelum merge ke `main`:** hapus `img/qris-uji.png` (wajib) dan putuskan apakah blok `staging` dikosongkan.
+
 ## 5. Admin staging
 
 1. Daftar akun admin uji di `https://feature-pro-pricing.cekuntung.pages.dev/akun` (email berbeda dari admin produksi).

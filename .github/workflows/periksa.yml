@@ -16,3 +16,7 @@ jobs:
           node tests/tarif.test.js
           node tests/license.test.js
           node tests/cloud.test.js
+      - name: Gambar QRIS simulasi tidak boleh masuk main (rilis produksi)
+        if: github.ref == 'refs/heads/main' || github.base_ref == 'main'
+        run: |
+          if ls img/qris-uji* >/dev/null 2>&1; then echo "img/qris-uji* hanya untuk branch staging. Hapus sebelum merge ke main."; exit 1; fi

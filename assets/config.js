@@ -55,8 +55,8 @@ window.CEK_CONFIG = {
   // (sb_publishable_…). JANGAN isi secret/service_role. Host yang didaftarkan HANYA memakai staging.
   // proPembayaranAktif di sini hanya berlaku setelah host terbukti staging yang valid; produksi tetap memakai nilai di atas.
   staging: {
-    supabaseUrl: '',
-    supabaseAnonKey: '',
+    supabaseUrl: 'https://epyhhazihfolbdtjxxfd.supabase.co',             // project cekuntung-staging
+    supabaseAnonKey: 'sb_publishable_yJi7jb0iFM-5ElAbhB2Zxg_helb36Yg',      // publishable key STAGING (publik)
     hosts: ['feature-pro-pricing.cekuntung.pages.dev'],
     proPembayaranAktif: true,
   },

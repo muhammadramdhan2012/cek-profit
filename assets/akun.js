@@ -139,7 +139,8 @@
   }
   const metodeTersedia = (s) => ({
     transfer: !!(s && s.bank_nama && s.bank_nomor && s.bank_pemilik),
-    qris: !!(s && s.qris_merchant && GAMBAR_QRIS.test(s.qris_gambar || '')),
+    // img/qris-uji*.png = gambar simulasi staging; di luar staging terverifikasi dianggap tidak ada (QRIS tidak ditawarkan).
+    qris: !!(s && s.qris_merchant && GAMBAR_QRIS.test(s.qris_gambar || '') && (!/^img\/qris-uji/i.test(s.qris_gambar) || C.lingkungan === 'staging')),
   });
   const SIAPKAN = '<p class="msg info">Metode pembayaran sedang disiapkan. Semua fitur gratis tetap bisa Anda pakai.</p>';
   const salin = (v, label) => `<button class="btn link sm" type="button" data-salin="${esc(v)}" aria-label="Salin ${label}">Salin</button>`;
