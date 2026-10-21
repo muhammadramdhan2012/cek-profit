@@ -400,6 +400,9 @@ Sumber awal: audit menyeluruh 14 Okt 2026 (read-only), ditambah analisis penghit
 
 ## Riwayat perubahan dokumen
 
+- 21 Okt 2026: checkout manual Transfer Bank + QRIS (branch `feature/pro-pricing`, belum dirilis): usulan SQL v2
+  (pesanan berbasis akun, histori status, buku besar dana, verifikasi admin atomik; uji lokal O1–O24). Pembayaran
+  tetap nonaktif. Mesin hitung tidak berubah.
 - 21 Okt 2026: harga Pro sekali bayar (branch lokal `feature/pro-pricing`, belum dirilis): M5 dan M6 diberi catatan
   rancangan SQL `supabase/usulan/pro-sekali-bayar.sql` (diuji lokal, belum dijalankan). Pembelian Pro tetap nonaktif.
   Mesin hitung tidak berubah.

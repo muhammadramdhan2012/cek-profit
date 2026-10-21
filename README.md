@@ -51,9 +51,10 @@ Hal lain yang sudah disiapkan:
 
 Buka `assets/config.js` di GitHub, klik ikon pensil, ubah isinya, lalu **Commit changes**:
 
-- `whatsapp`: nomor untuk konfirmasi pembayaran Pro, misalnya `'628…'`.
-- `proPembayaranAktif`: tombol beli Pro hanya aktif bila `true` **dan** `whatsapp` terisi. Biarkan `false` sampai alur
-  pembayaran dan aktivasi di server (`supabase/usulan/pro-sekali-bayar.sql`) disetujui dan diuji.
+- `whatsapp`: kontak umum (opsional). Tidak dipakai untuk checkout.
+- `proPembayaranAktif`: membuka checkout Pro berbasis akun (`akun.html?view=pro`, transfer bank + QRIS). Biarkan
+  `false` sampai migrasi `supabase/usulan/pro-sekali-bayar.sql` dijalankan, rekening/QRIS resmi diisi di tabel
+  `pengaturan_pembayaran` (bukan di file ini), kebijakan refund terbit, dan satu transaksi uji berhasil.
 - `waSupport`: nomor WhatsApp bantuan (terpisah dari pembayaran). Kosong = tombol bantuan tidak tampil.
 - `prices`: harga Pro (`pro`, `proRegular` = harga reguler yang direncanakan, `proLabel`, `proUnit`).
 - `goatcounter`: kode situs dari goatcounter.com (statistik tanpa cookie). Kosong berarti statistik mati.

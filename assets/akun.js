@@ -11,6 +11,10 @@
   const NEXT_KEY = 'cekprofit.authNext';
   const ss = { get: (k) => { try { return sessionStorage.getItem(k); } catch (e) { return null; } }, set: (k, v) => { try { sessionStorage.setItem(k, v); } catch (e) { /* abaikan */ } }, del: (k) => { try { sessionStorage.removeItem(k); } catch (e) { /* abaikan */ } } };
   let next = safeNext(params.get('next')) || safeNext(ss.get(NEXT_KEY)) || 'dashboard.html';
+  // Halaman pembelian Pro (akun.html?view=pro): setelah masuk, kembali ke sini.
+  const PRO_VIEW = params.get('view') === 'pro';
+  if (PRO_VIEW && !params.get('next')) next = 'akun.html?view=pro';
+  const dashHref = () => (/^akun\.html/.test(next) ? 'dashboard.html' : next);
   const here = () => location.href.split('#')[0].split('?')[0];
   const toast = (m) => { const t = $('#toast'); t.textContent = m; t.hidden = false; clearTimeout(toast.t); toast.t = setTimeout(() => { t.hidden = true; }, 3500); };
   const track = (e) => { try { window.cekTrack && window.cekTrack(e); } catch (err) { /* abaikan */ } };
@@ -58,7 +62,7 @@
         <form id="f-new" novalidate>${pwField('pw1', 'Kata sandi baru', 'new-password', 'Buat kata sandi', { baru: true })}${confirmField('pw1b', 'pw1')}<button class="btn primary" type="submit">Simpan kata sandi</button></form>`;
       return;
     }
-    if (user) return renderAccount(card, user);
+    if (user) return PRO_VIEW ? renderPro(card, user) : renderAccount(card, user);
     if (view === 'lupa') {
       card.innerHTML = `${heading('Lupa kata sandi', 'Masukkan email akun Anda. Kami kirim tautan untuk membuat kata sandi baru.')}${msgHtml()}
         <form id="f-lupa" novalidate>${emailField()}<button class="btn primary" type="submit">Kirim tautan</button></form>
@@ -67,7 +71,7 @@
     }
     const daftar = view === 'daftar';
     card.innerHTML = `<div class="auth-tabs" role="tablist" aria-label="Masuk atau daftar"><button type="button" role="tab" data-view="masuk" aria-selected="${!daftar}">Masuk</button><button type="button" role="tab" data-view="daftar" aria-selected="${daftar}">Daftar</button></div>
-      ${heading(daftar ? 'Buat akun gratis' : 'Masuk ke Cek Untung', daftar ? 'Simpan modal produk dan riwayat laporan, lalu buka dari perangkat mana pun.' : 'Selamat datang kembali. Lanjutkan cek laba toko Anda.')}
+      ${heading(daftar ? 'Buat akun gratis' : 'Masuk ke Cek Untung', PRO_VIEW ? 'Pembelian Pro terhubung ke akun Anda. Masuk atau daftar terlebih dahulu.' : daftar ? 'Simpan modal produk dan riwayat laporan, lalu buka dari perangkat mana pun.' : 'Selamat datang kembali. Lanjutkan cek laba toko Anda.')}
       ${msgHtml()}${google()}
       <form id="f-auth" novalidate>
         ${daftar ? `<p class="tiny faint req-note">Kolom bertanda <span class="req" aria-hidden="true">*</span> wajib diisi.</p>${nameField()}` : ''}
@@ -80,8 +84,8 @@
       <p class="switch">${daftar ? 'Sudah punya akun?' : 'Belum punya akun?'} <button class="btn link" type="button" data-view="${daftar ? 'masuk' : 'daftar'}">${daftar ? 'Masuk' : 'Daftar gratis'}</button></p>`;
   }
 
-  // Pembelian Pro dibuka hanya bila kontak pembayaran diisi DAN proPembayaranAktif = true (sama dengan dashboard).
-  const PAY_READY = !!(C.whatsapp && C.proPembayaranAktif === true);
+  // Pembelian Pro dibuka hanya bila proPembayaranAktif = true (sama dengan dashboard); tidak bergantung WhatsApp.
+  const PAY_READY = C.proPembayaranAktif === true;
   /** Ringkasan harga Pro dari config (tidak menampilkan hitung mundur maupun jumlah slot promosi). */
   const hargaSingkat = () => { const pr = C.prices || {}; return pr.pro ? `Pro ${pr.pro} ${pr.proUnit || ''}${pr.proLabel ? ` (${pr.proLabel.toLowerCase()})` : ''}. Laporan PDF dan analisis lengkap.`.replace(/\s+\./, '.') : 'Laporan PDF & analisis lengkap ada di Pro'; };
   async function renderAccount(card, user) {
@@ -102,16 +106,117 @@
     const pending = (reqs || []).find((r) => r.status === 'baru' || r.status === 'diproses');
     card.innerHTML = `${heading('Akun saya', esc(user.email || ''))}${msgHtml()}${ajakWa}
       <div class="plan"><div><b>${pro ? (cloud.isProSekaliBayar(p) ? 'Pro sekali bayar' : 'Pro') : 'Gratis'}</b><span class="small muted">${pro ? (cloud.isProSekaliBayar(p) ? 'Aktif selama layanan Cek Untung beroperasi' : `Aktif sampai ${fmtDate(p.pro_until)}`) : pending ? 'Permintaan Pro sedang diproses' : esc(hargaSingkat())}</span></div>
-        ${pro ? '<span class="badge pro">PRO</span>' : pending ? '<a class="btn sm" href="dashboard.html#upgrade">Lihat status</a>' : PAY_READY ? '<a class="btn sm" href="dashboard.html#upgrade">Beli Pro</a>' : '<span class="badge">Pro segera hadir</span>'}</div>
+        ${pro ? '<span class="badge pro">PRO</span>' : pending ? '<a class="btn sm" href="akun.html?view=pro">Lihat status</a>' : PAY_READY ? '<a class="btn sm" href="akun.html?view=pro">Beli Pro</a>' : '<span class="badge">Pro segera hadir</span>'}</div>
       <form id="f-profile">
         <div class="field"><label for="pf-name">Nama lengkap</label><input class="plain" id="pf-name" value="${esc(p && p.full_name)}" autocomplete="name" maxlength="100" placeholder="Masukkan nama lengkap"></div>
         <div class="field"><label for="pf-store">Nama toko</label><input class="plain" id="pf-store" value="${esc(p && p.store_name)}" placeholder="Tampil di sampul laporan PDF"></div>
         <div class="field"><label for="pf-wa">Nomor HP/WhatsApp</label><input class="plain" id="pf-wa" type="tel" value="${esc(waIsi)}" data-awal="${esc(wa)}" inputmode="tel" autocomplete="tel" maxlength="20" placeholder="Contoh: 081234567890" aria-describedby="pf-wa-h pf-wa-err"><span class="hint" id="pf-wa-h">Untuk bantuan dan konfirmasi pembayaran. Tidak dipakai untuk iklan dan tidak diverifikasi otomatis.</span>${errSpan('pf-wa')}</div>
         <button class="btn" type="submit">Simpan profil</button>
       </form>
-      <div class="row-gap"><a class="btn primary" href="${esc(next)}" style="flex:1">Buka dashboard</a><button class="btn quiet" type="button" id="logout">Keluar</button></div>
+      <div class="row-gap"><a class="btn primary" href="${esc(dashHref())}" style="flex:1">Buka dashboard</a><button class="btn quiet" type="button" id="logout">Keluar</button></div>
       <button class="btn link" type="button" data-view="sandi-baru" style="justify-self:center">Ganti kata sandi</button>`;
     message = null;
+  }
+
+  /* ---------------- Pembelian Pro (checkout manual: transfer bank / QRIS) ----------------
+   * Kode pesanan, nominal, dan status dibuat server (supabase/usulan/pro-sekali-bayar.sql). Browser hanya menampilkan.
+   * "Saya sudah membayar" hanya klaim pembeli (Menunggu verifikasi); Pro aktif setelah admin menemukan dana di mutasi. */
+  const STATUS_PESANAN = { baru: 'Menunggu pembayaran', diproses: 'Menunggu verifikasi', selesai: 'Aktif', ditolak: 'Gagal', dibatalkan: 'Dibatalkan', direfund: 'Dana dikembalikan' };
+  const METODE = { transfer: 'Transfer bank', qris: 'QRIS' };
+  const GAMBAR_QRIS = /^img\/[A-Za-z0-9._-]+\.(png|jpg|jpeg|webp|svg)$/;
+  const rupiah = (n) => `Rp${Number(n || 0).toLocaleString('id-ID')}`;
+  const tglWaktu = (d) => new Date(d).toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' });
+  /** Harga dari server bila ada (nominal tagihan resmi); label & harga reguler yang direncanakan dari config. */
+  function hargaBlok(hargaServer) {
+    const pr = C.prices || {};
+    const now = hargaServer ? rupiah(hargaServer) : pr.pro;
+    if (!now) return '';
+    return `<div class="harga-pro">${pr.proLabel ? `<span class="hp-label">${esc(pr.proLabel)}</span>` : ''}
+      ${pr.proRegular ? `<span class="hp-was">Harga reguler yang direncanakan <s>${esc(pr.proRegular)}</s></span>` : ''}
+      <span class="hp-now"><b>${esc(now)}</b> ${esc(pr.proUnit || 'sekali bayar')}</span><span class="hp-note">Bayar satu kali, tanpa tagihan bulanan atau tahunan.</span></div>`;
+  }
+  const metodeTersedia = (s) => ({
+    transfer: !!(s && s.bank_nama && s.bank_nomor && s.bank_pemilik),
+    qris: !!(s && s.qris_merchant && GAMBAR_QRIS.test(s.qris_gambar || '')),
+  });
+  const SIAPKAN = '<p class="msg info">Metode pembayaran sedang disiapkan. Semua fitur gratis tetap bisa Anda pakai.</p>';
+  function instruksi(o, s) {
+    const langkahAkhir = o.status === 'baru' ? '<li>Setelah berhasil, tekan <b>Saya sudah membayar</b>.</li>' : '';
+    if (o.metode === 'qris') {
+      return `<div class="pay-box"><img class="qris" src="${esc(s.qris_gambar)}" alt="Kode QRIS ${esc(s.qris_merchant)}" width="220" height="220">
+        <p class="small">Merchant: <b>${esc(s.qris_merchant)}</b>${s.qris_nmid ? ` · NMID ${esc(s.qris_nmid)}` : ''}</p>
+        <ol class="steps"><li>Pindai dengan aplikasi bank atau dompet digital. Pastikan nama merchant sama dengan di atas.</li>
+        <li>Masukkan nominal tepat <b>${rupiah(o.amount)}</b>.</li>${langkahAkhir}</ol></div>`;
+    }
+    return `<div class="pay-box"><dl class="pay-dl"><div><dt>Bank</dt><dd>${esc(s.bank_nama)}</dd></div>
+        <div><dt>Nomor rekening</dt><dd><b class="mono">${esc(s.bank_nomor)}</b> <button class="btn link sm" type="button" data-salin="${esc(s.bank_nomor)}">Salin</button></dd></div>
+        <div><dt>Atas nama</dt><dd>${esc(s.bank_pemilik)}</dd></div></dl>
+      <ol class="steps"><li>Transfer tepat <b>${rupiah(o.amount)}</b>.</li><li>Tulis kode <b class="mono">${esc(o.order_code)}</b> di berita/keterangan transfer.</li>
+        ${langkahAkhir}</ol></div>`;
+  }
+  function panelPesanan(o, s, tersedia) {
+    const batas = new Date(new Date(o.created_at).getTime() + (Number(s && s.batas_hari) || 3) * 864e5);
+    const lewat = o.status === 'baru' && batas < new Date();
+    const lain = o.metode === 'transfer' ? 'qris' : 'transfer';
+    let aksi = '';
+    if (o.status === 'baru' && !lewat) {
+      aksi = `<div class="field"><label for="k-catatan">Catatan untuk admin (opsional)</label><input class="plain" id="k-catatan" maxlength="200" placeholder="Misalnya nama pengirim transfer">
+          <span class="hint">Jangan menulis nomor kartu, PIN, atau kode OTP.</span></div>
+        <button class="btn primary" type="button" data-konfirmasi="${o.id}">Saya sudah membayar</button>
+        <p class="tiny faint">Tombol ini hanya memberi tahu kami. Pro aktif setelah dana kami temukan di mutasi ${o.metode === 'qris' ? 'QRIS' : 'rekening'}; tangkapan layar saja tidak cukup.</p>
+        <div class="row-gap">${tersedia[lain] ? `<button class="btn sm" type="button" data-beli="${lain}">Ganti ke ${METODE[lain]}</button>` : ''}<button class="btn sm quiet" type="button" data-batal="${o.id}">Batalkan pesanan</button></div>`;
+    } else if (lewat) {
+      aksi = `<p class="msg info">Batas waktu pembayaran pesanan ini sudah lewat.</p><button class="btn primary" type="button" data-beli="${esc(o.metode)}">Buat pesanan baru</button>`;
+    } else if (o.status === 'diproses') {
+      aksi = '<p class="msg info">Terima kasih. Kami sedang mencocokkan pembayaran Anda dengan mutasi. Konfirmasi Anda belum berarti pembayaran berhasil; Pro aktif setelah dana ditemukan.</p>';
+    }
+    return `<section class="order" aria-label="Pesanan ${esc(o.order_code)}">
+      <div class="order-head"><span class="small muted">Pesanan</span><b class="mono">${esc(o.order_code)}</b><span class="badge st-${esc(o.status)}">${esc(STATUS_PESANAN[o.status] || o.status)}</span></div>
+      <dl class="pay-dl"><div><dt>Total dibayar</dt><dd><b>${rupiah(o.amount)}</b></dd></div><div><dt>Metode</dt><dd>${esc(METODE[o.metode] || '-')}</dd></div>
+        ${o.status === 'baru' ? `<div><dt>Bayar sebelum</dt><dd>${tglWaktu(batas)}</dd></div>` : ''}</dl>
+      ${(o.status === 'baru' && !lewat) || o.status === 'diproses' ? instruksi(o, s) : ''}
+      ${aksi}</section>`;
+  }
+  async function renderPro(card, user) {
+    card.innerHTML = '<p class="muted" role="status">Memuat pembelian…</p>';
+    let p = null;
+    try { p = await cloud.db.profile(); } catch (e) { message = { text: e.message }; }
+    if (!cloud.auth.user()) { view = 'masuk'; return render(); }
+    const head = `${heading('Beli Cek Untung Pro', esc(user.email || ''))}${msgHtml()}`;
+    const kembali = '<p class="switch"><a class="btn link" href="akun.html">Kembali ke akun</a></p>';
+    message = null;
+    if (cloud.isProSekaliBayar(p)) {
+      card.innerHTML = `${head}<p class="msg ok">Pro sekali bayar sudah aktif di akun ini, selama layanan Cek Untung beroperasi.</p><a class="btn primary" href="dashboard.html">Buka dashboard</a>${kembali}`;
+      return;
+    }
+    // Selama pembelian belum dibuka (config), database pembayaran tidak dihubungi sama sekali.
+    if (!PAY_READY) { card.innerHTML = `${head}${hargaBlok()}${SIAPKAN}${kembali}`; return; }
+    let s = null, orders = [];
+    try { [s, orders] = await Promise.all([cloud.db.pengaturanPembayaran(), cloud.db.pesananSaya()]); } catch (e) { s = null; orders = []; }
+    const tersedia = metodeTersedia(s);
+    const open = (orders || []).find((o) => o.status === 'baru' || o.status === 'diproses');
+    const lama = (orders || []).filter((o) => o !== open).slice(0, 5);
+    const riwayat = lama.length ? `<details class="riwayat"><summary class="small">Riwayat pesanan</summary><ul>${lama.map((o) => `<li><span class="mono">${esc(o.order_code || '-')}</span> · ${tglWaktu(o.created_at)} · ${esc(STATUS_PESANAN[o.status] || o.status)}</li>`).join('')}</ul></details>` : '';
+    const kontak = s && s.kontak_bantuan ? `<p class="tiny faint">Butuh bantuan pembayaran? Hubungi ${esc(s.kontak_bantuan)}. Jangan kirim file laporan toko atau data pembeli.</p>` : '';
+    const siap = !!(s && s.aktif && (tersedia.transfer || tersedia.qris));
+    if (open) { card.innerHTML = `${head}${panelPesanan(open, s || {}, tersedia)}${kontak}${riwayat}${kembali}`; return; }
+    if (!siap) { card.innerHTML = `${head}${hargaBlok()}${SIAPKAN}${riwayat}${kembali}`; return; }
+    const pilihan = ['transfer', 'qris'].filter((m) => tersedia[m]);
+    card.innerHTML = `${head}${hargaBlok(s.harga_pro)}
+      <ul class="benefits"><li>Laporan PDF dengan nama dan logo toko</li><li>Semua produk dan saran harga</li><li>Semua temuan, ekspor Excel, riwayat tanpa batas</li></ul>
+      <p class="tiny faint">Akses Pro berlaku untuk akun ini selama layanan Cek Untung beroperasi. Fitur berbayar baru di masa depan tidak otomatis termasuk. <a href="privasi.html">Ketentuan</a></p>
+      <fieldset class="metode"><legend class="small"><b>Pilih metode pembayaran</b></legend>
+        ${pilihan.map((m, i) => `<label class="plan-opt"><input type="radio" name="metode" value="${m}" ${i === 0 ? 'checked' : ''}><span><b>${METODE[m]}</b></span><span class="small muted">${m === 'qris' ? 'Pindai kode QRIS' : 'Transfer ke rekening resmi'}</span></label>`).join('')}
+      </fieldset>
+      <button class="btn primary" type="button" id="buat-pesanan">Buat pesanan</button>
+      <p class="tiny faint">Pesanan berlaku ${Number(s.batas_hari) || 3} hari. Pro aktif setelah dana kami verifikasi di mutasi resmi.</p>
+      ${kontak}${riwayat}${kembali}`;
+  }
+  async function aksiPro(btn, fn, sukses) {
+    if (!online()) { toast(OFFLINE); return; }
+    busy(btn, true, 'Memproses…');
+    try { await fn(); if (sukses) toast(sukses); } catch (err) { message = { text: err.message }; }
+    render();
   }
 
   /** Menampilkan/menghapus pesan di bawah kolom. Mengembalikan true bila ada pesan. */
@@ -256,6 +361,11 @@
   document.addEventListener('click', async (e) => {
     const t = e.target.closest('button, a');
     if (!t) return;
+    if (t.id === 'buat-pesanan') { const m = ($('input[name="metode"]:checked') || {}).value; return aksiPro(t, () => cloud.db.buatPesanan(m), 'Pesanan dibuat. Ikuti instruksi pembayaran.'); }
+    if (t.dataset.beli) return aksiPro(t, () => cloud.db.buatPesanan(t.dataset.beli), 'Pesanan diperbarui.');
+    if (t.dataset.konfirmasi) return aksiPro(t, () => cloud.db.konfirmasiBayar(+t.dataset.konfirmasi, ($('#k-catatan') || {}).value || ''), 'Terima kasih. Kami akan memverifikasi pembayaran Anda.');
+    if (t.dataset.batal) { if (!confirm('Batalkan pesanan ini? Jangan batalkan bila Anda sudah membayar.')) return; return aksiPro(t, () => cloud.db.batalkanPesanan(+t.dataset.batal), 'Pesanan dibatalkan.'); }
+    if (t.dataset.salin) { try { await navigator.clipboard.writeText(t.dataset.salin); toast('Disalin.'); } catch (err) { toast('Tidak bisa menyalin otomatis. Salin manual.'); } return; }
     if (t.dataset.view) { view = t.dataset.view; message = null; render(); const first = $('#card input'); if (first && t.dataset.view !== 'masuk') first.focus(); }
     else if (t.dataset.eye) {
       const i = $(`#${t.dataset.eye}`), show = i.type === 'password';

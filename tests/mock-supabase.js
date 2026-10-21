@@ -8,10 +8,13 @@ const crypto = require('crypto');
 // strongPasswords: meniru pengaturan Supabase yang direkomendasikan (min. 8, huruf kecil, kapital, angka) untuk daftar
 // dan ganti sandi. Masuk dengan sandi lama yang lemah TETAP berhasil, dengan penanda weak_password (meniru Supabase
 // Auth; perilaku server sungguhan tetap harus diuji di Supabase).
-// proMigrasi: meniru database SETELAH supabase/usulan/pro-sekali-bayar.sql (kolom pro_sekali_bayar + fungsi admin tercatat).
-// false = database produksi saat ini (fungsi belum ada → 404 PGRST202).
+// proMigrasi: meniru database SETELAH supabase/usulan/pro-sekali-bayar.sql v2 (pesanan, buku besar, fungsi admin).
+// false = database produksi saat ini (tabel/fungsi belum ada → 404).
 function createMock({ confirmEmail = false, tokenTtl = 3600, strongPasswords = false, proMigrasi = true } = {}) {
-  const proPayments = [];
+  const proPayments = [], events = [];
+  const pengaturan = { id: 1, aktif: false, harga_pro: 149000, batas_hari: 3, bank_nama: '', bank_nomor: '', bank_pemilik: '', qris_merchant: '', qris_nmid: '', qris_gambar: '', kontak_bantuan: '' };
+  let paySeq = 1;
+  const norm = (v) => String(v || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
   const weak = (pw) => !pw || pw.length < 8 || (strongPasswords && !(/[a-z]/.test(pw) && /[A-Z]/.test(pw) && /[0-9]/.test(pw)));
   const weakMsg = (pw) => (!pw || pw.length < 8 ? 'Password should be at least 8 characters.' : 'Password should contain at least one character of each: abcdefghijklmnopqrstuvwxyz, ABCDEFGHIJKLMNOPQRSTUVWXYZ, 0123456789.');
   const signupBodies = [];
@@ -140,30 +143,95 @@ function createMock({ confirmEmail = false, tokenTtl = 3600, strongPasswords = f
       if (req.method === 'DELETE') { const i = reports.findIndex((r) => r.id === eq('id') && r.user_id === uid); if (i >= 0) reports.splice(i, 1); return send(204); }
     }
     if (table === 'upgrade_requests') {
-      if (req.method === 'GET') return send(200, requests.filter((r) => r.user_id === uid || isAdmin(uid)).slice().reverse());
+      if (req.method === 'GET') return send(200, requests.filter((r) => (r.user_id === uid || isAdmin(uid)) && (!eq('plan') || r.plan === eq('plan'))).slice().reverse());
+      // Setelah migrasi v2 seller tidak boleh menulis langsung (hanya lewat fungsi).
+      if (proMigrasi && ['POST', 'PATCH'].includes(req.method)) return send(403, { code: '42501', message: 'permission denied for table upgrade_requests' });
       if (req.method === 'POST') { const r = { id: reqSeq++, user_id: uid, plan: body.plan, note: body.note || '', status: 'baru', created_at: new Date().toISOString() }; requests.push(r); return send(201, [r]); }
       if (req.method === 'PATCH') { if (!isAdmin(uid)) return send(200, []); const r = requests.find((x) => x.id === +eq('id')); if (r) r.status = body.status; return send(204); }
     }
-    if (table === 'rpc/admin_aktifkan_pro_sekali' || table === 'rpc/admin_cabut_pro') {
+    if (['pengaturan_pembayaran', 'pro_order_events', 'pro_payments'].includes(table) && !proMigrasi) return send(404, { code: '42P01', message: `relation "public.${table}" does not exist` });
+    if (table === 'pengaturan_pembayaran' && req.method === 'GET') return send(200, [pengaturan]);
+    if (table === 'pro_order_events' && req.method === 'GET') {
+      return send(200, events.filter((e) => e.order_id === +eq('order_id') && (isAdmin(uid) || (requests.find((r) => r.id === e.order_id) || {}).user_id === uid)));
+    }
+    if (table === 'pro_payments' && req.method === 'GET') return send(200, proPayments.filter((x) => x.user_id === uid || isAdmin(uid)).slice().reverse());
+    if (table.startsWith('rpc/') && table !== 'rpc/admin_set_pro') {
       if (!proMigrasi) return send(404, { code: 'PGRST202', message: `Could not find the function public.${table.slice(4)} in the schema cache` });
-      if (!isAdmin(uid)) return send(400, { message: 'Hanya admin' });
-      const r = profiles.get(body.target); if (!r) return send(400, { message: 'Akun tidak ditemukan' });
-      if (table === 'rpc/admin_aktifkan_pro_sekali') {
-        if (!(body.nominal > 0)) return send(400, { message: 'Nominal pembayaran wajib diisi' });
-        if (!body.referensi || String(body.referensi).trim().length < 3) return send(400, { message: 'Referensi transaksi wajib diisi' });
-        if (r.pro_sekali_bayar) return send(400, { message: 'Akun ini sudah Pro sekali bayar' });
-        if (proPayments.some((x) => x.kind === 'aktivasi' && x.reference === String(body.referensi).trim())) return send(409, { code: '23505', message: 'duplicate key value violates unique constraint "pro_payments_ref_aktivasi"' });
-        proPayments.push({ user_id: r.id, kind: 'aktivasi', amount: body.nominal, reference: String(body.referensi).trim(), created_by: uid });
-        r.pro_sekali_bayar = true;
-        requests.filter((x) => x.user_id === r.id && ['baru', 'diproses'].includes(x.status)).forEach((x) => { x.status = 'selesai'; });
+      const err = (m, code = 400) => send(code, { message: m });
+      const ev = (r, lama, baru, cat) => events.push({ order_id: r.id, status_lama: lama, status_baru: baru, oleh: uid, catatan: cat, waktu: new Date().toISOString() });
+      const fn = table.slice(4);
+      const tersedia = (m) => (m === 'transfer' ? !!(pengaturan.bank_nama && pengaturan.bank_nomor && pengaturan.bank_pemilik) : m === 'qris' ? !!(pengaturan.qris_merchant && pengaturan.qris_gambar) : false);
+      if (fn === 'buat_pesanan_pro') {
+        if (!pengaturan.aktif) return err('Pembelian Pro belum dibuka');
+        if (!tersedia(body.p_metode)) return err('Metode pembayaran tidak tersedia');
+        if (profiles.get(uid).pro_sekali_bayar) return err('Akun Anda sudah Pro');
+        requests.filter((r) => r.user_id === uid && r.plan === 'pro_sekali' && r.status === 'baru' && Date.now() - Date.parse(r.created_at) > pengaturan.batas_hari * 864e5)
+          .forEach((r) => { r.status = 'dibatalkan'; ev(r, 'baru', 'dibatalkan', 'Kedaluwarsa: belum dibayar dalam batas waktu'); });
+        let r = requests.find((x) => x.user_id === uid && x.plan === 'pro_sekali' && ['baru', 'diproses'].includes(x.status));
+        if (r) { if (r.status === 'baru' && r.metode !== body.p_metode) { r.metode = body.p_metode; ev(r, 'baru', 'baru', `Metode diganti: ${body.p_metode}`); } return send(200, r); }
+        r = { id: reqSeq++, user_id: uid, plan: 'pro_sekali', note: '', status: 'baru', created_at: new Date().toISOString(), order_code: `CU-${crypto.randomBytes(4).toString('hex').toUpperCase()}`, metode: body.p_metode, amount: pengaturan.harga_pro, claimed_at: null };
+        requests.push(r); ev(r, null, 'baru', 'Pesanan dibuat'); return send(200, r);
+      }
+      if (fn === 'konfirmasi_sudah_bayar' || fn === 'batalkan_pesanan') {
+        const r = requests.find((x) => x.id === +body.p_order && x.user_id === uid && x.plan === 'pro_sekali');
+        if (!r) return err('Pesanan tidak ditemukan');
+        if (fn === 'konfirmasi_sudah_bayar') {
+          if (r.status === 'diproses') return send(200, r);
+          if (r.status !== 'baru') return err('Status pesanan tidak dapat diubah');
+          r.status = 'diproses'; r.claimed_at = new Date().toISOString(); ev(r, 'baru', 'diproses', `Pembeli menyatakan sudah membayar. ${String(body.p_catatan || '').slice(0, 300)}`); return send(200, r);
+        }
+        if (r.status !== 'baru') return err('Pesanan yang sudah dikonfirmasi dibayar hanya bisa dibatalkan oleh admin');
+        r.status = 'dibatalkan'; ev(r, 'baru', 'dibatalkan', 'Dibatalkan pembeli'); return send(200, r);
+      }
+      if (!isAdmin(uid)) return err('Hanya admin');
+      const r = requests.find((x) => x.id === +body.p_order);
+      if (fn === 'admin_verifikasi_pesanan') {
+        const ref = norm(body.p_referensi);
+        if (!['transfer', 'qris'].includes(body.p_sumber)) return err('Sumber pembayaran harus transfer atau qris');
+        if (ref.length < 3) return err('Referensi transaksi dari mutasi wajib diisi');
+        if (!(body.p_nominal > 0)) return err('Nominal pembayaran wajib diisi');
+        if (!r || r.plan !== 'pro_sekali') return err('Pesanan tidak ditemukan');
+        if (r.status === 'selesai') return proPayments.some((x) => x.order_id === r.id && x.kind === 'pembayaran' && x.sumber === body.p_sumber && x.reference_norm === ref) ? send(200, 'sudah_aktif') : err('Pesanan sudah aktif. Untuk transfer ganda/kelebihan gunakan "Catat pembayaran tambahan"');
+        if (r.status === 'direfund') return err('Pesanan sudah direfund');
+        if (body.p_nominal < r.amount) return err('Nominal kurang dari tagihan. Pro tidak diaktifkan');
+        if (profiles.get(r.user_id).pro_sekali_bayar) return err('Akun ini sudah Pro sekali bayar');
+        if (proPayments.some((x) => x.kind === 'pembayaran' && x.sumber === body.p_sumber && x.reference_norm === ref)) return err('Referensi ini sudah tercatat untuk pembayaran lain');
+        proPayments.push({ id: paySeq++, order_id: r.id, user_id: r.user_id, kind: 'pembayaran', sumber: body.p_sumber, reference: body.p_referensi, reference_norm: ref, amount: body.p_nominal, note: body.p_catatan || '', created_by: uid, created_at: new Date().toISOString() });
+        profiles.get(r.user_id).pro_sekali_bayar = true; const lama = r.status; r.status = 'selesai'; ev(r, lama, 'selesai', `Dana terverifikasi (${body.p_sumber}, ${ref})`);
+        return send(200, body.p_nominal > r.amount ? 'aktif_kelebihan' : 'aktif');
+      }
+      if (fn === 'admin_catat_pembayaran_tambahan') {
+        if (!r) return err('Pesanan tidak ditemukan');
+        if (String(body.p_catatan || '').trim().length < 3) return err('Keterangan wajib diisi');
+        const ref = norm(body.p_referensi);
+        if (proPayments.some((x) => x.kind === 'pembayaran' && x.sumber === body.p_sumber && x.reference_norm === ref)) return err('Referensi ini sudah tercatat untuk pembayaran lain');
+        proPayments.push({ id: paySeq++, order_id: r.id, user_id: r.user_id, kind: 'pembayaran', sumber: body.p_sumber, reference: body.p_referensi, reference_norm: ref, amount: body.p_nominal, note: body.p_catatan, created_by: uid, created_at: new Date().toISOString() });
+        ev(r, r.status, r.status, `Pembayaran tambahan dicatat: ${body.p_catatan}`); return send(200, null);
+      }
+      if (fn === 'admin_refund_pesanan') {
+        if (!r) return err('Pesanan tidak ditemukan');
+        if (String(body.p_alasan || '').trim().length < 3) return err('Alasan wajib diisi');
+        const saldo = proPayments.filter((x) => x.order_id === r.id).reduce((a, x) => a + (x.kind === 'pembayaran' ? x.amount : x.kind === 'refund' ? -x.amount : 0), 0);
+        if (!(body.p_nominal > 0) || body.p_nominal > saldo) return err(`Nominal refund harus 1 sampai ${saldo}`);
+        proPayments.push({ id: paySeq++, order_id: r.id, user_id: r.user_id, kind: 'refund', amount: body.p_nominal, note: body.p_alasan, created_by: uid, created_at: new Date().toISOString() });
+        if (body.p_cabut_pro) { profiles.get(r.user_id).pro_sekali_bayar = false; const lama = r.status; r.status = 'direfund'; ev(r, lama, 'direfund', `Refund ${body.p_nominal}, Pro dicabut: ${body.p_alasan}`); }
+        else ev(r, r.status, r.status, `Refund sebagian/kelebihan ${body.p_nominal}: ${body.p_alasan}`);
         return send(200, null);
       }
-      if (!['pencabutan', 'refund'].includes(body.jenis)) return send(400, { message: 'Jenis harus pencabutan atau refund' });
-      if (!body.catatan || String(body.catatan).trim().length < 3) return send(400, { message: 'Alasan wajib diisi' });
-      if (!r.pro_sekali_bayar) return send(400, { message: 'Akun ini tidak memiliki Pro sekali bayar' });
-      proPayments.push({ user_id: r.id, kind: body.jenis, amount: body.nominal || 0, note: body.catatan, created_by: uid });
-      r.pro_sekali_bayar = false;
-      return send(200, null);
+      if (fn === 'admin_tolak_pesanan') {
+        if (!r) return err('Pesanan tidak ditemukan');
+        if (String(body.p_alasan || '').trim().length < 3) return err('Alasan wajib diisi');
+        if (!['baru', 'diproses'].includes(r.status)) return err('Hanya pesanan yang belum selesai yang bisa ditolak');
+        const lama = r.status; r.status = body.p_status || 'ditolak'; ev(r, lama, r.status, body.p_alasan); return send(200, null);
+      }
+      if (fn === 'admin_cabut_pro') {
+        const pr = profiles.get(body.target);
+        if (String(body.catatan || '').trim().length < 3) return err('Alasan wajib diisi');
+        if (!pr || !pr.pro_sekali_bayar) return err('Akun ini tidak memiliki Pro sekali bayar');
+        proPayments.push({ id: paySeq++, user_id: pr.id, kind: 'pencabutan', amount: 0, note: body.catatan, created_by: uid, created_at: new Date().toISOString() });
+        pr.pro_sekali_bayar = false; return send(200, null);
+      }
+      return send(404, { code: 'PGRST202', message: `Could not find the function public.${fn}` });
     }
     if (table === 'rpc/admin_set_pro') {
       if (!isAdmin(uid)) return send(400, { message: 'Hanya admin' });
@@ -173,7 +241,7 @@ function createMock({ confirmEmail = false, tokenTtl = 3600, strongPasswords = f
     }
     return send(404, { message: 'not found' });
   });
-  return { server, users, signupBodies, proPayments, profiles, userData, reports, requests, addUser, makeAdmin: (email) => { const u = [...users.values()].find((x) => x.email === email); profiles.get(u.id).is_admin = true; }, confirmAll: () => users.forEach((u) => { u.confirmed = true; }), today };
+  return { server, users, signupBodies, proPayments, events, pengaturan, profiles, userData, reports, requests, addUser, makeAdmin: (email) => { const u = [...users.values()].find((x) => x.email === email); profiles.get(u.id).is_admin = true; }, confirmAll: () => users.forEach((u) => { u.confirmed = true; }), today };
 }
 module.exports = createMock;
 if (require.main === module) {

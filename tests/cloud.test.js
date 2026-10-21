@@ -51,10 +51,10 @@ const memStore = () => { const m = new Map(); return { getItem: (k) => (m.has(k)
     const old = C3.auth.session().access_token;
     truthy(await C3.db.profile()); truthy(C3.auth.session().access_token !== old, 'token tidak diperbarui');
   });
-  await t('permintaan upgrade → admin aktifkan Pro', async () => {
+  await t('Pro lama (berjangka): admin_set_pro tetap berfungsi; permintaan lama ikut selesai', async () => {
     const C4 = fresh().init({ url, key: 'anon', store });
-    await C4.db.requestUpgrade('pro_bulanan', 'QRIS');
     const me = await C4.db.profile();
+    mock.requests.push({ id: 999, user_id: me.id, plan: 'pro_bulanan', note: '', status: 'baru', created_at: new Date().toISOString() });   // permintaan lama yang sudah ada
     mock.addUser('admin@toko.id', 'adminadmin', {}); mock.makeAdmin('admin@toko.id');
     const A = fresh().init({ url, key: 'anon', store: memStore() });
     await A.auth.signIn({ email: 'admin@toko.id', password: 'adminadmin' });
@@ -209,36 +209,48 @@ const memStore = () => { const m = new Map(); return { getItem: (k) => (m.has(k)
     truthy(/memenuhi syarat/.test(msg('Password should contain at least one character of each: abc')), 'syarat');
   });
   /* ---------- Pro sekali bayar: kolom eksplisit + aktivasi admin tercatat (server TIRUAN meniru usulan SQL) ---------- */
-  await t('Pro sekali bayar: status dari akun; seller tidak bisa menaikkan sendiri; aktivasi admin wajib nominal + referensi unik', async () => {
+  /* ---------- Checkout Pro manual (server TIRUAN meniru supabase/usulan/pro-sekali-bayar.sql v2) ---------- */
+  await t('Checkout: pesanan dibuat server (harga resmi, kode unik), satu pesanan terbuka, klaim bayar tidak mengaktifkan Pro', async () => {
     const m5 = createMock(); await new Promise((r) => m5.server.listen(0, r)); const u5 = `http://127.0.0.1:${m5.server.address().port}`;
-    const sellerId = m5.addUser('seller@toko.id', 'Sandiku123', {}); const lamaId = m5.addUser('lama@toko.id', 'Sandiku123', {});
-    m5.profiles.get(lamaId).pro_until = '2099-01-31'; m5.addUser('admin@toko.id', 'Sandiku123', {}); m5.makeAdmin('admin@toko.id');
-    const S1 = fresh().init({ url: u5, key: 'anon', store: memStore() }); await S1.auth.signIn({ email: 'seller@toko.id', password: 'Sandiku123' });
-    try { await S1.db.updateProfile({ pro_sekali_bayar: true }); throw new Error('harus ditolak'); } catch (e) { truthy(e.status === 403, e.message); }
-    try { await S1.db.adminAktifkanPro(sellerId, 149000, 'TRX-SENDIRI'); throw new Error('harus ditolak'); } catch (e) { truthy(/Hanya admin/.test(e.message), e.message); }
-    truthy(!S1.isPro(await S1.db.profile()), 'tetap gratis');
-    const AD = fresh().init({ url: u5, key: 'anon', store: memStore() }); await AD.auth.signIn({ email: 'admin@toko.id', password: 'Sandiku123' });
-    try { await AD.db.adminAktifkanPro(sellerId, 149000, ''); throw new Error('harus ditolak'); } catch (e) { truthy(/Referensi/.test(e.message), e.message); }
-    try { await AD.db.adminAktifkanPro(sellerId, 0, 'TRX-1'); throw new Error('harus ditolak'); } catch (e) { truthy(/Nominal/.test(e.message), e.message); }
-    await AD.db.adminAktifkanPro(sellerId, 149000, 'TRX-1');
-    try { await AD.db.adminAktifkanPro(sellerId, 149000, 'TRX-2'); throw new Error('harus ditolak'); } catch (e) { truthy(/sudah Pro/.test(e.message), e.message); }
-    try { await AD.db.adminAktifkanPro(lamaId, 149000, 'TRX-1'); throw new Error('harus ditolak'); } catch (e) { truthy(e.status === 409, e.message); }
-    truthy(m5.proPayments.filter((x) => x.kind === 'aktivasi').length === 1, 'satu aktivasi tercatat');
-    const S2 = fresh().init({ url: u5, key: 'anon', store: memStore() }); await S2.auth.signIn({ email: 'seller@toko.id', password: 'Sandiku123' });
-    const pr = await S2.db.profile();
-    truthy(S2.isPro(pr) && S2.isProSekaliBayar(pr) && pr.pro_until === null, 'login ulang: Pro sekali bayar dari database, tanpa tanggal');
-    const L = fresh().init({ url: u5, key: 'anon', store: memStore() }); await L.auth.signIn({ email: 'lama@toko.id', password: 'Sandiku123' });
-    const pl = await L.db.profile(); truthy(L.isPro(pl) && !L.isProSekaliBayar(pl), 'Pro lama (berjangka) tetap berfungsi');
-    try { await AD.db.adminCabutPro(sellerId, 'refund', 149000, ''); throw new Error('harus ditolak'); } catch (e) { truthy(/Alasan/.test(e.message), e.message); }
-    await AD.db.adminCabutPro(sellerId, 'refund', 149000, 'refund atas permintaan');
-    truthy(!S2.isPro(await S2.db.profile()) && m5.proPayments.some((x) => x.kind === 'refund'), 'refund: Pro dicabut, tercatat');
+    m5.addUser('a@toko.id', 'Sandiku123', {}); m5.addUser('b@toko.id', 'Sandiku123', {}); m5.addUser('adm@toko.id', 'Sandiku123', {}); m5.makeAdmin('adm@toko.id');
+    const masuk = async (email) => { const c = fresh().init({ url: u5, key: 'anon', store: memStore() }); await c.auth.signIn({ email, password: 'Sandiku123' }); return c; };
+    const A = await masuk('a@toko.id'), B = await masuk('b@toko.id'), AD = await masuk('adm@toko.id');
+    try { await A.db.buatPesanan('transfer'); throw new Error('harus ditolak'); } catch (e) { truthy(/belum dibuka/.test(e.message), e.message); }
+    Object.assign(m5.pengaturan, { aktif: true, bank_nama: 'BANK UJI', bank_nomor: '0000000000', bank_pemilik: 'PEMILIK UJI', kontak_bantuan: 'bantuan@contoh.invalid' });   // data SINTETIS
+    try { await A.db.buatPesanan('qris'); throw new Error('harus ditolak'); } catch (e) { truthy(/tidak tersedia/.test(e.message), e.message); }
+    const o = await A.db.buatPesanan('transfer');
+    truthy(o.amount === 149000 && /^CU-[0-9A-F]{8}$/.test(o.order_code) && o.status === 'baru', JSON.stringify(o));
+    truthy((await A.db.buatPesanan('transfer')).id === o.id, 'pesanan ganda tidak dibuat');
+    try { await fetch(`${u5}/rest/v1/upgrade_requests`, { method: 'POST', headers: { apikey: 'anon', Authorization: `Bearer ${A.auth.session().access_token}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ plan: 'pro_sekali', amount: 1 }) }).then((r) => { if (r.status !== 403) throw new Error(`insert langsung harus ditolak: ${r.status}`); }); } catch (e) { throw e; }
+    truthy((await B.db.pesananSaya()).length === 0, 'B tidak melihat pesanan A');
+    try { await B.db.konfirmasiBayar(o.id); throw new Error('harus ditolak'); } catch (e) { truthy(/tidak ditemukan/.test(e.message), e.message); }
+    const k = await A.db.konfirmasiBayar(o.id, 'sudah transfer'); truthy(k.status === 'diproses', 'menunggu verifikasi');
+    truthy(!A.isPro(await A.db.profile()), 'klaim bayar TIDAK mengaktifkan Pro');
+    try { await A.db.batalkanPesanan(o.id); throw new Error('harus ditolak'); } catch (e) { truthy(/admin/.test(e.message), e.message); }
+    try { await A.db.adminVerifikasi(o.id, 'transfer', 'TRX-SENDIRI', 149000); throw new Error('harus ditolak'); } catch (e) { truthy(/Hanya admin/.test(e.message), e.message); }
+    // admin
+    try { await AD.db.adminVerifikasi(o.id, 'transfer', 'TRX-001', 100000); throw new Error('harus ditolak'); } catch (e) { truthy(/kurang/.test(e.message), e.message); }
+    truthy((await AD.db.adminVerifikasi(o.id, 'transfer', 'TRX-001', 149000)) === 'aktif', 'aktif');
+    truthy((await AD.db.adminVerifikasi(o.id, 'transfer', 'trx 001', 149000)) === 'sudah_aktif', 'ulang aman');
+    const A2 = await masuk('a@toko.id'); const pa = await A2.db.profile();
+    truthy(A2.isPro(pa) && A2.isProSekaliBayar(pa), 'login ulang: Pro sekali bayar');
+    truthy((await A2.db.historiPesanan(o.id)).map((x) => x.status_baru).join('>') === 'baru>diproses>selesai', 'histori status');
+    const ob = await B.db.buatPesanan('transfer');
+    try { await AD.db.adminVerifikasi(ob.id, 'transfer', 'TRX/001', 149000); throw new Error('harus ditolak'); } catch (e) { truthy(/sudah tercatat/.test(e.message), e.message); }
+    truthy(!B.isPro(await B.db.profile()), 'satu pembayaran tidak mengaktifkan dua akun');
+    truthy((await AD.db.adminVerifikasi(ob.id, 'qris', 'QR-1', 150000)) === 'aktif_kelebihan', 'kelebihan bayar');
+    try { await AD.db.adminRefund(ob.id, 200000, 'kelebihan', false); throw new Error('harus ditolak'); } catch (e) { truthy(/1 sampai 150000/.test(e.message), e.message); }
+    await AD.db.adminRefund(ob.id, 1000, 'kelebihan bayar', false); truthy(B.isPro(await B.db.profile()), 'refund kelebihan: Pro tetap');
+    await AD.db.adminRefund(o.id, 149000, 'refund atas permintaan', true); truthy(!A2.isPro(await A2.db.profile()), 'refund penuh: Pro dicabut');
+    truthy((await A2.db.pesananSaya())[0].status === 'direfund' && (await B.db.pesananSaya()).every((x) => x.user_id !== m5.profiles.get([...m5.users.values()].find((u) => u.email === 'a@toko.id').id).id), 'status direfund; B hanya melihat miliknya');
+    truthy(m5.proPayments.length === 4, 'buku besar: 2 pembayaran + 2 refund, tidak ada yang dihapus');
     m5.server.close();
   });
-  await t('Pro sekali bayar: sebelum migrasi, fungsi admin memberi pesan jelas; Pro lama tetap terbaca', async () => {
+  await t('Checkout: sebelum migrasi, pesan jelas dan Pro lama tetap terbaca', async () => {
     const m6 = createMock({ proMigrasi: false }); await new Promise((r) => m6.server.listen(0, r)); const u6 = `http://127.0.0.1:${m6.server.address().port}`;
     const id = m6.addUser('x@toko.id', 'Sandiku123', {}); m6.profiles.get(id).pro_until = '2099-01-31'; m6.addUser('adm@toko.id', 'Sandiku123', {}); m6.makeAdmin('adm@toko.id');
     const AD = fresh().init({ url: u6, key: 'anon', store: memStore() }); await AD.auth.signIn({ email: 'adm@toko.id', password: 'Sandiku123' });
-    try { await AD.db.adminAktifkanPro(id, 149000, 'TRX-1'); throw new Error('harus gagal'); } catch (e) { truthy(/migrasi belum dijalankan/.test(e.message), e.message); }
+    try { await AD.db.adminVerifikasi(1, 'transfer', 'TRX-1', 149000); throw new Error('harus gagal'); } catch (e) { truthy(/migrasi belum dijalankan/.test(e.message), e.message); }
     const X = fresh().init({ url: u6, key: 'anon', store: memStore() }); await X.auth.signIn({ email: 'x@toko.id', password: 'Sandiku123' });
     const px = await X.db.profile(); truthy(!('pro_sekali_bayar' in px) && X.isPro(px) && !X.isProSekaliBayar(px), 'tanpa kolom baru: Pro lama tetap Pro');
     m6.server.close();

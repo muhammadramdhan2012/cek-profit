@@ -41,8 +41,9 @@
   };
   // Export pesanan Shopee/TikTok: parser belum diuji dengan semua format file asli (CLAUDE.md §2.5).
   // Pembayaran Pro manual hanya bisa diselesaikan bila kontak WhatsApp sudah diisi (config.js).
-  // Pembelian Pro dibuka hanya bila kontak pembayaran diisi DAN proPembayaranAktif = true (config.js).
-  const PAY_READY = !!(C.whatsapp && C.proPembayaranAktif === true);
+  // Pembelian Pro (checkout berbasis akun di akun.html?view=pro) hanya dibuka bila proPembayaranAktif = true di config.js.
+  // Tidak bergantung pada WhatsApp. Kesiapan rekening/QRIS dicek lagi di server (pengaturan_pembayaran.aktif).
+  const PAY_READY = C.proPembayaranAktif === true;
   const BETA_NOTE = 'Format export marketplace dapat berubah. Hasil pencocokan ditandai bila belum dapat diverifikasi.';
   const track = (e) => { try { window.cekTrack && window.cekTrack(e); } catch (err) { /* abaikan */ } };
   /* Pengumuman: #toast selalu ada di halaman sebagai area status (role=status). Isi dikosongkan dulu lalu diisi,
@@ -1690,7 +1691,6 @@
   /* ================= 6. dialog ================= */
   const dlg = () => $('#dlg');
   // Satu paket Pro, sekali bayar. Nama paket lama tetap dikenali untuk permintaan yang sudah tercatat.
-  const PLAN_PRO = 'pro_sekali';
   const planName = (k) => ({ pro_sekali: 'Pro sekali bayar', pro_bulanan: 'Pro bulanan (paket lama)', pro_tahunan: 'Pro tahunan (paket lama)' }[k] || 'Pro');
   /** Harga Pro dari config: harga peluncuran + harga reguler yang direncanakan (dicoret, berlabel). Tidak menampilkan hitung mundur maupun jumlah slot promosi. */
   function hargaPro(gaya = '') {
@@ -1700,7 +1700,6 @@
       ${pr.proRegular ? `<span class="hp-was">Harga reguler yang direncanakan <s>${esc(pr.proRegular)}</s></span>` : ''}
       <span class="hp-now"><b>${esc(pr.pro)}</b> ${esc(pr.proUnit || '')}</span><span class="hp-note">Bayar satu kali, tanpa tagihan bulanan atau tahunan.</span></div>`;
   }
-  const waLink = (msg) => (C.whatsapp ? `https://wa.me/${C.whatsapp}?text=${encodeURIComponent(msg)}` : '');
   const dHead = (t, s) => `<div class="d-head"><div><h2 style="font-size:22px">${t}</h2>${s ? `<p class="small muted" style="margin-top:4px">${s}</p>` : ''}</div><button class="x" type="button" data-close aria-label="Tutup">×</button></div>`;
   async function openUpgrade() {
     track('buka-upgrade');
@@ -1717,15 +1716,12 @@
         <textarea class="plain code" id="code-input" placeholder="Tempel kode yang diawali CP1." spellcheck="false"></textarea><span class="tiny" id="code-msg">${license.error ? `<span class="bad">${esc(license.error)}</span>` : ''}</span>
         <button class="btn" type="button" id="code-apply">Aktifkan kode</button></div></details>`;
       let action;
-      // P0 rilis: pembayaran Pro baru bisa diselesaikan bila kontak WhatsApp sudah diisi di config.js. Selama kosong,
-      // tombol yang mengarah ke pembayaran tidak ditampilkan (kode alurnya tetap ada; otomatis aktif setelah diisi).
       const SOON = '<p class="note-box"><span class="badge">Segera hadir</span> Pembelian Pro belum dibuka. Semua fitur gratis tetap bisa Anda pakai. Bila sudah punya kode akses, aktifkan di bawah.</p>';
-      if (!PAY_READY) action = pending ? `<p class="note-box">Permintaan <b>${esc(planName(pending.plan))}</b> tercatat ${tgl(pending.created_at)}. Pro aktif setelah pembayaran diverifikasi.</p>${SOON}` : SOON;
-      else if (pending) action = `<p class="note-box">Permintaan <b>${esc(planName(pending.plan))}</b> tercatat ${tgl(pending.created_at)} dan sedang diproses. Pro aktif setelah pembayaran diverifikasi.</p>
-        ${C.whatsapp ? `<a class="btn primary" href="${esc(waLink(`${C.waMessage} Email akun: ${account.user.email}. Paket: ${planName(pending.plan)}.`))}" target="_blank" rel="noopener">Hubungi kami soal pembayaran</a>` : ''}`;
-      else if (cloud.enabled && !account.user) action = '<a class="btn primary" href="akun.html?mode=daftar&next=dashboard.html%23upgrade">Daftar atau masuk untuk membeli Pro</a>';
-      else if (cloud.enabled) action = '<button class="btn primary" type="button" id="req-upgrade">Lanjut ke pembayaran</button><p class="tiny faint">Kami catat permintaan Anda lalu memberi petunjuk pembayaran. Pro aktif di akun ini setelah pembayaran diverifikasi.</p>';
-      else action = C.whatsapp ? `<a class="btn primary" href="${esc(waLink(C.waMessage))}" target="_blank" rel="noopener" data-track="beli-wa">Pesan lewat WhatsApp</a>` : '<p class="small warn">Kontak pembelian belum diatur.</p>';
+      const pendingInfo = pending ? `<p class="note-box">Pesanan <b>${esc(planName(pending.plan))}</b> tercatat ${tgl(pending.created_at)}. Pro aktif setelah pembayaran diverifikasi admin.</p>` : '';
+      if (!PAY_READY) action = `${pendingInfo}${SOON}`;
+      else if (cloud.enabled && !account.user) action = '<a class="btn primary" href="akun.html?mode=daftar&next=akun.html%3Fview%3Dpro">Daftar atau masuk untuk membeli Pro</a>';
+      else if (cloud.enabled) action = `${pendingInfo}<a class="btn primary" href="akun.html?view=pro" data-track="buka-checkout">${pending ? 'Lihat status pesanan' : 'Lanjut ke pembelian'}</a><p class="tiny faint">Pilih transfer bank atau QRIS. Pro aktif di akun ini setelah dana kami verifikasi.</p>`;
+      else action = '<p class="small warn">Pembelian Pro membutuhkan akun.</p>';
       d.innerHTML = `${dHead('Cek Untung Pro', 'Untuk keputusan harga dan produk yang berbasis angka.')}
         <div class="d-body"><ul class="benefits"><li>Laporan PDF siap kirim, dengan nama dan logo toko</li><li>Semua produk dengan status rugi, tipis, atau sehat</li><li>Harga impas dan harga target per produk</li><li>Semua temuan, ekspor Excel, riwayat tanpa batas</li></ul>
         ${hargaPro()}<p class="tiny faint">Akses Pro berlaku untuk akun ini selama layanan Cek Untung beroperasi. Fitur berbayar baru di masa depan tidak otomatis termasuk.</p>
@@ -1898,17 +1894,6 @@
       return;
     }
     if (t.id === 'code-remove') { store.del(KEYS.license); license = { ok: false }; dlg().close(); render(); return; }
-    if (t.id === 'req-upgrade') {
-      const plan = PLAN_PRO;
-      busy(t, true);
-      try {
-        await cloud.db.requestUpgrade(plan, '');
-        track('minta-upgrade');
-        if (C.whatsapp) window.open(waLink(`${C.waMessage} Email akun: ${account.user.email}. Paket: ${planName(plan)}.`), '_blank', 'noopener');
-        openUpgrade();
-      } catch (err) { toast(err.message); busy(t, false); }
-      return;
-    }
     if (t.id === 'hist-confirm') {
       busy(t, true);
       try {

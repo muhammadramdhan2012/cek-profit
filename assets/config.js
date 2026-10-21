@@ -5,13 +5,12 @@
 window.CEK_CONFIG = {
   brand: 'Cek Untung',
 
-  // Nomor WhatsApp untuk konfirmasi PEMBAYARAN Pro, format internasional TANPA "+" dan spasi (mis. '628…').
+  // Nomor WhatsApp kontak umum (opsional, format '628…'). TIDAK dipakai untuk checkout Pro.
   whatsapp: '',
-  waMessage: 'Halo, saya ingin membeli Cek Untung Pro (sekali bayar).',
 
-  // Tombol pembelian Pro hanya aktif bila KEDUANYA terpenuhi: `whatsapp` diisi DAN `proPembayaranAktif: true`.
-  // Biarkan false sampai alur pembayaran, aktivasi Pro di server (supabase/usulan/pro-sekali-bayar.sql), dan uji
-  // keamanan selesai serta disetujui pemilik.
+  // Checkout Pro (transfer bank + QRIS, berbasis akun di akun.html?view=pro). Biarkan false sampai migrasi
+  // supabase/usulan/pro-sekali-bayar.sql dijalankan, rekening/QRIS resmi + kontak bantuan diisi di tabel
+  // pengaturan_pembayaran, kebijakan refund terbit, dan satu transaksi uji berhasil. Detail rekening TIDAK disimpan di sini.
   proPembayaranAktif: false,
 
   // Nomor WhatsApp BANTUAN (dukungan pengguna), format sama: '628…' tanpa "+" dan spasi.

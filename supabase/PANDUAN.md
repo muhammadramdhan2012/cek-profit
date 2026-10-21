@@ -84,24 +84,29 @@ berstatus *Verified* (SPF dan DKIM). Uji dengan mendaftar akun penguji dan memin
 2. Di Supabase: **Table Editor** → tabel **profiles** → baris dengan email Anda → kolom **is_admin** → ubah menjadi `true` → **Save**.
 3. Buka `https://muhammadramdhan2012.github.io/cek-profit/admin.html`.
 
-## Alur pembayaran manual
+## Alur pembayaran manual (Transfer Bank + QRIS)
 
-Pro dijual **sekali bayar** (Rp149.000, harga peluncuran). Pembelian **belum dibuka**: tombol beli baru aktif bila
-`whatsapp` terisi **dan** `proPembayaranAktif: true` di `assets/config.js`. Jangan aktifkan sebelum metode pembayaran
-diputuskan dan migrasi `supabase/usulan/pro-sekali-bayar.sql` disetujui, dijalankan, dan diuji.
+Pro dijual **sekali bayar** (Rp149.000, harga peluncuran). Pembelian **belum dibuka**. Rancangan lengkap ada di
+`docs/usulan/PRO_SEKALI_BAYAR.md`. Ringkasnya:
 
-Setelah dibuka (alur manual):
-1. Pengguna yang sudah masuk menekan **Beli Pro** → **Lanjut ke pembayaran**. Permintaan `pro_sekali` tercatat
-   (butuh migrasi di atas; tanpa itu database menolak paket baru).
-2. Anda memberi petunjuk pembayaran. **Aktifkan hanya setelah dana benar-benar masuk** (cek mutasi rekening atau dasbor
-   penyedia pembayaran), bukan dari tangkapan layar.
-3. **admin.html** → **Aktifkan Pro sekali bayar**. Pro aktif di akun pembeli begitu halamannya dimuat ulang, dan tetap
-   aktif saat login ulang dari perangkat mana pun.
+1. Setelah migrasi `supabase/usulan/pro-sekali-bayar.sql` disetujui dan dijalankan (uji di project staging dulu),
+   isi tabel **pengaturan_pembayaran** lewat Table Editor sebagai admin:
+   - nama bank, nomor rekening, nama pemilik;
+   - dan/atau nama merchant QRIS, NMID, dan path gambar QRIS (`img/…`, file diunggah ke repo lewat rilis yang disetujui);
+   - kontak bantuan.
+   Jangan isi data contoh.
+2. Ubah `aktif` menjadi `true`. Database menolak bila kontak bantuan atau metode belum lengkap.
+3. Seller membuat pesanan di **akun.html?view=pro**: kode pesanan dan nominal dibuat server. Tombol "Saya sudah
+   membayar" hanya mengubah status menjadi *Menunggu verifikasi*.
+4. Anda membuka **mutasi rekening / dasbor QRIS merchant**. Bila dana masuk, buka **admin.html** → **Pesanan Pro** →
+   **Verifikasi dana**, lalu isi sumber, referensi persis dari mutasi, dan nominal yang terlihat. **Tangkapan layar
+   pembeli bukan bukti.**
+5. Kurang bayar ditolak sistem. Kelebihan bayar dan transfer ganda dicatat lalu direfund dari baris pesanan. Semua
+   tercatat di **Buku besar pembayaran**.
 
-Tombol admin memanggil `admin_aktifkan_pro_sekali` (wajib nominal + referensi unik dari mutasi, tercatat di
-`pro_payments`) dan `admin_cabut_pro` (refund/pencabutan dengan alasan). **Sebelum migrasi dijalankan, tombol itu
-menampilkan "migrasi belum dijalankan"** dan tidak mengaktifkan apa pun. Pro berjangka lama (`pro_until`) tidak
-berubah dan tetap bisa dimatikan dengan "Matikan Pro lama". Rancangan lengkap: `docs/usulan/PRO_SEKALI_BAYAR.md`.
+Checkout website baru aktif bila `proPembayaranAktif: true` di `assets/config.js`. Sebelum migrasi, tombol admin
+menampilkan "migrasi belum dijalankan" dan tidak mengubah apa pun. Pro berjangka lama (`pro_until`) tetap berlaku dan
+bisa dimatikan dengan "Matikan Pro lama".
 
 ## Opsional
 

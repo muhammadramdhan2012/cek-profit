@@ -1,71 +1,122 @@
-# USULAN — Pro sekali bayar: hak akses, audit pembayaran, dan pembayaran manual
+# USULAN v2 — Pro sekali bayar: checkout manual (Transfer Bank + QRIS), hak akses, dan audit
 
-Status: **DIUSULKAN — BELUM DISETUJUI.** Belum ada migrasi yang dijalankan di Supabase produksi.
-Dibuat 21 Okt 2026 (branch `feature/pro-pricing`). SQL: `supabase/usulan/pro-sekali-bayar.sql`,
-tes lokal: `supabase/usulan/test-pro-sekali-bayar.sql`.
+Status: **DIUSULKAN — BELUM DISETUJUI.** Belum ada migrasi yang dijalankan di Supabase produksi, dan
+`proPembayaranAktif: false`.
 
-## 1. Hak akses (entitlement) sekali bayar
+- Diperbarui 21 Okt 2026 (branch `feature/pro-pricing`).
+- SQL: `supabase/usulan/pro-sekali-bayar.sql`.
+- Tes lokal: `supabase/usulan/test-pro-sekali-bayar.sql` (O1–O24).
 
-| Opsi | Cara | Kelebihan | Kekurangan |
+## 1. Satu sistem, memakai ulang yang ada
+
+| Bagian | Tabel/kolom | Isi |
+|---|---|---|
+| Hak akses | `profiles.pro_sekali_bayar` | Boolean eksplisit. Pro lama tetap di `pro_until`. |
+| Pesanan | `upgrade_requests` (diperluas) | `order_code`, `metode`, `amount` (dari server), `claimed_at`, `updated_at`. Data permintaan lama tetap sah. |
+| Histori | `pro_order_events` | Status lama → baru, oleh siapa, kapan, catatan. |
+| Buku besar dana | `pro_payments` | `pembayaran` (terverifikasi), `refund`, `pencabutan`; sumber, referensi, nominal, admin, waktu. |
+| Pengaturan | `pengaturan_pembayaran` (1 baris) | Harga resmi, batas hari, rekening, QRIS, kontak bantuan, sakelar `aktif`. Hanya admin yang mengubah. |
+
+**Tidak ada pembayaran lewat WhatsApp.** Checkout ada di `akun.html?view=pro`.
+
+**Detail rekening dan QRIS disimpan di database, bukan di repo publik.** Gambar QRIS berupa file di `img/` situs;
+database hanya menyimpan path-nya, dan path dibatasi pola `img/…` lewat check constraint.
+
+## 2. Alur pembeli
+
+1. Seller masuk (Auth V3), lalu membuka **Beli Pro**.
+2. Seller memilih **Transfer bank** atau **QRIS**, lalu menekan **Buat pesanan**.
+   - Server membuat kode `CU-XXXXXXXX` dan mengambil nominal dari `harga_pro`.
+   - Satu akun hanya bisa punya satu pesanan terbuka. Akun yang sudah Pro tidak bisa memesan lagi.
+3. Halaman menampilkan instruksi:
+   - **Transfer:** bank, nomor rekening (tombol salin), atas nama, nominal tepat, dan kode pesanan di berita transfer.
+   - **QRIS:** gambar QRIS, nama merchant, NMID, dan nominal tepat.
+4. Seller menekan **Saya sudah membayar** (opsional dengan catatan nama pengirim).
+   - Status berubah menjadi **Menunggu verifikasi**. Ini hanya pemberitahuan, **bukan pengesahan**.
+5. Admin memeriksa **mutasi rekening / dasbor QRIS merchant**, lalu menekan **Verifikasi dana**.
+   - Admin mengisi sumber, referensi persis dari mutasi, dan nominal yang terlihat. Nominal tidak diisi otomatis.
+   - Fungsi server mencatat dana dan mengaktifkan Pro dalam satu transaksi.
+6. Seller melihat **Pro sekali bayar aktif** di perangkat mana pun.
+
+## 3. Status pesanan
+
+| Status | Label | Masuk dari | Oleh |
 |---|---|---|---|
-| A. Tanggal penanda | `pro_until = '9999-12-31'` | Tanpa migrasi | Tidak eksplisit; tercampur dengan Pro berjangka; mudah salah baca (tampil "sampai 31 Des 9999") |
-| **B. Kolom boolean (dipilih)** | `profiles.pro_sekali_bayar boolean not null default false` | Eksplisit; satu kolom; Pro lama di `pro_until` tidak disentuh; grant update yang ada otomatis melindunginya | Butuh migrasi kecil |
-| C. Tabel entitlement | `entitlements(user_id, produk, sejak, dicabut)` | Paling fleksibel untuk banyak produk | Lebih banyak query/RLS; berlebihan untuk satu produk |
+| `baru` | Menunggu pembayaran | — | Pembeli (`buat_pesanan_pro`) |
+| `diproses` | Menunggu verifikasi | `baru` | Pembeli (`konfirmasi_sudah_bayar`), klik ulang aman |
+| `selesai` | Aktif | `baru`/`diproses`/`dibatalkan`/`ditolak` (dana datang terlambat) | **Hanya admin** (`admin_verifikasi_pesanan`) |
+| `ditolak` | Gagal | `baru`/`diproses` | Admin (`admin_tolak_pesanan`, wajib alasan) |
+| `dibatalkan` | Dibatalkan | `baru` | Pembeli (`batalkan_pesanan`) atau kedaluwarsa otomatis |
+| `direfund` | Dana dikembalikan | `selesai` | Admin (`admin_refund_pesanan` dengan pencabutan) |
 
-**Rekomendasi: B.** Website membaca `isPro = pro_sekali_bayar === true || pro_until >= hari ini`.
+**Kedaluwarsa:** pesanan `baru` yang melewati `batas_hari` (bawaan 3 hari) dibatalkan dan dicatat saat pembeli
+membuat pesanan berikutnya. Tidak perlu penjadwal di server.
 
-**Kompatibilitas:**
-- Sebelum migrasi kolom belum ada (`undefined`), jadi hanya `pro_until` yang berlaku. Akun Pro lama tetap Pro.
-- Urutan rilis bebas: website baru aman di database lama, dan migrasi aman untuk website lama karena kolom bawaannya `false`.
-- Pengguna tidak bisa mengubah kolom ini: hak ubah di `profiles` hanya untuk `full_name`, `store_name`, dan
-  `whatsapp`. Ini sudah diuji lokal (P1).
+## 4. Kasus khusus
 
-## 2. Audit pembayaran dan aktivasi
-
-- **Tabel `pro_payments`** berisi akun, `kind` (aktivasi/pencabutan/refund), nominal, referensi, catatan, admin
-  pencatat (`created_by`), waktu, dan `request_id`.
-- **Referensi unik:** referensi transaksi untuk aktivasi wajib unik, sehingga satu transfer tidak bisa mengaktifkan dua akun.
-- **Siapa yang bisa menulis:** pengguna hanya bisa membaca catatannya sendiri. Penulisan hanya lewat fungsi admin.
-- **`admin_aktifkan_pro_sekali`:**
-  - nominal dan referensi wajib diisi;
-  - akun yang sudah Pro sekali bayar ditolak;
-  - permintaan terkait otomatis menjadi "selesai".
-- **`admin_cabut_pro`:** jenis refund/pencabutan dengan alasan wajib. `pro_until` lama tidak disentuh.
-- **Status pesanan** memakai `upgrade_requests.status` yang sudah ada:
-
-| `status` | Arti |
+| Kasus | Penanganan |
 |---|---|
-| `baru` | Menunggu Pembayaran |
-| `diproses` | Menunggu Verifikasi |
-| `selesai` | Aktif |
-| `ditolak` | Gagal/Dibatalkan |
+| Klaim / tangkapan layar tanpa dana masuk | Status hanya `diproses`. Pro tidak aktif. Admin menolak bila dana tidak ditemukan. |
+| Kurang bayar | Verifikasi ditolak ("Nominal kurang dari tagihan"). Admin menolak pesanan atau meminta pelunasan sesuai kebijakan. |
+| Kelebihan bayar | Pro aktif. Hasil `aktif_kelebihan` mengingatkan admin melakukan refund kelebihan (`admin_refund_pesanan`, `cabut = false`). |
+| Transfer ganda | `admin_catat_pembayaran_tambahan` mencatat dana kedua, lalu direfund. Hak akses tidak berubah. |
+| Satu referensi dipakai dua akun | Ditolak: referensi unik per sumber (`transfer`/`qris`), dinormalkan huruf besar tanpa spasi dan tanda baca. |
+| Admin mengulang verifikasi (klik ganda, jaringan putus) | Referensi sama pada pesanan yang sudah aktif menghasilkan `sudah_aktif`, tanpa entri baru. Referensi lain ditolak. |
+| Dua admin bersamaan | Baris pesanan dan profil dikunci (`FOR UPDATE`) di dalam satu transaksi. |
+| Dana datang setelah pesanan kedaluwarsa | Admin tetap bisa memverifikasi pesanan `dibatalkan`/`ditolak`. |
+| Refund | Nominal ≤ saldo dana pesanan (pembayaran − refund). Wajib alasan. Histori tidak dihapus. |
+| Akun dihapus | Pesanan dan histori ikut terhapus. Buku besar dana tetap ada dengan `user_id = null` (keputusan retensi pemilik). |
 
-- **Tidak disimpan:** nomor rekening/kartu pembeli, tangkapan layar, atau data pembayaran sensitif lain.
-- **Tes lokal P1–P19 lulus** (PostgreSQL 16 + shim), dan tes RLS lama T1–T11 tetap lulus setelah migrasi dijalankan dua kali.
+## 5. Hasil audit SQL dan RLS
 
-## 3. Pembayaran manual paling sederhana (closed paid launch)
+Semua lulus di PostgreSQL 16 lokal dengan shim `auth.uid()`; ini bukan Supabase sungguhan.
 
-1. Seller masuk, lalu menekan **Beli Pro**. Permintaan `pro_sekali` tercatat dengan status `baru`.
-2. Seller membayar Rp149.000 ke **satu rekening atau QRIS resmi** dan menyertakan email akun di berita transfer.
-3. Admin memeriksa **mutasi rekening atau QRIS** (bukan tangkapan layar):
-   - nominal sesuai;
-   - referensi diambil dari mutasi (nomor referensi bank atau ID transaksi QRIS).
-4. Admin membuka admin.html, menekan **Aktifkan Pro sekali bayar**, lalu mengisi referensi dan nominal. Aktivasi tercatat.
-5. Seller memuat ulang dan melihat "Pro sekali bayar". Status tetap ada saat masuk dari perangkat lain.
-6. Bila pembayaran tidak ditemukan dalam batas waktu yang ditetapkan, admin menolak permintaan (status `ditolak`).
+- **Akses langsung:** seller tidak bisa insert, update, atau delete pesanan, histori, buku besar, pengaturan, maupun
+  `pro_sekali_bayar` (O1, O8, O18).
+- **Isolasi antar-seller:** seller hanya membaca pesanan, histori, dan dana miliknya (O6, O7, O17).
+- **Anonim:** tidak bisa memesan atau membaca pengaturan (O22).
+- **Wewenang admin:** fungsi admin memeriksa `is_admin()` dari identitas login, bukan parameter dari browser (O8, O22).
+- **Harga:** dari server. Klaim bayar tidak mengaktifkan Pro (O4, O8).
+- **Verifikasi:** atomik, aman diulang, tanpa referensi ganda, aman untuk kurang dan lebih bayar (O9–O13).
+- **Transfer ganda dan refund** tercatat tanpa menghapus histori (O14, O16). Pro lama tidak berubah (O21).
+- **Fungsi `security definer`** semuanya dengan `search_path = public` terkunci. `_catat_event` tidak diberikan ke
+  pengguna. Hak eksekusi dicabut dari `public` dan `anon`.
+- **Catatan:** tes `supabase/tests/test.sql` T6, T9, dan T10 sengaja berubah hasil setelah migrasi, karena seller tidak
+  lagi boleh insert permintaan langsung. Saat migrasi disetujui, tes itu diperbarui ke alur RPC; padanannya ada di O1/O4/O20.
 
-## 4. Kebutuhan sebelum tombol beli diaktifkan
+## 6. Prosedur migrasi (setelah disetujui)
 
-- Rekening atau QRIS resmi atas nama usaha atau pemilik.
-- Kanal bantuan resmi (email dan/atau WhatsApp Business), diisi di `waSupport` / `email` di `assets/config.js`.
-- Kebijakan refund disetujui dan terbit (draf: `docs/usulan/KEBIJAKAN_REFUND.md`).
-- Migrasi `supabase/usulan/pro-sekali-bayar.sql` §0–§4 dijalankan pemilik, lalu tes P1–P19 diulang di Supabase.
-  §5 (batas riwayat gratis) opsional.
-- Isi `whatsapp` (kontak pembayaran) dan `proPembayaranAktif: true`.
-- Satu transaksi uji dari awal sampai akhir dengan akun penguji, termasuk refund.
+1. **Staging dulu:** buat project Supabase terpisah, jalankan `schema.sql`, lalu usulan ini.
+   - Ulangi O1–O24 dan T1–T11 dengan tes RLS yang sudah diperbarui.
+   - **Jangan jalankan file tes di produksi**, karena tes membuat akun.
+2. **Cadangan produksi:**
+   - `create table cadangan_pro_<tgl> as select id, pro_until from public.profiles;`
+   - `create table cadangan_req_<tgl> as select * from public.upgrade_requests;`
+   - Catat jumlah akun Pro lama.
+3. **Jalankan** usulan di SQL Editor dalam `begin; … commit;`. Biarkan `pengaturan_pembayaran.aktif = false`.
+4. **Verifikasi tanpa membuat data:**
+   - kolom `pro_sekali_bayar` ada dan semuanya `false`;
+   - jumlah Pro lama sama;
+   - fungsi dan policy baru ada;
+   - pengaturan `aktif = false`.
+5. **Isi pengaturan** (rekening, QRIS, kontak bantuan) lewat Table Editor sebagai admin, lalu satu transaksi uji
+   dengan akun penguji: pesan, bayar, verifikasi, login ulang, lalu refund.
+6. **Buka pembelian:** `pengaturan_pembayaran.aktif = true`, lalu `proPembayaranAktif: true` lewat rilis yang disetujui.
 
-## 5. Batas yang tetap ada
+## 7. Rollback
 
-- **Fitur Pro tetap bisa dibuka lewat DevTools.** PDF, Excel, dan analisis dibuat di browser. Ini tidak bisa dikunci
-  penuh tanpa desain tambahan, misalnya PDF bermerek dibuat di server.
-- **Kode akses lama tetap diterima,** dan tidak ada kode baru yang diterbitkan.
+- **Menutup pembelian** (kapan saja, tanpa menghapus data): `update pengaturan_pembayaran set aktif = false;` dan/atau
+  `proPembayaranAktif: false`.
+- **Membatalkan migrasi** (hanya bila belum ada pembayaran nyata):
+  - drop fungsi dan trigger baru, lalu tabel `pro_payments`, `pro_order_events`, `pengaturan_pembayaran`;
+  - drop kolom tambahan `upgrade_requests` dan `pro_sekali_bayar`;
+  - kembalikan constraint, policy, dan grant `upgrade_requests` seperti di `schema.sql`.
+- Website tetap berfungsi sebelum dan sesudah rollback: tanpa tabel baru, checkout menampilkan "sedang disiapkan" dan
+  Pro lama tetap terbaca.
+- **Setelah ada pembayaran nyata, jangan hapus tabel atau kolom**, karena ini catatan keuangan. Cukup tutup pembelian.
+
+## 8. Batas yang tetap ada
+
+- **Fitur Pro tetap bisa dibuka lewat DevTools.** PDF, Excel, dan analisis dibuat di browser. Status Pro yang
+  tersimpan di database tetap tidak bisa diubah seller.
+- **Kode akses lama tetap diterima.** Kode baru tidak diterbitkan.
