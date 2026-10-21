@@ -34,8 +34,8 @@ Cloudflare Pages alamat itu tanpa `.html` (`/akun`), jadi kedua bentuk perlu did
 | Alamat | Untuk |
 |---|---|
 | `https://muhammadramdhan2012.github.io/cek-profit/**` | alamat lama (GitHub Pages). **Jangan dihapus** selama masa pindah |
-| `https://cekuntung.pages.dev/akun` dan `https://cekuntung.pages.dev/akun.html` | staging Cloudflare |
-| `https://*.cekuntung.pages.dev/akun` | preview per branch Cloudflare (opsional; hanya bila menguji login di preview) |
+| `https://cekuntung.pages.dev/akun` dan `https://cekuntung.pages.dev/akun.html` | alamat bawaan Cloudflare Pages untuk branch `main` (**produksi**, bukan staging) |
+| ~~`https://*.cekuntung.pages.dev/akun`~~ | **Jangan ditambahkan di project produksi.** Preview per branch tidak pernah memakai Supabase produksi; login di preview memakai project **staging** (`docs/usulan/STAGING_SUPABASE.md`). Bila baris ini pernah ditambahkan, boleh dihapus |
 | `https://cekuntung.id/akun` dan `https://cekuntung.id/akun.html` | domain resmi |
 
 **Site URL**: tetap `https://muhammadramdhan2012.github.io/cek-profit/akun.html` sampai QA di `cekuntung.id` lulus,
@@ -88,7 +88,8 @@ berstatus *Verified* (SPF dan DKIM). Uji dengan mendaftar akun penguji dan memin
 
 Pro dijual **sekali bayar** (Rp149.000, harga peluncuran). Pembelian **belum dibuka**.
 - Rancangan lengkap: `docs/usulan/PRO_SEKALI_BAYAR.md`.
-- Uji dulu di staging: `docs/usulan/STAGING_SUPABASE.md`.
+- Uji dulu di staging: `docs/usulan/STAGING_SUPABASE.md`. Staging = project Supabase terpisah (`cekuntung-staging`) +
+  preview branch khusus (mis. `feature-pro-pricing.cekuntung.pages.dev`), bukan `cekuntung.pages.dev`.
 
 Ringkasnya:
 
@@ -132,7 +133,7 @@ menampilkan "migrasi belum dijalankan" dan tidak mengubah apa pun. Pro berjangka
   5. Supabase → Authentication → **URL Configuration**: *Site URL* `https://muhammadramdhan2012.github.io/cek-profit/`;
      *Redirect URLs* tambahkan `https://muhammadramdhan2012.github.io/cek-profit/akun.html`.
   Untuk domain `cekuntung.id`: tambahkan juga *Authorized JavaScript origins* `https://cekuntung.id` (dan
-  `https://cekuntung.pages.dev` untuk staging), domain `cekuntung.id` di consent screen, dan tautan privasi
+  `https://cekuntung.pages.dev`, alamat produksi bawaan Cloudflare), domain `cekuntung.id` di consent screen, dan tautan privasi
   `https://cekuntung.id/privasi`. Login Google **tetap nonaktif** (`googleLogin: false`) sampai diuji dengan Supabase
   sungguhan, terutama akun lama berstatus Pro.
   6. Ubah `googleLogin: true` di `assets/config.js` (lewat commit yang disetujui), tunggu GitHub Pages, lalu uji:

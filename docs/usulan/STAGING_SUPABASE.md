@@ -32,9 +32,8 @@ membacanya sama sekali (ada tesnya).
 - **"Konfigurasi database staging belum siap…"** (merah): alamat preview, tetapi konfigurasi staging kosong/salah.
   Halaman akun dan admin menampilkan pesan yang sama; dashboard tetap bisa dipakai tanpa login.
 
-Catatan: `supabase/PANDUAN.md` menyebut `cekuntung.pages.dev` sebagai "staging Cloudflare". Secara teknis alamat itu
-adalah alamat bawaan **branch `main` (produksi)**, jadi website memperlakukannya sebagai produksi. Uji staging memakai
-alamat **preview per branch**, bukan `cekuntung.pages.dev`.
+`cekuntung.pages.dev` adalah alamat bawaan Cloudflare untuk branch `main` (**produksi**). Uji staging memakai alamat
+**preview per branch**, bukan `cekuntung.pages.dev`.
 
 ## 2. Biaya dan batasan
 
@@ -43,40 +42,79 @@ alamat **preview per branch**, bukan `cekuntung.pages.dev`.
 - **Email:** staging memakai SMTP bawaan Supabase (jumlah email per jam terbatas, bisa masuk spam). Jangan pakai SMTP
   Resend produksi. Alternatif khusus staging: matikan "Confirm email".
 
-## 3. Membuat project staging dari nol (tanpa data produksi)
+## 3. Project staging yang sudah dibuat pemilik (21 Okt 2026)
 
-1. **Buat project.** supabase.com → **New project**.
-   - **Name:** `cekuntung-staging`. **Region:** Singapore.
-   - **Database password:** buat baru (jangan sama dengan produksi), simpan di pengelola sandi Anda.
-   - Tunggu sampai status project **Healthy**.
-2. **Catat ref dan publishable key staging.** **Project Settings → API**:
-   - **Project URL**: `https://<ref-staging>.supabase.co`. `<ref-staging>` = 20 huruf/angka. Pastikan **berbeda** dari
-     `ikjcbgfexhpksbewkpym` (produksi).
-   - **Publishable key** (`sb_publishable_…`). **Jangan** salin secret key / service_role.
-3. **Skema dasar.** **SQL Editor → New query** → tempel seluruh isi `supabase/schema.sql` → **Run**.
-4. **Migrasi Manual Payment V1.** Query baru → tempel isi `supabase/usulan/pro-sekali-bayar.sql` → **Run**. Lalu **Run
-   sekali lagi** untuk membuktikan aman dijalankan ulang (hasil kedua tidak boleh error).
-5. **Penanda staging.** Query baru → tempel isi `supabase/staging/penanda-staging.sql`.
-   - Ganti `GANTI_DENGAN_REF_STAGING` dengan `<ref-staging>` dari langkah 2 → **Run**.
-   - File ini menolak placeholder dan menolak ref produksi. **Jangan pernah** jalankan di project produksi.
-   - Cek: `select public.info_lingkungan();` → `{"ref": "<ref-staging>", "lingkungan": "staging"}`.
-6. **Pemeriksaan keamanan cepat** (query baru, hanya membaca katalog):
-   ```sql
-   select proname, prosecdef, proconfig from pg_proc
-   where pronamespace = 'public'::regnamespace and prosecdef order by 1;          -- semua: search_path=public, pg_temp
-                                                                                   -- (kecuali is_admin, handle_new_user dari schema.sql)
-   select relname, relrowsecurity from pg_class
-   where relnamespace = 'public'::regnamespace and relkind = 'r' order by 1;      -- semua rls = true
-   select has_table_privilege('authenticated', 'public.pro_payments', 'delete');  -- false
-   ```
-7. **Auth.** **Authentication → Sign In / Providers → Email**: biarkan aktif. Google tetap **nonaktif**.
-8. **URL Configuration** (**Authentication → URL Configuration**) di project **staging**:
+| Pengaturan | Nilai | Dampak ke file SQL |
+|---|---|---|
+| Nama / status | `cekuntung-staging` / Healthy | — |
+| Region | Sydney | Tidak memengaruhi SQL. Latensi dari Indonesia sedikit lebih tinggi daripada Singapore; tidak masalah untuk uji. Region tidak bisa diubah setelah project dibuat |
+| Enable Data API | Aktif | **Wajib** aktif: website memakai REST/RPC (`/rest/v1`, `/rest/v1/rpc`) |
+| Automatically expose new tables | Nonaktif | Tabel baru **tidak** mendapat hak akses otomatis untuk `anon`/`authenticated`. **Aman:** `schema.sql` dan migrasi selalu `revoke all` lalu `grant` eksplisit per tabel/kolom. Kolom id memakai `generated always as identity`, jadi insert tidak butuh hak sequence |
+| Enable automatic RLS | Aktif | RLS menyala otomatis di tabel baru. **Aman:** semua file sudah `enable row level security` sendiri dan membuat policy; menyalakan dua kali tidak error |
+
+**Bukti kompatibilitas** (PostgreSQL 16 lokal, tiruan `supabase/tests/shim-tanpa-ekspos.sql`: tanpa grant otomatis + RLS
+otomatis lewat event trigger): baseline `test.sql` T1–T11 lulus, v3 40/40, RLS setelah migrasi 12/12, migrasi dan
+penanda dijalankan dua kali tanpa error, `periksa-staging.sql` 14/14. Fungsi (RPC) tidak terpengaruh opsi ekspos;
+hak EXECUTE diatur eksplisit oleh migrasi.
+
+Belum terbukti sampai dijalankan di Supabase sungguhan: perilaku SQL Editor, versi PostgreSQL Supabase, dan isi pasti
+fungsi RLS otomatis milik Supabase.
+
+## 3a. Urutan eksekusi SQL di staging (dengan pemeriksaan setiap tahap)
+
+Semua di **SQL Editor** project **`cekuntung-staging`**. Untuk setiap file: buka **New query**, tempel **seluruh** isi
+file, klik **Run**. Bila muncul pesan **error** (merah), **berhenti**, jangan menjalankan sebagian file, dan kirim pesan
+errornya ke Claude. Pesan `NOTICE … does not exist, skipping` normal.
+
+**Tahap 0 — pastikan Anda di project staging.**
+- Di kiri atas dasbor tertulis `cekuntung-staging`, dan alamat browser memuat ref staging, **bukan**
+  `ikjcbgfexhpksbewkpym`.
+- Jalankan: `select count(*) as tabel_public from pg_tables where schemaname = 'public';` → **0** (project baru kosong).
+  Bila bukan 0, berhenti dan tanyakan dulu.
+
+**Tahap 1 — `supabase/schema.sql`.** Periksa:
+```sql
+select tablename, rowsecurity from pg_tables where schemaname = 'public' order by 1;
+```
+→ 4 baris (`profiles`, `reports`, `upgrade_requests`, `user_data`), semua `rowsecurity = true`.
+
+**Tahap 2 — `supabase/usulan/pro-sekali-bayar.sql`, lalu jalankan file yang sama sekali lagi.** Periksa:
+```sql
+select (select count(*) from pg_tables where schemaname = 'public') as tabel,          -- 8
+       (select count(*) from public.pengaturan_pembayaran) as baris_pengaturan,         -- 1
+       (select aktif from public.pengaturan_pembayaran) as pembayaran_aktif;            -- false
+```
+Catatan: file ini juga memasang batas 3 riwayat untuk akun gratis (bagian 19, opsional). Di staging dibiarkan; untuk
+produksi tetap keputusan Anda.
+
+**Tahap 3 — `supabase/staging/penanda-staging.sql`.** Ganti `GANTI_DENGAN_REF_STAGING` dengan ref staging (20 huruf
+kecil/angka dari Project URL), **Run**. Periksa: `select public.info_lingkungan();` →
+`{"ref": "<ref-staging>", "lingkungan": "staging"}`. File ini menolak placeholder dan ref produksi.
+
+**Tahap 4 — `supabase/staging/periksa-staging.sql`** (hanya membaca). Semua 14 baris harus `ok = true`.
+
+**Tahap 5 — Security Advisor.** Dasbor → **Advisors → Security Advisor** → **Rerun linter**. Tidak boleh ada level
+**ERROR** untuk tabel/fungsi Cek Untung. Peringatan lain kirim ke Claude untuk dinilai.
+
+**Bila RPC belum terbaca** (nanti di website muncul pesan "migrasi belum dijalankan"): jalankan
+`notify pgrst, 'reload schema';` lalu muat ulang halaman.
+
+**Jangan** menjalankan file tes `supabase/tests/*.sql` atau `supabase/usulan/test-*.sql` di Supabase: file itu menulis
+langsung ke `auth.users` dan meninggalkan data uji. Tes tersebut sudah dijalankan di PostgreSQL lokal; di staging,
+pengujian dilakukan lewat website (bagian 6).
+
+## 3b. Pengaturan lain di project staging
+
+1. **Auth → Sign In / Providers → Email:** aktif. Google **nonaktif**.
+2. **URL Configuration** (**Authentication → URL Configuration**) di project **staging**:
    - **Site URL:** `https://feature-pro-pricing.cekuntung.pages.dev/akun`
    - **Redirect URLs:** `https://feature-pro-pricing.cekuntung.pages.dev/akun` dan
      `https://feature-pro-pricing.cekuntung.pages.dev/akun.html`
-   - URL Configuration produksi **tidak perlu diubah**.
-9. **Tidak ada data produksi yang disalin.** Jangan memakai fitur backup/restore/clone dari project produksi. Semua akun di
-   staging adalah akun uji baru.
+   - URL Configuration produksi **tidak diubah**.
+3. **Email:** biarkan SMTP bawaan Supabase (jangan SMTP Resend produksi).
+4. **Tidak ada data produksi yang disalin** (tanpa backup/restore/clone dari produksi).
+5. **Project Settings → API Keys:** catat **Project URL** dan **Publishable key** (`sb_publishable_…`). Jangan salin
+   secret key, service_role, atau password database.
 
 ## 4. Menghubungkan preview Cloudflare ke staging
 
@@ -99,7 +137,7 @@ di-commit. Karena itu staging dihubungkan **lewat commit di branch preview**, bu
 4. **Tunggu deploy preview** (Cloudflare → Workers & Pages → `cekuntung` → **Deployments**, cari branch
    `feature/pro-pricing`, status **Success**). Buka `https://feature-pro-pricing.cekuntung.pages.dev/akun`, tekan
    Cmd+Shift+R.
-5. **Pastikan pita oranye "STAGING: database uji"** tampil. Bila merah, **berhenti**: periksa langkah 3.2 dan 3.5.
+5. **Pastikan pita oranye "STAGING: database uji"** tampil. Bila merah, **berhenti**: periksa bagian 3a tahap 3 dan bagian 3b butir 5.
 
 **Dampak ke produksi:** tidak ada.
 - Produksi (`cekuntung.id`, `www`, `cekuntung.pages.dev`, GitHub Pages) **mengabaikan** blok `staging`, walau nanti blok
@@ -149,11 +187,11 @@ Pengaturan pembayaran diisi lewat `/admin` di preview dengan data **uji** yang j
 
 ## 7. Rollback staging
 
-Paling mudah: hapus project staging (**Project Settings → General → Delete project**) dan buat ulang dari langkah 3.
+Paling mudah: hapus project staging (**Project Settings → General → Delete project**) dan buat ulang (**New project**, nama `cekuntung-staging`, password database baru yang berbeda dari produksi, opsi Data API aktif, ekspos tabel otomatis nonaktif, RLS otomatis aktif), lalu ulangi bagian 3a–3b.
 Alternatifnya, jalankan bagian rollback di `docs/usulan/PRO_SEKALI_BAYAR.md` §7 **di project staging saja**.
 
 ## 8. Yang dibutuhkan dari pemilik
 
-- Membuat project staging (langkah 3) lalu memberikan **Project URL** dan **publishable key** staging.
+- Menjalankan bagian 3a–3b lalu memberikan **Project URL** dan **publishable key** staging.
 - Izin commit dan push **hanya** ke branch `feature/pro-pricing` untuk mengisi blok `staging`.
 - Data rekening/QRIS uji (opsional). Rekening/QRIS asli hanya dengan persetujuan terpisah.
