@@ -26,6 +26,8 @@
   const gLogo = '<svg width="18" height="18" viewBox="0 0 48 48" aria-hidden="true"><path fill="#FFC107" d="M43.6 20.5H42V20H24v8h11.3C33.7 32.7 29.3 36 24 36c-6.6 0-12-5.4-12-12s5.4-12 12-12c3 0 5.8 1.1 7.9 3l5.7-5.7C34 6.1 29.3 4 24 4 12.9 4 4 12.9 4 24s8.9 20 20 20 20-8.9 20-20c0-1.3-.1-2.4-.4-3.5z"/><path fill="#FF3D00" d="M6.3 14.7l6.6 4.8C14.7 15.1 19 12 24 12c3 0 5.8 1.1 7.9 3l5.7-5.7C34 6.1 29.3 4 24 4 16.3 4 9.7 8.3 6.3 14.7z"/><path fill="#4CAF50" d="M24 44c5.2 0 9.9-2 13.4-5.2l-6.2-5.2C29.2 35.1 26.7 36 24 36c-5.3 0-9.7-3.3-11.3-8l-6.5 5C9.5 39.6 16.2 44 24 44z"/><path fill="#1976D2" d="M43.6 20.5H42V20H24v8h11.3c-.8 2.2-2.2 4.2-4.1 5.6l6.2 5.2C37 39.2 44 34 44 24c0-1.3-.1-2.4-.4-3.5z"/></svg>';
   // Tombol Google hanya tampil bila pemilik sudah mengaktifkan provider (config.googleLogin = true).
   const google = () => (C.googleLogin ? `<button class="btn g-btn" type="button" id="g-login">${gLogo}<span>Lanjutkan dengan Google</span></button><div class="or">atau gunakan email</div>` : '');
+  // Tanda kolom wajib di form Daftar email (dibacakan pembaca layar lewat atribut required, bukan lewat bintang).
+  const REQ = ' <span class="req" aria-hidden="true">*</span>';
   const errSpan = (id) => `<span class="field-err" id="${id}-err" hidden></span>`;
   /** Kolom kata sandi. `baru` = kata sandi baru (daftar/ganti): tampilkan daftar syarat yang diperbarui saat mengetik. */
   const pwField = (id, label, auto, placeholder, { baru = false, eyeLabel = 'kata sandi' } = {}) => {
@@ -33,13 +35,13 @@
     return `<div class="field"><label for="${id}">${label}</label><div class="pw"><input class="plain" id="${id}" type="password" autocomplete="${auto}" placeholder="${placeholder}" required aria-describedby="${id}-err${baru ? ` ${id}-rules` : ''}"${baru ? ` data-baru="1" maxlength="${A.SANDI_MAKS}"` : ''}>
     <button class="btn quiet sm" type="button" data-eye="${id}" data-eye-label="${eyeLabel}" aria-label="Tampilkan ${eyeLabel}" aria-pressed="false">${eye}</button></div>${errSpan(id)}${rules}</div>`;
   };
-  const emailField = (ph = 'Masukkan email Anda') => `<div class="field"><label for="em">Email</label><input class="plain" id="em" type="email" autocomplete="email" inputmode="email" placeholder="${ph}" required aria-describedby="em-err">${errSpan('em')}</div>`;
-  const nameField = () => `<div class="field"><label for="nm">Nama lengkap</label><input class="plain" id="nm" autocomplete="name" placeholder="Masukkan nama lengkap" maxlength="100" required aria-describedby="nm-err">${errSpan('nm')}</div>`;
+  const emailField = (ph = 'Masukkan email Anda', tanda = '') => `<div class="field"><label for="em">Email${tanda}</label><input class="plain" id="em" type="email" autocomplete="email" inputmode="email" placeholder="${ph}" required aria-describedby="em-err">${errSpan('em')}</div>`;
+  const nameField = () => `<div class="field"><label for="nm">Nama lengkap${REQ}</label><input class="plain" id="nm" autocomplete="name" placeholder="Masukkan nama lengkap" maxlength="100" required aria-describedby="nm-err">${errSpan('nm')}</div>`;
   // Wajib untuk daftar dengan email + kata sandi (keputusan pemilik 21 Okt 2026). Pengguna Google dan akun lama tidak
   // diwajibkan; mereka bisa melengkapinya di halaman Akun. Nomor tidak pernah ditandai terverifikasi.
-  const phoneField = () => `<div class="field"><label for="hp">Nomor HP/WhatsApp <span class="req" aria-hidden="true">*</span></label><input class="plain" id="hp" type="tel" autocomplete="tel" inputmode="tel" placeholder="Contoh: 081234567890" maxlength="20" required aria-describedby="hp-h hp-err">
+  const phoneField = () => `<div class="field"><label for="hp">Nomor HP/WhatsApp${REQ}</label><input class="plain" id="hp" type="tel" autocomplete="tel" inputmode="tel" placeholder="Contoh: 081234567890" maxlength="20" required aria-describedby="hp-h hp-err">
     <span class="hint" id="hp-h">Untuk menghubungi Anda soal bantuan dan pembayaran. Tidak dipakai untuk iklan dan tidak diverifikasi otomatis.</span>${errSpan('hp')}</div>`;
-  const confirmField = (id, of) => pwField(id, 'Konfirmasi kata sandi', 'new-password', 'Ulangi kata sandi', { eyeLabel: 'konfirmasi kata sandi' }).replace('<input ', `<input data-sama="${of}" `);
+  const confirmField = (id, of, tanda = '') => pwField(id, 'Konfirmasi kata sandi' + tanda, 'new-password', 'Ulangi kata sandi', { eyeLabel: 'konfirmasi kata sandi' }).replace('<input ', `<input data-sama="${of}" `);
   const msgHtml = () => (message ? `<p class="msg ${message.ok ? 'ok' : 'err'}" role="${message.ok ? 'status' : 'alert'}">${esc(message.text)}</p>` : '');
   const heading = (title, sub) => `<div class="acct-head"><h1>${title}</h1>${sub ? `<p class="muted">${sub}</p>` : ''}</div>`;
 
@@ -68,10 +70,10 @@
       ${heading(daftar ? 'Buat akun gratis' : 'Masuk ke Cek Untung', daftar ? 'Simpan modal produk dan riwayat laporan, lalu buka dari perangkat mana pun.' : 'Selamat datang kembali. Lanjutkan cek laba toko Anda.')}
       ${msgHtml()}${google()}
       <form id="f-auth" novalidate>
-        ${daftar ? nameField() : ''}
-        ${emailField(daftar ? 'contoh@email.com' : 'Masukkan email Anda')}
+        ${daftar ? `<p class="tiny faint req-note">Kolom bertanda <span class="req" aria-hidden="true">*</span> wajib diisi.</p>${nameField()}` : ''}
+        ${daftar ? emailField('contoh@email.com', REQ) : emailField()}
         ${daftar ? phoneField() : ''}
-        ${daftar ? pwField('pw', 'Kata sandi', 'new-password', 'Buat kata sandi', { baru: true }) + confirmField('pw2', 'pw') : pwField('pw', 'Kata sandi', 'current-password', 'Masukkan kata sandi')}
+        ${daftar ? pwField('pw', `Kata sandi${REQ}`, 'new-password', 'Buat kata sandi', { baru: true }) + confirmField('pw2', 'pw', REQ) : pwField('pw', 'Kata sandi', 'current-password', 'Masukkan kata sandi')}
         ${daftar ? '<p class="tiny faint">Dengan mendaftar, Anda menyetujui <a href="privasi.html">ketentuan &amp; privasi</a>.</p>' : '<button class="btn link forgot" type="button" data-view="lupa">Lupa kata sandi?</button>'}
         <button class="btn primary" type="submit">${daftar ? 'Daftar gratis' : 'Masuk'}</button>
       </form>

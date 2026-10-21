@@ -291,7 +291,7 @@ test('AUTH-V2: tombol Google hanya bila diaktifkan; tujuan setelah masuk hanya h
   truthy(/code_challenge_method=s256/.test(cl) && /grant_type=pkce/.test(cl), 'Google memakai PKCE');
   truthy(/Jika email tersebut terdaftar/.test(ak), 'lupa sandi: pesan netral');
   truthy(/prefers-reduced-motion: no-preference/.test(src('account.css')), 'animasi hanya bila gerak tidak dikurangi');
-  truthy(/<label for="em">Email<\/label>/.test(ak) && /aria-pressed="false"/.test(ak), 'label form & tombol tampilkan sandi');
+  truthy(/<label for="em">Email\$\{tanda\}<\/label>/.test(ak) && /aria-pressed="false"/.test(ak), 'label form & tombol tampilkan sandi');
 });
 test('P13-D peringatan total: ditahan vs ambigu, konsisten di dashboard, PDF, Excel; tanpa konflik identik', () => {
   // Data SINTETIS TikTok berperiode resmi Januari. Engine tidak diubah; yang diuji hanya penyajian metadata P11/P13.
@@ -699,12 +699,14 @@ test('V1A tampilan: tanpa laba/modal per sumber, keterangan wajib, aturan sembun
 test('AUTH-V3 form: placeholder, kolom daftar lengkap, konfirmasi sandi, masuk tanpa aturan sandi baru', () => {
   const ak = src('akun.js'), html = fs.readFileSync(path.join(__dirname, '..', 'akun.html'), 'utf8');
   for (const ph of ['Masukkan email Anda', 'Masukkan kata sandi', 'Masukkan nama lengkap', 'contoh@email.com', 'Contoh: 081234567890', 'Buat kata sandi', 'Ulangi kata sandi']) truthy(ak.includes(ph), `placeholder ${ph}`);
-  truthy(/<label for="nm">Nama lengkap<\/label>/.test(ak) && /<label for="hp">Nomor HP\/WhatsApp <span class="req" aria-hidden="true">\*<\/span><\/label>/.test(ak) && !/opsional/i.test(ak) && /'Konfirmasi kata sandi'/.test(ak), 'label daftar');
+  truthy(/<label for="hp">Nomor HP\/WhatsApp\$\{REQ\}<\/label>/.test(ak) && /const REQ = ' <span class="req" aria-hidden="true">\*<\/span>';/.test(ak) && !/opsional/i.test(ak) && /'Konfirmasi kata sandi'/.test(ak), 'label daftar');
   truthy(/id="nm" [^>]*required/.test(ak) && /id="hp" [^>]*required/.test(ak), 'daftar email: nama dan nomor HP wajib');
+  truthy(/<label for="nm">Nama lengkap\$\{REQ\}<\/label>/.test(ak) && /emailField\('contoh@email\.com', REQ\)/.test(ak) && /pwField\('pw', `Kata sandi\$\{REQ\}`/.test(ak) && /confirmField\('pw2', 'pw', REQ\)/.test(ak), 'daftar: kelima kolom wajib bertanda *');
+  truthy(/: emailField\(\)\}/.test(ak) && /pwField\('pw', 'Kata sandi', 'current-password'/.test(ak) && /confirmField\('pw1b', 'pw1'\)/.test(ak), 'form masuk & ganti sandi tanpa tanda *');
   truthy(/case 'hp': return !v\.trim\(\) \? 'Nomor HP\/WhatsApp wajib diisi untuk mendaftar dengan email\.' : A\.normalisasiHp\(v\)\.ok \? '' : A\.PESAN_HP;/.test(ak), 'nomor wajib + validasi format');
   truthy(/case 'pf-wa': return v\.trim\(\) === input\.dataset\.awal \? ''/.test(ak), 'halaman Akun: nomor tidak dipaksa (pengguna Google/lama)');
   truthy(!/user_metadata[^;]*whatsapp[^;]*return 'Nomor/.test(ak) && !/signIn[^;]*whatsapp/.test(ak), 'masuk tidak mensyaratkan nomor');
-  truthy(/confirmField\('pw2', 'pw'\)/.test(ak) && /confirmField\('pw1b', 'pw1'\)/.test(ak), 'konfirmasi di daftar & ganti sandi');
+  truthy(/confirmField\('pw2', 'pw', REQ\)/.test(ak) && /confirmField\('pw1b', 'pw1'\)/.test(ak), 'konfirmasi di daftar & ganti sandi');
   truthy(/pwField\('pw', 'Kata sandi', 'current-password', 'Masukkan kata sandi'\)/.test(ak), 'form masuk: tanpa data-baru (sandi lama tidak dicek aturan baru)');
   truthy(/return v \? '' : 'Kata sandi wajib diisi\.';/.test(ak), 'kolom sandi masuk hanya wajib diisi');
   truthy(/<script src="assets\/aturan-akun\.js\?v=\w+"><\/script>\s*<script src="assets\/situs\.js\?v=\w+" defer><\/script>\s*<script src="assets\/akun\.js/.test(html), 'aturan dimuat sebelum akun.js');
@@ -736,7 +738,7 @@ test('waSupport: kunci config terpisah & kosong; pembayaran tetap bergantung pad
 });
 test('Privasi: nomor HP & tujuannya, Cloudflare, Supabase, Resend; paragraf Google hanya bila aktif', () => {
   const pv = fs.readFileSync(path.join(__dirname, '..', 'privasi.html'), 'utf8');
-  truthy(/Nomor wajib diisi bila Anda mendaftar dengan email dan kata sandi/.test(pv) && /nomor tidak wajib untuk masuk/.test(pv) && /Bila pemindahan gagal, halaman Akun memberi tahu Anda/.test(pv) && !/opsional/i.test(pv), 'aturan wajib/opsional');
+  truthy(/Nomor wajib diisi bila Anda mendaftar dengan email dan kata sandi/.test(pv) && /nomor tidak wajib untuk masuk/.test(pv) && /mengubah atau menghapus nomor di halaman Akun kapan saja; menghapus nomor tidak menghalangi Anda masuk/.test(pv) && /Bila pemindahan gagal, halaman Akun memberi tahu Anda/.test(pv) && !/opsional/i.test(pv), 'aturan wajib/opsional');
   truthy(/<h2>Nomor HP\/WhatsApp<\/h2>/.test(pv) && /tidak dipakai untuk iklan, tidak dijual, dan tidak dipakai sebagai kode verifikasi \(OTP\)/.test(pv) && /tidak diverifikasi otomatis/.test(pv), 'nomor HP');
   for (const s of ['<b>Cloudflare</b>', '<b>Supabase</b>', '<b>Resend</b>']) truthy(pv.includes(s), s);
   truthy(/<li id="google-note" hidden>/.test(pv) && /getElementById\('google-note'\)\.hidden = !C\.googleLogin;/.test(pv), 'Google hanya bila googleLogin aktif');
