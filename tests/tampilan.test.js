@@ -519,7 +519,7 @@ test('P0 Pro: tanpa kontak pembayaran, CTA bayar tidak tampil dan status "Segera
   truthy(/C\.whatsapp \? '<a class="btn sm" href="dashboard\.html#upgrade">Upgrade<\/a>' : '<span class="badge">Pro segera hadir<\/span>'/.test(akun), 'halaman akun');
   // Harga Pro sekali bayar (keputusan pemilik 21 Okt 2026); pembelian tetap tertutup karena whatsapp kosong.
   truthy(/prices: \{[^}]*pro: 'Rp149\.000',\s*proUnit: 'sekali bayar'/.test(cfg) && /whatsapp: '',/.test(cfg), 'harga Pro sekali bayar, kontak pembayaran tetap kosong');
-  for (const lama of ['Rp49.000', 'Rp399.000', 'Berlangganan Pro', 'data-price="proUnit">/ bulan']) truthy(!idx.includes(lama) && !cfg.includes(`'${lama}'`), `tanpa harga/teks lama: ${lama}`);
+  for (const lama of ['Rp49.000', 'Rp399.000', 'Berlangganan Pro', 'data-price="proUnit">/ bulan', 'Jasa laporan</h3>', 'Rp299.000']) truthy(!idx.includes(lama) && !cfg.includes(`'${lama}'`), `tanpa harga/teks lama: ${lama}`);
   truthy(/data-price="pro">Rp149\.000</.test(idx) && /data-price="proUnit">sekali bayar</.test(idx), 'halaman depan: Rp149.000 sekali bayar');
 });
 test('P0 laba bulanan PDF: Belum diketahui / sebagian (*) / Rp0 aktual / lengkap; tanpa NaN', () => {
