@@ -80,6 +80,8 @@ function createMidtransMock({ serverKey = 'SB-Mid-server-UJI-LOKAL' } = {}) {
     server, trx, log, serverKey,
     /** Pembeli membayar: transaksi → settlement (nominal bisa dipalsukan untuk uji tidak cocok). */
     bayar(orderId, { gross } = {}) { const t = trx.get(orderId); if (!t) throw new Error(`tidak ada ${orderId}`); t.status = 'settlement'; if (gross) t.gross_amount = Number(gross).toFixed(2); return t; },
+    /** Pembeli memilih QRIS di halaman Snap: transaksi muncul di Get Status sebagai pending. */
+    pilihQris(orderId) { const t = trx.get(orderId); if (!t) throw new Error(`tidak ada ${orderId}`); if (t.status === 'snap') t.status = 'pending'; return t; },
     kedaluwarsa(orderId) { const t = trx.get(orderId); t.status = 'expire'; return t; },
     /** Isi notifikasi HTTP seperti yang dikirim Midtrans. kunci lain = signature salah. */
     notifikasi(orderId, { kunci = serverKey, ubah = {} } = {}) {

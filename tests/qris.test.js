@@ -39,7 +39,7 @@ const JWT = 'eyJ.uji.pembeli';
     headers: { 'Content-Type': 'application/json', ...(jwt ? { Authorization: `Bearer ${jwt}` } : {}), ...(origin ? { Origin: origin } : {}) },
     body: method === 'POST' ? JSON.stringify(body) : undefined });
   const baca = async (res) => ({ status: res.status, body: await res.json(), headers: res.headers });
-  const percobaan = (o) => ({ id: 7, order_id: 3, gateway_order_id: 'CU-AAAA0001-1', amount: 149000, status: 'dibuat', berlaku_sampai: new Date(Date.now() + 15 * 60000).toISOString(), qr_url: null, ...o });
+  const percobaan = (o) => ({ id: 7, order_id: 3, gateway_order_id: 'CU-AAAA0001-1', amount: 149000, status: 'dibuat', berlaku_sampai: new Date(Date.now() + 15 * 60000).toISOString(), snap_url: null, ...o });
 
   await t('Konfigurasi: kunci/rahasia/lingkungan wajib; kunci harus cocok lingkungan; hanya mock boleh ganti API', async () => {
     const coba = (e) => { try { return Q.bacaKonfigurasi(e); } catch (x) { return x; } };
@@ -105,55 +105,56 @@ const JWT = 'eyJ.uji.pembeli';
     truthy(r.status === 503 && /belum dikonfigurasi/.test(r.body.error), 'tanpa konfigurasi → 503 pesan jelas');
   });
 
-  await t('Buat QR: wajib login; QR berjalan dipakai ulang tanpa charge baru', async () => {
+  await t('Checkout login: wajib login; halaman Snap berjalan dipakai ulang tanpa transaksi baru (tanpa tagihan ganda)', async () => {
     let r = await baca(await Q.handleBuat(req({ pesanan: 3 }, { jwt: '' }), deps(db({}).fetcher)));
     truthy(r.status === 401, 'tanpa JWT → 401');
     r = await baca(await Q.handleBuat(req({ pesanan: 3 }, { jwt: ANON }), deps(db({}).fetcher)));
     truthy(r.status === 401, 'JWT = anon key → 401');
-    const g = percobaan({ status: 'menunggu', qr_url: 'https://api.sandbox.midtrans.com/v2/qris/x/qr-code' });
+    const g = percobaan({ status: 'menunggu', snap_url: 'https://app.sandbox.midtrans.com/snap/v4/redirection/x' });
     const d = db({ gateway_mulai_percobaan: () => ({ aksi: 'pakai', percobaan: g }) }); mt.log.length = 0;
     r = await baca(await Q.handleBuat(req({ pesanan: 3 }), deps(d.fetcher)));
-    truthy(r.status === 200 && r.body.percobaan.qr_url === g.qr_url && mt.log.length === 0, 'pakai → tanpa charge');
+    truthy(r.status === 200 && r.body.percobaan.snap_url === g.snap_url && mt.log.length === 0, 'pakai → Snap yang sama, tanpa transaksi baru');
     truthy(d.calls[0].auth === `Bearer ${JWT}`, 'mulai_percobaan memakai JWT pembeli');
     r = await baca(await Q.handleBuat(req({ pesanan: 3 }), deps(db({ gateway_mulai_percobaan: () => ({ aksi: 'pakai', percobaan: percobaan() }) }).fetcher)));
-    truthy(r.status === 409, 'QR masih dibuat → 409 coba lagi');
+    truthy(r.status === 409, 'Snap masih disiapkan → 409 coba lagi');
     r = await baca(await Q.handleBuat(req({ pesanan: 'abc' }), deps(db({}).fetcher)));
     truthy(r.status === 400, 'pesanan tidak valid → 400');
   });
 
-  await t('Buat QR baru: nominal & masa berlaku dari database (bukan browser), charge QRIS 15 menit, hasil disimpan dengan rahasia', async () => {
+  await t('Checkout login baru: Snap QRIS saja, nominal & masa berlaku dari database (bukan browser), kembali ke view=pro', async () => {
     const g = percobaan({ gateway_order_id: 'CU-B1-1' });
     const d = db({ gateway_mulai_percobaan: () => ({ aksi: 'baru', percobaan: g, qr_menit: 15 }),
-      gateway_simpan_qr: (a) => ({ ...g, status: a.p_hasil.ok ? 'menunggu' : 'gagal', qr_url: a.p_hasil.qr_url, gateway_txn_id: a.p_hasil.gateway_txn_id }) });
+      gateway_simpan_qr: (a) => ({ ...g, status: a.p_hasil.ok ? 'menunggu' : 'gagal', snap_url: a.p_hasil.snap_url }) });
     const r = await baca(await Q.handleBuat(req({ pesanan: 3, amount: 1, harga: 1 }), deps(d.fetcher)));
-    truthy(r.status === 200 && r.body.status === 'menunggu' && /qr-code$/.test(r.body.percobaan.qr_url), `200 + QR (${r.status} ${JSON.stringify(r.body)})`);
+    truthy(r.status === 200 && r.body.status === 'menunggu' && /\/snap\/v4\/redirection\//.test(r.body.percobaan.snap_url) && !('qr_url' in r.body.percobaan), `200 + snap_url (${r.status} ${JSON.stringify(r.body)})`);
     const body = mt.trx.get('CU-B1-1').body;
-    truthy(body.transaction_details.gross_amount === 149000 && body.item_details[0].price === 149000 && body.qris.acquirer === 'gopay', 'nominal 149000 dari database; amount browser diabaikan');
-    truthy(body.custom_expiry.expiry_duration === 15 && body.custom_expiry.unit === 'minute' && !body.customer_details, 'berlaku 15 menit; tanpa data pembeli');
+    truthy(body.transaction_details.gross_amount === 149000 && body.item_details[0].price === 149000 && body.enabled_payments.join() === 'other_qris', 'nominal 149000 dari database; hanya QRIS; amount browser diabaikan');
+    truthy(body.expiry.duration === 15 && body.callbacks.finish === 'https://feature-pro-pricing.cekuntung.pages.dev/akun?view=pro' && !body.customer_details, 'berlaku 15 menit; kembali ke view=pro; tanpa data pembeli');
     const s = d.calls.find((c) => c.nama === 'gateway_simpan_qr');
-    truthy(s.args.p_rahasia === RAHASIA && s.args.p_hasil.ok === true && s.auth === `Bearer ${ANON}`, 'simpan_qr dengan rahasia + anon key');
+    truthy(s.args.p_rahasia === RAHASIA && s.args.p_hasil.ok === true && s.auth === `Bearer ${ANON}`, 'simpan dengan rahasia + anon key');
+    truthy(mt.log.every((l) => !/charge/.test(l)), 'tidak ada Core API charge');
   });
 
-  await t('Buat QR: charge gagal/terputus → percobaan ditandai gagal, 502, tanpa QR palsu', async () => {
+  await t('Checkout login: Snap gagal/terputus → percobaan ditandai gagal, 502, tanpa tautan palsu', async () => {
     for (const mode of ['500', 'putus']) {
       const g = percobaan({ gateway_order_id: `CU-F${mode}-1` });
       const d = db({ gateway_mulai_percobaan: () => ({ aksi: 'baru', percobaan: g, qr_menit: 15 }), gateway_simpan_qr: (a) => ({ ...g, status: a.p_hasil.ok ? 'menunggu' : 'gagal' }) });
-      mt.gagalkanBerikutnya(/charge$/, mode);
+      mt.gagalkanBerikutnya(/transactions$/, mode);
       const r = await baca(await Q.handleBuat(req({ pesanan: 3 }), deps(d.fetcher)));
       const s = d.calls.find((c) => c.nama === 'gateway_simpan_qr');
       truthy(r.status === 502 && s && s.args.p_hasil.ok === false && !r.body.percobaan, `${mode}: 502 + simpan ok:false (${r.status})`);
     }
   });
 
-  await t('Buat QR saat QR lama lewat waktu: cek status, batalkan yang masih pending, baru buat QR baru', async () => {
+  await t('Checkout login saat percobaan lama lewat waktu: cek status, batalkan yang masih pending, baru buat Snap baru', async () => {
     await fetch(`${MT}/v2/charge`, { method: 'POST', headers: { Authorization: `Basic ${Buffer.from(`${mt.serverKey}:`).toString('base64')}` }, body: JSON.stringify({ payment_type: 'qris', transaction_details: { order_id: 'CU-C1-1', gross_amount: 149000 } }) });
     let ke = 0; const lama = percobaan({ gateway_order_id: 'CU-C1-1', status: 'menunggu', berlaku_sampai: new Date(Date.now() - 1000).toISOString() });
     const baru = percobaan({ id: 8, gateway_order_id: 'CU-C1-2' });
     const d = db({ gateway_mulai_percobaan: () => (++ke === 1 ? { aksi: 'cek', percobaan: lama } : { aksi: 'baru', percobaan: baru, qr_menit: 15 }),
-      gateway_terapkan_status: (a) => a.p_status.transaction_status, gateway_simpan_qr: (a) => ({ ...baru, status: 'menunggu', qr_url: a.p_hasil.qr_url }) });
+      gateway_terapkan_status: (a) => a.p_status.transaction_status, gateway_simpan_qr: (a) => ({ ...baru, status: 'menunggu', snap_url: a.p_hasil.snap_url }) });
     mt.log.length = 0;
     const r = await baca(await Q.handleBuat(req({ pesanan: 3 }), deps(d.fetcher)));
-    truthy(r.status === 200 && mt.log.join() === 'GET /v2/CU-C1-1/status,POST /v2/CU-C1-1/cancel,GET /v2/CU-C1-1/status,POST /v2/charge', `urutan Midtrans: ${mt.log.join()}`);
+    truthy(r.status === 200 && mt.log.join() === 'GET /v2/CU-C1-1/status,POST /v2/CU-C1-1/cancel,GET /v2/CU-C1-1/status,POST /snap/v1/transactions', `urutan Midtrans: ${mt.log.join()}`);
     truthy(d.calls.find((c) => c.nama === 'gateway_terapkan_status').args.p_status.transaction_status === 'cancel', 'QR lama tercatat batal sebelum QR baru');
   });
 
@@ -181,13 +182,17 @@ const JWT = 'eyJ.uji.pembeli';
     truthy(r.status === 400 && r.body.error === 'Hanya admin', 'bukan admin → ditolak database');
   });
 
-  await t('URL QR: hanya https dari host API Midtrans; selain itu tidak disimpan (dan server tidak pernah mengambilnya)', async () => {
-    const sb = Q.bacaKonfigurasi({ ...env, MIDTRANS_ENV: 'sandbox', MIDTRANS_SERVER_KEY: 'SB-Mid-server-abc' });
-    truthy(Q.urlQrSah('https://api.sandbox.midtrans.com/v2/qris/abc/qr-code', sb), 'host sandbox diterima');
-    for (const u of ['http://api.sandbox.midtrans.com/v2/qris/a', 'https://api.sandbox.midtrans.com.evil.id/a', 'https://evil.id/a', 'javascript:alert(1)',
-      'https://user:pw@api.sandbox.midtrans.com/a', 'https://api.sandbox.midtrans.com:8443/a', 'data:image/png;base64,AAA', '']) truthy(!Q.urlQrSah(u, sb), `ditolak: ${u}`);
-    const pr = Q.bacaKonfigurasi({ ...env, MIDTRANS_ENV: 'production', MIDTRANS_SERVER_KEY: 'Mid-server-abc' });
-    truthy(Q.urlQrSah('https://api.midtrans.com/v2/qris/a/qr-code', pr) && !Q.urlQrSah('https://api.sandbox.midtrans.com/v2/qris/a', pr), 'produksi hanya api.midtrans.com');
+  await t('Checkout login: Snap lewat waktu tanpa transaksi (404) → kedaluwarsa; Snap belum lewat waktu → tetap menunggu', async () => {
+    const lewatG = percobaan({ gateway_order_id: 'CU-X404-1', status: 'menunggu', snap_url: 'https://app.sandbox.midtrans.com/snap/v4/redirection/y', berlaku_sampai: new Date(Date.now() - 1000).toISOString() });
+    const info = (g) => ({ pesanan: { id: 3, status: 'baru' }, pro: false, percobaan: g });
+    let d = db({ gateway_percobaan_saya: () => info(lewatG), gateway_terapkan_status: (a) => a.p_status.transaction_status });
+    let r = await baca(await Q.handleCek(req({ pesanan: 3 }), deps(d.fetcher)));
+    const ts = d.calls.find((c) => c.nama === 'gateway_terapkan_status');
+    truthy(r.status === 200 && ts && ts.args.p_status.transaction_status === 'expire' && ts.args.p_status.order_id === 'CU-X404-1', 'lewat waktu + 404 → expire');
+    const aktif = { ...lewatG, berlaku_sampai: new Date(Date.now() + 60000).toISOString() };
+    d = db({ gateway_percobaan_saya: () => info(aktif), gateway_terapkan_status: () => 'x' });
+    r = await baca(await Q.handleCek(req({ pesanan: 3, paksa: true }), deps(d.fetcher)));
+    truthy(r.status === 200 && !d.calls.some((c) => c.nama === 'gateway_terapkan_status') && r.body.percobaan.snap_url === aktif.snap_url, 'belum lewat waktu + 404 → tetap menunggu, tautan lanjutkan tetap ada');
   });
 
   await t('Checkout tamu: validasi input; Snap hanya QRIS, nominal dari database, tanpa data pembeli, kembali ke situs', async () => {

@@ -282,12 +282,14 @@
     if (VIEW !== 'bayar' || !$('#card')) return;
     const selesai = ['lunas', 'diklaim'].includes(r.status);
     const emailGagal = r.status === 'lunas' && r.email_status === 'gagal';
-    card.innerHTML = `${heading(selesai ? 'Pembayaran berhasil' : 'Status pembayaran', `Pesanan ${esc(s.kode)} · ${esc(s.email)}`)}
-      <p class="msg ${selesai ? 'ok' : 'info'}" role="status">${esc(PESAN_TAMU[r.status] || r.status)}</p>
-      ${emailGagal ? '<p class="msg err">Email aktivasi belum berhasil terkirim. Tekan tombol di bawah untuk mengirim ulang.</p><button class="btn primary" type="button" data-cek-tamu>Kirim ulang tautan aktivasi</button>' : ''}
+    const aksi = r.status === 'menunggu' ? `${snapSah(r.snap_url) ? `<a class="btn primary" href="${esc(r.snap_url)}">Lanjutkan pembayaran</a>` : ''}<button class="btn sm" type="button" data-cek-tamu>Cek status</button>`
+      : emailGagal ? '<button class="btn primary" type="button" data-cek-tamu>Kirim ulang tautan aktivasi</button>'
+      : ['kedaluwarsa', 'batal', 'gagal'].includes(r.status) ? '<a class="btn primary" href="akun.html?view=pro">Ulangi pembelian</a>' : '';
+    const pesan = r.status === 'menunggu' ? 'Selesaikan pembayaran di halaman Midtrans. Bila halaman itu tertutup, tekan <b>Lanjutkan pembayaran</b>; tagihannya tetap sama.'
+      : emailGagal ? 'Pembayaran berhasil, tetapi email aktivasi belum terkirim. Tekan tombol di bawah untuk mengirim ulang.' : esc(PESAN_TAMU[r.status] || r.status);
+    card.innerHTML = `${heading(selesai ? 'Pembayaran berhasil' : 'Status pembayaran', esc(s.email))}
+      ${panelBayar({ kode: s.kode, amount: r.amount, status: LABEL_STATUS[r.status] || '', pesan, ok: selesai, aksi })}
       ${r.status === 'lunas' && !emailGagal ? '<p class="tiny faint">Tidak menemukan email? Periksa folder Spam/Promosi, atau <a href="akun.html?view=aktivasi">kirim ulang tautan aktivasi</a>.</p>' : ''}
-      ${r.status === 'menunggu' && /^https:\/\//.test(r.snap_url || '') ? `<a class="btn primary" href="${esc(r.snap_url)}">Lanjutkan pembayaran</a>` : ''}
-      ${['kedaluwarsa', 'batal', 'gagal'].includes(r.status) ? '<a class="btn primary" href="akun.html?view=pro">Ulangi pembelian</a>' : ''}
       <p class="switch"><a class="btn link" href="dashboard.html">Buka dashboard</a></p>`;
     // Periksa ulang otomatis selama masih menunggu (maks. ±5 menit); sumber kebenaran tetap server/Midtrans.
     if (r.status === 'menunggu' && ke < 60) tamuPoll = setTimeout(() => renderBayar(card, false, ke + 1), 5000);
@@ -303,27 +305,34 @@
     return '';
   }
 
-  /* ---------------- Pembayaran otomatis: QRIS dinamis (Midtrans, lewat Edge Function) ----------------
-   * Nominal Rp149.000 sudah terisi di QR; Pro aktif otomatis setelah server memvalidasi pembayaran ke Midtrans.
-   * Browser hanya menampilkan QR dari server dan menanyakan status; tidak pernah menentukan lunas/tidaknya. */
-  let qris = null;   // { order, g, tick, poll, cek }
-  function hentikanQris() { if (qris) { clearInterval(qris.tick); clearInterval(qris.poll); } qris = null; }
-  const mmss = (ms) => { const d = Math.max(0, Math.round(ms / 1000)); return `${String(Math.floor(d / 60)).padStart(2, '0')}:${String(d % 60).padStart(2, '0')}`; };
+  /* ---------------- Pembayaran otomatis: Midtrans Snap redirect (QRIS), sama untuk tamu & pengguna login ----------------
+   * Nominal & halaman Snap dari server; Pro aktif setelah server memverifikasi pembayaran ke Midtrans (webhook/Get Status),
+   * bukan karena browser kembali dari Snap. Satu percobaan terbuka per pesanan → "Lanjutkan pembayaran" tidak menagih ganda. */
+  let qris = null;   // { order, g, poll, ke, cek }
+  function hentikanQris() { if (qris) clearTimeout(qris.poll); qris = null; }
+  const snapSah = (u) => /^https:\/\//.test(u || '');
+  /** Panel status pembayaran (dipakai checkout login & tamu agar tampilannya sama). */
+  function panelBayar({ kode, amount, status, pesan, ok, aksi }) {
+    return `<section class="order" aria-label="Pesanan ${esc(kode)}">
+      <div class="order-head"><span class="small muted">Pesanan</span><b class="mono">${esc(kode)}</b>${status ? `<span class="badge">${esc(status)}</span>` : ''}</div>
+      <dl class="pay-dl"><div><dt>Total</dt><dd><b>${amount ? rupiah(amount) : '-'}</b></dd></div><div><dt>Metode</dt><dd>QRIS (Midtrans)</dd></div></dl>
+      <div class="pay-box" aria-live="polite"><p class="msg ${ok ? 'ok' : 'info'}" role="status"><span>${pesan}</span></p>${aksi ? `<div class="row-gap">${aksi}</div>` : ''}</div>
+      </section>`;
+  }
+  const LABEL_STATUS = { menunggu: 'Menunggu pembayaran', lunas: 'Lunas', diklaim: 'Lunas', kedaluwarsa: 'Kedaluwarsa', batal: 'Dibatalkan', gagal: 'Gagal', perlu_cek: 'Diperiksa', direfund: 'Dikembalikan', refund_sebagian: 'Dikembalikan sebagian' };
+  const tombolCek = '<button class="btn sm" type="button" data-qris-cek>Cek status</button>';
   function qrisHtml(g, o) {
     const sisa = g ? new Date(g.berlaku_sampai).getTime() - Date.now() : 0;
-    const cekBtn = '<button class="btn sm" type="button" data-qris-cek>Saya sudah bayar, cek sekarang</button>';
-    if (g && g.status === 'menunggu' && sisa > 0 && /^https:\/\//.test(g.qr_url || '')) {
-      return `<img class="qris" src="${esc(g.qr_url)}" alt="Kode QRIS pembayaran ${rupiah(g.amount)}" width="240" height="240" referrerpolicy="no-referrer">
-        <p class="small qr-timer">Berlaku <b id="qr-sisa">${mmss(sisa)}</b> lagi · kode pesanan <b class="mono">${esc(o.order_code)}</b></p>
-        <ol class="steps"><li>Buka aplikasi bank atau dompet digital, pilih bayar dengan QRIS, lalu pindai kode ini.</li>
-        <li>Nominal <b>${rupiah(g.amount)}</b> sudah terisi otomatis. Periksa, lalu bayar.</li>
-        <li>Tetap di halaman ini. Pro aktif otomatis setelah pembayaran terkonfirmasi, biasanya kurang dari 1 menit.</li></ol>
-        <div class="row-gap">${cekBtn}</div>
-        <p class="tiny faint">Jangan membayar kode yang sudah kedaluwarsa. Pembayaran diproses Midtrans; kami tidak menerima nomor kartu, PIN, atau kode OTP.</p>`;
+    if (g && g.status === 'menunggu' && sisa > 0 && snapSah(g.snap_url)) {
+      return panelBayar({ kode: o.order_code, amount: g.amount, status: LABEL_STATUS.menunggu,
+        pesan: 'Selesaikan pembayaran di halaman Midtrans. Bila halaman itu tertutup, tekan <b>Lanjutkan pembayaran</b>; tagihannya tetap sama. Pro aktif otomatis setelah pembayaran terverifikasi.',
+        aksi: `<a class="btn primary" href="${esc(g.snap_url)}">Lanjutkan pembayaran</a>${tombolCek}` });
     }
-    if (g && g.status === 'menunggu' && sisa > 0) return `<p class="msg err" role="alert">Kode QRIS belum dapat ditampilkan.</p><div class="row-gap"><button class="btn primary" type="button" data-qris-baru>Buat QR baru</button>${cekBtn}</div>`;
-    return `<p class="msg info">Kode QRIS sudah tidak berlaku. Bila Anda sempat membayar, tekan <b>Cek pembayaran</b>; dana tidak hangus.</p>
-      <div class="row-gap"><button class="btn primary" type="button" data-qris-baru>Buat QR baru</button><button class="btn sm" type="button" data-qris-cek>Cek pembayaran</button></div>`;
+    if (g && g.status === 'perlu_cek') return panelBayar({ kode: o.order_code, amount: g.amount, status: LABEL_STATUS.perlu_cek, pesan: 'Pembayaran Anda sedang diperiksa manual. Pro aktif setelah pemeriksaan selesai; bila tidak cocok, dana dikembalikan sesuai kebijakan refund.' });
+    const pernah = g && ['menunggu', 'kedaluwarsa', 'batal', 'gagal'].includes(g.status);
+    return panelBayar({ kode: o.order_code, amount: (g && g.amount) || o.amount, status: pernah ? LABEL_STATUS[g.status === 'menunggu' ? 'kedaluwarsa' : g.status] : '',
+      pesan: pernah ? 'Waktu pembayaran sebelumnya sudah habis atau tidak berhasil. Bila Anda sempat membayar, tekan <b>Cek status</b>; dana tidak hangus.' : 'Lanjutkan ke halaman pembayaran Midtrans untuk membayar dengan QRIS.',
+      aksi: `<button class="btn primary" type="button" data-qris-baru>Bayar dengan QRIS</button>${pernah ? tombolCek : ''}` });
   }
   function tampilQris() { const b = $('#qris-box'); if (b && qris) b.innerHTML = qrisHtml(qris.g, qris.order); }
   function qrisLunas() { hentikanQris(); toast('Pembayaran berhasil. Pro sudah aktif.'); render(); }
@@ -334,62 +343,47 @@
         <ul class="benefits"><li>Laporan PDF dengan nama dan logo toko</li><li>Semua produk dan saran harga</li><li>Semua temuan, ekspor Excel, riwayat tanpa batas</li></ul>
         <p class="tiny faint">Akses Pro berlaku untuk akun ini selama layanan Cek Untung beroperasi. Fitur berbayar baru di masa depan tidak otomatis termasuk. <a href="privasi.html">Ketentuan</a></p>
         <button class="btn primary" type="button" id="bayar-qris">Bayar dengan QRIS</button>
-        <p class="tiny faint">Nominal ${rupiah(s.harga_pro)} terisi otomatis di aplikasi pembayaran. Kode QRIS berlaku ${Number(s.qr_berlaku_menit) || 15} menit; Pro aktif otomatis setelah pembayaran terkonfirmasi.</p>
+        <p class="tiny faint">Anda akan diarahkan ke halaman pembayaran Midtrans. Nominal ${rupiah(s.harga_pro)} terisi otomatis; kode QRIS berlaku ${Number(s.qr_berlaku_menit) || 15} menit. Pro aktif otomatis setelah pembayaran terverifikasi.</p>
         ${kontak}${riwayat}${kembali}`;
       return;
     }
     const info = open.status === 'perlu_cek' ? '<p class="msg info">Pembayaran Anda sedang diperiksa manual (misalnya nominal tidak sesuai). Pro aktif setelah pemeriksaan selesai; bila tidak cocok, dana dikembalikan sesuai kebijakan refund.</p>'
       : open.status === 'diproses' ? '<p class="msg info">Kami sedang memverifikasi pembayaran Anda.</p>' : '';
-    card.innerHTML = `${head}<section class="order" aria-label="Pesanan ${esc(open.order_code)}">
-      <div class="order-head"><span class="small muted">Pesanan</span><b class="mono">${esc(open.order_code)}</b><span class="badge st-${esc(open.status)}">${esc(STATUS_PESANAN[open.status] || open.status)}</span></div>
-      <dl class="pay-dl"><div><dt>Total dibayar</dt><dd><b>${rupiah(open.amount)}</b></dd></div><div><dt>Metode</dt><dd>QRIS</dd></div></dl>
-      ${open.status === 'baru' ? '<div id="qris-box" class="pay-box qris-box" aria-live="polite"><p class="muted" role="status">Menyiapkan kode QRIS…</p></div>' : info}
-      </section>${kontak}${riwayat}${kembali}`;
-    if (open.status === 'baru') mulaiQris(open);
+    if (open.status !== 'baru') { card.innerHTML = `${head}${panelBayar({ kode: open.order_code, amount: open.amount, status: STATUS_PESANAN[open.status] || open.status, pesan: info.replace(/<\/?p[^>]*>/g, '') })}${kontak}${riwayat}${kembali}`; return; }
+    card.innerHTML = `${head}<div id="qris-box"><p class="muted" role="status">Memeriksa pembayaran…</p></div>${kontak}${riwayat}${kembali}`;
+    qris = { order: open, g: null, ke: 0 };
+    cekQris(false);
   }
-  async function mulaiQris(order) {
-    hentikanQris();
-    const st = { order, g: null };
-    qris = st;
-    if (!online()) { const b = $('#qris-box'); if (b) b.innerHTML = `<p class="msg err" role="alert">${OFFLINE}</p><button class="btn" type="button" data-qris-baru>Coba lagi</button>`; return; }
+  /** Buka halaman Snap untuk pesanan ini (memakai percobaan terbuka bila ada → tanpa tagihan ganda). */
+  async function bayarSnap(btn, ambilPesanan) {
+    if (!online()) return toast(OFFLINE);
+    busy(btn, true, 'Membuka pembayaran…');
     try {
+      const x = await ambilPesanan(); const order = Array.isArray(x) ? x[0] : x;
+      if (!order || !order.id) throw new Error('Pesanan belum berhasil dibuat. Silakan coba lagi.');
       const r = await cloud.db.qrisBuat(order.id);
-      if (qris !== st) return;
       if (r && r.status === 'selesai') return qrisLunas();
-      st.g = r.percobaan; tampilQris();
-    } catch (err) {
-      if (qris !== st) return;
-      const b = $('#qris-box');
-      if (b) b.innerHTML = `<p class="msg err" role="alert">${esc(err.message)}</p><button class="btn" type="button" data-qris-baru>Coba lagi</button>`;
-      return;
-    }
-    st.tick = setInterval(() => {
-      if (!st.g) return;
-      const sisa = new Date(st.g.berlaku_sampai).getTime() - Date.now();
-      const el = $('#qr-sisa'); if (el) el.textContent = mmss(sisa);
-      if (sisa <= 0 && st.g.status === 'menunggu') { st.g = { ...st.g, status: 'lewat' }; tampilQris(); cekQris(false); }
-    }, 1000);
-    st.poll = setInterval(() => cekQris(false), 5000);
+      const g = r && r.percobaan;
+      if (!g || !snapSah(g.snap_url)) throw new Error('Halaman pembayaran belum tersedia. Silakan coba lagi.');
+      track('checkout_snap'); location.assign(g.snap_url);
+    } catch (err) { message = { text: online() ? err.message : OFFLINE }; busy(btn, false); render(); }
   }
   async function cekQris(paksa) {
     const st = qris;
     if (!st || st.cek) return;
-    if (!online()) { if (paksa) toast(OFFLINE); return; }
+    if (!online()) { if (paksa) toast(OFFLINE); if (!st.g) tampilQris(); return; }
     st.cek = true;
     try {
       const r = await cloud.db.qrisCek(st.order.id, paksa);
       if (qris !== st) return;
       if (r.pro || (r.pesanan && r.pesanan.status === 'selesai')) return qrisLunas();
       if (r.pesanan && r.pesanan.status !== 'baru') { hentikanQris(); render(); return; }
-      if (r.percobaan) {
-        const lama = st.g && st.g.status;
-        // Waktu habis di browser tetap dianggap habis walau server belum sempat mencatatnya.
-        st.g = r.percobaan.status === 'menunggu' && new Date(r.percobaan.berlaku_sampai).getTime() <= Date.now() ? { ...r.percobaan, status: 'lewat' } : r.percobaan;
-        if (lama !== st.g.status) tampilQris();
-        if (st.g.status !== 'menunggu') clearInterval(st.poll);
-      }
+      st.g = r.percobaan || null; tampilQris();
       if (paksa) toast(st.g && st.g.status === 'menunggu' ? 'Pembayaran belum kami terima. Bila sudah membayar, tunggu sebentar.' : 'Status pembayaran diperbarui.');
-    } catch (err) { if (paksa) toast(err.message); }
+      // Periksa ulang otomatis selama masih menunggu (maks. ±5 menit); sumber kebenaran tetap server/Midtrans.
+      clearTimeout(st.poll);
+      if (st.g && st.g.status === 'menunggu' && st.ke++ < 60) st.poll = setTimeout(() => cekQris(false), 5000);
+    } catch (err) { if (paksa) toast(err.message); else if (!st.g) { const b = $('#qris-box'); if (b) b.innerHTML = `<p class="msg err" role="alert">${esc(err.message)}</p>${tombolCek}`; } }
     finally { st.cek = false; }
   }
   async function aksiPro(btn, fn, sukses) {
@@ -563,8 +557,8 @@
       try { await cloud.auth.kirimTautan(cloud.auth.user().email, urlAktivasi()); toast('Tautan aktivasi dikirim. Periksa email Anda.'); } catch (err) { toast(err.message); }
       return busy(t, false);
     }
-    if (t.id === 'bayar-qris') return aksiPro(t, () => cloud.db.buatPesanan('qris'), '');
-    if (t.hasAttribute('data-qris-baru')) { if (qris) return mulaiQris(qris.order); return render(); }
+    if (t.id === 'bayar-qris') return bayarSnap(t, () => cloud.db.buatPesanan('qris'));
+    if (t.hasAttribute('data-qris-baru')) { if (qris) { const o = qris.order; return bayarSnap(t, async () => o); } return render(); }
     if (t.hasAttribute('data-qris-cek')) { busy(t, true, 'Mengecek…'); await cekQris(true); if (document.contains(t)) busy(t, false); return; }
     if (t.dataset.konfirmasi) return aksiPro(t, () => cloud.db.konfirmasiBayar(+t.dataset.konfirmasi, ($('#k-catatan') || {}).value || ''), 'Terima kasih. Kami akan memverifikasi pembayaran Anda.');
     if (t.dataset.batal) { if (!confirm('Batalkan pesanan ini? Jangan batalkan bila Anda sudah membayar.')) return; return aksiPro(t, () => cloud.db.batalkanPesanan(+t.dataset.batal), 'Pesanan dibatalkan.'); }

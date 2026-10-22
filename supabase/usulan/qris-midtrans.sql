@@ -70,6 +70,11 @@ create table if not exists public.pro_gateway_percobaan (
 );
 -- Satu QR terbuka per pesanan: QR baru hanya dibuat setelah QR lama selesai/kedaluwarsa (tanpa tagihan ganda).
 alter table public.pro_gateway_percobaan add column if not exists jumlah_diterima numeric;   -- nominal yang dilaporkan Midtrans
+-- Halaman Midtrans Snap (redirect) untuk percobaan ini; satu-satunya cara bayar di checkout (keputusan pemilik 22 Okt 2026).
+alter table public.pro_gateway_percobaan add column if not exists snap_url text;
+do $$ begin
+  alter table public.pro_gateway_percobaan add constraint pro_gateway_snap_url_https check (snap_url is null or (snap_url ~ '^https?://' and length(snap_url) <= 500));
+exception when duplicate_object then null; end $$;
 create unique index if not exists pro_gateway_satu_terbuka on public.pro_gateway_percobaan (order_id) where status in ('dibuat', 'menunggu');
 create index if not exists pro_gateway_percobaan_order on public.pro_gateway_percobaan (order_id, id desc);
 alter table public.pro_gateway_percobaan enable row level security;
@@ -152,7 +157,7 @@ begin
 end $$;
 
 -- 7. EDGE FUNCTION (rahasia gateway): simpan hasil pembuatan QR. Hanya mengubah percobaan berstatus 'dibuat'.
---    p_hasil: {ok, gateway_txn_id, qr_url, qr_string, pesan}
+--    p_hasil: {ok, gateway_txn_id, qr_url, qr_string, snap_url, pesan}. Snap: belum ada transaction_id sampai pembeli memilih QRIS.
 create or replace function public.gateway_simpan_qr(p_rahasia text, p_percobaan bigint, p_hasil jsonb)
 returns jsonb language plpgsql security definer set search_path = public, pg_temp as $$
 declare g public.pro_gateway_percobaan;
@@ -161,10 +166,10 @@ begin
   select * into g from public.pro_gateway_percobaan where id = p_percobaan for update;
   if not found then raise exception 'Percobaan tidak ditemukan'; end if;
   -- Notifikasi "pending" bisa tiba lebih dulu dan mengubah status ke 'menunggu' tanpa QR; QR tetap dilengkapi di sini.
-  if g.status not in ('dibuat', 'menunggu') or (g.status = 'menunggu' and g.qr_url is not null) then return to_jsonb(g); end if;
-  if coalesce((p_hasil ->> 'ok')::boolean, false) and coalesce(p_hasil ->> 'gateway_txn_id', '') <> '' then
-    update public.pro_gateway_percobaan set status = 'menunggu', gateway_txn_id = coalesce(gateway_txn_id, p_hasil ->> 'gateway_txn_id'),
-      qr_url = nullif(p_hasil ->> 'qr_url', ''), qr_string = nullif(p_hasil ->> 'qr_string', ''), updated_at = now()
+  if g.status not in ('dibuat', 'menunggu') or (g.status = 'menunggu' and (g.qr_url is not null or g.snap_url is not null)) then return to_jsonb(g); end if;
+  if coalesce((p_hasil ->> 'ok')::boolean, false) and (coalesce(p_hasil ->> 'gateway_txn_id', '') <> '' or coalesce(p_hasil ->> 'snap_url', '') <> '') then
+    update public.pro_gateway_percobaan set status = 'menunggu', gateway_txn_id = coalesce(gateway_txn_id, nullif(p_hasil ->> 'gateway_txn_id', '')),
+      qr_url = nullif(p_hasil ->> 'qr_url', ''), qr_string = nullif(p_hasil ->> 'qr_string', ''), snap_url = nullif(p_hasil ->> 'snap_url', ''), updated_at = now()
       where id = g.id returning * into g;
   elsif g.status = 'menunggu' then
     return to_jsonb(g);

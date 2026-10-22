@@ -94,13 +94,6 @@ export function midtrans(cfg, fetcher) {
   }
   const id = (o) => encodeURIComponent(o);
   return {
-    charge: (orderId, amount, menit) => panggil('POST', '/v2/charge', {
-      payment_type: 'qris',
-      transaction_details: { order_id: orderId, gross_amount: amount },
-      item_details: [{ ...PRODUK, price: amount, quantity: 1 }],
-      qris: { acquirer: 'gopay' },
-      custom_expiry: { expiry_duration: menit, unit: 'minute' },
-    }),
     status: (orderId) => panggil('GET', `/v2/${id(orderId)}/status`),
     cancel: (orderId) => panggil('POST', `/v2/${id(orderId)}/cancel`),
     refund: (orderId, refundKey, amount, reason) => panggil('POST', `/v2/${id(orderId)}/refund`, { refund_key: refundKey, amount, reason }),
@@ -187,6 +180,9 @@ async function sinkron(ctx, g, { batalkanBilaPending = false } = {}) {
   let st = await ctx.mt.status(g.gateway_order_id);
   if (tidakAda(st)) {
     if (g.status === 'dibuat') await ctx.rpc('gateway_simpan_qr', { p_rahasia: ctx.cfg.rahasia, p_percobaan: g.id, p_hasil: { ok: false, pesan: 'Tidak tercatat di penyedia pembayaran' } });
+    // Snap yang lewat waktu tanpa transaksi di Midtrans tidak bisa dibayar lagi = kedaluwarsa (sama dengan checkout tamu).
+    // Bila ternyata dibayar, notifikasi/Get Status settlement tetap diterapkan (status kedaluwarsa boleh menjadi lunas).
+    else if (batalkanBilaPending && g.snap_url) return ctx.rpc('gateway_terapkan_status', { p_rahasia: ctx.cfg.rahasia, p_status: { order_id: g.gateway_order_id, transaction_status: 'expire', refunds: [] } });
     return 'tidak_ada';
   }
   if (batalkanBilaPending && String(st.data.transaction_status) === 'pending') {
@@ -197,18 +193,11 @@ async function sinkron(ctx, g, { batalkanBilaPending = false } = {}) {
   if (!st.data.transaction_status) throw new GalatQris(502, 'Status pembayaran belum dapat dipastikan. Coba lagi sebentar.', `status tanpa transaction_status (${st.http})`);
   return ctx.rpc('gateway_terapkan_status', { p_rahasia: ctx.cfg.rahasia, p_status: ringkasStatus(st.data) });
 }
-/** URL gambar QR hanya diterima dari host API Midtrans (https); server tidak pernah mengambil URL ini (bukan SSRF),
- *  browser hanya memuatnya sebagai <img>. Mode mock (uji lokal) boleh memakai host tiruan. */
-export function urlQrSah(url, cfg) {
-  let u; try { u = new URL(String(url || '')); } catch (e) { return false; }
-  if (String(url).length > 500 || u.username || u.password) return false;
-  if (cfg.lingkungan === 'mock') return /^https?:$/.test(u.protocol);
-  return u.protocol === 'https:' && u.hostname === new URL(cfg.apiBase).hostname && (u.port === '' || u.port === '443');
-}
 const lewat = (g, ctx) => new Date(g.berlaku_sampai).getTime() <= ctx.now();
-const publik = (g) => g && { id: g.id, status: g.status, qr_url: g.qr_url, qr_string: g.qr_string, berlaku_sampai: g.berlaku_sampai, amount: g.amount, gateway_order_id: g.gateway_order_id, pesan: g.pesan };
+const publik = (g) => g && { id: g.id, status: g.status, snap_url: g.status === 'menunggu' ? g.snap_url || null : null, berlaku_sampai: g.berlaku_sampai, amount: g.amount, gateway_order_id: g.gateway_order_id, pesan: g.pesan };
 
-/** POST {pesanan} — pembeli (login). Mengembalikan QR yang berlaku, atau membuat QR baru bila yang lama sudah selesai. */
+/** POST {pesanan} — pembeli (login). Mengembalikan halaman Snap yang berlaku, atau membuat yang baru bila yang lama sudah selesai.
+ *  Satu percobaan terbuka per pesanan (database) → membuka ulang tidak membuat tagihan ganda. */
 export const handleBuat = bungkus('qris-buat', async (req, ctx) => {
   const { pesanan } = await bodyJson(req);
   const p_order = idPesanan(pesanan);
@@ -221,26 +210,23 @@ export const handleBuat = bungkus('qris-buat', async (req, ctx) => {
   if (m.aksi === 'selesai') return { status: 'selesai' };
   const g = m.percobaan;
   if (m.aksi === 'pakai') {
-    if (g.status === 'dibuat') throw new GalatQris(409, 'QR sedang dibuat. Coba lagi beberapa detik lagi.');
+    if (g.status === 'dibuat') throw new GalatQris(409, 'Halaman pembayaran sedang disiapkan. Coba lagi beberapa detik lagi.');
     return { status: 'menunggu', percobaan: publik(g) };
   }
-  // aksi 'baru': buat charge. Nominal & masa berlaku dari database, bukan dari browser.
+  // aksi 'baru': buat transaksi Snap (QRIS saja). Nominal & masa berlaku dari database, bukan dari browser.
   const menit = Math.max(1, Math.round((new Date(g.berlaku_sampai).getTime() - ctx.now()) / 60000)) || m.qr_menit;
+  if (!ctx.cfg.situs) throw new GalatQris(503, 'Pembayaran otomatis belum dikonfigurasi.', 'SITE_URL/ALLOWED_ORIGINS kosong');
   let hasil;
   try {
-    const r = await ctx.mt.charge(g.gateway_order_id, g.amount, menit);
-    const d = r.data;
-    const qr = Array.isArray(d.actions) && d.actions.find((a) => a && a.name === 'generate-qr-code');
-    const ok = String(d.status_code) === '201' && d.transaction_status === 'pending' && d.transaction_id && Number(d.gross_amount) === g.amount;
-    hasil = ok ? { ok: true, gateway_txn_id: String(d.transaction_id), qr_url: urlQrSah(qr && qr.url, ctx.cfg) ? qr.url : '', qr_string: typeof d.qr_string === 'string' ? d.qr_string.slice(0, 1000) : '' }
-      : { ok: false, pesan: `Ditolak penyedia (${String(d.status_code || r.http).slice(0, 10)})` };
+    const r = await ctx.mt.snap(g.gateway_order_id, g.amount, menit, `${ctx.cfg.situs}/akun?view=pro`);
+    hasil = r.http === 201 && r.data.token && urlSnapSah(r.data.redirect_url, ctx.cfg)
+      ? { ok: true, snap_url: r.data.redirect_url } : { ok: false, pesan: `Ditolak penyedia (${r.http})` };
   } catch (e) {
-    // Hasil tidak pasti (jaringan/batas waktu): tandai gagal. Bila ternyata tercatat lalu dibayar, notifikasi tetap
-    // diterapkan ke percobaan ini (status gagal masih boleh menjadi lunas).
+    // Hasil tidak pasti: tandai gagal. Snap tanpa pilihan QRIS tidak bisa dibayar; bila sempat dibayar, notifikasi tetap diterapkan.
     hasil = { ok: false, pesan: 'Gagal menghubungi penyedia pembayaran' };
   }
   const simpan = await ctx.rpc('gateway_simpan_qr', { p_rahasia: ctx.cfg.rahasia, p_percobaan: g.id, p_hasil: hasil });
-  if (simpan.status !== 'menunggu') throw new GalatQris(502, 'QR belum berhasil dibuat. Silakan coba lagi.', simpan.pesan);
+  if (simpan.status !== 'menunggu') throw new GalatQris(502, 'Halaman pembayaran belum berhasil dibuat. Silakan coba lagi.', simpan.pesan);
   return { status: 'menunggu', percobaan: publik(simpan) };
 }, { butuhLogin: true });
 

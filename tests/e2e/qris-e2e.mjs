@@ -90,13 +90,14 @@ try {
   const pro = async (uid) => (await satu(`select pro_sekali_bayar from public.profiles where id = '${uid}'`)) === 't';
   const jml = (sql) => satu(sql).then(Number);
 
-  // E1 buat QR, panggil ulang → QR yang sama (tanpa charge kedua)
+  // E1 checkout login → Snap; panggil ulang → Snap yang sama (tanpa tagihan ganda)
   const oA = await pesan(U.a);
   let r = await panggil(Q.handleBuat, { pesanan: oA, amount: 1 }, U.a);
   const gA = r.body.percobaan;
-  cek(r.status === 200 && gA.status === 'menunggu' && /qr-code$/.test(gA.qr_url) && gA.amount === 149000, `E1 QR dibuat (Rp149.000 dari server, amount browser diabaikan) ${r.status}`);
+  cek(r.status === 200 && gA.status === 'menunggu' && /snap\/v4\/redirection/.test(gA.snap_url) && gA.amount === 149000 && mt.trx.get(gA.gateway_order_id).body.enabled_payments.join() === 'other_qris', `E1 Snap QRIS dibuat (Rp149.000 dari server, amount browser diabaikan) ${r.status}`);
   r = await panggil(Q.handleBuat, { pesanan: oA }, U.a);
-  cek(r.body.percobaan.id === gA.id && mt.trx.size === 1, 'E2 permintaan ulang memakai QR yang sama, 1 charge di Midtrans');
+  cek(r.body.percobaan.id === gA.id && r.body.percobaan.snap_url === gA.snap_url && mt.trx.size === 1, 'E2 Lanjutkan pembayaran memakai Snap yang sama, 1 transaksi di Midtrans');
+  mt.pilihQris(gA.gateway_order_id);
   // E3 notifikasi pending tidak mengaktifkan
   r = await notifikasi(gA.gateway_order_id);
   cek(r.status === 200 && !(await pro(U.a)), 'E3 notifikasi pending: Pro belum aktif');
@@ -117,7 +118,7 @@ try {
 
   // E9 QR kedaluwarsa → QR baru tanpa tagihan ganda; QR lama dibatalkan di Midtrans
   const oB = await pesan(U.b);
-  const g1 = (await panggil(Q.handleBuat, { pesanan: oB }, U.b)).body.percobaan;
+  const g1 = (await panggil(Q.handleBuat, { pesanan: oB }, U.b)).body.percobaan; mt.pilihQris(g1.gateway_order_id);
   await satu(`update public.pro_gateway_percobaan set berlaku_sampai = now() - interval '1 minute' where id = ${g1.id}`);
   r = await panggil(Q.handleBuat, { pesanan: oB }, U.b);
   cek(r.status === 200 && r.body.percobaan.gateway_order_id.endsWith('-2') && mt.trx.get(g1.gateway_order_id).status === 'cancel'
@@ -128,12 +129,22 @@ try {
   r = await panggil(Q.handleCek, { pesanan: oB, paksa: true }, U.b);
   cek(r.body.pro === true && await pro(U.b), 'E11 tanpa notifikasi: tombol cek/polling mengaktifkan lewat Get Status');
 
-  // E12 nominal tidak cocok
   const oC = await pesan(U.c);
+  // E9b Snap ditutup tanpa memilih QRIS lalu lewat waktu (Get Status 404) → kedaluwarsa; Snap baru untuk pesanan yang sama
+  const c1 = (await panggil(Q.handleBuat, { pesanan: oC }, U.c)).body.percobaan;
+  await satu(`update public.pro_gateway_percobaan set berlaku_sampai = now() - interval '1 minute' where id = ${c1.id}`);
+  r = await panggil(Q.handleCek, { pesanan: oC }, U.c);
+  cek(r.status === 200 && r.body.percobaan.status === 'kedaluwarsa' && !r.body.percobaan.snap_url, 'E9b Snap lewat waktu tanpa transaksi → kedaluwarsa, tautan lanjutkan disembunyikan');
   const gC = (await panggil(Q.handleBuat, { pesanan: oC }, U.c)).body.percobaan;
+  cek(gC.gateway_order_id.endsWith('-2') && (await jml(`select count(*) from public.upgrade_requests where user_id = '${U.c}'`)) === 1, 'E9c bayar ulang: Snap baru -2 pada pesanan yang sama');
+  // E12 nominal tidak cocok
   mt.bayar(gC.gateway_order_id, { gross: 1000 });
   r = await notifikasi(gC.gateway_order_id);
   cek(r.body.hasil === 'perlu_cek' && !(await pro(U.c)) && (await satu(`select status from public.upgrade_requests where id = ${oC}`)) === 'perlu_cek', 'E12 nominal tidak cocok: perlu_cek, Pro tidak aktif');
+  // E9d webhook terlambat: Snap pertama (sudah ditandai kedaluwarsa) ternyata dibayar penuh → tetap diterapkan, dana tidak hangus
+  mt.bayar(c1.gateway_order_id);
+  r = await notifikasi(c1.gateway_order_id);
+  cek(r.status === 200 && await pro(U.c) && (await satu(`select status from public.pro_gateway_percobaan where id = ${c1.id}`)) === 'lunas', `E9d webhook terlambat untuk Snap kedaluwarsa → lunas, Pro aktif (${JSON.stringify(r.body)})`);
 
   // E13 database mati saat notifikasi → 503 (Midtrans kirim ulang); setelah pulih → diterapkan
   const oD = await pesan(U.d);
@@ -218,7 +229,7 @@ try {
   cek(r.body.hasil === 'perlu_cek' && (await jml(`select count(*) from public.pro_payments where note like '%${k4}%'`)) === 0, 'G15 nominal salah → perlu_cek, tidak masuk buku besar, tanpa email');
   cek(!otp.some((o) => o.body.email === 'nominal@e2e.id'), 'G16 tidak ada tautan aktivasi untuk pembayaran tidak sah');
   cek(!logs.join('\n').includes(RAHASIA) && !logs.join('\n').includes(mt.serverKey), 'E21 log Edge Function tanpa server key/rahasia');
-  cek((await jml(`select count(*) from public.pro_payments where sumber = 'midtrans' and kind = 'pembayaran' and note not like 'Checkout tamu%'`)) === 3, 'E22 buku besar: 3 pembayaran sah (A, B, D); nominal tidak cocok (C) tidak tercatat');
+  cek((await jml(`select count(*) from public.pro_payments where sumber = 'midtrans' and kind = 'pembayaran' and note not like 'Checkout tamu%'`)) === 4, 'E22 buku besar: 4 pembayaran sah (A, B, C terlambat, D); nominal tidak cocok (C-2) tidak tercatat');
 } catch (e) { gagal++; console.log('GAGAL (galat)', e.message); }
 finally {
   mt.server.close(); bridge.close();
