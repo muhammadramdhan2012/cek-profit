@@ -267,10 +267,10 @@ export function tokenTamu(v) {
   return hex(crypto.getRandomValues(new Uint8Array(32)));
 }
 /** Penanda peminta untuk batas penyalahgunaan: HMAC-SHA256(GATEWAY_SECRET, IP) 32 hex; IP mentah tidak disimpan.
- *  IP dibaca dari X-Forwarded-For (entri pertama) dan DIANGGAP PETUNJUK, bukan identitas: bila dipalsukan, batas
- *  global di database tetap berlaku, dan batas ini tidak pernah dikaitkan ke email pembeli. */
+ *  Hanya CF-Connecting-IP (ditimpa Cloudflare di depan Supabase). X-Forwarded-For TIDAK dipakai: entri pertamanya bisa
+ *  dikirim klien sendiri. Tanpa header ini peminta = null dan hanya batas global yang berlaku (perlu dicek di staging). */
 export async function pemintaDari(req, rahasia) {
-  const ip = String(req.headers.get('x-forwarded-for') || '').split(',')[0].trim();
+  const ip = String(req.headers.get('cf-connecting-ip') || '').trim();
   if (!ip || ip.length > 64 || !/^[0-9a-fA-F:.]+$/.test(ip)) return null;
   const k = await crypto.subtle.importKey('raw', new TextEncoder().encode(rahasia), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
   return hex(await crypto.subtle.sign('HMAC', k, new TextEncoder().encode(`peminta:${ip}`))).slice(0, 32);

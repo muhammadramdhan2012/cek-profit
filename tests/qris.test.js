@@ -222,8 +222,8 @@ const JWT = 'eyJ.uji.pembeli';
     const t0 = { id: 12, kode: 'CT-TOKN0001', amount: 149000, status: 'menunggu', snap_url: 'https://app.sandbox.midtrans.com/snap/v4/redirection/t', berlaku_sampai: new Date(Date.now() + 9e5).toISOString(), email: 'x@y.id' };
     const d = db({ tamu_buat_pesanan: () => ({ aksi: 'pakai', pesanan: t0 }) });
     const tok = 'ab'.repeat(32);
-    const kirim = (body, xff) => new Request('https://fungsi.uji/x', { method: 'POST', headers: { 'Content-Type': 'application/json', ...(xff ? { 'X-Forwarded-For': xff } : {}) }, body: JSON.stringify(body) });
-    let r = await baca(await Q.handleTamuCheckout(kirim({ nama: 'Ani', email: 'x@y.id', token: tok }, '203.0.113.7, 10.0.0.1'), deps(d.fetcher)));
+    const kirim = (body, ip, xff) => new Request('https://fungsi.uji/x', { method: 'POST', headers: { 'Content-Type': 'application/json', ...(ip ? { 'CF-Connecting-IP': ip } : {}), ...(xff ? { 'X-Forwarded-For': xff } : {}) }, body: JSON.stringify(body) });
+    let r = await baca(await Q.handleTamuCheckout(kirim({ nama: 'Ani', email: 'x@y.id', token: tok }, '203.0.113.7', '198.51.100.1'), deps(d.fetcher)));
     const a = d.calls[0].args;
     truthy(r.status === 200 && r.body.token === tok && a.p_token_hash === require('crypto').createHash('sha256').update(tok).digest('hex'), 'token sah dipakai ulang');
     truthy(/^[0-9a-f]{32}$/.test(a.p_peminta) && !JSON.stringify(d.calls).includes('203.0.113.7'), 'peminta = HMAC 32 hex, IP mentah tidak dikirim ke database');
@@ -231,6 +231,10 @@ const JWT = 'eyJ.uji.pembeli';
     truthy(r.body.token !== 'bukan-token' && /^[0-9a-f]{64}$/.test(r.body.token) && d.calls[1].args.p_peminta === a.p_peminta, 'token tidak sah diganti token baru; IP sama → peminta sama');
     r = await baca(await Q.handleTamuCheckout(kirim({ nama: 'Ani', email: 'x@y.id' }, '<script>'), deps(d.fetcher)));
     truthy(d.calls[2].args.p_peminta === null, 'header IP tidak wajar → peminta null (hanya batas global)');
+    await Q.handleTamuCheckout(kirim({ nama: 'Ani', email: 'x@y.id' }, null, '203.0.113.7'), deps(d.fetcher));
+    truthy(d.calls[3].args.p_peminta === null, 'X-Forwarded-For (bisa dipalsukan klien) diabaikan');
+    await Q.handleTamuCheckout(kirim({ nama: 'Ani', email: 'x@y.id' }, '203.0.113.7', '1.2.3.4, 203.0.113.7'), deps(d.fetcher));
+    truthy(d.calls[4].args.p_peminta === a.p_peminta, 'XFF palsu tidak mengubah penanda peminta');
   });
 
   await t('Notifikasi checkout tamu lunas → tautan aktivasi (OTP Supabase, anon key); gagal kirim tetap 200 dan tercatat', async () => {
