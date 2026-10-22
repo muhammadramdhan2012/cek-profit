@@ -747,7 +747,10 @@ test('AUTH-V3 form: placeholder, kolom daftar lengkap, konfirmasi sandi, masuk t
 });
 test('AUTH-V3 privasi data: sandi tidak masuk draft/profil/log; nomor hanya ke metadata lalu profiles.whatsapp', () => {
   const ak = src('akun.js'), cl = src('cloud.js');
-  truthy(/const DRAFT_IDS = \['em', 'nm', 'hp'\];/.test(ak), 'draft tanpa kata sandi');
+  // tm-wa = WhatsApp opsional checkout tamu. Setiap kolom draft harus bukan kolom kata sandi.
+  truthy(/const DRAFT_IDS = \['em', 'nm', 'hp', 'tm-wa'\];/.test(ak), 'draft hanya email, nama, nomor HP/WA');
+  const pwIds = [...ak.matchAll(/pwField\('([\w-]+)'/g)].map((m) => m[1]).concat([...ak.matchAll(/id="([\w-]+)"[^>]*type="password"|type="password"[^>]*id="([\w-]+)"/g)].map((m) => m[1] || m[2]));
+  truthy(pwIds.length > 0 && ['em', 'nm', 'hp', 'tm-wa'].every((id) => !pwIds.includes(id) && !/pw|sandi/i.test(id)), `draft tanpa kata sandi (kolom sandi: ${pwIds.join(',')})`);
   truthy(!/console\.(log|info|debug|warn)/.test(ak + cl + src('aturan-akun.js') + src('situs.js')), 'tanpa log');
   truthy(/const data = \{ full_name: fullName \|\| '' \};\s*if \(whatsapp\) data\.whatsapp = whatsapp;/.test(cl), 'metadata daftar: nama + nomor saja');
   truthy(/if \(!saved \|\| saved\.whatsapp !== n\.nilai\) return \{ status: 'gagal', nomor \};/.test(ak), 'salin: hasil dicek dari respons server');
