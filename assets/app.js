@@ -106,7 +106,7 @@
   let demo = false;
   let license = { ok: false };
   let viewName = 'ringkasan';
-  const view = { openSec: {}, section: 'unggah', platform: 'all', from: '', to: '', metric: 'margin', q: '', sort: 'margin', showAll: false, onlyCheck: true, costQ: '', costAll: false, compare: null, typeOpen: false, prodFilter: 'all', prodKey: null, platCol: 'total' };
+  const view = { openSec: {}, section: 'unggah', platform: 'all', from: '', to: '', metric: 'margin', q: '', sort: 'margin', showAll: false, onlyCheck: true, costQ: '', costAll: false, compare: null, typeOpen: false, prodFilter: 'all', prodKey: null, platCol: 'total', mp: '' };
   const sim = { listPrice: null, disc: null, cost: null, feePct: null, feeFixed: null, src: null, plat: null, status: 'nonmall', kat: null, opsi: [], afiliasi: 0 };
   let last = null;
   const cloud = CekCloud.init({ url: C.supabaseUrl, key: C.supabaseAnonKey });
@@ -1308,6 +1308,104 @@
         <span class="ic">${typeIcon(k)}</span><span><b>${t.label}</b><span>${t.desc}</span></span></button>`).join('')}</div>
       ${cur ? '<div><button class="btn sm quiet" type="button" data-type-close>Batal</button></div>' : ''}</section>`;
   }
+  /* ---------- Pusat Data Marketplace ----------
+   * Peta jenis laporan per marketplace dan kategori. Hanya jenis yang punya parser di engine yang bisa diunggah;
+   * sisanya ditampilkan jujur sebagai "Memerlukan sampel data" (tanpa parser, tanpa angka). Status unggah diambil dari
+   * hasil parser dan engine (files, last.all.jejakUang), bukan dihitung ulang di sini. */
+  const MP_NAMA = { shopee: 'Shopee', tiktok: 'TikTok Shop', tokopedia: 'Tokopedia', lazada: 'Lazada' };
+  const KATEGORI = [
+    ['income', 'Penghasilan dan biaya marketplace', 'Sumber penjualan, potongan marketplace, dan dana diterima. Wajib untuk analisis laba.'],
+    ['orders', 'Penjualan dan pesanan', 'Jumlah barang, SKU, dan variasi tiap pesanan agar modal per produk lebih tepat. Tidak menambah penjualan.'],
+    ['ads', 'Iklan dan promosi', 'Biaya iklan dan promosi di luar potongan per pesanan.'],
+    ['return', 'Retur dan refund', 'Kasus retur dan refund, termasuk barang yang tidak kembali.'],
+    ['balance', 'Saldo marketplace', 'Mutasi saldo penjual.'],
+    ['payout', 'Penarikan atau pencairan dana', 'Dana yang dipindahkan ke rekening Anda.'],
+    ['product', 'Produk, SKU, variasi, dan stok', 'Daftar produk dan stok dari Seller Centre.'],
+    ['modal', 'Modal, HPP, dan biaya tambahan', 'Modal per produk lewat template Cek Untung. Biaya tetap dan packing diisi di Pengaturan.'],
+  ];
+  const DUK = {   // st: ok | beta | via | ignored | need | na
+    ok: ['ok', 'Didukung'], beta: ['beta', 'Beta'], via: ['via', 'Lewat TikTok Shop'], ignored: ['ign', 'Dikenali, tidak dipakai'],
+    need: ['need', 'Memerlukan sampel data'], na: ['need', 'Belum berlaku'] };
+  const PERLU = { st: 'need' };
+  const BETA_EXPORT = 'Format export marketplace dapat berubah. Hasil pencocokan ditandai bila belum dapat diverifikasi.';
+  const MODAL_SUP = { st: 'ok', kind: 'modal_template', fmt: '.xlsx / .csv', how: 'Unduh template di bagian Modal & HPP, isi, lalu unggah kembali.' };
+  const SUMBER = {
+    shopee: {
+      income: { st: 'ok', kind: 'shopee_income', fmt: '.xlsx', how: 'Keuangan › Penghasilan Saya › tab Sudah Dilepas › Unduh' },
+      orders: { st: 'beta', kind: 'shopee_orders', fmt: '.xlsx', how: 'Pesanan Saya › Export', note: BETA_EXPORT },
+      ads: { st: 'need', note: 'Laporan iklan belum dibaca. Agar tidak terhitung dua kali, biaya iklan bisa dicatat sebagai biaya tetap di Pengaturan.' },
+      return: { st: 'ok', kind: 'shopee_return', fmt: '.xlsx' },
+      balance: { st: 'ignored', kind: 'shopee_balance', fmt: '.xlsx', note: 'File saldo dikenali tetapi tidak dipakai dalam laba: isinya memuat pencairan dan mutasi yang bukan penjualan.' },
+      payout: { st: 'need', note: 'Pencairan dana tidak pernah dihitung sebagai penjualan.' },
+      product: PERLU, modal: MODAL_SUP,
+    },
+    tiktok: {
+      income: { st: 'ok', kind: 'tiktok_income', fmt: '.xlsx', how: 'Keuangan › Transaksi › Unduh (pesanan Tokopedia ikut di sini)' },
+      orders: { st: 'beta', kind: 'tiktok_orders', fmt: '.csv', how: 'Pesanan › Kelola pesanan › Ekspor', note: BETA_EXPORT },
+      ads: { st: 'need', note: 'Laporan iklan belum dibaca. Agar tidak terhitung dua kali, biaya iklan bisa dicatat sebagai biaya tetap di Pengaturan.' },
+      return: { st: 'ok', kind: 'tiktok_return', fmt: '.csv' },
+      balance: PERLU, payout: { st: 'need', note: 'Pencairan dana tidak pernah dihitung sebagai penjualan.' }, product: PERLU, modal: MODAL_SUP,
+    },
+    tokopedia: {
+      income: { st: 'via', note: 'Pesanan bersumber Tokopedia terbaca dari Laporan Penghasilan TikTok Shop. Jangan unggah laporan Tokopedia terpisah untuk pesanan yang sama.' },
+      orders: PERLU, ads: PERLU, return: PERLU,
+      balance: PERLU, payout: PERLU, product: PERLU, modal: MODAL_SUP,
+    },
+    lazada: { income: PERLU, orders: PERLU, ads: PERLU, return: PERLU, balance: PERLU, payout: PERLU, product: PERLU,
+      modal: { st: 'na', note: 'Berlaku setelah laporan Lazada didukung.' } },
+  };
+  /** Status unggah & validasi satu kategori: dari file yang terbaca (kind) dan rekonsiliasi engine. */
+  function statusKategori(pf, cat, sup) {
+    const ok1 = files.filter((f) => !f.error && f.kind === sup.kind);
+    const salah = files.filter((f) => f.expect === sup.kind && f.kind !== sup.kind);
+    const bits = [];
+    if (salah.length) bits.push(`<span class="warn">${num(salah.length)} file yang dipilih di sini bukan ${esc(KIND[sup.kind] ? KIND[sup.kind][1] : 'jenis ini')}</span>`);
+    if (!sup.kind || sup.st === 'via') return bits.join(' · ');
+    if (!ok1.length) return bits.length ? bits.join(' · ') : '<span class="faint">Belum ada file</span>';
+    bits.unshift(`<span class="ok">${num(ok1.length)} file terbaca</span>`);
+    if (sup.st === 'ignored') bits.push('tidak masuk perhitungan');
+    if (cat === 'income') {
+      const J = last && last.all && last.all.jejakUang && last.all.jejakUang.marketplace && last.all.jejakUang.marketplace[pf];
+      const cocok = ok1.filter((f) => { const p = f.parsed; const ref = pf === 'shopee' ? p.check.summaryTotal : p.check.reportSettle; return ref !== null && Math.abs(ref - p.check.sum) <= 1; }).length;
+      bits.push(cocok === ok1.length ? 'cocok dengan ringkasan resmi' : `<span class="warn">${num(ok1.length - cocok)} file tidak cocok atau tanpa ringkasan</span>`);
+      if (J && J.file && J.file.identik) bits.push(`${num(J.file.identik)} file sama diabaikan`);
+      if (J && J.gabungan) {
+        if (J.gabungan.ditahan) bits.push(`<span class="warn">${num(J.gabungan.ditahan)} transaksi berbeda antarlaporan ditahan</span>`);
+        else if (J.gabungan.duplikatDiabaikan) bits.push(`${num(J.gabungan.duplikatDiabaikan)} baris yang sama di beberapa laporan dihitung sekali`);
+        if (J.gabungan.status === 'periode_perlu_dicek') bits.push('<span class="warn">periode perlu dicek</span>');
+      }
+    }
+    return bits.join(' · ');
+  }
+  function pusatData() {
+    const ada = (k) => files.some((f) => f.kind && f.kind.startsWith(k));
+    const mp = view.mp || (ada('tiktok') && !ada('shopee') ? 'tiktok' : 'shopee');
+    const aktif = KATEGORI.filter(([cat]) => SUMBER[mp][cat].st !== 'need' && SUMBER[mp][cat].st !== 'na');
+    const belum = KATEGORI.filter(([cat]) => !aktif.some(([c]) => c === cat));
+    const baris = aktif.map(([cat, nama, guna]) => {
+      const sup = SUMBER[mp][cat];
+      const [cls, lbl] = DUK[sup.st];
+      const bisa = !demo && sup.kind && ['ok', 'beta'].includes(sup.st);
+      const id = `in-${mp}-${cat}`;
+      const st = statusKategori(mp, cat, sup);
+      return `<li class="pd-k pd-${cls}">
+        <div class="pd-h"><b>${nama}</b><span class="pd-st ${cls}">${lbl}</span></div>
+        <p class="pd-guna">${guna}</p>
+        ${sup.how || sup.fmt ? `<p class="pd-meta">${sup.how ? `<span><span class="pd-l">Cara unduh</span> ${esc(sup.how)}</span>` : ''}${sup.fmt ? `<span><span class="pd-l">Format</span> ${esc(sup.fmt)}</span>` : ''}</p>` : ''}
+        ${sup.note ? `<p class="pd-note">${esc(sup.note)}</p>` : ''}
+        ${bisa || st ? `<div class="pd-foot">${st ? `<span class="pd-v">${st}</span>` : '<span></span>'}${bisa ? `<label class="btn sm" for="${id}">Pilih file</label><input id="${id}" type="file" multiple accept="${sup.fmt && sup.fmt.includes('.csv') && !sup.fmt.includes('.xlsx') ? '.csv' : '.xlsx,.xls,.csv'}" data-expect="${sup.kind}" hidden>` : ''}</div>` : ''}
+      </li>`;
+    }).join('');
+    return `<section class="panel pusat-data" aria-labelledby="pd-t">
+      <div class="panel-head" style="margin-bottom:10px"><h3 id="pd-t">Pusat Data Marketplace</h3><p>Pilih marketplace, lalu unggah laporan sesuai kategorinya. Jenis file tetap dikenali dari isinya, bukan dari nama file.</p></div>
+      <div class="pd-mp" role="tablist" aria-label="Marketplace">${Object.entries(MP_NAMA).map(([k, l]) => `<button type="button" role="tab" aria-selected="${mp === k}" data-mp="${k}"><i class="sw ${k}" aria-hidden="true"></i>${l}</button>`).join('')}</div>
+      <div role="tabpanel" aria-label="Kategori laporan ${MP_NAMA[mp]}" class="pd-panel">
+        ${aktif.length ? `<ul class="pd-list">${baris}</ul>` : `<p class="pd-kosong">Laporan ${MP_NAMA[mp]} belum bisa dibaca. Kami memerlukan sampel file ekspor asli sebelum membuat pembacanya, agar tidak menghasilkan angka yang salah.</p>`}
+        ${belum.length ? `<details class="pd-lain" ${aktif.length ? '' : 'open'}><summary>${num(belum.length)} kategori belum didukung untuk ${MP_NAMA[mp]}</summary><ul>${belum.map(([cat, nama, guna]) => { const sup = SUMBER[mp][cat]; const [cls, lbl] = DUK[sup.st]; return `<li><div class="pd-h"><b>${nama}</b><span class="pd-st ${cls}">${lbl}</span></div><p class="pd-guna">${guna}</p>${sup.note ? `<p class="pd-note">${esc(sup.note)}</p>` : ''}</li>`; }).join('')}</ul></details>` : ''}
+      </div>
+      <p class="tiny faint">Hanya kategori berstatus Didukung atau Beta yang masuk perhitungan. Kategori "Memerlukan sampel data" belum punya pembaca file dan tidak menghasilkan angka. Unduh semua laporan untuk periode yang sama.</p>
+    </section>`;
+  }
   function viewData() {
     const s = st();
     const r = last && last.all;
@@ -1319,14 +1417,12 @@
     const steps = [['Jenis usaha', !!type, 'cara modal dihitung'], ['Laporan penghasilan', hasIncome || demo, 'wajib, dari Seller Centre'],
       ['Modal & HPP', !!(r && r.totalSales && r.coverage >= 0.98), r && r.totalSales ? `${pct(r.coverage, 0)} penjualan punya modal` : 'agar laba bisa dihitung'], ['Biaya & target', !!((s.fixedCosts || []).length || ok(s.packing)), 'opsional']];
     const sec = view.section || 'unggah';
-    const SUP = [['Wajib', 'req', [['shopee', 'Shopee', 'Laporan Penghasilan', 'Keuangan › Penghasilan Saya › tab Sudah Dilepas › Unduh'], ['tiktok', 'TikTok Shop', 'Laporan Penghasilan', 'Keuangan › Transaksi › Unduh (pesanan Tokopedia ikut di sini)']]],
-      ['Disarankan', 'rec', [['shopee', 'Shopee', 'Export pesanan', 'Pesanan Saya › Export, untuk jumlah barang dan SKU', true], ['tiktok', 'TikTok Shop', 'Export pesanan', 'Pesanan › Kelola pesanan › Ekspor', true]]],
-      ['Opsional', 'opt', [['', 'Shopee / TikTok', 'File retur atau pengembalian', 'untuk menandai barang yang tidak kembali'], ['modal', 'Cek Untung', 'Template modal terisi', 'diunduh dari bagian Modal & HPP']]]];
     return `
       ${demo ? '<p class="note-box warn">Mode contoh memakai data dan modal Toko Contoh Sejahtera. Unggah file Anda untuk mulai; data contoh akan diganti.</p>' : ''}
       <ol class="setup-steps" aria-label="Langkah persiapan">${steps.map(([t, done, d], i) => `<li class="${done ? 'done' : ''}"><span class="ss-n" aria-hidden="true">${done ? '✓' : i + 1}</span><span><b>${t}</b><small>${done ? 'selesai' : d}</small></span><span class="sr-only">${done ? 'selesai' : 'belum'}</span></li>`).join('')}</ol>
       <nav class="sec-tabs" aria-label="Bagian halaman data">${[['unggah', 'Unggah data'], ['modal', 'Modal & HPP'], ['pengaturan', 'Pengaturan']].map(([k, l]) => `<button type="button" data-go="data" data-section="${k}" ${sec === k ? 'aria-current="true"' : ''}>${l}</button>`).join('')}</nav>
       ${!demo && (!type || view.typeOpen) ? typePicker(type) : ''}
+      ${pusatData()}
       <div class="grid-2 data-grid" style="align-items:start">
         <section class="stack" id="sec-unggah" aria-label="Data penghasilan">
           <div class="grp-head"><span class="grp-n" aria-hidden="true">1</span><b>Data penghasilan</b><span class="badge todo">Wajib</span><span class="tiny faint grp-sub">Laporan Penghasilan dari Seller Centre: sumber penjualan, potongan, dan dana diterima.</span></div>
@@ -1337,9 +1433,6 @@
           <ul class="files" id="file-list"></ul>
           <div id="upload-status" aria-live="polite"></div>
           ${files.length ? '<div><button class="btn sm quiet danger" type="button" id="clear-btn">Hapus semua file</button></div>' : ''}
-          <section class="panel sup" aria-labelledby="sup-h"><div class="panel-head" style="margin:0 0 4px"><h3 id="sup-h">Laporan yang didukung</h3><p>Unduh untuk periode yang sama di semua laporan</p></div>
-            ${SUP.map(([lvl, cls, items]) => `<div class="sup-g ${cls}"><span class="sup-lvl">${lvl}</span><ul>${items.map(([p, pl, t, how, beta]) => `<li><span class="sup-plat">${p ? `<i class="sw" style="background:var(--${p === 'modal' ? 'accent' : p})"></i>` : ''}${pl}</span><b>${t}${beta ? ' <span class="beta-tag" title="Belum diuji dengan semua format file asli">Beta</span>' : ''}</b><small>${how}</small></li>`).join('')}${cls === 'rec' ? '<li class="beta-note">Format export marketplace dapat berubah. Hasil pencocokan ditandai bila belum dapat diverifikasi.</li>' : ''}</ul></div>`).join('')}
-            <p class="tiny faint">Jenis file dikenali dari nama sheet dan kolom di dalamnya, bukan dari nama file. Nama menu di Seller Centre bisa sedikit berubah dari waktu ke waktu.</p></section>
         </section>
         <section class="panel modal-panel" id="sec-modal" aria-label="Modal dan HPP">
           <div class="panel-head" style="margin:0"><h3><span class="grp-n" aria-hidden="true">2</span>${type === 'produsen' ? 'Modal produksi (HPP)' : 'Modal barang / HPP'}${qi('modal')} <span class="badge todo">Wajib untuk laba</span></h3>${r && r.totalSales ? `<span class="badge ${r.coverage >= 0.98 ? 'ok' : 'todo'}">${r.coverage >= 0.98 ? 'Lengkap' : `${pct(r.coverage, 0)} penjualan`}</span>` : ''}</div>
@@ -1539,19 +1632,24 @@
       try {
         if (!window.XLSX) throw new Error('Pembaca Excel gagal dimuat. Muat ulang halaman.');
         const wbx = isCsv ? XLSX.read(reader.result, { type: 'string', raw: true }) : XLSX.read(new Uint8Array(reader.result), { type: 'array' });
-        const parsed = Engine.parseWorkbook({ name: file.name, sheets: Engine.sheetsFromSheetJS(XLSX, wbx) });
+        const sheets = Engine.sheetsFromSheetJS(XLSX, wbx);
+        // File tanpa satu pun sel berisi: beri tahu terus terang, jangan dianggap laporan dengan nilai nol.
+        const isi = Object.values(sheets).some((rows) => (rows || []).some((r) => (r || []).some((c) => c !== null && c !== undefined && String(c).trim() !== '')));
+        if (!isi) { resolve({ name: file.name, kind: 'unknown', error: 'File kosong: tidak ada data yang bisa dibaca.' }); return; }
+        const parsed = Engine.parseWorkbook({ name: file.name, sheets });
         resolve({ name: file.name, kind: parsed.kind, parsed });
       } catch (err) { resolve({ name: file.name, kind: 'unknown', error: err.message || 'File tidak bisa dibaca.' }); }
     };
     reader.onerror = () => resolve({ name: file.name, kind: 'unknown', error: 'File tidak bisa dibaca.' });
     if (isCsv) reader.readAsText(file, 'utf-8'); else reader.readAsArrayBuffer(file);
   });
-  async function addFiles(list) {
+  async function addFiles(list, expect = '') {
     if (!list || !list.length) return;
     if (demo) { demo = false; files = []; resetView(); }
     const fl = $('#file-list'); if (fl) fl.insertAdjacentHTML('beforeend', `<li class="file small muted">Membaca ${list.length} file…</li>`);
     toast(`Membaca ${list.length} file…`);
     const results = await Promise.all([...list].map(readFile));
+    if (expect) results.forEach((f) => { f.expect = expect; });
     for (const f of results) if (f.parsed && f.parsed.kind === 'modal_template') { mergeCatalog(f.parsed.entries); f.note = `${num(f.parsed.entries.length)} modal produk dimuat`; toast(f.note); }
     const hadIncome = !!last;
     files.push(...results);
@@ -1563,6 +1661,11 @@
     const box = $('#upload-status'); if (box && box.firstElementChild) box.scrollIntoView({ block: 'center' });
   }
   function fileStatus(f) {
+    const beda = f.expect && f.kind !== f.expect
+      ? `<br><span class="warn">Dipilih untuk ${esc(KIND[f.expect] ? KIND[f.expect][1] : 'kategori lain')}, tetapi ${f.kind === 'unknown' ? 'isinya tidak sesuai format itu' : `isinya ${esc(KIND[f.kind] ? KIND[f.kind][1] : 'jenis lain')}. Diproses sesuai isinya`}.</span>` : '';
+    return fileStatusDasar(f) + beda;
+  }
+  function fileStatusDasar(f) {
     if (f.error) return `<span class="bad">${esc(f.error)}</span>`;
     if (f.note) return `<span class="ok">${esc(f.note)}</span>`;
     const p = f.parsed;
@@ -1844,6 +1947,7 @@
     else if (t.id === 'simx-aff') { sim.afiliasi = Math.min(50, Math.max(0, +t.value || 0)); resetSimFee(); render(); }
     else if (t.dataset.simOpsi) { const k = t.dataset.simOpsi; sim.opsi = t.checked ? [...new Set([...sim.opsi, k])] : sim.opsi.filter((x) => x !== k); resetSimFee(); render(); }
     else if (t.id === 'file-input' || t.id === 'tpl-input') { addFiles(t.files); t.value = ''; }
+    else if (t.dataset.expect) { addFiles(t.files, t.dataset.expect); t.value = ''; }
     else if (t.id === 'pf-logo' && t.files[0]) {
       const f = t.files[0];
       if (f.size > 400000) { toast('Logo maksimal 400 KB.'); t.value = ''; return; }
@@ -1878,6 +1982,7 @@
     }
     if (t.dataset.fixModal) { const p = last && last.r.products.find((x) => x.key === t.dataset.fixModal); view.costQ = p ? p.name : ''; closeSheet(); go('data', true, 'modal'); return; }
     if (t.hasAttribute('data-sheet-close')) { closeSheet(); return; }
+    if (t.dataset.mp) { view.mp = t.dataset.mp; render(); const b = document.querySelector(`[data-mp="${t.dataset.mp}"]`); if (b) b.focus(); return; }
     if (t.dataset.go) { closeSheet(); go(t.dataset.go, true, t.dataset.section); return; }
     // Tombol di lembar Filter & unduh memakai fungsi yang sama dengan menu Unduh di bilah atas.
     if (t.dataset.act) { closeSheet(); ({ pdf: openReport, export: exportXlsx, 'save-hist': saveHistory })[t.dataset.act](); return; }

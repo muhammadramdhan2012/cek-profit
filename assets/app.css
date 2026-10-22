@@ -1592,3 +1592,35 @@ body.app :is(button, a, input, select, summary, [tabindex]) { scroll-margin-top:
 table.data.src-table th:first-child { min-width: 0; }
 @media (max-width: 600px) { .src-table th, .src-table td { padding-inline: 6px; font-size: 13px; } }
 .up-st-toko { flex-basis: 100%; }
+
+/* ===== Pusat Data Marketplace (Batch 2) ===== */
+.pusat-data { display: grid; gap: 12px; margin-bottom: 16px; }
+.pd-mp { display: flex; flex-wrap: wrap; gap: 6px; padding: 4px; border-radius: 12px; background: var(--surface-2); justify-self: start; max-width: 100%; }
+.pd-mp button { display: inline-flex; align-items: center; gap: 7px; border: 0; background: transparent; color: var(--ink-2); font: inherit; font-size: 13.5px; font-weight: 650; padding: 7px 12px; border-radius: 9px; cursor: pointer; }
+.pd-mp button[aria-selected="true"] { background: var(--surface); color: var(--ink); box-shadow: var(--shadow-sm, 0 1px 2px rgb(0 0 0 / .08)); }
+.pd-mp button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.pd-mp .sw { width: 9px; height: 9px; border-radius: 3px; display: inline-block; }
+.sw.shopee { background: var(--shopee); } .sw.tiktok { background: var(--tiktok); } .sw.tokopedia { background: var(--good); } .sw.lazada { background: var(--ink-3); }
+.pd-list { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.pd-k { display: grid; gap: 6px; align-content: start; padding: 14px; border: 1px solid var(--line); border-radius: 14px; background: var(--surface); }
+.pd-k.pd-need { background: var(--surface-2); border-style: dashed; }
+.pd-h { display: flex; justify-content: space-between; gap: 10px; align-items: flex-start; }
+.pd-h b { font-size: 14.5px; line-height: 1.35; }
+.pd-st { flex: none; font-size: 11.5px; font-weight: 750; padding: 3px 8px; border-radius: 999px; white-space: nowrap; }
+.pd-st.ok { color: var(--good); background: var(--good-soft); } .pd-st.beta { color: var(--info); background: var(--info-soft); }
+.pd-st.via { color: var(--accent); background: var(--accent-soft); } .pd-st.ign { color: var(--ink-2); background: var(--surface-2); border: 1px solid var(--line); }
+.pd-st.need { color: var(--ink-2); background: var(--surface); border: 1px dashed var(--line-strong); }
+.pd-guna, .pd-note { margin: 0; font-size: 13px; color: var(--ink-2); line-height: 1.45; }
+.pd-note { color: var(--ink-3); }
+.pd-meta { margin: 0; display: grid; gap: 2px; font-size: 12.5px; color: var(--ink-2); }
+.pd-l { display: inline-block; min-width: 72px; color: var(--ink-3); font-weight: 650; }
+.pd-foot { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; padding-top: 6px; border-top: 1px dashed var(--line); margin-top: 2px; }
+.pd-v { font-size: 12.5px; color: var(--ink-2); flex: 1 1 180px; }
+@media (max-width: 760px) { .pd-list { grid-template-columns: 1fr; } .pd-mp { justify-self: stretch; } .pd-mp button { flex: 1 1 auto; justify-content: center; } }
+.pd-panel { display: grid; gap: 10px; }
+.pd-kosong { margin: 0; padding: 14px; border: 1px dashed var(--line-strong); border-radius: 14px; font-size: 13.5px; color: var(--ink-2); }
+.pd-lain { border: 1px dashed var(--line); border-radius: 14px; padding: 4px 14px; background: var(--surface-2); }
+.pd-lain > summary { cursor: pointer; padding: 10px 0; font-size: 13.5px; font-weight: 700; color: var(--ink-2); }
+.pd-lain > summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; border-radius: 6px; }
+.pd-lain ul { list-style: none; margin: 0 0 10px; padding: 0; display: grid; gap: 10px; }
+.pd-lain li { display: grid; gap: 4px; padding-top: 10px; border-top: 1px dashed var(--line); }
