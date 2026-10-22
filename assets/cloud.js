@@ -227,7 +227,7 @@ const CekCloud = (() => {
        Browser hanya mengirim nomor pesanan; nominal, QR, dan status ditentukan server/Midtrans. ---- */
     qrisBuat: (order) => http('/functions/v1/qris-buat', { method: 'POST', body: { pesanan: order } }),
     /* Checkout tamu (tanpa login, Edge Function --no-verify-jwt): server menentukan harga; Pro aktif setelah klaim lewat email. */
-    tamuCheckout: (data) => http('/functions/v1/tamu-checkout', { method: 'POST', auth: false, body: { nama: data.nama, email: data.email, whatsapp: data.whatsapp || '' } }),
+    tamuCheckout: (data) => http('/functions/v1/tamu-checkout', { method: 'POST', auth: false, body: { nama: data.nama, email: data.email, whatsapp: data.whatsapp || '', ...(data.token ? { token: data.token } : {}) } }),
     tamuStatus: (kode, email, paksa = false) => http('/functions/v1/tamu-status', { method: 'POST', auth: false, body: { kode, email, paksa: !!paksa } }),
     klaimPembelian: () => http('/rest/v1/rpc/klaim_pembelian_tamu', { method: 'POST', body: {} }),
     qrisCek: (order, paksa = false) => http('/functions/v1/qris-cek', { method: 'POST', body: { pesanan: order, paksa: !!paksa } }),

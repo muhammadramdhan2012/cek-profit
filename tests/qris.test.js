@@ -210,11 +210,27 @@ const JWT = 'eyJ.uji.pembeli';
     truthy(r.status === 200 && r.body.kode === 'CT-ABCD1234' && /\/snap\/v4\/redirection\//.test(r.body.snap_url) && !('email' in r.body), `200 + URL Snap, tanpa email di respons (${JSON.stringify(r.body)})`);
     const a = d.calls.find((c) => c.nama === 'tamu_buat_pesanan').args;
     truthy(a.p_email === 'ani@contoh.id' && a.p_nama === 'Ani Wijaya' && a.p_whatsapp === '+6281234567890' && a.p_rahasia === RAHASIA, 'argumen dinormalkan + rahasia');
+    truthy(/^[0-9a-f]{64}$/.test(r.body.token) && a.p_token_hash === require('crypto').createHash('sha256').update(r.body.token).digest('hex') && a.p_peminta === null, 'token baru dikembalikan; database hanya menerima hash-nya; tanpa IP → peminta null');
     const sb = mt.trx.get('CT-ABCD1234').body;
     truthy(sb.transaction_details.gross_amount === 149000 && sb.enabled_payments.join() === 'other_qris' && sb.expiry.duration === 15 && sb.expiry.unit === 'minutes'
       && sb.callbacks.finish === 'https://feature-pro-pricing.cekuntung.pages.dev/akun?view=bayar' && !sb.customer_details, 'Snap: QRIS saja, Rp dari database, 15 menit, kembali ke situs, tanpa data pembeli');
     const sbCfg = Q.bacaKonfigurasi({ ...env, MIDTRANS_ENV: 'sandbox', MIDTRANS_SERVER_KEY: 'SB-Mid-server-abc' });
     truthy(Q.urlSnapSah('https://app.sandbox.midtrans.com/snap/v4/redirection/x', sbCfg) && !Q.urlSnapSah('https://app.sandbox.midtrans.com.jahat.id/x', sbCfg) && !Q.urlSnapSah('https://api.sandbox.midtrans.com/x', sbCfg), 'URL Snap hanya dari host Snap Midtrans');
+  });
+
+  await t('Checkout tamu: token sah dipakai ulang, token tidak sah diganti; peminta = HMAC IP (IP mentah tidak dikirim)', async () => {
+    const t0 = { id: 12, kode: 'CT-TOKN0001', amount: 149000, status: 'menunggu', snap_url: 'https://app.sandbox.midtrans.com/snap/v4/redirection/t', berlaku_sampai: new Date(Date.now() + 9e5).toISOString(), email: 'x@y.id' };
+    const d = db({ tamu_buat_pesanan: () => ({ aksi: 'pakai', pesanan: t0 }) });
+    const tok = 'ab'.repeat(32);
+    const kirim = (body, xff) => new Request('https://fungsi.uji/x', { method: 'POST', headers: { 'Content-Type': 'application/json', ...(xff ? { 'X-Forwarded-For': xff } : {}) }, body: JSON.stringify(body) });
+    let r = await baca(await Q.handleTamuCheckout(kirim({ nama: 'Ani', email: 'x@y.id', token: tok }, '203.0.113.7, 10.0.0.1'), deps(d.fetcher)));
+    const a = d.calls[0].args;
+    truthy(r.status === 200 && r.body.token === tok && a.p_token_hash === require('crypto').createHash('sha256').update(tok).digest('hex'), 'token sah dipakai ulang');
+    truthy(/^[0-9a-f]{32}$/.test(a.p_peminta) && !JSON.stringify(d.calls).includes('203.0.113.7'), 'peminta = HMAC 32 hex, IP mentah tidak dikirim ke database');
+    r = await baca(await Q.handleTamuCheckout(kirim({ nama: 'Ani', email: 'x@y.id', token: 'bukan-token' }, '203.0.113.7'), deps(d.fetcher)));
+    truthy(r.body.token !== 'bukan-token' && /^[0-9a-f]{64}$/.test(r.body.token) && d.calls[1].args.p_peminta === a.p_peminta, 'token tidak sah diganti token baru; IP sama → peminta sama');
+    r = await baca(await Q.handleTamuCheckout(kirim({ nama: 'Ani', email: 'x@y.id' }, '<script>'), deps(d.fetcher)));
+    truthy(d.calls[2].args.p_peminta === null, 'header IP tidak wajar → peminta null (hanya batas global)');
   });
 
   await t('Notifikasi checkout tamu lunas → tautan aktivasi (OTP Supabase, anon key); gagal kirim tetap 200 dan tercatat', async () => {

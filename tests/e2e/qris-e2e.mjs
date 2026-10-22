@@ -183,8 +183,11 @@ try {
   r = await tamu({ nama: 'Tamu Baru', email: 'Tamu@E2E.id', whatsapp: '081234567890' });
   const k1 = r.body.kode;
   cek(r.status === 200 && /^CT-/.test(k1) && /snap\/v4\/redirection/.test(r.body.snap_url) && mt.trx.get(k1).body.enabled_payments.join() === 'other_qris', `G1 checkout tamu tanpa login → Snap QRIS (${r.status})`);
-  r = await tamu({ nama: 'Tamu Baru', email: 'tamu@e2e.id' });
-  cek(r.body.kode === k1 && mt.trx.size === [...mt.trx.keys()].length, 'G2 klik ulang → Snap yang sama (tanpa tagihan ganda)');
+  const tok1 = r.body.token; const n0 = mt.trx.size;
+  r = await tamu({ nama: 'Tamu Baru', email: 'tamu@e2e.id', token: tok1 });
+  cek(/^[0-9a-f]{64}$/.test(tok1) && r.body.kode === k1 && r.body.token === tok1 && mt.trx.size === n0, 'G2 klik ulang dari browser yang sama (token) → Snap yang sama (tanpa tagihan ganda)');
+  r = await tamu({ nama: 'Penyusup', email: 'tamu@e2e.id' });
+  cek(r.status === 200 && r.body.kode !== k1 && r.body.token !== tok1 && r.body.snap_url !== (await statusTamu({ kode: k1, email: 'tamu@e2e.id' })).body.snap_url, 'G2b hanya tahu email → pesanan sendiri, kode/tautan pembeli asli tidak terungkap');
   r = await panggil(Q.handleNotifikasi, mt.notifikasi(k1, { kunci: 'palsu' }), null);
   cek(r.status === 401, 'G3 webhook palsu untuk pesanan tamu ditolak');
   mt.bayar(k1);

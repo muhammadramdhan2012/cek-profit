@@ -37,8 +37,14 @@ create table if not exists public.pro_pesanan_tamu (
   created_at       timestamptz not null default now(),
   updated_at       timestamptz not null default now()
 );
--- Satu tagihan berjalan per email: membayar ulang memakai Snap yang sama sampai kedaluwarsa.
-create unique index if not exists pro_tamu_satu_terbuka on public.pro_pesanan_tamu (email) where status in ('dibuat', 'menunggu');
+-- Pengamanan checkout (22 Okt 2026): pesanan terbuka hanya dipakai ulang oleh browser yang membuatnya (token acak; database
+-- menyimpan hash-nya). Siapa pun yang hanya tahu email TIDAK menerima kode/tautan Snap orang lain dan tidak bisa
+-- menghabiskan kuota email tersebut: batas dihitung global + per peminta (HMAC alamat IP, dihapus setelah 24 jam).
+alter table public.pro_pesanan_tamu add column if not exists token_hash text check (token_hash is null or token_hash ~ '^[0-9a-f]{64}$');
+alter table public.pro_pesanan_tamu add column if not exists peminta text check (peminta is null or peminta ~ '^[0-9a-f]{32}$');
+drop index if exists public.pro_tamu_satu_terbuka;   -- dulu: satu pesanan terbuka per email (bisa dipakai memblokir korban)
+create index if not exists pro_tamu_token on public.pro_pesanan_tamu (token_hash) where status in ('dibuat', 'menunggu');
+create index if not exists pro_tamu_dibuat on public.pro_pesanan_tamu (created_at desc);
 create index if not exists pro_tamu_email on public.pro_pesanan_tamu (email, created_at desc);
 alter table public.pro_pesanan_tamu enable row level security;
 drop policy if exists "tamu: admin baca" on public.pro_pesanan_tamu;
@@ -47,29 +53,43 @@ revoke all on public.pro_pesanan_tamu from public, anon, authenticated;
 grant select on public.pro_pesanan_tamu to authenticated;   -- dibatasi policy: hanya admin
 
 -- 1. EDGE FUNCTION (rahasia): buat/ambil pesanan tamu. aksi: 'pakai' | 'cek' (lewat waktu, cek Midtrans dulu) | 'baru'.
-create or replace function public.tamu_buat_pesanan(p_rahasia text, p_email text, p_nama text, p_whatsapp text)
+--    Pesanan lama hanya dikembalikan bila p_token_hash cocok (browser yang sama); tanpa token selalu pesanan baru,
+--    sehingga respons tidak membedakan email yang sedang/pernah checkout. Tagihan ganda dari dua perangkat tetap
+--    tercatat aman (klaim kedua = pembayaran ganda, tampil di monitor admin untuk refund).
+drop function if exists public.tamu_buat_pesanan(text, text, text, text);
+create or replace function public.tamu_buat_pesanan(p_rahasia text, p_email text, p_nama text, p_whatsapp text,
+  p_token_hash text default null, p_peminta text default null)
 returns jsonb language plpgsql security definer set search_path = public, pg_temp as $$
 declare s public.pengaturan_pembayaran; t public.pro_pesanan_tamu; em text := lower(trim(coalesce(p_email, ''))); v_kode text;
+  tok text := case when p_token_hash ~ '^[0-9a-f]{64}$' then p_token_hash end;
+  pem text := case when p_peminta ~ '^[0-9a-f]{32}$' then p_peminta end;
 begin
   if not public._rahasia_gateway_sah(p_rahasia) then raise exception 'Akses ditolak'; end if;
   select * into s from public.pengaturan_pembayaran where id = 1;
   if s is null or not s.aktif or s.mode <> 'otomatis' then raise exception 'Pembayaran otomatis belum dibuka'; end if;
   if em !~ '^[^@\s]+@[^@\s]+\.[^@\s]+$' or length(em) > 254 then raise exception 'Email tidak valid'; end if;
   if length(trim(coalesce(p_nama, ''))) < 2 then raise exception 'Nama lengkap wajib diisi'; end if;
-  perform pg_advisory_xact_lock(hashtext('tamu:' || em));   -- serialisasi klik bersamaan untuk email yang sama
-  select * into t from public.pro_pesanan_tamu where email = em and status in ('dibuat', 'menunggu') for update;
-  if found then
-    return jsonb_build_object('aksi', case when t.berlaku_sampai > now() + interval '20 seconds' then 'pakai' else 'cek' end, 'pesanan', to_jsonb(t));
+  if tok is not null then
+    perform pg_advisory_xact_lock(hashtext('tamu-token:' || tok));   -- serialisasi klik bersamaan dari browser yang sama
+    select * into t from public.pro_pesanan_tamu where token_hash = tok and email = em and status in ('dibuat', 'menunggu')
+      order by id desc limit 1 for update;
+    if found then
+      return jsonb_build_object('aksi', case when t.berlaku_sampai > now() + interval '20 seconds' then 'pakai' else 'cek' end, 'pesanan', to_jsonb(t));
+    end if;
   end if;
-  if (select count(*) from public.pro_pesanan_tamu where email = em and created_at > now() - interval '24 hours') >= 5 then
-    raise exception 'Terlalu banyak percobaan pembayaran untuk email ini. Coba lagi besok atau hubungi bantuan';
+  -- Batas penyalahgunaan (bukan per email): per peminta 8/jam, global 120/jam. Pesan sama untuk keduanya.
+  perform pg_advisory_xact_lock(hashtext('tamu:batas'));
+  update public.pro_pesanan_tamu set peminta = null where peminta is not null and created_at < now() - interval '24 hours';
+  if (pem is not null and (select count(*) from public.pro_pesanan_tamu where peminta = pem and created_at > now() - interval '1 hour') >= 8)
+     or (select count(*) from public.pro_pesanan_tamu where created_at > now() - interval '1 hour') >= 120 then
+    raise exception 'Terlalu banyak percobaan pembayaran. Coba lagi beberapa saat lagi';
   end if;
   loop
     v_kode := 'CT-' || upper(substr(replace(gen_random_uuid()::text, '-', ''), 1, 8));
     exit when not exists (select 1 from public.pro_pesanan_tamu x where x.kode = v_kode);
   end loop;
-  insert into public.pro_pesanan_tamu (kode, email, nama, whatsapp, amount, berlaku_sampai)
-    values (v_kode, em, left(trim(p_nama), 100), coalesce(p_whatsapp, ''), s.harga_pro, now() + make_interval(mins => s.qr_berlaku_menit))
+  insert into public.pro_pesanan_tamu (kode, email, nama, whatsapp, amount, berlaku_sampai, token_hash, peminta)
+    values (v_kode, em, left(trim(p_nama), 100), coalesce(p_whatsapp, ''), s.harga_pro, now() + make_interval(mins => s.qr_berlaku_menit), tok, pem)
     returning * into t;
   return jsonb_build_object('aksi', 'baru', 'pesanan', to_jsonb(t), 'qr_menit', s.qr_berlaku_menit);
 end $$;
@@ -288,7 +308,7 @@ end $$;
 do $$
 declare f text;
 begin
-  foreach f in array array['tamu_buat_pesanan(text, text, text, text)', 'tamu_simpan_snap(text, bigint, jsonb)', 'tamu_perlu_email(text, text)',
+  foreach f in array array['tamu_buat_pesanan(text, text, text, text, text, text)', 'tamu_simpan_snap(text, bigint, jsonb)', 'tamu_perlu_email(text, text)',
       'tamu_catat_email(text, bigint, boolean, text)', 'tamu_status(text, text, text)'] loop
     execute format('revoke all on function public.%s from public', f);
     execute format('grant execute on function public.%s to anon, authenticated', f);

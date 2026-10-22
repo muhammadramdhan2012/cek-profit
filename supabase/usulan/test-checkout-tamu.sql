@@ -30,10 +30,10 @@ select 'K1 tanpa rahasia ditolak; anon tidak bisa membaca pesanan tamu' t,
   pg_temp.coba($$select public.tamu_buat_pesanan('salah-salah-salah-salah-salah-salah-1', 'x@t.id', 'X', '')$$) = 'Akses ditolak'
   and pg_temp.coba($$select * from public.pro_pesanan_tamu$$) like 'permission denied%'
   and pg_temp.coba($$select public.klaim_pembelian_tamu()$$) like 'permission denied%' ok;
-create temp table b1 as select public.tamu_buat_pesanan(:R, ' Baru@T.id ', 'Pembeli Baru', '+6281234567890') j;
-create temp table b2 as select public.tamu_buat_pesanan(:R, 'baru@t.id', 'Pembeli Baru', '') j;
+create temp table b1 as select public.tamu_buat_pesanan(:R, ' Baru@T.id ', 'Pembeli Baru', '+6281234567890', repeat('a', 64)) j;
+create temp table b2 as select public.tamu_buat_pesanan(:R, 'baru@t.id', 'Pembeli Baru', '', repeat('a', 64)) j;
 reset role;
-select 'K2 pesanan tamu: kode CT-, Rp149.000 dari server, email dinormalkan; klik ulang = pesanan sama' t,
+select 'K2 pesanan tamu: kode CT-, Rp149.000 dari server, email dinormalkan; klik ulang dari browser yang sama (token) = pesanan sama' t,
   (select j->>'aksi' = 'baru' and j->'pesanan'->>'kode' ~ '^CT-[A-Z0-9]{8}$' and (j->'pesanan'->>'amount')::int = 149000 and j->'pesanan'->>'email' = 'baru@t.id' from b1)
   and (select j->>'aksi' = 'pakai' and j->'pesanan'->>'id' = (select j->'pesanan'->>'id' from b1) from b2)
   and (select count(*) from public.pro_pesanan_tamu where email = 'baru@t.id') = 1 ok;
@@ -138,27 +138,45 @@ select 'K19 dana yang sudah direfund sebelum diklaim tidak mengaktifkan Pro' t, 
   and not (select pro_sekali_bayar from public.profiles where id = 'e5000000-0000-0000-0000-0000000000e5') ok;
 
 -- ---------- kedaluwarsa & batas ----------
-select public.tamu_buat_pesanan(:R, 'lewat@t.id', 'Lewat Waktu', '');
+select public.tamu_buat_pesanan(:R, 'lewat@t.id', 'Lewat Waktu', '', repeat('b', 64));
 select public.tamu_simpan_snap(:R, (select id from pg_temp.tamu('lewat@t.id')), '{"ok":true,"snap_url":"https://app.sandbox.midtrans.com/u"}');
 update public.pro_pesanan_tamu set berlaku_sampai = now() - interval '1 minute' where email = 'lewat@t.id';
-create temp table l1 as select public.tamu_buat_pesanan(:R, 'lewat@t.id', 'Lewat Waktu', '') j;
+create temp table l1 as select public.tamu_buat_pesanan(:R, 'lewat@t.id', 'Lewat Waktu', '', repeat('b', 64)) j;
 create temp table l2 as select public.gateway_terapkan_status(:R, jsonb_build_object('order_id', (pg_temp.tamu('lewat@t.id')).kode, 'transaction_status', 'expire')) h;
-create temp table l3 as select public.tamu_buat_pesanan(:R, 'lewat@t.id', 'Lewat Waktu', '') j;
+create temp table l3 as select public.tamu_buat_pesanan(:R, 'lewat@t.id', 'Lewat Waktu', '', repeat('b', 64)) j;
 select 'K20 Snap lewat waktu → aksi cek; setelah kedaluwarsa tercatat → pesanan baru dengan kode baru' t,
   (select j->>'aksi' = 'cek' from l1) and (select h = 'kedaluwarsa' from l2) and (select j->>'aksi' = 'baru' from l3)
   and (select count(*) from public.pro_pesanan_tamu where email = 'lewat@t.id') = 2 ok;
-update public.pro_pesanan_tamu set status = 'kedaluwarsa' where email = 'lewat@t.id';
-select public.tamu_buat_pesanan(:R, 'lewat@t.id', 'Lewat Waktu', '') from generate_series(1, 1);
-update public.pro_pesanan_tamu set status = 'kedaluwarsa' where email = 'lewat@t.id';
-select public.tamu_buat_pesanan(:R, 'lewat@t.id', 'Lewat Waktu', '');
-update public.pro_pesanan_tamu set status = 'kedaluwarsa' where email = 'lewat@t.id';
-select public.tamu_buat_pesanan(:R, 'lewat@t.id', 'Lewat Waktu', '');
-update public.pro_pesanan_tamu set status = 'kedaluwarsa' where email = 'lewat@t.id';
-select 'K21 maksimal 5 pesanan per email per 24 jam' t, pg_temp.coba($$select public.tamu_buat_pesanan('RRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRR', 'lewat@t.id', 'Lewat Waktu', '')$$) like 'Terlalu banyak%' ok;
+-- ---------- pengamanan: tanpa pengungkapan kode, tanpa pemblokiran kuota per email ----------
+create temp table x1 as select public.tamu_buat_pesanan(:R, 'korban@t.id', 'Korban Asli', '', repeat('c', 64)) j;   -- pembeli sah
+create temp table x2 as select public.tamu_buat_pesanan(:R, 'korban@t.id', 'Penyusup', '') j;                       -- hanya tahu email
+create temp table x3 as select public.tamu_buat_pesanan(:R, 'Korban@T.id', 'Penyusup', '', repeat('d', 64)) j;     -- token lain
+select 'K21 hanya tahu email (tanpa/dengan token lain): pesanan baru, kode & tautan pembeli lain tidak terungkap, bentuk respons sama' t,
+  (select j->>'aksi' = 'baru' from x2) and (select j->>'aksi' = 'baru' from x3)
+  and (select j->'pesanan'->>'kode' from x2) <> (select j->'pesanan'->>'kode' from x1) and (select j->'pesanan'->>'kode' from x3) <> (select j->'pesanan'->>'kode' from x1)
+  and (select array(select jsonb_object_keys(j)) from x1) = (select array(select jsonb_object_keys(j)) from x2) ok;
+create temp table x4 as select public.tamu_buat_pesanan(:R, 'korban@t.id', 'Korban Asli', '', repeat('c', 64)) j;
+select 'K21b pembeli sah (token sama) tetap memakai pesanannya sendiri' t, (select j->>'aksi' = 'pakai' and j->'pesanan'->>'kode' = (select j->'pesanan'->>'kode' from x1) from x4) ok;
+select public.tamu_buat_pesanan(:R, 'korban@t.id', 'Penyusup', '', null, md5('penyusup')) from generate_series(1, 8);
+select 'K21c batas per peminta 8/jam: ke-9 ditolak (pesan umum), peminta lain & pembeli sah tetap bisa' t,
+  pg_temp.coba($$select public.tamu_buat_pesanan('RRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRR', 'acak@t.id', 'Penyusup', '', null, md5('penyusup'))$$) = 'Terlalu banyak percobaan pembayaran. Coba lagi beberapa saat lagi'
+  and pg_temp.coba($$select public.tamu_buat_pesanan('RRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRR', 'korban@t.id', 'Korban Asli', '', repeat('e', 64), md5('korban'))$$) = 'LOLOS' ok;
+select 'K21d banyak pesanan atas email korban tidak menghabiskan kuota email korban (tidak ada batas per email)' t,
+  (select count(*) from public.pro_pesanan_tamu where email = 'korban@t.id') >= 10
+  and pg_temp.coba($$select public.tamu_buat_pesanan('RRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRR', 'korban@t.id', 'Korban Asli', '', repeat('f', 64))$$) = 'LOLOS' ok;
+update public.pro_pesanan_tamu set created_at = now() - interval '25 hours' where peminta = md5('penyusup');
+select public.tamu_buat_pesanan(:R, 'lain2@t.id', 'Orang Lain', '');
+select 'K21e penanda peminta dihapus setelah 24 jam (privasi); batas peminta pulih' t,
+  (select count(*) from public.pro_pesanan_tamu where peminta = md5('penyusup')) = 0 ok;
+insert into public.pro_pesanan_tamu (kode, email, nama, amount, berlaku_sampai, status)
+  select 'CT-' || upper(substr(md5(g::text), 1, 8)), 'massal' || g || '@t.id', 'Massal', 149000, now(), 'kedaluwarsa' from generate_series(1, 120) g;
+select 'K21f batas global 120/jam: ditolak dengan pesan umum yang sama (tidak bergantung email)' t,
+  pg_temp.coba($$select public.tamu_buat_pesanan('RRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRR', 'siapa@t.id', 'Siapa', '', repeat('9', 64))$$) = 'Terlalu banyak percobaan pembayaran. Coba lagi beberapa saat lagi' ok;
+delete from public.pro_pesanan_tamu where email like 'massal%@t.id';
 update public.pengaturan_pembayaran set mode = 'manual', bank_nama = 'BANK UJI', bank_nomor = '0000000000', bank_pemilik = 'PEMILIK UJI';
 select 'K22 mode manual: checkout tamu tertutup' t, pg_temp.coba($$select public.tamu_buat_pesanan('RRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRR', 'z@t.id', 'Zed', '')$$) = 'Pembayaran otomatis belum dibuka' ok;
 select 'K23 hak: fungsi tamu bergerbang rahasia (anon boleh), klaim hanya login, bantu privat, search_path terkunci' t,
-  has_function_privilege('anon', 'public.tamu_buat_pesanan(text, text, text, text)', 'execute') and not has_function_privilege('anon', 'public.klaim_pembelian_tamu()', 'execute')
+  has_function_privilege('anon', 'public.tamu_buat_pesanan(text, text, text, text, text, text)', 'execute') and to_regprocedure('public.tamu_buat_pesanan(text, text, text, text)') is null and not has_function_privilege('anon', 'public.klaim_pembelian_tamu()', 'execute')
   and not has_function_privilege('authenticated', 'public._tamu_terapkan_status(jsonb)', 'execute') and not has_function_privilege('anon', 'public._tamu_terapkan_status(jsonb)', 'execute')
   and not exists (select 1 from pg_proc where pronamespace = 'public'::regnamespace and prosecdef and (proname like 'tamu\_%' or proname in ('_tamu_terapkan_status', 'klaim_pembelian_tamu'))
     and coalesce(array_to_string(proconfig, ','), '') <> 'search_path=public, pg_temp') ok;

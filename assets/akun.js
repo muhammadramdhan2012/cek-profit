@@ -239,7 +239,13 @@
   /* ---------------- Checkout tamu (tanpa login, Midtrans Snap redirect) ----------------
    * Harga & halaman Snap dari server. Pro TIDAK aktif dari halaman ini: aktif setelah pembeli membuka tautan aktivasi yang
    * dikirim ke emailnya (klaim_pembelian_tamu di database memeriksa email terkonfirmasi + sesi dari tautan email). */
-  const tamuSesi = { get: () => { try { return JSON.parse(ss.get(TAMU_KEY) || 'null'); } catch (e) { return null; } }, set: (v) => ss.set(TAMU_KEY, JSON.stringify(v)) };
+  // Pesanan tamu terakhir {kode, email, token} di browser ini (localStorage, fallback sessionStorage). Token hanya membuat
+  // browser yang sama memakai ulang tautan pembayarannya; bila hilang, pembeli tetap bisa membayar (pesanan baru) dan aktivasi.
+  const ls = { get: (k) => { try { return localStorage.getItem(k); } catch (e) { return null; } }, set: (k, v) => { try { localStorage.setItem(k, v); } catch (e) { /* abaikan */ } } };
+  const tamuSesi = {
+    get: () => { try { return JSON.parse(ls.get(TAMU_KEY) || ss.get(TAMU_KEY) || 'null'); } catch (e) { return null; } },
+    set: (v) => { const t = JSON.stringify(v); ls.set(TAMU_KEY, t); ss.set(TAMU_KEY, t); },
+  };
   const urlAktivasi = () => `${here()}?view=aktivasi`;
   function renderTamu(card) {
     card.innerHTML = `${heading('Beli Cek Untung Pro', 'Tanpa perlu daftar dulu. Akun dibuat otomatis dari email Anda setelah pembayaran berhasil.')}${msgHtml()}${hargaBlok()}
@@ -491,10 +497,11 @@
         }
       } else if (f.id === 'f-tamu') {
         const email = $('#em').value.trim();
-        const r = await cloud.db.tamuCheckout({ nama: $('#nm').value.trim(), email, whatsapp: $('#tm-wa').value.trim() ? A.normalisasiHp($('#tm-wa').value).nilai : '' });
+        const lama = tamuSesi.get();
+        const r = await cloud.db.tamuCheckout({ token: lama && lama.token, nama: $('#nm').value.trim(), email, whatsapp: $('#tm-wa').value.trim() ? A.normalisasiHp($('#tm-wa').value).nilai : '' });
         // Hanya halaman Snap https yang diikuti (server juga membatasi host Midtrans).
         if (!r || !r.kode || !/^https:\/\//.test(r.snap_url || '')) throw new Error('Halaman pembayaran belum tersedia. Silakan coba lagi.');
-        tamuSesi.set({ kode: r.kode, email }); track('checkout_tamu');
+        tamuSesi.set({ kode: r.kode, email, token: r.token || (lama && lama.token) || '' }); track('checkout_tamu');
         location.assign(r.snap_url); return;
       } else if (f.id === 'f-tautan') {
         await cloud.auth.kirimTautan($('#em').value.trim(), urlAktivasi());

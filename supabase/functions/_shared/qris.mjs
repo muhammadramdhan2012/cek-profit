@@ -51,6 +51,7 @@ export function bacaKonfigurasi(env = {}) {
 
 /* ------------------------------------------------------------------ util */
 const hex = (buf) => [...new Uint8Array(buf)].map((b) => b.toString(16).padStart(2, '0')).join('');
+export async function sha256Hex(teks) { return hex(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(teks))); }
 export async function sha512(teks) { return hex(await crypto.subtle.digest('SHA-512', new TextEncoder().encode(teks))); }
 /** Perbandingan waktu-konstan untuk string hex. */
 export function samaAman(a, b) {
@@ -258,6 +259,22 @@ export function urlSnapSah(url, cfg) {
 
 /* ------------------------------------------------------------------ checkout tamu (tanpa login) */
 const EMAIL = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
+const TOKEN = /^[0-9a-f]{64}$/;
+/** Token browser untuk memakai ulang pesanan tamu miliknya. Yang dikirim browser hanya dipakai bila formatnya benar;
+ *  selain itu dibuat baru. Database hanya menyimpan SHA-256-nya. */
+export function tokenTamu(v) {
+  if (typeof v === 'string' && TOKEN.test(v)) return v;
+  return hex(crypto.getRandomValues(new Uint8Array(32)));
+}
+/** Penanda peminta untuk batas penyalahgunaan: HMAC-SHA256(GATEWAY_SECRET, IP) 32 hex; IP mentah tidak disimpan.
+ *  IP dibaca dari X-Forwarded-For (entri pertama) dan DIANGGAP PETUNJUK, bukan identitas: bila dipalsukan, batas
+ *  global di database tetap berlaku, dan batas ini tidak pernah dikaitkan ke email pembeli. */
+export async function pemintaDari(req, rahasia) {
+  const ip = String(req.headers.get('x-forwarded-for') || '').split(',')[0].trim();
+  if (!ip || ip.length > 64 || !/^[0-9a-fA-F:.]+$/.test(ip)) return null;
+  const k = await crypto.subtle.importKey('raw', new TextEncoder().encode(rahasia), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
+  return hex(await crypto.subtle.sign('HMAC', k, new TextEncoder().encode(`peminta:${ip}`))).slice(0, 32);
+}
 /** Nomor WhatsApp opsional → +62…; '' bila kosong; null bila format salah. */
 export function normalWa(v) {
   const d = String(v || '').replace(/[\s\-().]/g, '');
@@ -295,7 +312,7 @@ async function sinkronTamu(ctx, kode, lewatWaktu) {
   if (!st.data.transaction_status) throw new GalatQris(502, 'Status pembayaran belum dapat dipastikan. Coba lagi sebentar.', `HTTP ${st.http}`);
   return ctx.rpc('gateway_terapkan_status', { p_rahasia: ctx.cfg.rahasia, p_status: ringkasStatus(st.data) });
 }
-const tamuPublik = (t) => ({ kode: t.kode, status: t.status, amount: t.amount, berlaku_sampai: t.berlaku_sampai, snap_url: t.status === 'menunggu' ? t.snap_url : null, email_status: t.email_status });
+const tamuPublik = (t, token) => ({ ...(token ? { token } : {}), kode: t.kode, status: t.status, amount: t.amount, berlaku_sampai: t.berlaku_sampai, snap_url: t.status === 'menunggu' ? t.snap_url : null, email_status: t.email_status });
 
 /** POST {nama, email, whatsapp} — tanpa login. Membuat/mengambil pesanan tamu + halaman Snap (QRIS). */
 export const handleTamuCheckout = bungkus('tamu-checkout', async (req, ctx) => {
@@ -306,7 +323,9 @@ export const handleTamuCheckout = bungkus('tamu-checkout', async (req, ctx) => {
   if (nama.length < 2 || nama.length > 100) throw new GalatQris(400, 'Nama lengkap wajib diisi (2–100 karakter).');
   if (wa === null) throw new GalatQris(400, 'Nomor WhatsApp tidak valid. Contoh: 081234567890, atau kosongkan.');
   if (!ctx.cfg.situs) throw new GalatQris(503, 'Pembayaran otomatis belum dikonfigurasi.', 'SITE_URL/ALLOWED_ORIGINS kosong');
-  const args = { p_rahasia: ctx.cfg.rahasia, p_email: email, p_nama: nama, p_whatsapp: wa };
+  const token = tokenTamu(b.token);
+  const args = { p_rahasia: ctx.cfg.rahasia, p_email: email, p_nama: nama, p_whatsapp: wa,
+    p_token_hash: await sha256Hex(token), p_peminta: await pemintaDari(req, ctx.cfg.rahasia) };
   let m = await ctx.rpc('tamu_buat_pesanan', args);
   if (m.aksi === 'cek') {
     await sinkronTamu(ctx, m.pesanan.kode, true);
@@ -316,7 +335,7 @@ export const handleTamuCheckout = bungkus('tamu-checkout', async (req, ctx) => {
   const t = m.pesanan;
   if (m.aksi === 'pakai') {
     if (t.status === 'dibuat') throw new GalatQris(409, 'Halaman pembayaran sedang disiapkan. Coba lagi beberapa detik lagi.');
-    return tamuPublik(t);
+    return tamuPublik(t, token);
   }
   const menit = Math.max(1, Math.round((new Date(t.berlaku_sampai).getTime() - ctx.now()) / 60000)) || m.qr_menit;
   let hasil;
@@ -328,7 +347,7 @@ export const handleTamuCheckout = bungkus('tamu-checkout', async (req, ctx) => {
   } catch (e) { hasil = { ok: false, pesan: 'Gagal menghubungi penyedia pembayaran' }; }
   const simpan = await ctx.rpc('tamu_simpan_snap', { p_rahasia: ctx.cfg.rahasia, p_pesanan: t.id, p_hasil: hasil });
   if (simpan.status !== 'menunggu') throw new GalatQris(502, 'Halaman pembayaran belum berhasil dibuat. Silakan coba lagi.', simpan.pesan);
-  return tamuPublik(simpan);
+  return tamuPublik(simpan, token);
 }, { butuhLogin: false });
 
 /** POST {kode, email, paksa} — tanpa login; kode DAN email harus cocok. Untuk halaman kembali dari Snap. */
