@@ -519,12 +519,12 @@ test('P0 Pro: checkout hanya dibuka bila proPembayaranAktif (tanpa syarat WhatsA
   truthy(/PAY_READY \? '<a class="btn sm" href="akun\.html\?view=pro">Beli Pro<\/a>' : '<span class="badge">Pro segera hadir<\/span>'/.test(akun), 'halaman akun');
   truthy(/if \(!PAY_READY\) \{ card\.innerHTML = `\$\{head\}\$\{hargaBlok\(\)\}\$\{SIAPKAN\}\$\{kembali\}`; return; \}/.test(akun) && /Metode pembayaran sedang disiapkan/.test(akun), 'checkout: "sedang disiapkan" tanpa menghubungi tabel pembayaran');
 });
-test('Harga Pro sekali bayar: Rp149.000 peluncuran, Rp299.000 reguler direncanakan (dicoret, berlabel), tanpa harga lama/kuota', () => {
+test('Harga Pro sekali bayar: Rp149.000 peluncuran, tanpa harga reguler pembanding, tanpa harga lama/kuota', () => {
   const cfg = src('config.js'), idx = fs.readFileSync(path.join(__dirname, '..', 'index.html'), 'utf8'), appJs = src('app.js'), akun = src('akun.js'), pv = fs.readFileSync(path.join(__dirname, '..', 'privasi.html'), 'utf8');
-  truthy(/prices: \{\s*pro: 'Rp149\.000',\s*proRegular: 'Rp299\.000',\s*proLabel: 'Harga Peluncuran',\s*proUnit: 'sekali bayar',\s*\}/.test(cfg), 'config harga');
-  truthy(/<p class="price-was">Harga reguler yang direncanakan <s data-price="proRegular">Rp299\.000<\/s><\/p>/.test(idx) && /data-price="pro">Rp149\.000</.test(idx) && /data-price="proLabel">Harga Peluncuran</.test(idx), 'landing: label + coret + harga utama');
+  truthy(/prices: \{\s*pro: 'Rp149\.000',\s*proLabel: 'Harga Peluncuran',\s*proUnit: 'sekali bayar',\s*\}/.test(cfg) && !/proRegular:/.test(cfg), 'config harga, tanpa harga reguler');
+  truthy(!/Rp299\.000|price-was|proRegular/.test(idx) && (idx.match(/class="price [^"]*"/g) || []).length === 2 && /data-price="pro">Rp149\.000</.test(idx) && /data-price="proLabel">Harga Peluncuran</.test(idx), 'landing: label + coret + harga utama');
   truthy(/Bayar satu kali\. Tanpa tagihan bulanan atau tahunan\./.test(idx), 'landing: sekali bayar dijelaskan');
-  truthy(/Harga reguler yang direncanakan <s>\$\{esc\(pr\.proRegular\)\}<\/s>/.test(appJs) && /tanpa tagihan bulanan atau tahunan/.test(appJs), 'dashboard: label + coret');
+  truthy(/\$\{pr\.proRegular \?/.test(appJs) && /tanpa tagihan bulanan atau tahunan/.test(appJs), 'dashboard: harga coret hanya bila proRegular diisi (tidak diisi)');
   truthy(/const hargaSingkat = /.test(akun), 'akun: harga dari config');
   const semua = cfg + idx + appJs + akun + pv + fs.readFileSync(path.join(__dirname, '..', 'admin.html'), 'utf8');
   for (const lama of ['Rp49.000', 'Rp199.000', 'Rp399.000', 'Berlangganan', 'Jasa laporan</h3>', "'pro_bulanan', 'Pro bulanan'"]) truthy(!semua.includes(lama), `tanpa ${lama}`);

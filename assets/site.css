@@ -131,6 +131,8 @@ section.blk.alt { background: var(--surface); border-block: 1px solid var(--line
 .price .ticks { font-size: 14.5px; }
 .price .ticks li.no { color: var(--ink-3); } .price .ticks li.no::before { content: "–"; color: var(--ink-3); }
 .price .btn { margin-top: auto; }
+/* dua paket seimbang: tombol menempel di dasar kartu (sama dengan main) */
+.prices .price { display: flex; flex-direction: column; } .prices .price > .btn { align-self: stretch; }
 .ticks-pro li > span b { color: var(--ink); }
 .cmp { max-width: 860px; margin: 20px auto 0; border: 1px solid var(--line); border-radius: 16px; background: var(--surface); padding: 4px 20px; }
 .cmp > summary { cursor: pointer; padding: 14px 0; font-weight: 700; font-size: 15px; }

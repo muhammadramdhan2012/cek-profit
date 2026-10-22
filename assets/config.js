@@ -25,12 +25,11 @@ window.CEK_CONFIG = {
   domainResmi: 'https://cekuntung.id',
   alihkanAlamatLama: true,
 
-  // Harga Cek Untung Pro (sekali bayar, bukan langganan). Keputusan pemilik 21 Okt 2026.
-  // `proRegular` = harga reguler YANG DIRENCANAKAN, tampil dicoret sebagai pembanding dengan keterangan itu.
+  // Harga Cek Untung Pro (sekali bayar, bukan langganan). Keputusan pemilik 21 Okt 2026; harga reguler tidak ditampilkan
+  // sebagai pembanding (keputusan pemilik 22 Okt 2026). `proRegular` sengaja tidak diisi: tampilan coret otomatis hilang.
   // Tidak ada countdown atau sisa kuota yang ditampilkan: kuota promosi belum bisa dicatat/ditegakkan di server.
   prices: {
     pro: 'Rp149.000',
-    proRegular: 'Rp299.000',
     proLabel: 'Harga Peluncuran',
     proUnit: 'sekali bayar',
   },
