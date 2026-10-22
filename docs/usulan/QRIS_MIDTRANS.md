@@ -100,3 +100,24 @@ PGHOST=<socket> PGPORT=<port> PGUSER=postgres node tests/e2e/qris-e2e.mjs   # bu
 - Respons Midtrans sandbox sungguhan: bentuk `actions`/`qr_string`, perilaku `custom_expiry` untuk QRIS, kode status
   pembatalan, dan bentuk `refunds` di Get Status. Mock mengikuti dokumentasi publik.
 - Ketersediaan QRIS dinamis untuk akun Midtrans perorangan, MDR, dan jadwal pencairan.
+
+## Checkout tamu (Midtrans Snap, tanpa login) — usulan, belum di staging
+
+- Alur: `akun.html?view=pro` (belum login) → nama, email, WA opsional → Edge Function `tamu-checkout` (harga dari server,
+  `enabled_payments: other_qris`, kedaluwarsa 15 menit) → **redirect** ke halaman Snap → kembali ke `akun.html?view=bayar`
+  (status dari `tamu-status`, bukan dari callback browser) → webhook `qris-notifikasi` (signature + Get Status) mencatat
+  pembayaran → email tautan aktivasi (Supabase OTP) → `akun.html?view=aktivasi` → `klaim_pembelian_tamu()` mengaktifkan Pro.
+- Snap **redirect**, bukan popup: popup memerlukan `snap.js` dari CDN pihak ketiga yang bisa membaca token sesi di halaman.
+  Popup hanya dengan persetujuan pemilik.
+- Klaim mensyaratkan email terkonfirmasi **dan** sesi dari tautan email (`amr`), jadi mengetik email orang lain saat checkout
+  tidak memberi Pro ke akun orang itu. Akun yang sudah ada tidak diduplikasi (OTP dengan `create_user: true` memakai akun lama).
+- Email gagal: pembayaran tetap tercatat; `tamu-status` dengan `paksa` atau halaman `view=aktivasi` mengirim ulang (maks. 5×).
+- File: `supabase/usulan/checkout-tamu.sql` (+ tes `test-checkout-tamu.sql`), `supabase/functions/tamu-checkout`, `tamu-status`.
+
+### Kebutuhan staging (dijalankan pemilik)
+1. SQL Editor staging: jalankan ulang `qris-midtrans.sql` (dispatch pesanan tamu), lalu `checkout-tamu.sql`.
+2. Deploy `tamu-checkout` dan `tamu-status` dengan `--no-verify-jwt`.
+3. Secret Edge Function `SITE_URL` = alamat preview (mis. `https://feature-qris-midtrans.cekuntung.pages.dev`).
+4. Authentication → URL Configuration: tambahkan Redirect URL `<SITE_URL>/akun?view=aktivasi`.
+5. Verifikasi di staging: fungsi `security definer` dapat membaca `auth.users.email_confirmed_at`, dan nilai `amr` di JWT
+   setelah tautan email berisi `otp`/`magiclink` (belum bisa diuji di sini).

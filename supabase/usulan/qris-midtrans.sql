@@ -188,6 +188,11 @@ begin
   if not public._rahasia_gateway_sah(p_rahasia) then raise exception 'Akses ditolak'; end if;
   select * into g from public.pro_gateway_percobaan where gateway_order_id = p_status ->> 'order_id' for update;
   if not found then
+    -- Bukan percobaan anggota: mungkin pesanan checkout tamu (usulan/checkout-tamu.sql, bila sudah terpasang).
+    if to_regprocedure('public._tamu_terapkan_status(jsonb)') is not null then
+      hasil := public._tamu_terapkan_status(p_status);
+      if hasil is not null then return hasil; end if;
+    end if;
     perform public._audit('gateway_tidak_dikenal', null, null, null,
       jsonb_build_object('order_id', left(p_status ->> 'order_id', 60), 'status', ts), 'Status Midtrans untuk percobaan yang tidak dikenal');
     return 'tidak_dikenal';

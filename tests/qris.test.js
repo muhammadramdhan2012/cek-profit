@@ -21,6 +21,7 @@ const JWT = 'eyJ.uji.pembeli';
     const calls = [];
     const fetcher = async (url, init) => {
       if (!String(url).startsWith(SUPA)) return fetch(url, init);
+      if (String(url).includes('/auth/v1/otp')) { calls.push({ nama: 'otp', url: String(url), body: JSON.parse(init.body), apikey: init.headers.apikey }); return new Response('{}', { status: handlers.otpStatus || 200 }); }
       const nama = String(url).split('/rpc/')[1];
       const args = JSON.parse(init.body);
       calls.push({ nama, args, auth: init.headers.Authorization, apikey: init.headers.apikey });
@@ -187,6 +188,50 @@ const JWT = 'eyJ.uji.pembeli';
       'https://user:pw@api.sandbox.midtrans.com/a', 'https://api.sandbox.midtrans.com:8443/a', 'data:image/png;base64,AAA', '']) truthy(!Q.urlQrSah(u, sb), `ditolak: ${u}`);
     const pr = Q.bacaKonfigurasi({ ...env, MIDTRANS_ENV: 'production', MIDTRANS_SERVER_KEY: 'Mid-server-abc' });
     truthy(Q.urlQrSah('https://api.midtrans.com/v2/qris/a/qr-code', pr) && !Q.urlQrSah('https://api.sandbox.midtrans.com/v2/qris/a', pr), 'produksi hanya api.midtrans.com');
+  });
+
+  await t('Checkout tamu: validasi input; Snap hanya QRIS, nominal dari database, tanpa data pembeli, kembali ke situs', async () => {
+    const d0 = db({});
+    for (const [body, pesan] of [[{ nama: 'Ani', email: 'bukan' }, /Email/], [{ nama: 'A', email: 'a@b.id' }, /Nama/], [{ nama: 'Ani', email: 'a@b.id', whatsapp: '12345' }, /WhatsApp/]]) {
+      const r = await baca(await Q.handleTamuCheckout(req(body, { jwt: '' }), deps(d0.fetcher)));
+      truthy(r.status === 400 && pesan.test(r.body.error), `input salah → 400 (${JSON.stringify(body)})`);
+    }
+    truthy(d0.calls.length === 0, 'input salah tidak menyentuh database');
+    truthy(Q.normalWa('0812-3456-7890') === '+6281234567890' && Q.normalWa('') === '' && Q.normalWa('+6281234567890') === '+6281234567890' && Q.normalWa('021555') === null, 'normalisasi WhatsApp');
+    const t0 = { id: 11, kode: 'CT-ABCD1234', amount: 149000, status: 'dibuat', berlaku_sampai: new Date(Date.now() + 15 * 60000).toISOString(), email: 'x@y.id' };
+    const d = db({ tamu_buat_pesanan: () => ({ aksi: 'baru', pesanan: t0, qr_menit: 15 }),
+      tamu_simpan_snap: (a) => ({ ...t0, status: a.p_hasil.ok ? 'menunggu' : 'gagal', snap_url: a.p_hasil.snap_url, email_status: 'belum' }) });
+    const r = await baca(await Q.handleTamuCheckout(req({ nama: ' Ani  Wijaya ', email: 'Ani@Contoh.ID', whatsapp: '0812 3456 7890', amount: 1 }, { jwt: '' }), deps(d.fetcher)));
+    truthy(r.status === 200 && r.body.kode === 'CT-ABCD1234' && /\/snap\/v4\/redirection\//.test(r.body.snap_url) && !('email' in r.body), `200 + URL Snap, tanpa email di respons (${JSON.stringify(r.body)})`);
+    const a = d.calls.find((c) => c.nama === 'tamu_buat_pesanan').args;
+    truthy(a.p_email === 'ani@contoh.id' && a.p_nama === 'Ani Wijaya' && a.p_whatsapp === '+6281234567890' && a.p_rahasia === RAHASIA, 'argumen dinormalkan + rahasia');
+    const sb = mt.trx.get('CT-ABCD1234').body;
+    truthy(sb.transaction_details.gross_amount === 149000 && sb.enabled_payments.join() === 'other_qris' && sb.expiry.duration === 15 && sb.expiry.unit === 'minutes'
+      && sb.callbacks.finish === 'https://feature-pro-pricing.cekuntung.pages.dev/akun?view=bayar' && !sb.customer_details, 'Snap: QRIS saja, Rp dari database, 15 menit, kembali ke situs, tanpa data pembeli');
+    const sbCfg = Q.bacaKonfigurasi({ ...env, MIDTRANS_ENV: 'sandbox', MIDTRANS_SERVER_KEY: 'SB-Mid-server-abc' });
+    truthy(Q.urlSnapSah('https://app.sandbox.midtrans.com/snap/v4/redirection/x', sbCfg) && !Q.urlSnapSah('https://app.sandbox.midtrans.com.jahat.id/x', sbCfg) && !Q.urlSnapSah('https://api.sandbox.midtrans.com/x', sbCfg), 'URL Snap hanya dari host Snap Midtrans');
+  });
+
+  await t('Notifikasi checkout tamu lunas → tautan aktivasi (OTP Supabase, anon key); gagal kirim tetap 200 dan tercatat', async () => {
+    await fetch(`${MT}/snap/v1/transactions`, { method: 'POST', headers: { Authorization: `Basic ${Buffer.from(`${mt.serverKey}:`).toString('base64')}` }, body: JSON.stringify({ transaction_details: { order_id: 'CT-NOTIF001', gross_amount: 149000 } }) });
+    mt.bayar('CT-NOTIF001');
+    for (const otpStatus of [200, 500]) {
+      const d = db({ otpStatus, gateway_terapkan_status: () => 'lunas_tamu', tamu_perlu_email: () => ({ id: 21, email: 'ani@contoh.id' }), tamu_catat_email: () => null });
+      const r = await baca(await Q.handleNotifikasi(req(mt.notifikasi('CT-NOTIF001'), { jwt: '' }), deps(d.fetcher)));
+      const otp = d.calls.find((c) => c.nama === 'otp'), cat = d.calls.find((c) => c.nama === 'tamu_catat_email');
+      truthy(r.status === 200 && r.body.hasil === 'lunas_tamu', `${otpStatus}: notifikasi tetap 200`);
+      truthy(otp && otp.body.email === 'ani@contoh.id' && otp.body.create_user === true && otp.apikey === ANON
+        && decodeURIComponent(otp.url).endsWith('redirect_to=https://feature-pro-pricing.cekuntung.pages.dev/akun?view=aktivasi'), `${otpStatus}: OTP dikirim ke email pesanan, kembali ke halaman aktivasi`);
+      truthy(cat && cat.args.p_ok === (otpStatus === 200) && cat.args.p_pesan === `HTTP ${otpStatus}`, `${otpStatus}: hasil pengiriman tercatat`);
+    }
+  });
+
+  await t('Status tamu: kode/email salah format → 404 tanpa database; kode+email dicek database', async () => {
+    const d = db({ tamu_status: () => null });
+    let r = await baca(await Q.handleTamuStatus(req({ kode: "CT-1' or 1=1", email: 'a@b.id' }, { jwt: '' }), deps(d.fetcher)));
+    truthy(r.status === 404 && d.calls.length === 0, 'format salah → 404 tanpa database');
+    r = await baca(await Q.handleTamuStatus(req({ kode: 'CT-ABCD1234', email: 'orang@lain.id' }, { jwt: '' }), deps(d.fetcher)));
+    truthy(r.status === 404 && d.calls[0].args.p_email === 'orang@lain.id', 'kode + email tidak cocok → 404');
   });
 
   await t('CORS: hanya origin terdaftar; OPTIONS 204', async () => {

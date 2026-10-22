@@ -29,21 +29,28 @@ const psql = (sql, db = DB, file, berhenti = true) => new Promise((ok, no) => ex
 const lit = (v) => (v === null || v === undefined ? 'NULL' : `'${(typeof v === 'object' ? JSON.stringify(v) : String(v)).replace(/'/g, "''")}'`);
 
 /* ---- jembatan PostgREST mini (hanya RPC) ---- */
-let dbMati = false;
+let dbMati = false, otpGagal = false; const otp = [];
 const bridge = http.createServer((req, res) => {
   let raw = ''; req.on('data', (c) => { raw += c; });
   req.on('end', async () => {
     const kirim = (s, b) => { res.writeHead(s, { 'Content-Type': 'application/json' }); res.end(JSON.stringify(b)); };
     if (dbMati) return kirim(503, { message: 'unavailable' });
-    const m = /^\/rest\/v1\/rpc\/([a-z_]+)$/.exec(new URL(req.url, 'http://x').pathname);
+    const pth = new URL(req.url, 'http://x');
+    if (pth.pathname === '/auth/v1/otp') {   // tiruan Supabase Auth: tautan email (OTP) — dicatat, bisa digagalkan
+      otp.push({ body: JSON.parse(raw || '{}'), redirect: pth.searchParams.get('redirect_to'), apikey: req.headers.apikey });
+      return kirim(otpGagal ? 500 : 200, {});
+    }
+    const m = /^\/rest\/v1\/rpc\/([a-z_]+)$/.exec(pth.pathname);
     if (!m || req.method !== 'POST' || req.headers.apikey !== ANON) return kirim(401, { message: 'invalid' });
     const tok = (/^Bearer (.+)$/.exec(req.headers.authorization || '') || [])[1] || '';
-    const uid = tok.startsWith('uid:') ? tok.slice(4) : '';
+    // Token uji: "uid:<uuid>" atau "uid:<uuid>:<metode amr>" (mis. otp / password).
+    const [uid = '', amr = 'password'] = tok.startsWith('uid:') ? tok.slice(4).split(':') : [];
     if (tok !== ANON && !/^[0-9a-f-]{36}$/.test(uid)) return kirim(401, { message: 'JWT tidak valid' });
     const args = JSON.parse(raw || '{}');
     if (!Object.keys(args).every((k) => /^p_[a-z_]+$/.test(k))) return kirim(400, { message: 'argumen' });
     const panggil = `public.${m[1]}(${Object.entries(args).map(([k, v]) => `${k} => ${lit(v)}`).join(', ')})`;
-    const sql = `begin; select set_config('request.jwt.claim.sub', ${lit(uid)}, true) \\g /dev/null
+    const klaim = uid ? JSON.stringify({ sub: uid, amr: [{ method: amr }] }) : '';
+    const sql = `begin; select set_config('request.jwt.claim.sub', ${lit(uid)}, true), set_config('request.jwt.claims', ${lit(klaim)}, true) \\g /dev/null
 set local role ${uid ? 'authenticated' : 'anon'};
 select coalesce(to_jsonb(${panggil}), 'null'::jsonb); commit;`;
     try { kirim(200, JSON.parse((await psqlStdin(sql)).split('\n').pop())); }
@@ -63,7 +70,7 @@ const mt = createMidtransMock();
 await new Promise((r) => mt.server.listen(0, r));
 await new Promise((r) => bridge.listen(0, r));
 const env = { SUPABASE_URL: `http://127.0.0.1:${bridge.address().port}`, SUPABASE_ANON_KEY: ANON, MIDTRANS_SERVER_KEY: mt.serverKey,
-  MIDTRANS_ENV: 'mock', MIDTRANS_API_BASE: `http://127.0.0.1:${mt.server.address().port}`, GATEWAY_SECRET: RAHASIA };
+  MIDTRANS_ENV: 'mock', MIDTRANS_API_BASE: `http://127.0.0.1:${mt.server.address().port}`, GATEWAY_SECRET: RAHASIA, SITE_URL: 'https://preview.uji.invalid' };
 const logs = [];
 const deps = { env, log: (m) => logs.push(m) };
 const panggil = async (h, body, uid) => { const r = await h(new Request('https://fn/x', { method: 'POST', headers: { 'Content-Type': 'application/json', ...(uid !== null ? { Authorization: `Bearer ${uid ? `uid:${uid}` : ANON}` } : {}) }, body: JSON.stringify(body) }), deps); return { status: r.status, body: await r.json() }; };
@@ -74,7 +81,7 @@ const satu = (sql) => psql(sql);
 try {
   await psql(`create database ${DB}`, 'postgres');
   await psql(null, DB, path.join(ROOT, 'supabase/tests/shim-tanpa-ekspos.sql'), false);
-  for (const f of ['supabase/schema.sql', 'supabase/usulan/pro-sekali-bayar.sql', 'supabase/usulan/hardening-fungsi.sql', 'supabase/usulan/qris-midtrans.sql']) await psql(null, DB, path.join(ROOT, f));
+  for (const f of ['supabase/schema.sql', 'supabase/usulan/pro-sekali-bayar.sql', 'supabase/usulan/hardening-fungsi.sql', 'supabase/usulan/qris-midtrans.sql', 'supabase/usulan/checkout-tamu.sql']) await psql(null, DB, path.join(ROOT, f));
   await satu(`insert into public.gateway_rahasia (id, hash) values (1, encode(sha256(convert_to('${RAHASIA}', 'UTF8')), 'hex'));
     insert into auth.users (id, email) values ('${U.a}','a@e2e.id'),('${U.b}','b@e2e.id'),('${U.c}','c@e2e.id'),('${U.d}','d@e2e.id'),('${U.adm}','admin@e2e.id');
     update public.profiles set is_admin = true where id = '${U.adm}';
@@ -156,8 +163,62 @@ try {
   r = await panggil(Q.handleBuat, { pesanan: oC }, U.c);
   cek(r.status === 400 && /belum dibuka/.test(r.body.error), 'E20 mode manual: pembuatan QR ditolak dengan pesan jelas');
 
+  // ---------------- checkout tamu (Snap) ----------------
+  await satu(`update public.pengaturan_pembayaran set mode = 'otomatis'`);
+  const tamu = (body) => panggil(Q.handleTamuCheckout, body, null);
+  const statusTamu = (body) => panggil(Q.handleTamuStatus, body, null);
+  const sebagai = (uid, metode) => `uid:${uid}:${metode}`;
+  const klaim = async (uid, metode) => (await fetch(`${env.SUPABASE_URL}/rest/v1/rpc/klaim_pembelian_tamu`, { method: 'POST', headers: { apikey: ANON, Authorization: `Bearer ${sebagai(uid, metode)}`, 'Content-Type': 'application/json' }, body: '{}' })).json();
+  r = await tamu({ nama: 'Tamu Baru', email: 'Tamu@E2E.id', whatsapp: '081234567890' });
+  const k1 = r.body.kode;
+  cek(r.status === 200 && /^CT-/.test(k1) && /snap\/v4\/redirection/.test(r.body.snap_url) && mt.trx.get(k1).body.enabled_payments.join() === 'other_qris', `G1 checkout tamu tanpa login → Snap QRIS (${r.status})`);
+  r = await tamu({ nama: 'Tamu Baru', email: 'tamu@e2e.id' });
+  cek(r.body.kode === k1 && mt.trx.size === [...mt.trx.keys()].length, 'G2 klik ulang → Snap yang sama (tanpa tagihan ganda)');
+  r = await panggil(Q.handleNotifikasi, mt.notifikasi(k1, { kunci: 'palsu' }), null);
+  cek(r.status === 401, 'G3 webhook palsu untuk pesanan tamu ditolak');
+  mt.bayar(k1);
+  const par = await Promise.all(Array.from({ length: 8 }, () => panggil(Q.handleNotifikasi, mt.notifikasi(k1), null)));
+  cek(par.every((x) => x.status === 200) && (await jml(`select count(*) from public.pro_payments where note like '%${k1}%' and kind = 'pembayaran'`)) === 1
+    && (await satu(`select status from public.pro_pesanan_tamu where kode = '${k1}'`)) === 'lunas', 'G4 8 notifikasi paralel → 1 dana, pesanan lunas, belum ada Pro');
+  cek(otp.length === 1 && otp[0].body.email === 'tamu@e2e.id' && otp[0].body.create_user === true && otp[0].redirect === 'https://preview.uji.invalid/akun?view=aktivasi'
+    && (await satu(`select email_status from public.pro_pesanan_tamu where kode = '${k1}'`)) === 'terkirim', 'G5 tautan aktivasi dikirim sekali ke email pesanan');
+  // akun dibuat Supabase dari tautan (OTP) → klaim
+  const uT = 'e6000000-0000-0000-0000-0000000000e6', uX = 'e7000000-0000-0000-0000-0000000000e7';
+  await satu(`insert into auth.users (id, email, email_confirmed_at) values ('${uT}', 'tamu@e2e.id', now()), ('${uX}', 'penyerang@e2e.id', now())`);
+  let kl = await klaim(uX, 'otp');
+  cek(kl.aktif === 0 && !(await pro(uX)), 'G6 klaim oleh email lain ditolak');
+  kl = await klaim(uT, 'password');
+  cek(kl.aktif === 0 && kl.perlu_tautan_email === true && !(await pro(uT)), 'G7 masuk dengan kata sandi saja belum cukup → diminta tautan email');
+  kl = await klaim(uT, 'otp');
+  cek(kl.aktif === 1 && await pro(uT) && (await satu(`select status from public.pro_pesanan_tamu where kode = '${k1}'`)) === 'diklaim', 'G8 masuk lewat tautan email → Pro aktif');
+  // email gagal terkirim → tercatat → pulih
+  const uS = 'e8000000-0000-0000-0000-0000000000e8';
+  r = await tamu({ nama: 'Email Gagal', email: 'gagal@e2e.id' }); const k2 = r.body.kode; mt.bayar(k2);
+  otpGagal = true; r = await panggil(Q.handleNotifikasi, mt.notifikasi(k2), null); otpGagal = false;
+  cek(r.status === 200 && (await satu(`select status || '/' || email_status from public.pro_pesanan_tamu where kode = '${k2}'`)) === 'lunas/gagal', 'G9 email gagal: pembayaran tetap tercatat lunas, status email gagal');
+  await satu(`update public.pro_pesanan_tamu set email_dicoba = now() - interval '2 minutes' where kode = '${k2}'`);
+  r = await statusTamu({ kode: k2, email: 'gagal@e2e.id' });
+  cek(r.body.status === 'lunas' && r.body.email_status === 'terkirim', 'G10 pemulihan: halaman status mengirim ulang tautan');
+  await satu(`insert into auth.users (id, email, email_confirmed_at) values ('${uS}', 'gagal@e2e.id', now())`);
+  cek((await klaim(uS, 'magiclink')).aktif === 1 && await pro(uS), 'G11 klaim setelah pemulihan → Pro aktif');
+  // email terdaftar yang sudah Pro membayar lagi → tidak ada aktivasi ganda
+  r = await tamu({ nama: 'Sudah Pro', email: 'tamu@e2e.id' }); const k3 = r.body.kode; mt.bayar(k3);
+  await panggil(Q.handleNotifikasi, mt.notifikasi(k3), null);
+  kl = await klaim(uT, 'otp');
+  cek(kl.ganda === 1 && (await jml(`select count(*) from public.upgrade_requests where user_id = '${uT}'`)) === 1, 'G12 email sudah Pro bayar lagi → ditandai ganda, tanpa aktivasi kedua');
+  // refund dana tamu yang sudah diklaim
+  const payT = await jml(`select payment_id from public.pro_pesanan_tamu where kode = '${k1}'`);
+  r = await panggil(Q.handleRefund, { pembayaran: payT, nominal: 149000, alasan: 'uji refund tamu' }, U.adm);
+  cek(r.status === 200 && r.body.hasil === 'direfund' && !(await pro(uT)), `G13 refund penuh dana tamu → Pro dicabut (${JSON.stringify(r.body)})`);
+  r = await panggil(Q.handleRefund, { pembayaran: payT, nominal: 149000, alasan: 'ulang' }, U.adm);
+  cek(r.status === 400 && (await jml(`select count(*) from public.pro_payments where refund_of = ${payT}`)) === 1, 'G14 refund ulang ditolak, 1 baris refund');
+  // nominal salah
+  r = await tamu({ nama: 'Nominal Salah', email: 'nominal@e2e.id' }); const k4 = r.body.kode; mt.bayar(k4, { gross: 1000 });
+  r = await panggil(Q.handleNotifikasi, mt.notifikasi(k4), null);
+  cek(r.body.hasil === 'perlu_cek' && (await jml(`select count(*) from public.pro_payments where note like '%${k4}%'`)) === 0, 'G15 nominal salah → perlu_cek, tidak masuk buku besar, tanpa email');
+  cek(!otp.some((o) => o.body.email === 'nominal@e2e.id'), 'G16 tidak ada tautan aktivasi untuk pembayaran tidak sah');
   cek(!logs.join('\n').includes(RAHASIA) && !logs.join('\n').includes(mt.serverKey), 'E21 log Edge Function tanpa server key/rahasia');
-  cek((await jml(`select count(*) from public.pro_payments where sumber = 'midtrans' and kind = 'pembayaran'`)) === 3, 'E22 buku besar: 3 pembayaran sah (A, B, D); nominal tidak cocok (C) tidak tercatat');
+  cek((await jml(`select count(*) from public.pro_payments where sumber = 'midtrans' and kind = 'pembayaran' and note not like 'Checkout tamu%'`)) === 3, 'E22 buku besar: 3 pembayaran sah (A, B, D); nominal tidak cocok (C) tidak tercatat');
 } catch (e) { gagal++; console.log('GAGAL (galat)', e.message); }
 finally {
   mt.server.close(); bridge.close();

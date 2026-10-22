@@ -14,6 +14,11 @@
   // Halaman pembelian Pro (akun.html?view=pro): setelah masuk, kembali ke sini.
   const PRO_VIEW = params.get('view') === 'pro';
   if (PRO_VIEW && !params.get('next')) next = 'akun.html?view=pro';
+  // Checkout tamu (tanpa login): ?view=pro → formulir; ?view=bayar → kembali dari Snap; ?view=aktivasi → tautan email.
+  const VIEW = params.get('view');
+  let tamu = PRO_VIEW || VIEW === 'aktivasi';   // false setelah pengunjung memilih "Masuk"
+  let tamuPoll = null;
+  const TAMU_KEY = 'cekprofit.tamu';
   const dashHref = () => (/^akun\.html/.test(next) ? 'dashboard.html' : next);
   const here = () => location.href.split('#')[0].split('?')[0];
   const toast = (m) => { const t = $('#toast'); t.textContent = m; t.hidden = false; clearTimeout(toast.t); toast.t = setTimeout(() => { t.hidden = true; }, 3500); };
@@ -24,7 +29,7 @@
   let view = params.get('mode') === 'daftar' ? 'daftar' : 'masuk';
   let message = null;   // { ok?: boolean, text }
   let draft = {};       // isian (selain kata sandi) tetap terisi setelah pesan error
-  const DRAFT_IDS = ['em', 'nm', 'hp'];
+  const DRAFT_IDS = ['em', 'nm', 'hp', 'tm-wa'];
 
   const eye = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg>';
   const gLogo = '<svg width="18" height="18" viewBox="0 0 48 48" aria-hidden="true"><path fill="#FFC107" d="M43.6 20.5H42V20H24v8h11.3C33.7 32.7 29.3 36 24 36c-6.6 0-12-5.4-12-12s5.4-12 12-12c3 0 5.8 1.1 7.9 3l5.7-5.7C34 6.1 29.3 4 24 4 12.9 4 4 12.9 4 24s8.9 20 20 20 20-8.9 20-20c0-1.3-.1-2.4-.4-3.5z"/><path fill="#FF3D00" d="M6.3 14.7l6.6 4.8C14.7 15.1 19 12 24 12c3 0 5.8 1.1 7.9 3l5.7-5.7C34 6.1 29.3 4 24 4 16.3 4 9.7 8.3 6.3 14.7z"/><path fill="#4CAF50" d="M24 44c5.2 0 9.9-2 13.4-5.2l-6.2-5.2C29.2 35.1 26.7 36 24 36c-5.3 0-9.7-3.3-11.3-8l-6.5 5C9.5 39.6 16.2 44 24 44z"/><path fill="#1976D2" d="M43.6 20.5H42V20H24v8h11.3c-.8 2.2-2.2 4.2-4.1 5.6l6.2 5.2C37 39.2 44 34 44 24c0-1.3-.1-2.4-.4-3.5z"/></svg>';
@@ -51,6 +56,7 @@
 
   function render() {
     hentikanQris();   // timer & polling QRIS hanya hidup selama panel QR tampil
+    clearTimeout(tamuPoll); tamuPoll = null;
     const card = $('#card');
     if (!cloud.enabled) {
       // Di alamat staging yang konfigurasinya belum siap, akun sengaja dimatikan (fail-closed) agar tidak menulis ke database produksi.
@@ -65,7 +71,10 @@
         <form id="f-new" novalidate>${pwField('pw1', 'Kata sandi baru', 'new-password', 'Buat kata sandi', { baru: true })}${confirmField('pw1b', 'pw1')}<button class="btn primary" type="submit">Simpan kata sandi</button></form>`;
       return;
     }
+    if (VIEW === 'bayar') return renderBayar(card);
     if (user) return PRO_VIEW ? renderPro(card, user) : renderAccount(card, user);
+    if (tamu && VIEW === 'aktivasi' && view === 'masuk') return renderTautan(card);
+    if (tamu && PAY_READY && view === 'masuk' && !params.get('mode')) return renderTamu(card);
     if (view === 'lupa') {
       card.innerHTML = `${heading('Lupa kata sandi', 'Masukkan email akun Anda. Kami kirim tautan untuk membuat kata sandi baru.')}${msgHtml()}
         <form id="f-lupa" novalidate>${emailField()}<button class="btn primary" type="submit">Kirim tautan</button></form>
@@ -93,6 +102,7 @@
   const hargaSingkat = () => { const pr = C.prices || {}; return pr.pro ? `Pro ${pr.pro} ${pr.proUnit || ''}${pr.proLabel ? ` (${pr.proLabel.toLowerCase()})` : ''}. Laporan PDF dan analisis lengkap.`.replace(/\s+\./, '.') : 'Laporan PDF & analisis lengkap ada di Pro'; };
   async function renderAccount(card, user) {
     card.innerHTML = '<p class="muted" role="status">Memuat akun…</p>';
+    const klaim = await klaimTamu();
     const salin = await salinHpDaftar();
     let p = null, reqs = [];
     try { [p, reqs] = await Promise.all([cloud.db.profile(), cloud.db.myRequests().catch(() => [])]); } catch (e) { message = { text: e.message }; }
@@ -107,7 +117,7 @@
       // Pengguna Google (atau akun lama) belum punya nomor: ajak melengkapi, tidak memblokir.
       : !wa ? '<p class="msg info" id="wa-ajak">Lengkapi nomor WhatsApp Anda agar kami bisa membantu bila ada kendala atau saat konfirmasi pembayaran.</p>' : '';
     const pending = (reqs || []).find((r) => r.status === 'baru' || r.status === 'diproses');
-    card.innerHTML = `${heading('Akun saya', esc(user.email || ''))}${msgHtml()}${ajakWa}
+    card.innerHTML = `${heading('Akun saya', esc(user.email || ''))}${msgHtml()}${klaim}${ajakWa}
       <div class="plan"><div><b>${pro ? (cloud.isProSekaliBayar(p) ? 'Pro sekali bayar' : 'Pro') : 'Gratis'}</b><span class="small muted">${pro ? (cloud.isProSekaliBayar(p) ? 'Aktif selama layanan Cek Untung beroperasi' : `Aktif sampai ${fmtDate(p.pro_until)}`) : pending ? 'Permintaan Pro sedang diproses' : esc(hargaSingkat())}</span></div>
         ${pro ? '<span class="badge pro">PRO</span>' : pending ? '<a class="btn sm" href="akun.html?view=pro">Lihat status</a>' : PAY_READY ? '<a class="btn sm" href="akun.html?view=pro">Beli Pro</a>' : '<span class="badge">Pro segera hadir</span>'}</div>
       <form id="f-profile">
@@ -226,6 +236,73 @@
       <p class="tiny faint">Bayar dalam ${Number(s.batas_jam) || 48} jam setelah pesanan dibuat. Pro aktif setelah dana kami verifikasi di mutasi resmi.</p>
       ${kontak}${riwayat}${kembali}`;
   }
+  /* ---------------- Checkout tamu (tanpa login, Midtrans Snap redirect) ----------------
+   * Harga & halaman Snap dari server. Pro TIDAK aktif dari halaman ini: aktif setelah pembeli membuka tautan aktivasi yang
+   * dikirim ke emailnya (klaim_pembelian_tamu di database memeriksa email terkonfirmasi + sesi dari tautan email). */
+  const tamuSesi = { get: () => { try { return JSON.parse(ss.get(TAMU_KEY) || 'null'); } catch (e) { return null; } }, set: (v) => ss.set(TAMU_KEY, JSON.stringify(v)) };
+  const urlAktivasi = () => `${here()}?view=aktivasi`;
+  function renderTamu(card) {
+    card.innerHTML = `${heading('Beli Cek Untung Pro', 'Tanpa perlu daftar dulu. Akun dibuat otomatis dari email Anda setelah pembayaran berhasil.')}${msgHtml()}${hargaBlok()}
+      <ul class="benefits"><li>Laporan PDF dengan nama dan logo toko</li><li>Semua produk dan saran harga</li><li>Semua temuan, ekspor Excel, riwayat tanpa batas</li></ul>
+      <form id="f-tamu" novalidate>
+        <p class="tiny faint req-note">Kolom bertanda <span class="req" aria-hidden="true">*</span> wajib diisi.</p>
+        ${nameField()}${emailField('contoh@email.com', REQ)}
+        <p class="tiny faint">Tautan aktivasi akun dikirim ke email ini. Pro aktif setelah Anda membuka tautan tersebut.</p>
+        <div class="field"><label for="tm-wa">Nomor WhatsApp (opsional)</label><input class="plain" id="tm-wa" type="tel" inputmode="tel" autocomplete="tel" maxlength="20" placeholder="Contoh: 081234567890" aria-describedby="tm-wa-err">${errSpan('tm-wa')}</div>
+        <button class="btn primary" type="submit">Bayar dengan QRIS</button>
+        <p class="tiny faint">Anda akan diarahkan ke halaman pembayaran Midtrans. Nominal terisi otomatis; kode QRIS berlaku 15 menit. Dengan membeli, Anda menyetujui <a href="privasi.html">ketentuan &amp; privasi</a>.</p>
+      </form>
+      <p class="switch">Sudah punya akun? <button class="btn link" type="button" data-masuk-akun>Masuk</button></p>`;
+    message = null;
+  }
+  function renderTautan(card) {
+    card.innerHTML = `${heading('Aktivasi pembelian Pro', 'Masukkan email yang Anda pakai saat membayar. Kami kirim tautan masuk; Pro aktif setelah Anda membukanya.')}${msgHtml()}
+      <form id="f-tautan" novalidate>${emailField()}<button class="btn primary" type="submit">Kirim tautan aktivasi</button></form>
+      <p class="switch"><button class="btn link" type="button" data-masuk-akun>Masuk dengan kata sandi</button></p>`;
+    message = null;
+  }
+  const PESAN_TAMU = {
+    menunggu: 'Kami belum menerima pembayaran Anda. Bila Anda sudah membayar, tunggu sebentar; halaman ini memeriksa otomatis.',
+    lunas: 'Pembayaran berhasil. Kami mengirim tautan aktivasi ke email Anda. Buka tautan itu untuk mengaktifkan Pro.',
+    diklaim: 'Pembayaran berhasil dan Pro sudah aktif di akun Anda.',
+    perlu_cek: 'Pembayaran Anda sedang diperiksa manual. Kami akan menghubungi Anda lewat email.',
+    kedaluwarsa: 'Waktu pembayaran habis. Silakan ulangi pembelian.', batal: 'Pembayaran dibatalkan. Silakan ulangi pembelian.',
+    gagal: 'Pembayaran tidak berhasil. Silakan ulangi pembelian.', direfund: 'Dana untuk pesanan ini sudah dikembalikan.',
+  };
+  async function renderBayar(card, paksa = true, ke = 0) {
+    const s = tamuSesi.get();
+    if (!s || !s.kode) {
+      card.innerHTML = `${heading('Status pembayaran', '')}<p class="msg info">Bila Anda sudah membayar, buka email Anda untuk tautan aktivasi. Tidak menerima email?</p>
+        <a class="btn primary" href="akun.html?view=aktivasi">Kirim ulang tautan aktivasi</a>`;
+      return;
+    }
+    if (ke === 0) card.innerHTML = `${heading('Status pembayaran', `Pesanan ${esc(s.kode)}`)}<p class="muted" role="status">Memeriksa pembayaran…</p>`;
+    let r;
+    try { r = await cloud.db.tamuStatus(s.kode, s.email, paksa); } catch (err) { card.innerHTML = `${heading('Status pembayaran', `Pesanan ${esc(s.kode)}`)}<p class="msg err" role="alert">${esc(online() ? err.message : OFFLINE)}</p><button class="btn" type="button" data-cek-tamu>Coba lagi</button>`; return; }
+    if (VIEW !== 'bayar' || !$('#card')) return;
+    const selesai = ['lunas', 'diklaim'].includes(r.status);
+    const emailGagal = r.status === 'lunas' && r.email_status === 'gagal';
+    card.innerHTML = `${heading(selesai ? 'Pembayaran berhasil' : 'Status pembayaran', `Pesanan ${esc(s.kode)} · ${esc(s.email)}`)}
+      <p class="msg ${selesai ? 'ok' : 'info'}" role="status">${esc(PESAN_TAMU[r.status] || r.status)}</p>
+      ${emailGagal ? '<p class="msg err">Email aktivasi belum berhasil terkirim. Tekan tombol di bawah untuk mengirim ulang.</p><button class="btn primary" type="button" data-cek-tamu>Kirim ulang tautan aktivasi</button>' : ''}
+      ${r.status === 'lunas' && !emailGagal ? '<p class="tiny faint">Tidak menemukan email? Periksa folder Spam/Promosi, atau <a href="akun.html?view=aktivasi">kirim ulang tautan aktivasi</a>.</p>' : ''}
+      ${r.status === 'menunggu' && /^https:\/\//.test(r.snap_url || '') ? `<a class="btn primary" href="${esc(r.snap_url)}">Lanjutkan pembayaran</a>` : ''}
+      ${['kedaluwarsa', 'batal', 'gagal'].includes(r.status) ? '<a class="btn primary" href="akun.html?view=pro">Ulangi pembelian</a>' : ''}
+      <p class="switch"><a class="btn link" href="dashboard.html">Buka dashboard</a></p>`;
+    // Periksa ulang otomatis selama masih menunggu (maks. ±5 menit); sumber kebenaran tetap server/Midtrans.
+    if (r.status === 'menunggu' && ke < 60) tamuPoll = setTimeout(() => renderBayar(card, false, ke + 1), 5000);
+  }
+  /** Klaim pembelian tamu milik email akun ini (database memeriksa email terkonfirmasi + sesi dari tautan email). */
+  async function klaimTamu() {
+    if (!PAY_READY) return '';
+    let k;
+    try { k = await cloud.db.klaimPembelian(); } catch (e) { return ''; }   // migrasi belum ada / offline: abaikan
+    if (k && k.aktif > 0) return '<p class="msg ok" role="status">Pembelian Pro Anda sudah aktif di akun ini.</p>';
+    if (k && k.ganda > 0) return '<p class="msg info">Kami menerima pembayaran Pro tambahan untuk akun yang sudah Pro. Tim kami akan memproses pengembalian dana sesuai kebijakan refund.</p>';
+    if (k && k.perlu_tautan_email) return `<div class="msg info"><p>Ada pembelian Pro untuk email ini. Untuk keamanan, aktifkan lewat tautan yang kami kirim ke email Anda.</p><button class="btn sm" type="button" data-kirim-aktivasi>Kirim tautan aktivasi</button></div>`;
+    return '';
+  }
+
   /* ---------------- Pembayaran otomatis: QRIS dinamis (Midtrans, lewat Edge Function) ----------------
    * Nominal Rp149.000 sudah terisi di QR; Pro aktif otomatis setelah server memvalidasi pembayaran ke Midtrans.
    * Browser hanya menampilkan QR dari server dan menanyakan status; tidak pernah menentukan lunas/tidaknya. */
@@ -337,6 +414,7 @@
       case 'em': return !v.trim() ? 'Email wajib diisi.' : !input.checkValidity() ? 'Format email tidak valid. Contoh: nama@toko.com' : '';
       case 'nm': return v.trim() ? '' : 'Nama lengkap wajib diisi.';
       case 'hp': return !v.trim() ? 'Nomor HP/WhatsApp wajib diisi untuk mendaftar dengan email.' : A.normalisasiHp(v).ok ? '' : A.PESAN_HP;
+      case 'tm-wa': return !v.trim() || A.normalisasiHp(v).ok ? '' : A.PESAN_HP;
       case 'pf-wa': return v.trim() === input.dataset.awal ? '' : A.normalisasiHp(v).ok ? '' : A.PESAN_HP;
       default:
         if (input.dataset.sama) { const asal = document.getElementById(input.dataset.sama); return !v ? 'Ulangi kata sandi Anda.' : asal && v !== asal.value ? 'Konfirmasi kata sandi belum sama.' : ''; }
@@ -417,6 +495,17 @@
           await cloud.auth.signIn({ email, password }); track('masuk');
           return go('Berhasil masuk. Membuka dashboard…');
         }
+      } else if (f.id === 'f-tamu') {
+        const email = $('#em').value.trim();
+        const r = await cloud.db.tamuCheckout({ nama: $('#nm').value.trim(), email, whatsapp: $('#tm-wa').value.trim() ? A.normalisasiHp($('#tm-wa').value).nilai : '' });
+        // Hanya halaman Snap https yang diikuti (server juga membatasi host Midtrans).
+        if (!r || !r.kode || !/^https:\/\//.test(r.snap_url || '')) throw new Error('Halaman pembayaran belum tersedia. Silakan coba lagi.');
+        tamuSesi.set({ kode: r.kode, email }); track('checkout_tamu');
+        location.assign(r.snap_url); return;
+      } else if (f.id === 'f-tautan') {
+        await cloud.auth.kirimTautan($('#em').value.trim(), urlAktivasi());
+        // Pesan sama untuk email terdaftar maupun tidak (mencegah enumerasi akun).
+        message = { ok: true, text: 'Bila ada pembelian untuk email tersebut, tautan aktivasi sudah dikirim. Periksa kotak masuk dan folder spam.' };
       } else if (f.id === 'f-lupa') {
         await cloud.auth.recover($('#em').value.trim(), here());
         // Pesan sama untuk email terdaftar maupun tidak (mencegah enumerasi akun).
@@ -466,6 +555,14 @@
     if (!t) return;
     if (t.id === 'buat-pesanan') { const m = ($('input[name="metode"]:checked') || {}).value; return aksiPro(t, () => cloud.db.buatPesanan(m), 'Pesanan dibuat. Ikuti instruksi pembayaran.'); }
     if (t.dataset.beli) return aksiPro(t, () => cloud.db.buatPesanan(t.dataset.beli), 'Pesanan diperbarui.');
+    if (t.hasAttribute('data-masuk-akun')) { tamu = false; view = 'masuk'; message = null; return render(); }
+    if (t.hasAttribute('data-cek-tamu')) { busy(t, true, 'Memeriksa…'); return renderBayar($('#card'), true); }
+    if (t.hasAttribute('data-kirim-aktivasi')) {
+      if (!online()) return toast(OFFLINE);
+      busy(t, true, 'Mengirim…');
+      try { await cloud.auth.kirimTautan(cloud.auth.user().email, urlAktivasi()); toast('Tautan aktivasi dikirim. Periksa email Anda.'); } catch (err) { toast(err.message); }
+      return busy(t, false);
+    }
     if (t.id === 'bayar-qris') return aksiPro(t, () => cloud.db.buatPesanan('qris'), '');
     if (t.hasAttribute('data-qris-baru')) { if (qris) return mulaiQris(qris.order); return render(); }
     if (t.hasAttribute('data-qris-cek')) { busy(t, true, 'Mengecek…'); await cekQris(true); if (document.contains(t)) busy(t, false); return; }
@@ -515,6 +612,7 @@
         history.replaceState(null, '', location.pathname + (keep.toString() ? `?${keep}` : ''));
         if (r && r.type === 'recovery') view = 'sandi-baru';
         else if (r && r.type === 'signup') message = { ok: true, text: 'Email terkonfirmasi. Akun Anda aktif.' };
+        else if (r && VIEW === 'aktivasi') message = { ok: true, text: 'Email terverifikasi.' };   // tetap di halaman Akun untuk klaim Pro
         else if (r) return go('Berhasil masuk. Membuka dashboard…');
       } catch (err) {
         history.replaceState(null, '', location.pathname);

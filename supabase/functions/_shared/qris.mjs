@@ -13,6 +13,7 @@
 
 const PRODUK = { id: 'cek-untung-pro', name: 'Cek Untung Pro' };
 const BASE = { sandbox: 'https://api.sandbox.midtrans.com', production: 'https://api.midtrans.com' };
+const SNAP = { sandbox: 'https://app.sandbox.midtrans.com', production: 'https://app.midtrans.com' };
 const BATAS_WAKTU_MS = 10000;
 const CEK_BERKALA_MS = 30000;   // tanpa ?paksa, Midtrans hanya ditanya bila status terakhir lebih tua dari ini
 
@@ -42,7 +43,10 @@ export function bacaKonfigurasi(env = {}) {
   const apiBase = lingkungan === 'mock' ? String(env.MIDTRANS_API_BASE || '') : BASE[lingkungan];
   if (!/^https?:\/\//.test(apiBase)) throw new GalatQris(503, 'Pembayaran otomatis belum dikonfigurasi.', 'MIDTRANS_API_BASE tidak valid');
   const origins = String(env.ALLOWED_ORIGINS || '').split(',').map((s) => s.trim()).filter(Boolean);
-  return { lingkungan, kunci, rahasia, apiBase: apiBase.replace(/\/+$/, ''), supabaseUrl: String(env.SUPABASE_URL).replace(/\/+$/, ''), anonKey: String(env.SUPABASE_ANON_KEY), origins };
+  const snapBase = (lingkungan === 'mock' ? String(env.MIDTRANS_SNAP_BASE || apiBase) : SNAP[lingkungan]).replace(/\/+$/, '');
+  // Alamat situs untuk tautan kembali dari Snap & tautan aktivasi email (harus terdaftar di Redirect URLs Supabase).
+  const situs = String(env.SITE_URL || origins[0] || '').replace(/\/+$/, '');
+  return { lingkungan, kunci, rahasia, apiBase: apiBase.replace(/\/+$/, ''), snapBase, situs, supabaseUrl: String(env.SUPABASE_URL).replace(/\/+$/, ''), anonKey: String(env.SUPABASE_ANON_KEY), origins };
 }
 
 /* ------------------------------------------------------------------ util */
@@ -77,10 +81,10 @@ export function ringkasStatus(st) {
 /* ------------------------------------------------------------------ klien Midtrans */
 export function midtrans(cfg, fetcher) {
   const auth = `Basic ${btoa(`${cfg.kunci}:`)}`;
-  async function panggil(method, path, body) {
+  async function panggil(method, path, body, base = cfg.apiBase) {
     let res;
     try {
-      res = await fetcher(cfg.apiBase + path, { method, headers: { Accept: 'application/json', 'Content-Type': 'application/json', Authorization: auth },
+      res = await fetcher(base + path, { method, headers: { Accept: 'application/json', 'Content-Type': 'application/json', Authorization: auth },
         body: body === undefined ? undefined : JSON.stringify(body), signal: AbortSignal.timeout(BATAS_WAKTU_MS) });
     } catch (e) { throw new GalatQris(502, 'Penyedia pembayaran tidak dapat dihubungi. Coba lagi sebentar.', 'jaringan'); }
     let data = null;
@@ -100,6 +104,14 @@ export function midtrans(cfg, fetcher) {
     status: (orderId) => panggil('GET', `/v2/${id(orderId)}/status`),
     cancel: (orderId) => panggil('POST', `/v2/${id(orderId)}/cancel`),
     refund: (orderId, refundKey, amount, reason) => panggil('POST', `/v2/${id(orderId)}/refund`, { refund_key: refundKey, amount, reason }),
+    /** Snap (checkout tamu): hanya QRIS, tanpa data pembeli, berlaku `menit` menit, kembali ke `finish`. */
+    snap: (orderId, amount, menit, finish) => panggil('POST', '/snap/v1/transactions', {
+      transaction_details: { order_id: orderId, gross_amount: amount },
+      item_details: [{ ...PRODUK, price: amount, quantity: 1 }],
+      enabled_payments: ['other_qris'],
+      expiry: { unit: 'minutes', duration: menit },
+      ...(finish ? { callbacks: { finish } } : {}),
+    }, cfg.snapBase),
   };
 }
 const tidakAda = (r) => r.http === 404 || String(r.data && r.data.status_code) === '404';
@@ -156,7 +168,7 @@ function bungkus(nama, fn, { butuhLogin }) {
       const jwt = jwtDari(req);
       if (butuhLogin && (!jwt || jwt === cfg.anonKey)) return json(401, { error: 'Silakan masuk terlebih dahulu.' }, h);
       const f = deps.fetch || fetch;
-      const ctx = { cfg, jwt, mt: midtrans(cfg, f), rpc: database(cfg, f), now: deps.now || (() => Date.now()) };
+      const ctx = { cfg, jwt, fetch: f, mt: midtrans(cfg, f), rpc: database(cfg, f), now: deps.now || (() => Date.now()) };
       return json(200, await fn(req, ctx), h);
     } catch (e) {
       const status = e instanceof GalatQris ? e.status : 500;
@@ -250,6 +262,106 @@ export const handleCek = bungkus('qris-cek', async (req, ctx) => {
 }, { butuhLogin: true });
 
 /** POST notifikasi Midtrans (tanpa login). Signature → Get Status → database. Non-200 membuat Midtrans mengirim ulang. */
+/** URL halaman Snap hanya diterima dari host Snap Midtrans (https). Pembeli diarahkan ke sini, jadi wajib dibatasi. */
+export function urlSnapSah(url, cfg) {
+  let u; try { u = new URL(String(url || '')); } catch (e) { return false; }
+  if (String(url).length > 500 || u.username || u.password) return false;
+  if (cfg.lingkungan === 'mock') return /^https?:$/.test(u.protocol);
+  return u.protocol === 'https:' && u.hostname === new URL(cfg.snapBase).hostname && (u.port === '' || u.port === '443');
+}
+
+/* ------------------------------------------------------------------ checkout tamu (tanpa login) */
+const EMAIL = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
+/** Nomor WhatsApp opsional → +62…; '' bila kosong; null bila format salah. */
+export function normalWa(v) {
+  const d = String(v || '').replace(/[\s\-().]/g, '');
+  if (!d) return '';
+  const n = d.startsWith('+62') ? d.slice(3) : d.startsWith('62') ? d.slice(2) : d.startsWith('0') ? d.slice(1) : null;
+  return n && /^8[0-9]{7,12}$/.test(n) ? `+62${n}` : null;
+}
+/**
+ * Kirim tautan masuk/aktivasi (OTP email Supabase, anon key; akun dibuat Supabase bila belum ada → tanpa akun ganda).
+ * Kegagalan TIDAK menggagalkan pembayaran: dicatat, dan pembeli bisa meminta tautan lagi dari halaman Akun.
+ */
+async function kirimAktivasi(ctx, kode, fetcher) {
+  try {
+    const t = await ctx.rpc('tamu_perlu_email', { p_rahasia: ctx.cfg.rahasia, p_kode: kode });
+    if (!t) return 'tidak_perlu';
+    let ok = false, ket = '';
+    try {
+      const res = await fetcher(`${ctx.cfg.supabaseUrl}/auth/v1/otp?redirect_to=${encodeURIComponent(`${ctx.cfg.situs}/akun?view=aktivasi`)}`, { method: 'POST',
+        headers: { apikey: ctx.cfg.anonKey, Authorization: `Bearer ${ctx.cfg.anonKey}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: t.email, create_user: true }), signal: AbortSignal.timeout(BATAS_WAKTU_MS) });
+      ok = res.ok; ket = `HTTP ${res.status}`;
+    } catch (e) { ket = 'jaringan'; }
+    await ctx.rpc('tamu_catat_email', { p_rahasia: ctx.cfg.rahasia, p_pesanan: t.id, p_ok: ok, p_pesan: ket });
+    return ok ? 'terkirim' : 'gagal';
+  } catch (e) { return 'gagal'; }   // dicatat di log pembungkus bila perlu; pembayaran tetap aman
+}
+/** Selaraskan pesanan tamu: Snap yang lewat waktu tanpa transaksi di Midtrans (404) = kedaluwarsa. */
+async function sinkronTamu(ctx, kode, lewatWaktu) {
+  let st = await ctx.mt.status(kode);
+  if (tidakAda(st)) {
+    if (!lewatWaktu) return 'menunggu';
+    return ctx.rpc('gateway_terapkan_status', { p_rahasia: ctx.cfg.rahasia, p_status: { order_id: kode, transaction_status: 'expire', refunds: [] } });
+  }
+  if (lewatWaktu && String(st.data.transaction_status) === 'pending') { await ctx.mt.cancel(kode); st = await ctx.mt.status(kode); if (tidakAda(st)) return 'tidak_ada'; }
+  if (!st.data.transaction_status) throw new GalatQris(502, 'Status pembayaran belum dapat dipastikan. Coba lagi sebentar.', `HTTP ${st.http}`);
+  return ctx.rpc('gateway_terapkan_status', { p_rahasia: ctx.cfg.rahasia, p_status: ringkasStatus(st.data) });
+}
+const tamuPublik = (t) => ({ kode: t.kode, status: t.status, amount: t.amount, berlaku_sampai: t.berlaku_sampai, snap_url: t.status === 'menunggu' ? t.snap_url : null, email_status: t.email_status });
+
+/** POST {nama, email, whatsapp} — tanpa login. Membuat/mengambil pesanan tamu + halaman Snap (QRIS). */
+export const handleTamuCheckout = bungkus('tamu-checkout', async (req, ctx) => {
+  const b = await bodyJson(req);
+  const email = String(b.email || '').trim().toLowerCase(), nama = String(b.nama || '').trim().replace(/\s+/g, ' ');
+  const wa = normalWa(b.whatsapp);
+  if (!EMAIL.test(email) || email.length > 254) throw new GalatQris(400, 'Email tidak valid.');
+  if (nama.length < 2 || nama.length > 100) throw new GalatQris(400, 'Nama lengkap wajib diisi (2–100 karakter).');
+  if (wa === null) throw new GalatQris(400, 'Nomor WhatsApp tidak valid. Contoh: 081234567890, atau kosongkan.');
+  if (!ctx.cfg.situs) throw new GalatQris(503, 'Pembayaran otomatis belum dikonfigurasi.', 'SITE_URL/ALLOWED_ORIGINS kosong');
+  const args = { p_rahasia: ctx.cfg.rahasia, p_email: email, p_nama: nama, p_whatsapp: wa };
+  let m = await ctx.rpc('tamu_buat_pesanan', args);
+  if (m.aksi === 'cek') {
+    await sinkronTamu(ctx, m.pesanan.kode, true);
+    m = await ctx.rpc('tamu_buat_pesanan', args);
+    if (m.aksi === 'cek') throw new GalatQris(409, 'Pembayaran sebelumnya masih diproses. Coba lagi beberapa saat lagi.');
+  }
+  const t = m.pesanan;
+  if (m.aksi === 'pakai') {
+    if (t.status === 'dibuat') throw new GalatQris(409, 'Halaman pembayaran sedang disiapkan. Coba lagi beberapa detik lagi.');
+    return tamuPublik(t);
+  }
+  const menit = Math.max(1, Math.round((new Date(t.berlaku_sampai).getTime() - ctx.now()) / 60000)) || m.qr_menit;
+  let hasil;
+  try {
+    const r = await ctx.mt.snap(t.kode, t.amount, menit, `${ctx.cfg.situs}/akun?view=bayar`);
+    hasil = r.http === 201 && r.data.token && urlSnapSah(r.data.redirect_url, ctx.cfg)
+      ? { ok: true, snap_token: String(r.data.token).slice(0, 200), snap_url: r.data.redirect_url }
+      : { ok: false, pesan: `Ditolak penyedia (${r.http})` };
+  } catch (e) { hasil = { ok: false, pesan: 'Gagal menghubungi penyedia pembayaran' }; }
+  const simpan = await ctx.rpc('tamu_simpan_snap', { p_rahasia: ctx.cfg.rahasia, p_pesanan: t.id, p_hasil: hasil });
+  if (simpan.status !== 'menunggu') throw new GalatQris(502, 'Halaman pembayaran belum berhasil dibuat. Silakan coba lagi.', simpan.pesan);
+  return tamuPublik(simpan);
+}, { butuhLogin: false });
+
+/** POST {kode, email, paksa} — tanpa login; kode DAN email harus cocok. Untuk halaman kembali dari Snap. */
+export const handleTamuStatus = bungkus('tamu-status', async (req, ctx) => {
+  const b = await bodyJson(req);
+  const kode = String(b.kode || ''), email = String(b.email || '').trim().toLowerCase();
+  if (!/^CT-[A-Z0-9]{8}$/.test(kode) || !EMAIL.test(email)) throw new GalatQris(404, 'Pesanan tidak ditemukan.');
+  const args = { p_rahasia: ctx.cfg.rahasia, p_kode: kode, p_email: email };
+  let t = await ctx.rpc('tamu_status', args);
+  if (!t) throw new GalatQris(404, 'Pesanan tidak ditemukan.');
+  if (['dibuat', 'menunggu'].includes(t.status)) {
+    const lewatWaktu = new Date(t.berlaku_sampai).getTime() <= ctx.now();
+    const tua = !t.dicek_pada || ctx.now() - new Date(t.dicek_pada).getTime() > CEK_BERKALA_MS;
+    if (b.paksa === true || lewatWaktu || tua) { await sinkronTamu(ctx, kode, lewatWaktu); t = await ctx.rpc('tamu_status', args); }
+  }
+  if (t.status === 'lunas' && t.email_status !== 'terkirim') { await kirimAktivasi(ctx, kode, ctx.fetch); t = await ctx.rpc('tamu_status', args); }
+  return tamuPublik(t);
+}, { butuhLogin: false });
+
 export const handleNotifikasi = bungkus('qris-notifikasi', async (req, ctx) => {
   const notif = await bodyJson(req);
   if (!(await signatureSah(notif, ctx.cfg.kunci))) throw new GalatQris(401, 'Signature tidak valid.', `signature ditolak untuk ${String(notif && notif.order_id).slice(0, 60)}`);
@@ -257,7 +369,9 @@ export const handleNotifikasi = bungkus('qris-notifikasi', async (req, ctx) => {
   if (tidakAda(st)) return { ok: true, hasil: 'tidak_ada_di_midtrans' };
   if (!st.data.transaction_status) throw new GalatQris(502, 'Status belum dapat dipastikan.', `HTTP ${st.http}`);
   const hasil = await ctx.rpc('gateway_terapkan_status', { p_rahasia: ctx.cfg.rahasia, p_status: ringkasStatus(st.data) });
-  return { ok: true, hasil };
+  // Checkout tamu yang baru lunas: kirim tautan aktivasi. Gagal kirim tidak membatalkan pencatatan (tetap 200).
+  const email = /^CT-/.test(String(notif.order_id)) && hasil === 'lunas_tamu' ? await kirimAktivasi(ctx, notif.order_id, ctx.fetch) : undefined;
+  return { ok: true, hasil, ...(email ? { email } : {}) };
 }, { butuhLogin: false });
 
 /** POST {pembayaran, nominal, alasan} — admin (login + is_admin di database). Refund lewat Midtrans, lalu dicatat dari Get Status. */

@@ -161,6 +161,10 @@ const CekCloud = (() => {
       await http(`/auth/v1/recover?redirect_to=${encodeURIComponent(redirectTo)}`, { method: 'POST', auth: false, body: { email } });
     },
     async updatePassword(password) { await http('/auth/v1/user', { method: 'PUT', body: { password } }); },
+    /** Tautan masuk lewat email (OTP Supabase). Akun dibuat bila belum ada; membuktikan kepemilikan email (klaim pembelian tamu). */
+    async kirimTautan(email, redirectTo) {
+      await http(`/auth/v1/otp?redirect_to=${encodeURIComponent(redirectTo)}`, { method: 'POST', auth: false, body: { email, create_user: true } });
+    },
     /** Mengubah metadata pengguna (mis. menghapus nomor sementara dari pendaftaran). Sesi diperbarui dengan data terbaru. */
     async updateMetadata(data) {
       const u = await http('/auth/v1/user', { method: 'PUT', body: { data } });
@@ -222,6 +226,10 @@ const CekCloud = (() => {
     /* ---- Pembayaran otomatis QRIS (Edge Functions Supabase; butuh supabase/usulan/qris-midtrans.sql + fungsi terpasang).
        Browser hanya mengirim nomor pesanan; nominal, QR, dan status ditentukan server/Midtrans. ---- */
     qrisBuat: (order) => http('/functions/v1/qris-buat', { method: 'POST', body: { pesanan: order } }),
+    /* Checkout tamu (tanpa login, Edge Function --no-verify-jwt): server menentukan harga; Pro aktif setelah klaim lewat email. */
+    tamuCheckout: (data) => http('/functions/v1/tamu-checkout', { method: 'POST', auth: false, body: { nama: data.nama, email: data.email, whatsapp: data.whatsapp || '' } }),
+    tamuStatus: (kode, email, paksa = false) => http('/functions/v1/tamu-status', { method: 'POST', auth: false, body: { kode, email, paksa: !!paksa } }),
+    klaimPembelian: () => http('/rest/v1/rpc/klaim_pembelian_tamu', { method: 'POST', body: {} }),
     qrisCek: (order, paksa = false) => http('/functions/v1/qris-cek', { method: 'POST', body: { pesanan: order, paksa: !!paksa } }),
     /* admin */
     adminProfiles: () => http('/rest/v1/profiles?select=*&order=created_at.desc&limit=500'),

@@ -40,11 +40,21 @@ function createMidtransMock({ serverKey = 'SB-Mid-server-UJI-LOKAL' } = {}) {
         return kirim(res, 200, { ...status(t), status_code: '201', status_message: 'QRIS transaction is created',
           actions: [{ name: 'generate-qr-code', method: 'GET', url: `${base}/v2/qris/${t.transaction_id}/qr-code` }], qr_string: `00020101021226MOCK${t.transaction_id}` });
       }
+      if (req.method === 'POST' && u.pathname === '/snap/v1/transactions') {
+        // Snap: transaksi baru "ada" di Get Status setelah pembeli memilih metode (di sini: saat bayar()).
+        const o = body.transaction_details && body.transaction_details.order_id;
+        if (!o) return kirim(res, 400, { error_messages: ['transaction_details.order_id is required'] });
+        if (trx.has(o)) return kirim(res, 400, { error_messages: ['transaction_details.order_id sudah digunakan'] });
+        const token = crypto.randomUUID();
+        trx.set(o, { order_id: o, transaction_id: `mock-${++urut}-${crypto.randomUUID()}`, gross_amount: `${Number(body.transaction_details.gross_amount).toFixed(2)}`,
+          status: 'snap', refunds: [], waktu: new Date().toISOString(), body });
+        return kirim(res, 201, { token, redirect_url: `http://127.0.0.1:${server.address().port}/snap/v4/redirection/${token}` });
+      }
       const m = /^\/v2\/([^/]+)\/(status|cancel|refund)$/.exec(u.pathname);
       if (!m) return kirim(res, 404, { status_code: '404' });
       const id = decodeURIComponent(m[1]);
       const t = trx.get(id) || [...trx.values()].find((x) => x.transaction_id === id);
-      if (!t) return kirim(res, 404, { status_code: '404', status_message: "Transaction doesn't exist." });
+      if (!t || t.status === 'snap') return kirim(res, 404, { status_code: '404', status_message: "Transaction doesn't exist." });
       if (m[2] === 'status' && req.method === 'GET') return kirim(res, 200, status(t));
       if (m[2] === 'cancel' && req.method === 'POST') {
         if (t.status !== 'pending') return kirim(res, 412, { status_code: '412', status_message: 'Merchant cannot modify the status of the transaction' });

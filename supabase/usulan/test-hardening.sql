@@ -25,17 +25,22 @@ select 'H3 is_admin: login bisa (dibutuhkan RLS), anon tidak' t,
 -- Bila migrasi QRIS (qris-midtrans.sql) sudah terpasang, dua fungsi bergerbang RAHASIA GATEWAY memang boleh dipanggil anon
 -- (Edge Function memakai anon key), dan dua fungsi pembeli QRIS ikut daftar pengguna login.
 create or replace function pg_temp.qris() returns boolean language sql as $$ select to_regprocedure('public.gateway_terapkan_status(text, jsonb)') is not null $$;
+create or replace function pg_temp.tamu() returns boolean language sql as $$ select to_regprocedure('public.klaim_pembelian_tamu()') is not null $$;
+create or replace function pg_temp.f_tamu() returns text[] language sql as $$ select case when pg_temp.tamu() then
+  array['tamu_buat_pesanan', 'tamu_catat_email', 'tamu_perlu_email', 'tamu_simpan_snap', 'tamu_status'] else '{}'::text[] end $$;
 select 'H4 anon: SECURITY DEFINER yang bisa dieksekusi hanya rls_auto_enable (Supabase) [+ 2 fungsi bergerbang rahasia QRIS]' t,
   (select coalesce(array_agg(proname::text order by proname), '{}') from pg_proc p where p.pronamespace = 'public'::regnamespace and p.prosecdef
      and has_function_privilege('anon', p.oid, 'execute'))
-  = case when pg_temp.qris() then array['gateway_simpan_qr', 'gateway_terapkan_status', 'rls_auto_enable'] else array['rls_auto_enable'] end ok;
+  = (select array_agg(n order by n) from unnest(case when pg_temp.qris() then array['gateway_simpan_qr', 'gateway_terapkan_status', 'rls_auto_enable'] else array['rls_auto_enable'] end
+       || pg_temp.f_tamu()) n) ok;
 select 'H5 login: SECURITY DEFINER yang bisa dieksekusi = RPC admin + 3 pembeli + is_admin + rls_auto_enable [+ 4 fungsi QRIS]' t,
   (select array_agg(proname::text order by proname) from pg_proc p where p.pronamespace = 'public'::regnamespace and p.prosecdef
      and has_function_privilege('authenticated', p.oid, 'execute'))
   = (select array_agg(n order by n) from (
        select proname::text n from pg_proc where pronamespace = 'public'::regnamespace and proname like 'admin\_%'
        union select unnest(array['buat_pesanan_pro', 'konfirmasi_sudah_bayar', 'batalkan_pesanan', 'is_admin', 'rls_auto_enable'])
-       union select unnest(case when pg_temp.qris() then array['gateway_mulai_percobaan', 'gateway_percobaan_saya', 'gateway_simpan_qr', 'gateway_terapkan_status'] else '{}'::text[] end)) x)
+       union select unnest(case when pg_temp.qris() then array['gateway_mulai_percobaan', 'gateway_percobaan_saya', 'gateway_simpan_qr', 'gateway_terapkan_status'] else '{}'::text[] end)
+       union select unnest(pg_temp.f_tamu() || case when pg_temp.tamu() then array['klaim_pembelian_tamu'] else '{}'::text[] end)) x)
   and (select count(*) from pg_proc where pronamespace = 'public'::regnamespace and proname like 'admin\_%') >= 10 ok;
 select 'H6 search_path: _norm_ref kosong; semua SECURITY DEFINER Cek Untung public, pg_temp' t,
   (select array_to_string(proconfig, ',') from pg_proc where proname = '_norm_ref') = 'search_path=""'
