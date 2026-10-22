@@ -185,7 +185,7 @@ const CekInfo = (() => {
       t: 'Potongan menurut nilai pesanan',
       a: 'Persentase potongan untuk pesanan kecil dibanding pesanan besar.',
       h: 'Pesanan dikelompokkan berdasarkan nilainya, lalu total potongan tiap kelompok dibagi penjualannya.',
-      b: 'Biaya tetap per pesanan membuat pesanan kecil terpotong lebih besar. Bila pesanan di bawah Rp50 ribu rugi, pertimbangkan bundling atau minimal pembelian.',
+      b: 'Biaya tetap per pesanan membuat pesanan kecil terpotong lebih besar. Bila pesanan di bawah Rp50.000 rugi, pertimbangkan bundling atau minimal pembelian.',
     },
 
     /* ---------- retur ---------- */
@@ -239,7 +239,7 @@ const CekInfo = (() => {
     biaya_kulakan: {
       t: 'Biaya kulakan',
       a: 'Biaya tambahan sampai barang ada di gudang Anda: ongkir dari supplier, biaya angkut, bea.',
-      h: 'Ditulis sebagai persen dari harga beli dan ditambahkan ke modal setiap produk. Contoh: belanja Rp5 juta dengan ongkir Rp150 ribu = 3%.',
+      h: 'Ditulis sebagai persen dari harga beli dan ditambahkan ke modal setiap produk. Contoh: belanja Rp5.000.000 dengan ongkir Rp150.000 = 3%.',
     },
     hpp: {
       t: 'HPP (harga pokok produksi)',

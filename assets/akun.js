@@ -137,7 +137,7 @@
   const STATUS_PESANAN = { baru: 'Menunggu pembayaran', diproses: 'Menunggu verifikasi', perlu_cek: 'Perlu pemeriksaan', selesai: 'Aktif', ditolak: 'Gagal', dibatalkan: 'Dibatalkan', direfund: 'Dana dikembalikan' };
   const METODE = { transfer: 'Transfer bank', qris: 'QRIS' };
   const GAMBAR_QRIS = /^img\/[A-Za-z0-9._-]+\.(png|jpg|jpeg|webp)$/;
-  const rupiah = (n) => `Rp${Number(n || 0).toLocaleString('id-ID')}`;
+  const rupiah = (n) => { const v = Math.round(Number(n) || 0); return `${v < 0 ? '−' : ''}Rp${Math.abs(v).toLocaleString('id-ID')}`; };   // gaya Indonesia: Rp149.000, −Rp…
   const tglWaktu = (d) => new Date(d).toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' });
   /** Harga dari server bila ada (nominal tagihan resmi); label & harga reguler yang direncanakan dari config. */
   function hargaBlok(hargaServer) {

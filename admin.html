@@ -37,7 +37,7 @@
   // Semua aksi pesanan lewat fungsi server (is_admin() dari login). Browser tidak pernah menentukan harga atau status.
   const STATUS = { baru: 'Menunggu pembayaran', diproses: 'Menunggu verifikasi', perlu_cek: 'Perlu pemeriksaan', selesai: 'Aktif', ditolak: 'Gagal', dibatalkan: 'Dibatalkan', direfund: 'Direfund' };
   const METODE = { transfer: 'Transfer bank', qris: 'QRIS' };
-  const rp = (n) => `Rp${Number(n || 0).toLocaleString('id-ID')}`;
+  const rp = (n) => { const v = Math.round(Number(n) || 0); return `${v < 0 ? '−' : ''}Rp${Math.abs(v).toLocaleString('id-ID')}`; };
   const angka = (v) => Number(String(v || '').replace(/\D/g, ''));
   const proCell = (p) => (cloud.isProSekaliBayar(p) ? '<span class="badge pro">Sekali bayar</span>' : cloud.isPro(p) ? `<span class="badge pro">${tgl(p.pro_until)}</span>` : p.pro_until ? `<span class="small faint">berakhir ${tgl(p.pro_until)}</span>` : '<span class="faint">—</span>');
   let profiles = [], requests = [], payments = null, setelan = null, monitor = null, monSemua = false, histori = '', q = '';
