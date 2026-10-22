@@ -29,6 +29,17 @@ C kosong. Pembayaran produksi tetap mati (`proPembayaranAktif: false` untuk prod
 - [ ] Backup database produksi sebelum migrasi belum dibuat.
 - [ ] `kontak_bantuan` (pengaturan pembayaran) dan email resmi (`email` di `assets/config.js`) belum diisi.
 
+## Status 22 Okt 2026 (malam)
+- Midtrans Production: **dalam review**. Repository siap; tidak ada perubahan kode yang menunggu.
+- QA alur seller (file sintetis, akun gratis, 375px): unggah laporan → status "Belum final" + 100% belum diketahui →
+  isi modal → laba dari data tersedia, porsi "Belum diketahui"/"Perkiraan minimum" ditampilkan, produk tanpa modal
+  "Belum diketahui"; batas 5 produk + kunci Pro tampil. Tanpa error JS.
+- Free vs Pro (dari kode): Gratis = seluruh perhitungan laba, Kepastian Profit, jejak uang, simulator harga, retur,
+  tren, 5 produk, 2 temuan, 3 riwayat. Pro = semua produk (status & harga target), semua temuan, PDF ber-logo, Excel,
+  riwayat tanpa batas. Celah kecil: pencarian produk tetap menampilkan 5 hasil teratas mana pun (bukan blocker).
+- `KNOWN_ISSUES.md` (ringkasan 14 Okt) belum mencerminkan perbaikan akurasi 19–21 Okt; perbarui setelah diverifikasi
+  ulang (perlu izin pemilik).
+
 ## Keputusan pemilik yang diperlukan
 1. Garansi tanpa alasan: ya/tidak, berapa hari.
 2. Batas hari perbaikan sebelum refund bila fitur inti rusak.
@@ -52,6 +63,10 @@ C kosong. Pembayaran produksi tetap mati (`proPembayaranAktif: false` untuk prod
 - [ ] Secrets (Edge Functions → Secrets), **berbeda dari staging**:
       `MIDTRANS_ENV=production`, `MIDTRANS_SERVER_KEY` (awalan `Mid-server-`), `GATEWAY_SECRET` (baru, 64 hex,
       lewat `atur-rahasia-gateway.sql`), `ALLOWED_ORIGINS=https://cekuntung.id`, `SITE_URL=https://cekuntung.id`.
+      Tambahkan origin `www` ke `ALLOWED_ORIGINS` bila situs juga dilayani di `www`.
+- [ ] Alamat lama GitHub Pages: checkout dari sana ditolak CORS (bukan origin yang diizinkan) dan kembali dari Midtrans
+      selalu ke `SITE_URL`, sehingga sesi login di alamat lama tidak terbawa. Arahkan pengunjung alamat lama ke
+      `cekuntung.id` sebelum pembelian dibuka.
 - [ ] Jangan pernah memakai `service_role`. Server key Midtrans hanya di secret, tidak di repo/chat.
 
 **Midtrans Production**
