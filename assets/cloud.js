@@ -248,6 +248,8 @@ const CekCloud = (() => {
     adminTolak: (order, alasan, status = 'ditolak') => http('/rest/v1/rpc/admin_tolak_pesanan', { method: 'POST', body: { p_order: order, p_alasan: alasan, p_status: status } }),
     adminCabutPro: (target, catatan) => http('/rest/v1/rpc/admin_cabut_pro', { method: 'POST', body: { target, catatan } }),
     adminPayments: () => http('/rest/v1/pro_payments?select=*&order=created_at.desc&limit=200'),
+    /** Monitor pembayaran Midtrans (login + tamu), baca saja; tanda dihitung database. Bukan admin → "Hanya admin". */
+    adminMonitor: () => http('/rest/v1/rpc/admin_monitor_pembayaran', { method: 'POST', body: {} }),
     adminRefundQris: (payment, nominal, alasan) => http('/functions/v1/qris-refund', { method: 'POST', body: { pembayaran: payment, nominal, alasan } }),
   };
 

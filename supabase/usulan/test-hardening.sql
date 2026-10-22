@@ -65,8 +65,9 @@ begin
   end loop;
 end $$;
 reset role;
-select 'H8 semua RPC admin (10, atau 11 dengan QRIS) menolak seller dengan "Hanya admin" (bukan error lain, tidak ada yang lolos)' t,
+select 'H8 semua RPC admin (10, atau 11 dengan QRIS) (+1 monitor) menolak seller dengan "Hanya admin" (bukan error lain, tidak ada yang lolos)' t,
   (select count(*) from pg_temp.hasil_admin) = case when pg_temp.qris() then 11 else 10 end
+    + case when to_regprocedure('public.admin_monitor_pembayaran(integer)') is not null then 1 else 0 end   -- monitor admin (usulan)
   and (select count(*) from pg_proc where pronamespace = 'public'::regnamespace and proname like 'admin\_%') = (select count(*) from pg_temp.hasil_admin) and not exists (select 1 from pg_temp.hasil_admin where pesan <> 'Hanya admin') ok;
 select fungsi, pesan from pg_temp.hasil_admin where pesan <> 'Hanya admin';
 

@@ -217,6 +217,12 @@ begin
   end if;
   for t in select * from public.pro_pesanan_tamu where email = em and status = 'lunas' order by id for update loop
     perform 1 from public.profiles where id = uid for update;
+    -- Pertahanan berlapis: dana yang sudah terhubung ke pesanan lain tidak boleh mengaktifkan akun kedua.
+    if exists (select 1 from public.pro_payments where id = t.payment_id and dihubungkan_pada is not null) then
+      update public.pro_pesanan_tamu set status = 'perlu_cek', pesan = 'Dana sudah terhubung ke pesanan lain; periksa manual', updated_at = now() where id = t.id;
+      perform public._audit('gateway_transaksi_bentrok', t.payment_id, null, null, jsonb_build_object('kode', t.kode, 'user_id', uid), 'klaim tamu');
+      continue;
+    end if;
     if exists (select 1 from public.profiles where id = uid and pro_sekali_bayar) then
       update public.pro_pesanan_tamu set status = 'perlu_cek', diklaim_oleh = uid, diklaim_pada = now(),
         pesan = 'Akun sudah Pro: pembayaran ganda, perlu refund', updated_at = now() where id = t.id;
@@ -236,6 +242,27 @@ begin
     aktif := aktif + 1;
   end loop;
   return jsonb_build_object('aktif', aktif, 'ganda', ganda, 'perlu_tautan_email', false);
+end $$;
+
+-- 7b. ADMIN: "Hubungkan dana" (pro-sekali-bayar.sql) TIDAK berlaku untuk dana checkout tamu. Dana tamu hanya bisa
+--     mengaktifkan Pro lewat klaim_pembelian_tamu (pembuktian email); tanpa ini satu dana bisa mengaktifkan dua akun.
+create or replace function public.admin_hubungkan_dana(p_payment bigint, p_order bigint, p_alasan text)
+returns text language plpgsql security definer set search_path = public, pg_temp as $$
+declare d public.pro_payments; r public.upgrade_requests;
+begin
+  if not public.is_admin() then raise exception 'Hanya admin'; end if;
+  if length(trim(coalesce(p_alasan, ''))) < 3 then raise exception 'Dasar penghubungan wajib diisi (bukti yang dicocokkan)'; end if;
+  select * into d from public.pro_payments where id = p_payment for update;
+  if not found or d.kind <> 'pembayaran' then raise exception 'Dana tidak ditemukan'; end if;
+  if exists (select 1 from public.pro_pesanan_tamu where payment_id = d.id) then
+    raise exception 'Dana checkout tamu hanya aktif lewat tautan email pembelinya. Refund bila perlu';
+  end if;
+  if d.dihubungkan_pada is not null then raise exception 'Dana ini sudah terhubung ke pesanan'; end if;
+  if exists (select 1 from public.pro_payments where refund_of = d.id) then raise exception 'Dana ini sudah (sebagian) direfund'; end if;
+  select * into r from public.upgrade_requests where id = p_order and plan = 'pro_sekali' for update;
+  if not found then raise exception 'Pesanan tidak ditemukan'; end if;
+  perform public._audit('hubungkan_dana', d.id, r.id, null, jsonb_build_object('order_code', r.order_code), trim(p_alasan));
+  return public._aktifkan_dari_pesanan(r, d.id, d.amount, 'Dana #' || d.id || ' dihubungkan: ' || trim(p_alasan));
 end $$;
 
 -- 8. ADMIN: refund lewat Midtrans juga berlaku untuk dana checkout tamu.

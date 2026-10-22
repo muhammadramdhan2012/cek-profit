@@ -21,7 +21,7 @@
   <main class="admin-grid" id="main" aria-live="polite"><p class="muted">Memuat…</p></main>
 </div>
 <div id="toast" class="toast" role="status" hidden></div>
-<script src="assets/cloud.js?v=837c0ed532"></script>
+<script src="assets/cloud.js?v=5befccb03c"></script>
 <script src="assets/situs.js?v=3e66447e85" defer></script>
 <script>
 (() => {
@@ -40,7 +40,7 @@
   const rp = (n) => `Rp${Number(n || 0).toLocaleString('id-ID')}`;
   const angka = (v) => Number(String(v || '').replace(/\D/g, ''));
   const proCell = (p) => (cloud.isProSekaliBayar(p) ? '<span class="badge pro">Sekali bayar</span>' : cloud.isPro(p) ? `<span class="badge pro">${tgl(p.pro_until)}</span>` : p.pro_until ? `<span class="small faint">berakhir ${tgl(p.pro_until)}</span>` : '<span class="faint">—</span>');
-  let profiles = [], requests = [], payments = null, setelan = null, histori = '', q = '';
+  let profiles = [], requests = [], payments = null, setelan = null, monitor = null, monSemua = false, histori = '', q = '';
   const TERBUKA = ['baru', 'diproses', 'perlu_cek'];
 
   async function load() {
@@ -51,7 +51,7 @@
     try {
       const me = await cloud.db.profile();
       if (!me || !me.is_admin) { main.innerHTML = '<div class="panel"><h2>Bukan admin</h2><p class="muted" style="margin-top:8px">Akun ini belum ditandai admin. Di Supabase: Table Editor → profiles → baris akun Anda → ubah <code>is_admin</code> menjadi <code>true</code>.</p></div>'; return; }
-      [profiles, requests, payments, setelan] = await Promise.all([cloud.db.adminProfiles(), cloud.db.adminRequests(), cloud.db.adminPayments().catch(() => null), cloud.db.pengaturanPembayaran().catch(() => null)]);
+      [profiles, requests, payments, setelan, monitor] = await Promise.all([cloud.db.adminProfiles(), cloud.db.adminRequests(), cloud.db.adminPayments().catch(() => null), cloud.db.pengaturanPembayaran().catch(() => null), cloud.db.adminMonitor().catch(() => null)]);
       render();
     } catch (e) { main.innerHTML = `<p class="panel bad">${esc(e.message)}</p>`; }
   }
@@ -71,7 +71,8 @@
     // Dana QRIS Midtrans: refund lewat Midtrans (tercatat otomatis dari status Midtrans). Refund manual tetap ada untuk
     // kasus di luar masa refund penyedia; koreksi referensi tidak berlaku (referensi = transaction_id Midtrans).
     const qris = x.sumber === 'midtrans';
-    return `<div class="row-gap">${!x.dihubungkan_pada ? `<button class="btn sm" data-hubungkan-dana="${x.id}">Hubungkan ke pesanan</button>` : ''}${sisa > 0 && qris ? `<button class="btn sm danger" data-refund-qris="${x.id}" data-sisa="${sisa}">Refund lewat Midtrans</button>` : ''}${sisa > 0 ? `<button class="btn sm quiet danger" data-refund="${x.id}" data-sisa="${sisa}">${qris ? 'Refund manual (transfer)' : 'Refund'}</button>` : ''}${qris ? '' : `<button class="btn sm quiet" data-koreksi="${x.id}">Koreksi referensi</button>`}</div>`;
+    const tamu = /^Checkout tamu/.test(x.note || '');   // dana tamu hanya aktif lewat klaim email (database juga menolak)
+    return `<div class="row-gap">${!x.dihubungkan_pada && !tamu ? `<button class="btn sm" data-hubungkan-dana="${x.id}">Hubungkan ke pesanan</button>` : ''}${sisa > 0 && qris ? `<button class="btn sm danger" data-refund-qris="${x.id}" data-sisa="${sisa}">Refund lewat Midtrans</button>` : ''}${sisa > 0 ? `<button class="btn sm quiet danger" data-refund="${x.id}" data-sisa="${sisa}">${qris ? 'Refund manual (transfer)' : 'Refund'}</button>` : ''}${qris ? '' : `<button class="btn sm quiet" data-koreksi="${x.id}">Koreksi referensi</button>`}</div>`;
   };
   const F = [['bank_nama', 'Nama bank'], ['bank_nomor', 'Nomor rekening (angka)'], ['bank_pemilik', 'Nama pemilik rekening'], ['qris_merchant', 'Nama merchant QRIS'], ['qris_nmid', 'NMID QRIS'], ['qris_gambar', 'Gambar QRIS (img/nama.png)'], ['kontak_bantuan', 'Kontak bantuan (email resmi)']];
   const formSetelan = () => (setelan === null ? '<p class="small muted">Belum tersedia: migrasi <code>supabase/usulan/pro-sekali-bayar.sql</code> belum dijalankan.</p>'
@@ -82,6 +83,28 @@
       <label class="field"><span class="small">Masa berlaku QR otomatis (menit, 5–60)</span><input class="plain" name="qr_berlaku_menit" inputmode="numeric" value="${esc(setelan.qr_berlaku_menit)}"></label>` : ''}
       <label style="display:flex;gap:8px;align-items:center"><input type="checkbox" name="aktif" ${setelan.aktif ? 'checked' : ''}> <b>Buka pembelian</b> (database menolak bila kontak/metode belum lengkap)</label>
       <button class="btn primary" type="submit">Simpan pengaturan</button><p class="tiny faint">Isi hanya dengan data resmi. Setiap perubahan tercatat (siapa & kapan).</p></form>`);
+  // Monitor pembayaran Midtrans (pengguna login + tamu). Data & tanda dari database (admin_monitor_pembayaran); baca saja.
+  const TANDA = { perlu_cek: ['bad', 'Perlu cek'], ganda: ['bad', 'Pembayaran ganda'], refund: ['todo', 'Refund'], belum_diklaim: ['todo', 'Tamu belum klaim'] };
+  const ST_MON = { dibuat: 'Disiapkan', menunggu: 'Menunggu bayar', lunas: 'Lunas', diklaim: 'Lunas, diklaim', kedaluwarsa: 'Kedaluwarsa', batal: 'Dibatalkan', gagal: 'Gagal', perlu_cek: 'Perlu cek', refund_sebagian: 'Refund sebagian', direfund: 'Direfund' };
+  function panelMonitor() {
+    if (monitor === null) return '<section class="panel"><h3 style="margin-bottom:6px">Monitor pembayaran Midtrans</h3><p class="small muted">Belum tersedia: migrasi <code>supabase/usulan/admin-monitor-pembayaran.sql</code> belum dijalankan.</p></section>';
+    const perhatian = monitor.filter((x) => (x.tanda || []).length);
+    const tampil = monSemua ? monitor : perhatian;
+    return `<section class="panel"><div style="display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:6px"><h3>Monitor pembayaran Midtrans</h3>
+        <div class="row-gap"><button class="btn sm ${monSemua ? 'quiet' : 'primary'}" data-mon="0">Perlu perhatian (${perhatian.length})</button><button class="btn sm ${monSemua ? 'primary' : 'quiet'}" data-mon="1">Semua (${monitor.length})</button></div></div>
+      <p class="small muted" style="margin-bottom:12px">Pengguna login dan tamu. Hanya untuk dibaca: refund lewat baris dana di Buku besar; dana tamu aktif hanya lewat tautan email pembelinya.</p>
+      ${tampil.length ? `<div class="tablewrap"><table class="tbl"><thead><tr><th>Waktu</th><th>Kode</th><th>Akun / email</th><th>Nominal</th><th>Status</th><th>Klaim</th><th>Referensi Midtrans</th><th>Tanda</th></tr></thead><tbody>
+        ${tampil.map((x) => `<tr><td class="small">${tgl(x.created_at)}</td>
+          <td><b>${esc(x.kode)}</b><br><span class="tiny faint">${x.jenis === 'tamu' ? 'Tamu' : 'Login'}${x.pesanan ? ` · ${esc(x.pesanan)}` : ''}</span></td>
+          <td class="small">${esc(x.akun || '—')}${x.nama ? `<br><span class="tiny faint">${esc(x.nama)}</span>` : ''}</td>
+          <td class="small">${rp(x.amount)}${Number(x.refund) > 0 ? `<br><span class="tiny faint">refund ${rp(x.refund)}</span>` : ''}</td>
+          <td class="small">${esc(ST_MON[x.status] || x.status)}${x.jenis === 'tamu' && x.email_status && x.email_status !== 'belum' ? `<br><span class="tiny faint">email ${esc(x.email_status)}</span>` : ''}</td>
+          <td class="small">${x.jenis === 'tamu' ? esc(x.klaim === 'diklaim' ? 'Diklaim' : x.klaim === 'belum' ? 'Belum' : '—') : '—'}</td>
+          <td class="small">${esc(x.referensi || '—')}</td>
+          <td>${(x.tanda || []).map((k) => `<span class="badge ${(TANDA[k] || ['todo'])[0]}">${esc((TANDA[k] || [, k])[1])}</span>`).join(' ') || '<span class="faint">—</span>'}${x.pesan ? `<br><span class="tiny faint">${esc(x.pesan)}</span>` : ''}</td></tr>`).join('')}
+        </tbody></table></div>` : `<p class="muted small">${monSemua ? 'Belum ada pembayaran Midtrans.' : 'Tidak ada pembayaran yang perlu perhatian.'}</p>`}
+    </section>`;
+  }
   function render() {
     const byId = new Map(profiles.map((p) => [p.id, p]));
     const week = new Date(Date.now() - 7 * 864e5).toISOString();
@@ -109,9 +132,10 @@
           </tbody></table></div>` : '<p class="muted small">Belum ada pesanan.</p>'}
         ${histori ? `<pre class="small" style="white-space:pre-wrap;margin-top:12px">${esc(histori)}</pre>` : ''}
       </section>
+      ${panelMonitor()}
       <section class="panel"><h3 style="margin-bottom:12px">Buku besar pembayaran</h3>
         ${payments === null ? '<p class="small muted">Belum tersedia: migrasi <code>supabase/usulan/pro-sekali-bayar.sql</code> belum dijalankan.</p>' : payments.length ? `<div class="tablewrap"><table class="tbl"><thead><tr><th>#</th><th>Waktu</th><th>Jenis</th><th>Akun / pesanan</th><th>Sumber · Referensi</th><th>Nominal</th><th>Catatan</th><th></th></tr></thead><tbody>
-          ${payments.map((x) => `<tr><td class="small">${x.id}</td><td class="small">${tgl(x.created_at)}</td><td>${esc(x.kind)}${x.kind === 'pembayaran' && !x.dihubungkan_pada ? ' <span class="badge todo">belum teridentifikasi</span>' : ''}${x.refund_of ? `<br><span class="tiny faint">atas #${x.refund_of}</span>` : ''}</td>
+          ${payments.map((x) => `<tr><td class="small">${x.id}</td><td class="small">${tgl(x.created_at)}</td><td>${esc(x.kind)}${x.kind === 'pembayaran' && !x.dihubungkan_pada ? (/^Checkout tamu/.test(x.note || '') ? ' <span class="badge todo">tamu, menunggu klaim email</span>' : ' <span class="badge todo">belum teridentifikasi</span>') : ''}${x.refund_of ? `<br><span class="tiny faint">atas #${x.refund_of}</span>` : ''}</td>
             <td class="small">${esc((byId.get(x.user_id) || {}).email || (x.user_id ? x.user_id : '—'))}${x.order_id ? `<br><span class="tiny faint">${esc((requests.find((r) => r.id === x.order_id) || {}).order_code || '')}</span>` : ''}</td>
             <td class="small">${esc(x.sumber || '—')} · ${esc(x.reference || '—')}</td><td class="small">${rp(x.amount)}</td><td class="small">${esc(x.note)}</td><td>${aksiDana(x)}</td></tr>`).join('')}
           </tbody></table></div>` : '<p class="muted small">Belum ada catatan.</p>'}
@@ -141,6 +165,7 @@
     if (!t) return;
     const pesanan = (id) => requests.find((x) => x.id === +id) || {};
     try {
+      if (t.dataset.mon) { monSemua = t.dataset.mon === '1'; return render(); }
       if (t.id === 'reload') return load();
       if (t.dataset.verifikasi) {
         const r = pesanan(t.dataset.verifikasi), d = mintaDana(r, 'VERIFIKASI DANA');
