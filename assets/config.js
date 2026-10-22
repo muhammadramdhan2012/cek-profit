@@ -8,7 +8,7 @@ window.CEK_CONFIG = {
   // Nomor WhatsApp untuk membeli kode akses, format internasional TANPA "+" dan spasi.
   // Contoh: '6281234567890'. Selama kosong, tombol beli menampilkan pesan "nomor belum diatur".
   whatsapp: '',
-  waMessage: 'Halo, saya ingin berlangganan Cek Untung Pro.',
+  waMessage: 'Halo, saya ingin membeli Cek Untung Pro.',
   waMessageJasa: 'Halo, saya ingin memakai jasa laporan profit toko dari Cek Untung.',
 
   // Nomor WhatsApp BANTUAN (dukungan pengguna), format sama: '628…' tanpa "+" dan spasi.
@@ -21,11 +21,14 @@ window.CEK_CONFIG = {
   // pemberitahuan pindah alamat. Kosong = tidak ada pemberitahuan. Tidak ada pengalihan otomatis.
   domainResmi: '',
 
-  // Harga yang tampil di halaman depan (teks bebas). GANTI sebelum dipromosikan.
+  // Harga Cek Untung Pro (sekali bayar, bukan langganan). Keputusan pemilik: Rp149.000 harga peluncuran (21 Okt 2026);
+  // harga reguler tidak ditampilkan dan Jasa laporan tidak ditawarkan di halaman publik (22 Okt 2026). Nilai `jasa`
+  // dipertahankan untuk kompatibilitas. Teks tampilan saja; pembelian belum dibuka (whatsapp kosong).
+  // JANGAN mengisi `whatsapp` di rilis ini: alur pembayaran lama di dashboard masih berbasis paket bulanan/tahunan.
   prices: {
-    pro: 'Rp49.000',
-    proUnit: '/ bulan',
-    proNote: 'atau Rp399.000 / tahun',
+    pro: 'Rp149.000',
+    proUnit: 'sekali bayar',
+    proLabel: 'Harga Peluncuran',
     jasa: 'Rp199.000',
     jasaUnit: '/ toko / bulan',
   },

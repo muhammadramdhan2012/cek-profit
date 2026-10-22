@@ -407,14 +407,20 @@ test('W1 halaman depan: tanpa "Laba bersih", tanpa klaim akurasi/realtime/pencai
 test('W2 angka contoh di halaman depan diberi label fiktif/sintetis dan konsisten satu sama lain', () => {
   for (const label of ['Data fiktif', 'Contoh sintetis', 'Ilustrasi, data fiktif', 'Ilustrasi dengan data fiktif']) truthy(indexHtml.includes(label), `label "${label}"`);
   const part = (from, to) => { const a = indexHtml.indexOf(from); truthy(a >= 0, `bagian ${from}`); return indexHtml.slice(a, indexHtml.indexOf(to, a)); };
-  // struk Rp100: penjualan − potongan − HPP − refund & biaya = laba; batang = 100%
-  const r100 = part('id="r100"', 'class="flow3-steps"');
-  const baris = [...r100.matchAll(/<dd>([^<]+)<\/dd>/g)].map((m) => rp(m[1]));
-  eq(baris.length, 4, 'baris struk Rp100'); eq(baris.reduce((x, y) => x + y, 0), rp(r100.match(/class="big">([^<]+)</)[1]), 'struk Rp100 konsisten');
-  const langkah = [...part('class="flow3-steps"', '</ol>').matchAll(/class="fs-n[^"]*">([^<]+)</g)].map((m) => rp(m[1]));
-  eq(langkah.join(','), [...baris, baris.reduce((x, y) => x + y, 0)].join(','), 'langkah alur = struk');
-  const w = (html) => [...html.matchAll(/--w:(\d+)%/g)].reduce((x, m) => x + +m[1], 0);
-  eq(w(r100.slice(r100.indexOf('r100-bar'))), 100, 'batang Rp100 = 100%');
+  // Ilustrasi Rp100.000: penjualan − potongan − HPP − refund & biaya = laba (17%); nota = legenda; batang = 100%
+  const nota = part('class="nota r100k"', '</section>');
+  const baris = [...nota.matchAll(/<dd>([^<]+)<\/dd>/g)].map((m) => rp(m[1]));
+  eq(baris.join(','), '100000,-18000,-55000,-10000', 'nota Rp100.000');
+  const laba = rp(nota.match(/class="big">([^<]+)</)[1]);
+  eq(baris.reduce((x, y) => x + y, 0), laba, 'nota konsisten'); eq(laba, 17000, 'laba Rp17.000');
+  truthy(/Margin ilustrasi 17%/.test(nota) && Math.round((laba / baris[0]) * 100) === 17, 'margin 17%');
+  const vis = part('id="r100"', 'class="nota r100k"');
+  eq(rp(vis.match(/data-jual>([^<]+)</)[1]), baris[0], 'penjualan legenda = nota');
+  eq([...vis.matchAll(/data-v>([^<]+)</g)].map((m) => rp(m[1])).join(','), baris.slice(1).join(','), 'legenda = nota');
+  eq(rp(vis.match(/data-laba>([^<]+)</)[1]), laba, 'laba legenda = nota');
+  const wv = (html) => [...html.matchAll(/--w:(\d+)%/g)].map((m) => +m[1]);
+  eq(wv(vis).join(','), '18,55,10,17', 'batang sesuai porsi'); eq(wv(vis).reduce((x, y) => x + y, 0), 100, 'batang = 100%');
+  const w = (html) => wv(html).reduce((x, y) => x + y, 0);
   // etalase hero dan bagian "Omzet bukan laba" memakai angka yang sama
   const show = part('class="show-stage"', 'class="show-cap"'), om = part('class="omzet"', 'class="om-cap"');
   eq(rp(om.match(/om-a"><span>[^<]*<\/span><b>([^<]+)</)[1]), rp(show.match(/<span>Penjualan<\/span><b>([^<]+)</)[1]), 'omzet = penjualan di etalase');
@@ -511,7 +517,10 @@ test('P0 Pro: tanpa kontak pembayaran, CTA bayar tidak tampil dan status "Segera
   truthy(/id="req-upgrade">Lanjut ke pembayaran/.test(appJs) && /t\.id === 'req-upgrade'/.test(appJs), 'alur pembayaran lama tetap ada');
   truthy(/data-pay="pro"/.test(idx) && /if \(!C\.whatsapp\) \{[^]*?'Segera hadir'/.test(idx), 'halaman depan: tombol Pro → Segera hadir');
   truthy(/C\.whatsapp \? '<a class="btn sm" href="dashboard\.html#upgrade">Upgrade<\/a>' : '<span class="badge">Pro segera hadir<\/span>'/.test(akun), 'halaman akun');
-  truthy(/prices: \{\s*pro: 'Rp49\.000'/.test(cfg) && /whatsapp: '',/.test(cfg), 'harga dan config tidak diubah');
+  // Harga Pro sekali bayar (keputusan pemilik 21 Okt 2026); pembelian tetap tertutup karena whatsapp kosong.
+  truthy(/prices: \{[^}]*pro: 'Rp149\.000',\s*proUnit: 'sekali bayar'/.test(cfg) && /whatsapp: '',/.test(cfg), 'harga Pro sekali bayar, kontak pembayaran tetap kosong');
+  for (const lama of ['Rp49.000', 'Rp399.000', 'Berlangganan Pro', 'data-price="proUnit">/ bulan', 'Jasa laporan</h3>', 'Rp299.000']) truthy(!idx.includes(lama) && !cfg.includes(`'${lama}'`), `tanpa harga/teks lama: ${lama}`);
+  truthy(/data-price="pro">Rp149\.000</.test(idx) && /data-price="proUnit">sekali bayar</.test(idx), 'halaman depan: Rp149.000 sekali bayar');
 });
 test('P0 laba bulanan PDF: Belum diketahui / sebagian (*) / Rp0 aktual / lengkap; tanpa NaN', () => {
   const inc = E.parseWorkbook(Sint.penghasilan([
@@ -625,7 +634,8 @@ test('UX P0 halaman depan: ilustrasi Rp100 berlabel contoh, bukan data seller', 
   truthy(/<span class="ilus-tag">Contoh ilustrasi<\/span>/.test(idx) && /bukan data penjualan Anda<\/b> dan bukan margin rata-rata seller/.test(idx), 'label contoh + bukan data');
   truthy(/CONTOH ILUSTRASI<br>bukan data asli/.test(idx), 'label di nota');
   truthy(/Di toko Anda bisa lebih besar, lebih kecil, atau rugi/.test(idx), 'margin tidak berlaku umum');
-  truthy(/Contoh: dari Rp100 penjualan, ke mana uangnya\?/.test(idx), 'judul');
+  truthy(/Contoh: dari Rp100\.000 penjualan, ke mana uangnya\?/.test(idx), 'judul');
+  truthy(/Laba bukan saldo kas\./.test(idx) && /Data yang belum ada tidak dianggap nol\./.test(idx), 'laba ≠ kas; belum ada ≠ nol');
 });
 test('Branding: favicon Cek Untung (URL baru), apple-touch-icon, PDF tanpa logo lama', () => {
   const root = (f) => fs.readFileSync(path.join(__dirname, '..', f), 'utf8');

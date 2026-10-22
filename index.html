@@ -24,8 +24,8 @@
 <script src="assets/theme.js?v=f5317dffb6"></script>
 <script src="assets/motion.js?v=9e6864196f"></script>
 <link rel="stylesheet" href="assets/base.css?v=3457c94f09">
-<link rel="stylesheet" href="assets/site.css?v=d75da9f448">
-<script src="assets/config.js?v=595a2ab5c6"></script>
+<link rel="stylesheet" href="assets/site.css?v=8c10ba55b8">
+<script src="assets/config.js?v=d2054fe0fb"></script>
 <script src="assets/analytics.js?v=26db3465aa" defer></script>
 <script src="assets/situs.js?v=1c3126f7b4" defer></script>
 </head>
@@ -125,6 +125,16 @@
         <li data-reveal><span class="how-n">02</span><b>Isi modal</b><p>Isi modal per produk lewat template, atau mulai dengan modal rata-rata sebagai perkiraan.</p></li>
         <li data-reveal><span class="how-n">03</span><b>Baca laba &amp; kepastiannya</b><p>Laba dari data tersedia, Kepastian Profit, produk yang merugi, dan tren bulanan.</p></li>
       </ol>
+      <div class="mkp" data-reveal>
+        <h3 class="mkp-t">Marketplace yang dibaca</h3>
+        <ul class="mkp-list">
+          <li><i class="mk mk-shopee" aria-hidden="true"></i><span class="mkp-n"><b>Shopee</b><small>Laporan Penghasilan dan retur. Export pesanan: Beta.</small></span><span class="mkp-s ok">Didukung</span></li>
+          <li><i class="mk mk-tiktok" aria-hidden="true"></i><span class="mkp-n"><b>TikTok Shop</b><small>Laporan Penghasilan dan retur. Export pesanan: Beta.</small></span><span class="mkp-s ok">Didukung</span></li>
+          <li><i class="mk mk-tokped" aria-hidden="true"></i><span class="mkp-n"><b>Tokopedia</b><small>Pesanan bersumber Tokopedia di Laporan Penghasilan TikTok Shop. Laporan Tokopedia terpisah belum dibaca.</small></span><span class="mkp-s part">Lewat TikTok Shop</span></li>
+          <li><i class="mk mk-none" aria-hidden="true"></i><span class="mkp-n"><b>Lazada</b><small>Laporan Lazada belum bisa diunggah.</small></span><span class="mkp-s no">Belum didukung</span></li>
+        </ul>
+        <p class="tiny faint">Shopee, TikTok Shop, Tokopedia, dan Lazada adalah merek milik pemiliknya masing-masing. Cek Untung tidak berafiliasi dengan marketplace mana pun.</p>
+      </div>
     </div>
   </section>
 
@@ -147,34 +157,41 @@
     </div>
   </section>
 
-  <!-- ============ 2. ALUR UANG: struk lengket + langkah di samping (gulir biasa) ============ -->
+  <!-- ============ 2. ALUR UANG: satu batang 100% + nota (ringkas, tanpa animasi gulir) ============ -->
   <section class="st st-cream" id="alur" aria-labelledby="h-alur">
     <div class="wrap">
       <p class="st-k" data-reveal>02 · Ke mana uang penjualan pergi</p>
-      <h2 id="h-alur" class="st-h" data-reveal>Contoh: dari Rp100 penjualan, ke mana uangnya?</h2>
-      <p class="ilus-note" data-reveal><span class="ilus-tag">Contoh ilustrasi</span> Angka di bawah hanya contoh untuk menjelaskan cara Cek Untung membaca laporan. Ini <b>bukan data penjualan Anda</b> dan bukan margin rata-rata seller. Potongan, modal, dan laba setiap toko berbeda; angka toko Anda muncul setelah laporan diunggah.</p>
-      <div class="flow3">
-        <div class="flow3-vis">
-          <div class="nota r100" id="r100" data-step="0" aria-hidden="true">
-            <div class="nota-head"><b>Nota laba</b><span>CONTOH ILUSTRASI<br>bukan data asli</span></div>
-            <dl>
-              <div class="ln" data-l="1"><dt>Penjualan</dt><dd>Rp100</dd></div>
-              <div class="ln minus" data-l="2"><dt>Potongan marketplace</dt><dd>−Rp18</dd></div>
-              <div class="ln minus" data-l="3"><dt>Modal / HPP</dt><dd>−Rp55</dd></div>
-              <div class="ln minus" data-l="4"><dt>Refund &amp; biaya</dt><dd>−Rp10</dd></div>
-            </dl>
-            <div class="nota-total" data-l="5"><span class="lbl">Laba dari data tersedia</span><span class="big">Rp17</span></div>
-            <div class="r100-bar"><i class="b-fee" style="--w:18%"></i><i class="b-hpp" style="--w:55%"></i><i class="b-ref" style="--w:10%"></i><i class="b-laba" style="--w:17%"></i></div>
+      <h2 id="h-alur" class="st-h" data-reveal>Contoh: dari Rp100.000 penjualan, ke mana uangnya?</h2>
+      <p class="ilus-note" data-reveal><span class="ilus-tag">Contoh ilustrasi</span> Angka di bawah hanya contoh untuk menjelaskan cara Cek Untung membaca laporan. Ini <b>bukan data penjualan Anda</b> dan bukan margin rata-rata seller.</p>
+      <div class="alur2" data-reveal>
+        <figure class="alur-vis" id="r100">
+          <figcaption class="alur-cap"><span>Penjualan (contoh)</span><b data-jual>Rp100.000</b><small>= 100%</small></figcaption>
+          <div class="alur-bar" role="img" aria-label="Dari Rp100.000 penjualan: potongan marketplace 18%, modal 55%, refund dan biaya 10%, laba 17%.">
+            <i class="b-fee" style="--w:18%"></i><i class="b-hpp" style="--w:55%"></i><i class="b-ref" style="--w:10%"></i><i class="b-laba" style="--w:17%"></i>
           </div>
+          <ul class="alur-leg">
+            <li><i class="b-fee" aria-hidden="true"></i><span class="al-n"><b>Potongan marketplace</b><small>Admin, komisi, ongkir, afiliasi: dari laporan.</small></span><span class="al-v neg" data-v>−Rp18.000</span><span class="al-p">18%</span></li>
+            <li><i class="b-hpp" aria-hidden="true"></i><span class="al-n"><b>Modal / HPP</b><small>Dari modal yang Anda isi. Yang belum diisi tidak dianggap nol.</small></span><span class="al-v neg" data-v>−Rp55.000</span><span class="al-p">55%</span></li>
+            <li><i class="b-ref" aria-hidden="true"></i><span class="al-n"><b>Refund &amp; biaya</b><small>Retur tidak kembali, packing, biaya operasional.</small></span><span class="al-v neg" data-v>−Rp10.000</span><span class="al-p">10%</span></li>
+            <li class="al-laba"><i class="b-laba" aria-hidden="true"></i><span class="al-n"><b>Laba dari data tersedia</b><small>Di toko Anda bisa lebih besar, lebih kecil, atau rugi.</small></span><span class="al-v pos" data-laba>Rp17.000</span><span class="al-p">17%</span></li>
+          </ul>
+        </figure>
+        <div class="nota r100k" aria-hidden="true">
+          <div class="nota-head"><b>Nota laba</b><span>CONTOH ILUSTRASI<br>bukan data asli</span></div>
+          <dl>
+            <div class="ln"><dt>Penjualan</dt><dd>Rp100.000</dd></div>
+            <div class="ln minus"><dt>Potongan marketplace</dt><dd>−Rp18.000</dd></div>
+            <div class="ln minus"><dt>Modal / HPP</dt><dd>−Rp55.000</dd></div>
+            <div class="ln minus"><dt>Refund &amp; biaya</dt><dd>−Rp10.000</dd></div>
+          </dl>
+          <div class="nota-total"><span class="lbl">Laba dari data tersedia</span><span class="big">Rp17.000</span><span class="nota-m">Margin ilustrasi 17%</span></div>
         </div>
-        <ol class="flow3-steps">
-          <li data-s="1"><span class="fs-n">Rp100</span><b>Penjualan (contoh)</b><p>Anggap pembeli membayar Rp100. Di toko Anda, angka ini diambil dari Laporan Penghasilan. Di sinilah kebanyakan seller berhenti membaca.</p></li>
-          <li data-s="2"><span class="fs-n neg">−Rp18</span><b>Potongan marketplace</b><p>Admin, komisi, program ongkir, dan afiliasi dijumlahkan dari kolom-kolom laporan.</p></li>
-          <li data-s="3"><span class="fs-n neg">−Rp55</span><b>Modal / HPP</b><p>Dari modal per produk yang Anda isi. Yang modalnya belum diketahui tidak dihitung, bukan dianggap nol.</p></li>
-          <li data-s="4"><span class="fs-n neg">−Rp10</span><b>Refund &amp; biaya</b><p>Retur yang tidak kembali, packing, dan biaya operasional yang Anda catat.</p></li>
-          <li data-s="5"><span class="fs-n pos">Rp17</span><b>Laba dari data tersedia</b><p>Di contoh ini sisa Rp17 dari Rp100 (17%). Di toko Anda bisa lebih besar, lebih kecil, atau rugi. Ini laba dari data yang ada, bukan saldo kas.</p></li>
-        </ol>
       </div>
+      <ul class="alur-fakta" data-reveal>
+        <li><b>Laba bukan saldo kas.</b> Uang di saldo marketplace bisa belum cair atau sudah terpakai.</li>
+        <li><b>Data yang belum ada tidak dianggap nol.</b> Bagiannya ditandai "belum diketahui", bukan dihitung untung.</li>
+        <li><b>Angka toko Anda</b> muncul setelah laporan diunggah, dari kolom laporan dan isian Anda.</li>
+      </ul>
     </div>
   </section>
 
@@ -266,17 +283,37 @@
         <h2 id="h-harga">Mulai gratis. Bayar saat perlu laporan lengkap.</h2>
       </div>
       <div class="prices" data-stagger="90">
-        <div class="price spot" data-spotlight data-reveal><h3>Gratis</h3><div><span class="amount">Rp0</span></div><p class="small muted">Melihat kondisi toko dengan cepat.</p>
-          <ul class="ticks"><li>Nota laba dan grafik per bulan</li><li>Modal per produk dan template</li><li>Biaya dan potongan per platform</li><li>5 produk teratas, 2 temuan</li><li>3 riwayat tersimpan (dengan akun)</li><li class="no">Laporan PDF dan Excel</li></ul>
+        <div class="price spot" data-spotlight data-reveal><h3>Gratis</h3><div><span class="amount">Rp0</span></div><p class="small muted">Untuk melihat kondisi toko dan mulai mengisi modal.</p>
+          <ul class="ticks"><li>Laba dari laporan Shopee dan TikTok Shop</li><li>Isi modal/HPP per produk, atau lewat template</li><li>Kepastian Profit</li><li>Simulator harga, retur &amp; refund, tren per bulan</li><li>Analisis 5 produk dan 2 temuan otomatis</li><li>3 riwayat tersimpan (dengan akun)</li><li class="no">Laporan PDF dan ekspor Excel</li></ul>
           <a class="btn" href="akun.html?mode=daftar&amp;next=dashboard.html" data-track="harga-gratis">Daftar gratis</a></div>
-        <div class="price featured spot" data-spotlight data-reveal><span class="price-flag">Paling lengkap</span><h3>Pro</h3><div><span class="amount" data-price="pro">Rp49.000</span> <span class="muted" data-price="proUnit">/ bulan</span><div class="small faint" data-price="proNote">atau Rp399.000 / tahun</div></div>
-          <p class="small muted">Keputusan harga dan produk berbasis angka.</p>
-          <ul class="ticks"><li>Semua fitur Gratis</li><li>Laporan PDF dengan nama dan logo toko</li><li>Semua produk dan saran harga</li><li>Semua temuan dan saran</li><li>Ekspor Excel, riwayat tanpa batas</li></ul>
-          <a class="btn primary" href="dashboard.html#upgrade" data-track="harga-pro" data-pay="pro">Berlangganan Pro<svg class="arr" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg></a></div>
-        <div class="price spot" data-spotlight data-reveal><h3>Jasa laporan</h3><div><span class="amount" data-price="jasa">Rp199.000</span> <span class="muted" data-price="jasaUnit">/ toko / bulan</span></div><p class="small muted">Tidak sempat? Kami yang kerjakan.</p>
-          <ul class="ticks"><li>Anda kirim file, kami olah</li><li>Bantu menyusun modal per produk</li><li>Laporan PDF bulanan</li><li>Rekomendasi harga dan produk</li><li>Sesi tanya jawab</li></ul>
-          <a class="btn" data-wa="jasa" href="#faq" data-track="harga-jasa">Hubungi lewat WhatsApp</a></div>
+        <div class="price featured spot" data-spotlight data-reveal><span class="price-flag" data-price="proLabel">Harga Peluncuran</span><h3>Pro</h3>
+          <div class="price-tag"><div><span class="amount" data-price="pro">Rp149.000</span> <span class="muted" data-price="proUnit">sekali bayar</span></div>
+            <p class="small faint">Bayar satu kali. Tanpa tagihan bulanan atau tahunan.</p></div>
+          <p class="small muted">Untuk seller yang memutuskan harga dan stok dari angka.</p>
+          <ul class="ticks ticks-pro"><li>Semua fitur Gratis</li>
+            <li><span><b>Semua produk dianalisis.</b> Temukan produk rugi atau bermargin tipis di seluruh katalog, lengkap dengan harga impas dan harga target.</span></li>
+            <li><span><b>Semua temuan otomatis.</b> Daftar lengkap hal yang menggerus laba, diurutkan dari dampak terbesar.</span></li>
+            <li><span><b>Laporan PDF dengan nama dan logo toko.</b> Rapi untuk dikirim ke partner, pemodal, atau keluarga.</span></li>
+            <li><span><b>Ekspor Excel dan riwayat tanpa batas.</b> Olah angka lebih lanjut dan bandingkan bulan demi bulan.</span></li></ul>
+          <p class="tiny faint">Akses Pro berlaku untuk akun Anda selama layanan Cek Untung beroperasi. <a href="privasi.html#pro">Lihat ketentuan</a></p>
+          <a class="btn primary" href="dashboard.html#upgrade" data-track="harga-pro" data-pay="pro">Beli Pro<svg class="arr" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg></a></div>
       </div>
+      <details class="cmp" data-reveal><summary>Bandingkan fitur Gratis dan Pro</summary>
+        <div class="tablewrap"><table class="cmp-t"><caption class="sr-only">Perbandingan fitur Gratis dan Pro</caption>
+          <thead><tr><th scope="col">Fitur</th><th scope="col">Gratis</th><th scope="col">Pro</th></tr></thead>
+          <tbody>
+            <tr><th scope="row">Laba dari laporan Shopee &amp; TikTok Shop (termasuk pesanan Tokopedia)</th><td>✓</td><td>✓</td></tr>
+            <tr><th scope="row">Isi modal/HPP per produk dan template</th><td>✓</td><td>✓</td></tr>
+            <tr><th scope="row">Kepastian Profit</th><td>✓</td><td>✓</td></tr>
+            <tr><th scope="row">Simulator harga, retur &amp; refund, tren per bulan</th><td>✓</td><td>✓</td></tr>
+            <tr><th scope="row">Analisis produk (status, harga impas, harga target)</th><td>5 produk</td><td>Semua produk</td></tr>
+            <tr><th scope="row">Temuan otomatis</th><td>2 teratas</td><td>Semua</td></tr>
+            <tr><th scope="row">Riwayat tersimpan di akun</th><td>3</td><td>Tanpa batas</td></tr>
+            <tr><th scope="row">Laporan PDF dengan nama dan logo toko</th><td><span aria-label="Tidak">–</span></td><td>✓</td></tr>
+            <tr><th scope="row">Ekspor Excel</th><td><span aria-label="Tidak">–</span></td><td>✓</td></tr>
+          </tbody></table></div>
+        <p class="tiny faint">Pro dibayar sekali, tanpa langganan dan tanpa perpanjangan otomatis. File laporan tetap diolah di browser Anda pada kedua paket.</p>
+      </details>
     </div>
   </section>
 
@@ -289,12 +326,12 @@
       </div>
       <div class="faq" data-reveal>
         <details><summary>Apakah data toko saya aman?</summary><p>File laporan dibaca dan dihitung di browser Anda, tidak dikirim ke server. Bila Anda membuat akun, yang disimpan hanya modal produk, pengaturan, profil toko, dan ringkasan angka untuk riwayat. Data pembeli tidak pernah disimpan.</p></details>
-        <details><summary>Harus daftar akun?</summary><p>Tidak. Anda bisa langsung memakai Cek Untung di website; modal dan pengaturan tersimpan di browser. Akun berguna agar modal produk dan riwayat bisa dibuka dari laptop atau HP lain, dan untuk berlangganan Pro.</p></details>
+        <details><summary>Harus daftar akun?</summary><p>Tidak. Anda bisa langsung memakai Cek Untung di website; modal dan pengaturan tersimpan di browser. Akun berguna agar modal produk dan riwayat bisa dibuka dari laptop atau HP lain, dan untuk membeli Pro saat pembelian dibuka.</p></details>
         <details><summary>Laporan apa yang perlu diunduh?</summary><p>Wajib: Laporan Penghasilan Shopee dan/atau TikTok Shop. Disarankan: export pesanan (Beta), untuk jumlah barang dan SKU; format export marketplace dapat berubah, dan hasil pencocokan ditandai bila belum dapat diverifikasi. Opsional: file retur. Panduannya ada di menu Unggah data pada dashboard.</p></details>
         <details><summary>Apakah Tokopedia didukung?</summary><p>Ya. Pesanan Tokopedia tercatat di laporan penghasilan TikTok Shop, dan hasilnya dipisahkan per sumber pesanan. Lazada belum didukung.</p></details>
         <details><summary>Apakah terhubung langsung ke akun Shopee atau TikTok Shop saya?</summary><p>Tidak. Cek Untung tidak terhubung otomatis ke marketplace. Anda mengunduh laporan dari Seller Centre, lalu mengunggahnya ke dashboard.</p></details>
         <details><summary>Seberapa bisa dipercaya hasilnya?</summary><p>Penjualan dan potongan diambil dari laporan resmi, dan total setiap file dicocokkan dengan ringkasan resmi platform. Laba bergantung pada modal yang Anda isi. Pesanan tanpa modal tidak dihitung, bukan dianggap nol, dan Kepastian Profit menunjukkan bagian mana yang sudah kuat dan mana yang masih perlu dilengkapi.</p></details>
-        <details><summary>Bagaimana cara berlangganan Pro?</summary><p data-pay="faq">Masuk ke akun, klik Berlangganan Pro, pilih paket, lalu lanjutkan pembayaran lewat transfer atau QRIS melalui WhatsApp. Pro aktif di akun Anda setelah pembayaran dikonfirmasi.</p></details>
+        <details><summary>Berapa harga Pro, dan bagaimana cara membelinya?</summary><p data-pay="faq">Cek Untung Pro dijual Rp149.000 sekali bayar (harga peluncuran), bukan langganan: tanpa tagihan bulanan atau tahunan. Cara pembayaran dan ketentuannya kami umumkan saat pembelian dibuka.</p></details>
         <details><summary>Apakah ini menggantikan akuntan atau laporan pajak?</summary><p>Tidak. Cek Untung membantu keputusan usaha sehari-hari seperti harga, produk, dan promosi. Untuk laporan keuangan resmi dan pajak, tetap gunakan akuntan.</p></details>
       </div>
     </div>
@@ -352,11 +389,11 @@
     if (C.whatsapp) { el.href = `https://wa.me/${C.whatsapp}?text=${encodeURIComponent(C.waMessageJasa || '')}`; el.target = '_blank'; el.rel = 'noopener'; }
     else { el.removeAttribute('href'); el.setAttribute('aria-disabled', 'true'); el.textContent = 'Kontak segera tersedia'; el.style.opacity = '.55'; el.style.cursor = 'default'; }
   });
-  // Pembayaran Pro manual butuh kontak WhatsApp di config.js. Selama kosong, tombol berlangganan tidak mengarah ke
+  // Pembayaran Pro manual butuh kontak WhatsApp di config.js. Selama kosong, tombol beli tidak mengarah ke
   // pembayaran yang belum bisa diselesaikan; teks aslinya kembali otomatis setelah kontak diisi.
   if (!C.whatsapp) {
     document.querySelectorAll('[data-pay="pro"]').forEach((el) => { el.removeAttribute('href'); el.setAttribute('aria-disabled', 'true'); el.textContent = 'Segera hadir'; el.style.cursor = 'default'; });
-    document.querySelectorAll('[data-pay="faq"]').forEach((el) => { el.textContent = 'Pembayaran Pro segera hadir. Sementara itu, semua fitur gratis tetap bisa Anda pakai, termasuk menyimpan modal di akun.'; });
+    document.querySelectorAll('[data-pay="faq"]').forEach((el) => { el.textContent = 'Pembelian Pro belum dibuka. Pro akan dijual Rp149.000 sekali bayar (harga peluncuran), bukan langganan. Sementara itu, semua fitur gratis tetap bisa Anda pakai, termasuk menyimpan modal di akun.'; });
   }
   document.getElementById('yr').textContent = new Date().getFullYear();
 
@@ -378,19 +415,6 @@
   sheet.addEventListener('cancel', (e) => { e.preventDefault(); closeMenu(); });
   sheet.addEventListener('click', (e) => { if (e.target === sheet || e.target.closest('[data-menu-close]') || e.target.closest('.ns-links a')) closeMenu(); });
   addEventListener('resize', () => { if (innerWidth > 900) closeMenu(); }, { passive: true });
-
-  // Alur Rp100: langkah yang sedang di tengah layar menyalakan baris struknya. Gulir tetap normal.
-  const r100 = document.getElementById('r100'), steps = [...document.querySelectorAll('.flow3-steps [data-s]')];
-  if (hasIO && r100 && steps.length) {
-    document.documentElement.classList.add('flow-js');
-    const sio = new IntersectionObserver((es) => es.forEach((en) => {
-      if (!en.isIntersecting) return;
-      const n = en.target.dataset.s;
-      r100.dataset.step = n;
-      steps.forEach((s) => s.classList.toggle('on', +s.dataset.s <= +n));
-    }), { rootMargin: '-45% 0px -45% 0px' });
-    steps.forEach((s) => sio.observe(s));
-  }
 
   // Ajakan lengket di HP: muncul setelah hero lewat, hilang saat ajakan akhir atau footer terlihat.
   const mcta = document.getElementById('m-cta');
