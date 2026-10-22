@@ -468,7 +468,7 @@ test('B3b UI: label Beta export pesanan + alasan refund parsial tampil (bukan Rp
   const note = 'Format export marketplace dapat berubah. Hasil pencocokan ditandai bila belum dapat diverifikasi.';
   truthy(appJs.includes(note), 'helper Beta di dashboard');
   truthy(/f\.kind === 'shopee_orders' \|\| f\.kind === 'tiktok_orders' \? `<span class="ftag beta-tag"/.test(appJs), 'tag Beta pada file export pesanan');
-  truthy(/Export pesanan', '[^']+', true\]/.test(appJs), 'daftar laporan didukung: export pesanan bertanda Beta');
+  truthy(/orders: \{ st: 'beta', kind: 'shopee_orders'/.test(appJs) && /orders: \{ st: 'beta', kind: 'tiktok_orders'/.test(appJs), 'Pusat Data: export pesanan bertanda Beta');
   truthy(/export pesanan \(Beta\)/.test(src('../index.html')), 'FAQ halaman depan menyebut Beta');
   truthy(/'Refund parsial: jumlah unit belum diketahui'/.test(appJs), 'item kepastian refund parsial');
   truthy(appJs.includes('Sebagian penjualan tidak masuk dalam perhitungan laba karena jumlah unit pada refund parsial belum dapat diverifikasi.'), 'teks refund parsial sesuai keputusan pemilik');
@@ -771,3 +771,21 @@ test('Service worker Cloudflare: kunci cache /x, /x.html, /x?q sama; respons red
 
 console.log(failed ? `\n${failed} uji GAGAL` : '\nSemua uji lulus');
 process.exitCode = failed ? 1 : 0;
+
+test('Batch 2 Pusat Data Marketplace: kategori jujur, hanya jenis berparser yang bisa diunggah', () => {
+  const appJs = src('app.js');
+  const blok = appJs.slice(appJs.indexOf('const SUMBER = {'), appJs.indexOf('function statusKategori'));
+  const kat = [...appJs.slice(appJs.indexOf('const KATEGORI = ['), appJs.indexOf('const DUK = {')).matchAll(/\['(\w+)', '([^']+)'/g)].map((m) => m[1]);
+  eq(kat.join(','), 'income,orders,ads,return,balance,payout,product,modal', '8 kategori');
+  for (const mp of ['shopee', 'tiktok', 'tokopedia', 'lazada']) truthy(new RegExp(`\\b${mp}: \\{`).test(blok), `marketplace ${mp}`);
+  const tiap = (mp) => blok.slice(blok.indexOf(`${mp}: {`), blok.indexOf('},\n    ', blok.indexOf(`${mp}: {`) + 5) + 3);
+  // Kind hanya boleh yang dikenali engine; Tokopedia/Lazada tanpa parser sendiri (hanya template modal bersama).
+  const kinds = [...blok.matchAll(/kind: '(\w+)'/g)].map((m) => m[1]);
+  for (const k of kinds) truthy(['shopee_income', 'shopee_orders', 'shopee_return', 'shopee_balance', 'tiktok_income', 'tiktok_orders', 'tiktok_return', 'modal_template'].includes(k), `kind dikenal engine: ${k}`);
+  truthy(!/kind: '(tokopedia|lazada)/.test(blok), 'tanpa parser Tokopedia/Lazada');
+  truthy(!/payout: \{[^}]*kind:/.test(blok) && !/ads: \{[^}]*kind:/.test(blok) && !/product: \{[^}]*kind:/.test(blok), 'iklan, pencairan, produk tanpa parser');
+  truthy(/Pencairan dana tidak pernah dihitung sebagai penjualan/.test(blok), 'pencairan bukan penjualan');
+  truthy(/const bisa = !demo && sup\.kind && \['ok', 'beta'\]\.includes\(sup\.st\)/.test(appJs), 'tombol unggah hanya untuk Didukung/Beta');
+  truthy(/File kosong: tidak ada data yang bisa dibaca\./.test(appJs), 'file kosong ditolak');
+  truthy(/Dipilih untuk \$\{esc\(KIND\[f\.expect\]/.test(appJs), 'file salah kategori diberi tahu');
+});
