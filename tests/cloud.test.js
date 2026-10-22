@@ -403,6 +403,22 @@ const memStore = () => { const m = new Map(); return { getItem: (k) => (m.has(k)
     truthy(S.alamatPindah(cfg, { hostname: 'cekuntung.pages.dev', pathname: '/' }) === '' && S.alamatPindah(cfg, { hostname: 'localhost', pathname: '/' }) === '', 'staging/lokal tidak tampil');
     truthy(S.alamatPindah({ domainResmi: 'http://cekuntung.id' }, gh('/cek-profit/')) === '' && S.alamatPindah({ domainResmi: 'bukan url' }, gh('/cek-profit/')) === '', 'hanya https');
   });
+  await t('pengalihan otomatis alamat lama: aman untuk token login dan data di browser lama', async () => {
+    const loc = (pathname, search = '', hash = '', hostname = 'muhammadramdhan2012.github.io') => ({ hostname, pathname, search, hash });
+    const store = (o) => { const k = Object.keys(o); return { length: k.length, key: (i) => k[i] }; };
+    const kosong = store({}), cfg = { domainResmi: 'https://cekuntung.id', alihkanAlamatLama: true };
+    truthy(S.alamatAlihkan(cfg, loc('/cek-profit/dashboard.html'), kosong) === 'https://cekuntung.id/dashboard.html', 'alamat lama → domain resmi');
+    truthy(S.alamatAlihkan(cfg, loc('/cek-profit/akun.html', '?view=pro'), kosong) === 'https://cekuntung.id/akun.html?view=pro', 'query aman ikut');
+    truthy(S.alamatAlihkan(cfg, loc('/cek-profit/dashboard.html', '', '#riwayat'), kosong) === 'https://cekuntung.id/dashboard.html#riwayat', 'hash bagian ikut');
+    truthy(S.alamatAlihkan({ domainResmi: 'https://cekuntung.id' }, loc('/cek-profit/'), kosong) === '', 'tanpa alihkanAlamatLama → tidak dialihkan');
+    for (const [s, h] of [['', '#access_token=x&refresh_token=y&type=signup'], ['?code=abc', ''], ['', '#error=access_denied'], ['?token_hash=x&type=magiclink', '']]) {
+      truthy(S.alamatAlihkan(cfg, loc('/cek-profit/akun.html', s, h), kosong) === '', `token login tidak dibawa pindah: ${s}${h}`);
+    }
+    truthy(S.alamatAlihkan(cfg, loc('/cek-profit/'), store({ 'cekprofit.theme': 'dark', 'cekprofit.session': '{}', 'cekprofit.pindahTutup': '1', lain: 'x' })) === 'https://cekuntung.id/', 'hanya tema/sesi → tetap dialihkan');
+    truthy(S.alamatAlihkan(cfg, loc('/cek-profit/'), store({ 'cekprofit.catalog': '[]' })) === '', 'ada data di browser lama → tidak dialihkan (pemberitahuan)');
+    truthy(S.alamatAlihkan(cfg, loc('/cek-profit/'), { get length() { throw new Error('diblokir'); } }) === '', 'penyimpanan tidak terbaca → tidak dialihkan');
+    for (const h of ['cekuntung.id', 'www.cekuntung.id', 'feature-qris-midtrans.cekuntung.pages.dev', 'localhost']) truthy(S.alamatAlihkan(cfg, loc('/', '', '', h), kosong) === '', `${h}: tidak dialihkan`);
+  });
   mock.server.close();
   console.log(failed ? `${failed} uji GAGAL` : 'Semua uji lulus');
   process.exitCode = failed ? 1 : 0;

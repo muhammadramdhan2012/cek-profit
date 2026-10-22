@@ -42,20 +42,23 @@ Sumber awal: audit menyeluruh 14 Okt 2026 (read-only), ditambah analisis penghit
   - fixture **sintetis** diizinkan pada tahap pengujian, setelah rencana implementasi disetujui (belum dibuat).
 - Tidak ada diskon pemasok yang di-hardcode. Struktur modal dan diskon tiap seller bisa berbeda.
 
-## Ringkasan (14 Okt 2026)
+## Ringkasan (diperbarui 22 Okt 2026)
 
-| Prioritas | Terbuka | Perlu verifikasi | Selesai |
+| Prioritas | Terbuka | Sebagian selesai / perlu verifikasi file asli | Selesai |
 |---|---|---|---|
 | Critical | 0 | 0 | 0 |
-| High | 3 | 1 (P10) | 0 |
-| Medium | 11 | 5 | 0 |
+| High | 0 | 3 (H1, H2, H3) + P10 | 0 |
+| Medium | 10 | 5 (perlu verifikasi) | 1 (M10) |
 | Low | 8 | 4 (termasuk P4: Low–Medium) | 0 |
+
+Pembaruan 22 Okt 2026 hanya mencakup H1, H3, dan M10 (diverifikasi ulang dari kode dan tes, lihat masing-masing).
+Status masalah lain belum diaudit ulang sejak 14 Okt 2026.
 
 ## Status pilar produk
 
 | Pilar | Status | Catatan |
 |---|---|---|
-| Profit Reporting | Berjalan, dengan masalah akurasi terbuka | H1, H2, H3, M1, M10, M11, P3, P10 |
+| Profit Reporting | Berjalan; H1/H2/H3 sebagian selesai, sisanya berlabel perkiraan/belum diketahui | H1, H2, H3, M1, M11, P3, P10 |
 | Profit Optimization | Sebagian | Simulator harga, harga impas/target, batas harga aman. Belum ada skenario tingkat toko. |
 | Financial Analytics | Sebagian | Tren per bulan, temuan otomatis. **Arus kas belum ada** (`docs/KAMUS_ANGKA.md` A.15). |
 | Financial Control | Awal | Pencocokan total per file dan, sejak Money Trace A1, per komponen (penjualan, refund, potongan, dana dilepas, penyesuaian) dengan ringkasan resmi. **Saldo dan pencairan belum dibaca:** laporan saldo Shopee dikenali tetapi diabaikan; rekonsiliasi pencairan **belum ada**. |
@@ -68,7 +71,19 @@ Sumber awal: audit menyeluruh 14 Okt 2026 (read-only), ditambah analisis penghit
 ## High
 
 ### H1 · Jumlah barang Shopee dianggap 1 tanpa export pesanan
-- **Status:** Terbuka · **Pilar:** Profit Reporting · **Kompleksitas:** S–M (1–2 hari)
+- **Status:** **Sebagian selesai** (diverifikasi ulang 22 Okt 2026) · **Pilar:** Profit Reporting
+- **Verifikasi 22 Okt 2026 (kode `assets/engine.js` di branch `feature/qris-midtrans`, sama dengan `main` untuk engine):**
+  - **Selesai:** dengan export pesanan, jumlah barang diambil dari export (T2, P4); status kuantitas per baris dan porsi
+    terverifikasi tersedia (`shopeeQty`); pesanan yang ada di export tetapi tidak cocok → HPP tidak diketahui, bukan
+    1 unit (P7, P7b, P7f); Kepastian Profit menampilkan "Perkiraan minimum".
+  - **Masih berlaku (keterbatasan data, berlabel):** pesanan Shopee yang tidak ada di export (atau tanpa export sama
+    sekali) tetap memakai **estimasi 1 unit** dengan status `estimasi` (P7e). Laba produk multi-unit bisa terlalu besar;
+    tidak pernah disebut final.
+  - **Belum:** validasi dengan lebih dari satu file export Shopee asli (parser export tetap **Beta**, keputusan 19 Okt).
+  - **Bukti:** `node tests/engine.test.js` lulus (T1–T21, P1–P12, Q1–Q13, R1–R6; commit `fbc1c27`, `f8fc951`, 14 Okt
+    2026). QA dashboard 22 Okt (file sintetis tanpa export): status "Belum final", porsi "Perkiraan minimum" tampil.
+- **Catatan historis (14 Okt 2026) di bawah ini menjelaskan kondisi sebelum perbaikan.**
+- **Status lama:** Terbuka · **Kompleksitas:** S–M (1–2 hari)
 - **Lokasi:** `assets/engine.js:455-458`, `assets/engine.js:682` (peringatan hanya level `info`), `assets/app.js:684`
 - **Bukti kode:** `cost = entry.cost * (qty ?? 1) * share; if (qty === null) qtyAssumed++;`
 - **Bukti data:** ditemukan pada data uji pemilik. Laporan Shopee tanpa export pesanan membuat seluruh baris produk
@@ -180,8 +195,21 @@ Sumber awal: audit menyeluruh 14 Okt 2026 (read-only), ditambah analisis penghit
   - kompensasi atas barang hilang (H2-B2) belum dikerjakan.
 
 ### H3 · Variasi produk dengan modal berbeda tergabung salah
-- **Status:** Terbuka · **Pilar:** Profit Reporting, Profit Optimization · **Kompleksitas:** M–L (3–5 hari, perlu
-  file export Shopee asli)
+- **Status:** **Sebagian selesai** — diperbaiki di kode untuk data dengan export pesanan; perlu verifikasi file asli
+  (diverifikasi ulang 22 Okt 2026) · **Pilar:** Profit Reporting, Profit Optimization
+- **Verifikasi 22 Okt 2026:**
+  - **Selesai:** penghitungan ganda unit variasi tidak terjadi lagi (T3, T10, T16, P8); modal per variasi tanpa SKU
+    lewat nama + variasi (P1, AC-S3); variasi harga kembar dengan modal berbeda → total kelompok pasti, rincian per
+    variasi tidak diklaim (P2, Q7); kelompok ambigu/tidak lengkap → tidak diketahui, bukan 0 dan bukan modal variasi
+    lain (P3, T17, H7); SKU induk tidak dipakai sebagai identitas variasi (P6, T21).
+  - **Uji acak tambahan (22 Okt, di luar repo):** 400 kasus sintetis variasi harga berbeda, qty 1–3, export lengkap →
+    total HPP sama dengan Σ(jumlah × modal variasi) dan unit tidak melebihi total export (AC-S6): 0 gagal.
+  - **Keterbatasan data:** tanpa export, Laporan Penghasilan Shopee tidak memuat nama variasi; modal tingkat produk
+    dipakai dan ditandai belum terbukti untuk tiap variasi (T16).
+  - **Belum:** validasi dengan beberapa file export Shopee asli berisi variasi (parser export **Beta**).
+  - **Bukti:** `node tests/engine.test.js` lulus, 22 Okt 2026.
+- **Catatan historis (14 Okt 2026) di bawah ini menjelaskan kondisi sebelum perbaikan.**
+- **Status lama:** Terbuka · **Kompleksitas:** M–L (3–5 hari, perlu file export Shopee asli)
 - **Lokasi:**
   - `assets/engine.js:451`: semua baris export bernama sama diambil item pertama;
   - `assets/engine.js:455`: modal variasi pertama × total qty;
@@ -199,7 +227,7 @@ Sumber awal: audit menyeluruh 14 Okt 2026 (read-only), ditambah analisis penghit
   - Tambahkan tes dengan data demo yang punya variasi.
 - **Bukti untuk menutup:** fixture dengan variasi bermodal berbeda; verifikasi `docs/KAMUS_ANGKA.md` C.3.
 - **Temuan validasi 14 Okt 2026: penghitungan ganda unit variasi saat export diunggah**
-  - **Prioritas:** High · **Status:** Terbuka · **Bagian dari:** H1 dan H3
+  - **Prioritas:** High · **Status:** Diperbaiki di kode (T16, P8, uji acak 22 Okt) · **Bagian dari:** H1 dan H3
   - **Lokasi:** `assets/engine.js:451-458`
   - **Bukti:** validasi baca-saja dengan export pesanan Shopee asli dan Laporan Penghasilan periode yang sama (data uji
     pemilik).
@@ -317,7 +345,11 @@ Sumber awal: audit menyeluruh 14 Okt 2026 (read-only), ditambah analisis penghit
   jadi perlu persetujuan. Keputusan 14 Okt 2026: **belum diubah**.
 
 ### M10 · Parser retur Shopee membaca kolom jumlah yang salah
-- **Status:** Terbuka · **Pilar:** Profit Reporting · **Kompleksitas:** S · **Terkait:** H1, H2
+- **Status:** **Selesai** (diverifikasi 22 Okt 2026) · **Pilar:** Profit Reporting · **Terkait:** H1, H2
+- **Bukti:** `assets/engine.js` membaca "Jumlah Produk Dikembalikan" dengan `Jumlah` sebagai alias; kosong/tidak ada/teks/
+  negatif → tidak diketahui (bukan 1), nol eksplisit tetap 0. Tes `H1 parser retur Shopee: 3, 1, kosong, tidak ada,
+  teks, nol, kolom lama` di `tests/engine.test.js` (commit `ae96ffc`, 15 Okt 2026), lulus 22 Okt 2026.
+- **Status lama:** Terbuka · **Kompleksitas:** S
 - **Lokasi:** `assets/engine.js:274` (`qty: num(g('Jumlah')) || 1`), dipakai di `assets/engine.js:601` (perkiraan modal retur)
 - **Bukti:** file retur Shopee asli memakai kolom "Jumlah Produk Dikembalikan". Kolom `Jumlah` tidak ada, sehingga jumlah
   retur Shopee selalu terbaca 1. Ditemukan pada data uji pemilik (nama kolom saja).

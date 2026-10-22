@@ -763,7 +763,7 @@ test('AUTH-V3 privasi data: sandi tidak masuk draft/profil/log; nomor hanya ke m
 });
 test('waSupport: kunci config terpisah & kosong; pembayaran tetap bergantung pada whatsapp; tautan tersembunyi bawaan', () => {
   const cfg = src('config.js'), appJs = src('app.js');
-  truthy(/waSupport: '',/.test(cfg) && /domainResmi: '',/.test(cfg), 'kosong (tanpa nomor fiktif)');
+  truthy(/waSupport: '',/.test(cfg) && /domainResmi: 'https:\/\/cekuntung\.id',/.test(cfg), 'nomor bantuan kosong (tanpa nomor fiktif); domain resmi = cekuntung.id (disetujui pemilik 22 Okt 2026)');
   truthy(/const PAY_READY = C\.proPembayaranAktif === true;/.test(appJs) && !/waSupport/.test(appJs), 'alur pembayaran tidak membaca waSupport');
   const pages = { 'index.html': 'Beranda', 'dashboard.html': 'Dashboard', 'akun.html': 'Akun' };
   for (const [f, nama] of Object.entries(pages)) {

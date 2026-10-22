@@ -2,6 +2,8 @@
  *  - Tautan bantuan WhatsApp (CEK_CONFIG.waSupport). TERPISAH dari nomor pembayaran Pro (CEK_CONFIG.whatsapp),
  *    agar mengisi nomor bantuan tidak ikut membuka alur pembayaran. Selama kosong/tidak valid, tautan disembunyikan.
  *  - Pemberitahuan pindah alamat (CEK_CONFIG.domainResmi). Hanya tampil di alamat lama GitHub Pages (*.github.io).
+ *  - Pengalihan otomatis alamat lama (CEK_CONFIG.alihkanAlamatLama), kecuali bila ada data di browser lama atau URL
+ *    membawa token login; dalam kasus itu pemberitahuan yang tampil.
  * Pesan WhatsApp hanya memuat nama halaman: tanpa email, nomor, angka laporan, atau data pesanan.
  */
 const CekSitus = (() => {
@@ -28,6 +30,33 @@ const CekSitus = (() => {
   }
 
   const TUTUP_KEY = 'cekprofit.pindahTutup';
+  // Kunci yang boleh ditinggal di alamat lama: tema, tanda "Nanti", dan sesi (data akun ada di server; cukup masuk lagi).
+  const KUNCI_AMAN = ['cekprofit.theme', TUTUP_KEY, 'cekprofit.session'];
+  const AUTH = /(^|[?&#])(code|error|error_code|error_description|access_token|refresh_token|token_hash|type)=/;
+  /**
+   * URL tujuan pengalihan otomatis dari alamat lama, atau '' bila TIDAK boleh dialihkan:
+   *  - alihkanAlamatLama bukan true, atau bukan alamat lama (lihat alamatPindah);
+   *  - URL membawa token/kode login (tautan email lama) — token tidak boleh pindah domain diam-diam;
+   *  - browser lama menyimpan data Cek Untung selain kunci aman (modal, retur, kode akses) — data itu tidak ikut pindah.
+   * Query aman (mis. ?view=pro) ikut dibawa; hash hanya bila berupa nama bagian (#riwayat).
+   */
+  function alamatAlihkan(cfg, loc, local) {
+    if (!cfg || cfg.alihkanAlamatLama !== true) return '';
+    const ke = alamatPindah(cfg, loc);
+    if (!ke) return '';
+    const search = String(loc.search || ''), hash = String(loc.hash || '');
+    if (AUTH.test(search) || AUTH.test(hash)) return '';
+    try {
+      for (let i = 0; local && i < local.length; i++) {
+        const k = local.key(i);
+        if (k && k.startsWith('cekprofit.') && !KUNCI_AMAN.includes(k)) return '';
+      }
+    } catch (e) { return ''; }   // penyimpanan tidak bisa dibaca: jangan ambil risiko kehilangan data
+    const u = new URL(ke);
+    if (search.length > 1 && search.length < 300) u.search = search;
+    if (/^#[A-Za-z0-9_-]{1,40}$/.test(hash)) u.hash = hash;
+    return u.href;
+  }
   /**
    * Penanda lingkungan. Pita "STAGING" hanya tampil setelah database MENJAWAB bahwa ia staging (fungsi info_lingkungan()
    * yang hanya dibuat di project staging: supabase/staging/penanda-staging.sql) dengan ref project yang sama dengan URL.
@@ -85,9 +114,16 @@ const CekSitus = (() => {
   }
 
   if (typeof document !== 'undefined') {
-    const run = () => { let st = null; try { st = sessionStorage; } catch (e) { /* abaikan */ } pasang(document, window.CEK_CONFIG || {}, location, st); };
+    const run = () => {
+      let st = null, local = null;
+      try { st = sessionStorage; } catch (e) { /* abaikan */ }
+      try { local = localStorage; } catch (e) { /* abaikan */ }
+      const ke = alamatAlihkan(window.CEK_CONFIG || {}, location, local);
+      if (ke) { location.replace(ke); return; }
+      pasang(document, window.CEK_CONFIG || {}, location, st);
+    };
     if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', run); else run();
   }
-  return { waSupportUrl, alamatPindah, pasang, tandaStaging };
+  return { waSupportUrl, alamatPindah, alamatAlihkan, pasang, tandaStaging };
 })();
 if (typeof module !== 'undefined') module.exports = CekSitus;

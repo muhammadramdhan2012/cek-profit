@@ -19,9 +19,11 @@ window.CEK_CONFIG = {
   waSupport: '',
   waSupportMessage: 'Halo Cek Untung, saya butuh bantuan menggunakan website',
 
-  // Alamat resmi situs. Bila diisi (mis. 'https://cekuntung.id'), pengunjung alamat lama *.github.io melihat
-  // pemberitahuan pindah alamat. Kosong = tidak ada pemberitahuan. Tidak ada pengalihan otomatis.
-  domainResmi: '',
+  // Alamat resmi situs. Pengunjung alamat lama *.github.io dialihkan ke sini (alihkanAlamatLama), kecuali bila browser
+  // lama masih menyimpan data Cek Untung atau URL membawa token login: mereka melihat pemberitahuan pindah alamat.
+  // Disetujui pemilik 22 Okt 2026. Tidak berpengaruh di cekuntung.id, preview, atau localhost.
+  domainResmi: 'https://cekuntung.id',
+  alihkanAlamatLama: true,
 
   // Harga Cek Untung Pro (sekali bayar, bukan langganan). Keputusan pemilik 21 Okt 2026.
   // `proRegular` = harga reguler YANG DIRENCANAKAN, tampil dicoret sebagai pembanding dengan keterangan itu.
