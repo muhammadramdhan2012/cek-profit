@@ -1,4 +1,8 @@
-# DRAF v2 — Kebijakan Pengembalian Dana (Refund) Cek Untung Pro
+# DRAF v3 — Kebijakan Pengembalian Dana (Refund) Cek Untung Pro
+
+> v3 (22 Okt 2026): pembayaran lewat QRIS Midtrans (otomatis), pembelian tanpa akun (kode `CT-…`), dan sengketa/chargeback.
+> Ringkasan yang tampil ke pengguna ada di `privasi.html#refund`; penanda `KEPUTUSAN PEMILIK` di sana harus diisi sebelum
+> merge ke `main` (CI menolak bila masih ada).
 
 Status: **DRAF UNTUK DITINJAU PEMILIK — BELUM DITERBITKAN.**
 
@@ -14,7 +18,7 @@ Bagian **[PILIH]** adalah keputusan pemilik. Bagian **[KONTAK]** diisi email res
 
 ## Kebijakan Pengembalian Dana Cek Untung Pro
 
-Cek Untung Pro dibeli dengan **sekali bayar Rp149.000** lewat transfer bank atau QRIS, dan aktif di akun yang membeli
+Cek Untung Pro dibeli dengan **sekali bayar Rp149.000** lewat QRIS (Midtrans), dan aktif di akun yang membeli
 selama layanan Cek Untung beroperasi. Kebijakan ini tidak mengurangi hak Anda sebagai konsumen menurut hukum yang
 berlaku.
 
@@ -58,7 +62,7 @@ Di luar ketentuan di atas:
 
 1. Kirim email ke **[KONTAK]** **dari email yang terdaftar di akun** Anda.
 2. Sertakan:
-   - kode pesanan (`CU-…`);
+   - kode pesanan (`CU-…` untuk akun, `CT-…` untuk pembelian tanpa akun);
    - tanggal dan jam pembayaran;
    - nominal dan metode (transfer/QRIS);
    - nama pengirim atau nama di aplikasi pembayar;
@@ -80,6 +84,12 @@ Biaya transfer pengembalian: **[PILIH: ditanggung Cek Untung / dipotong dari dan
 
 Pada refund penuh, akses Pro di akun dicabut saat refund diproses. Refund kelebihan atau pembayaran ganda tidak
 mencabut Pro.
+
+### 6b. Sengketa pembayaran (chargeback)
+
+Chargeback berbeda dengan refund: dana ditarik kembali oleh bank/penerbit pembayar lewat penyedia pembayaran, bukan
+dikembalikan atas permintaan kepada kami. Selama sengketa, akses Pro **[PILIH: dicabut / tetap]**; bila sengketa
+dimenangkan pembeli, Pro dicabut. Kami dapat meminta bukti pembelian untuk menanggapi sengketa.
 
 ### 7. Privasi dan pencatatan
 
@@ -104,6 +114,7 @@ Pertanyaan atau keluhan tentang pembayaran dan pengembalian dana: **[KONTAK]**.
   - refund proporsional bila layanan berhenti;
   - lama penyimpanan catatan;
   - email resmi.
-- **Pencatatan teknis:** refund memakai "Refund" pada baris pembayaran asal di admin.html (`admin_refund_pembayaran`),
-  sehingga selalu menunjuk transaksi asal.
+- **Pencatatan teknis:** pembayaran Midtrans direfund dengan "Refund lewat Midtrans" pada baris dana di admin.html
+  (tercatat otomatis dari status Midtrans); refund manual (`admin_refund_pembayaran`) hanya bila Midtrans tidak bisa.
+  Prosedur: `docs/RILIS_PRO.md`.
 - **Tempat terbit:** halaman Privasi & ketentuan dan FAQ harga. Terbitkan **sebelum** tombol beli diaktifkan.

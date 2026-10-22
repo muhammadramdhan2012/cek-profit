@@ -22,7 +22,7 @@
   </nav>
   <main class="prose">
     <h1 style="font-size:clamp(30px,4vw,42px)">Privasi dan ketentuan</h1>
-    <p class="small faint">Berlaku sejak Oktober 2026. Terakhir diperbarui Oktober 2026: nomor HP/WhatsApp dan layanan pihak ketiga.</p>
+    <p class="small faint">Berlaku sejak Oktober 2026. Terakhir diperbarui Oktober 2026: pembayaran Pro lewat Midtrans, pembelian tanpa akun, dan pengembalian dana.</p>
 
     <h2>File laporan yang Anda unggah</h2>
     <p>File laporan (penghasilan, pesanan, retur, template modal) dibaca dan dihitung di browser Anda. Isi file, data pembeli (nama, alamat, nomor telepon), dan daftar pesanan <b>tidak dikirim</b> ke server Cek Untung atau pihak lain, baik Anda login maupun tidak.</p>
@@ -53,22 +53,49 @@
     <ul>
       <li><b>Cloudflare</b> menyajikan website ini (hosting). Seperti layanan hosting pada umumnya, Cloudflare memproses data teknis kunjungan, misalnya alamat IP, jenis browser, dan halaman yang diminta, untuk mengirim halaman dan menjaga keamanan. Selama masa pindah alamat, alamat lama di GitHub Pages juga masih aktif. Isi file laporan tidak dikirim ke layanan hosting karena diolah di browser Anda.</li>
       <li><b>Supabase</b> mengelola login, akun, dan data yang disimpan di akun seperti dijelaskan di atas.</li>
-      <li><b>Resend</b> mengirim email akun, yaitu konfirmasi pendaftaran dan tautan membuat kata sandi baru. Resend menerima alamat email tujuan dan isi email tersebut.</li>
+      <li><b>Resend</b> mengirim email akun, yaitu konfirmasi pendaftaran, tautan membuat kata sandi baru, dan tautan aktivasi pembelian Pro. Resend menerima alamat email tujuan dan isi email tersebut.</li>
+      <li><b>Midtrans</b> (PT Midtrans) memproses pembayaran Pro dengan QRIS. Cek Untung hanya mengirim kode pesanan dan nominal ke Midtrans, tanpa nama, email, atau nomor Anda. Data yang Anda masukkan di aplikasi pembayaran (bank atau dompet digital) diproses Midtrans dan penyedia pembayaran Anda menurut kebijakan privasi mereka.</li>
       <li id="google-note" hidden><b>Google</b>: bila Anda memilih "Lanjutkan dengan Google", Google membagikan nama, alamat email, dan foto profil akun Google Anda kepada Supabase untuk membuat akun atau masuk. Cek Untung tidak meminta akses ke Gmail, Drive, atau data Google lainnya.</li>
     </ul>
 
     <h2>Statistik kunjungan</h2>
     <p id="analytics-note">Bila diaktifkan, Cek Untung memakai GoatCounter, layanan statistik tanpa cookie yang tidak melacak individu. Yang tercatat hanya halaman yang dibuka dan nama tombol yang diklik, bukan isi file atau angka toko Anda.</p>
 
-    <h2>Cek Untung Pro (sekali bayar)</h2>
+    <h2 id="pro">Cek Untung Pro (sekali bayar)</h2>
     <ul>
-      <li>Pro dibayar satu kali, bukan langganan. Tidak ada tagihan bulanan atau tahunan dan tidak ada perpanjangan otomatis.</li>
-      <li>Pembelian Pro belum dibuka. Setelah dibuka, Pro diaktifkan di akun yang membeli setelah pembayaran benar-benar diterima dan diverifikasi. Tangkapan layar transfer saja tidak cukup sebagai bukti.</li>
-      <li>Akses Pro melekat pada akun tersebut dan berlaku selama layanan Cek Untung beroperasi. Ini bukan jaminan bahwa layanan akan beroperasi selamanya.</li>
+      <li>Pro dibayar satu kali, bukan langganan. Tidak ada tagihan bulanan atau tahunan dan tidak ada perpanjangan otomatis. Harga yang berlaku adalah harga yang tampil di halaman pembayaran saat Anda membayar.</li>
+      <li>Pembayaran memakai QRIS lewat Midtrans. Nominal terisi otomatis dan kode QRIS berlaku terbatas (saat ini 15 menit). Cek Untung tidak pernah meminta nomor kartu, PIN, kode OTP, atau tangkapan layar transfer.</li>
+      <li>Pro aktif otomatis setelah server kami menerima konfirmasi pembayaran dari Midtrans. Kembali ke website dari halaman pembayaran saja tidak mengaktifkan Pro.</li>
+      <li>Akses Pro melekat pada akun yang membeli dan berlaku selama layanan Cek Untung beroperasi. Ini bukan jaminan bahwa layanan akan beroperasi selamanya.</li>
       <li>Pro mencakup fitur yang tercantum di halaman harga saat pembelian. Fitur atau layanan baru yang membutuhkan biaya tambahan (misalnya fitur berbasis AI, integrasi marketplace baru, atau jasa pembuatan laporan) tidak otomatis termasuk.</li>
-      <li>Untuk memverifikasi pembayaran, yang dicatat hanya akun Anda, nominal, status, waktu, dan referensi transaksi. File laporan dan data pembeli tidak diperlukan.</li>
+      <li>Untuk setiap pembayaran, yang dicatat hanya kode pesanan, nominal, status, waktu, dan referensi transaksi Midtrans. File laporan dan data pembeli tidak diperlukan.</li>
       <li>Kode akses (bila Anda menerimanya) bersifat pribadi dan tidak untuk diperjualbelikan kembali.</li>
     </ul>
+
+    <h2 id="tanpa-akun">Membeli Pro tanpa akun</h2>
+    <ul>
+      <li>Anda dapat membeli Pro tanpa mendaftar lebih dulu. Kami menyimpan nama, email, dan nomor WhatsApp (bila diisi) untuk mencatat pesanan, mengirim tautan aktivasi, dan menghubungi Anda soal pembayaran.</li>
+      <li>Setelah pembayaran terverifikasi, kami mengirim tautan aktivasi ke email tersebut. Pro aktif di akun dengan email itu setelah Anda membuka tautannya. Bila email itu belum punya akun, akun dibuat saat Anda membuka tautan; Anda dapat membuat kata sandi di halaman Akun.</li>
+      <li>Membayar dengan email orang lain tidak memberi Anda akses ke akun orang tersebut. Pro hanya aktif bagi pemilik email yang membuka tautan aktivasi.</li>
+      <li>Untuk mencegah penyalahgunaan, website mencatat penanda teracak dari alamat IP saat checkout (bukan alamat IP itu sendiri) dan menghapusnya setelah 24 jam. Browser Anda menyimpan kode pesanan terakhir agar Anda bisa melanjutkan pembayaran yang sama.</li>
+      <li>Data pesanan yang tidak dibayar disimpan selama <mark class="keputusan" data-keputusan>KEPUTUSAN PEMILIK: lama penyimpanan pesanan tamu yang tidak dibayar</mark>.</li>
+    </ul>
+
+    <h2 id="refund">Pengembalian dana</h2>
+    <ul>
+      <li>Pembayaran ganda (membayar Pro lebih dari sekali untuk akun yang sama) dikembalikan penuh. Pro tetap aktif.</li>
+      <li>Pembayaran yang nominalnya tidak sesuai tidak mengaktifkan Pro dan diperiksa manual; hasilnya Pro diaktifkan setelah kekurangan dilunasi atau dana dikembalikan.</li>
+      <li>Pengembalian dana penuh mencabut akses Pro. Pengembalian sebagian (misalnya kelebihan bayar) tidak mencabut Pro.</li>
+      <li>Garansi tanpa alasan: <mark class="keputusan" data-keputusan>KEPUTUSAN PEMILIK: ya/tidak, dan berapa hari sejak Pro aktif</mark>.</li>
+      <li>Pengembalian bila fitur Pro inti tidak berfungsi dan tidak dapat diperbaiki dalam <mark class="keputusan" data-keputusan>KEPUTUSAN PEMILIK: jumlah hari</mark>.</li>
+      <li>Pengajuan: email dari alamat yang terdaftar ke <mark class="keputusan" data-keputusan>KEPUTUSAN PEMILIK: email resmi pembayaran</mark>, dengan kode pesanan (CU-… atau CT-…), tanggal, dan nominal. Jangan kirim PIN, OTP, nomor kartu, atau kata sandi.</li>
+      <li>Dana dikembalikan lewat Midtrans ke metode pembayaran asal, atau ke rekening atas nama pembayar bila metode asal tidak mendukung pengembalian. Tanggapan pertama dalam <mark class="keputusan" data-keputusan>KEPUTUSAN PEMILIK: hari kerja</mark>; dana diterima dalam <mark class="keputusan" data-keputusan>KEPUTUSAN PEMILIK: hari kerja setelah disetujui</mark>.</li>
+      <li>Bila pembayaran dibatalkan atau ditarik kembali lewat penyedia pembayaran (sengketa/chargeback), akses Pro <mark class="keputusan" data-keputusan>KEPUTUSAN PEMILIK: dicabut atau tidak selama sengketa berlangsung</mark>.</li>
+      <li>Kebijakan ini tidak mengurangi hak Anda sebagai konsumen menurut hukum yang berlaku.</li>
+    </ul>
+
+    <h2 id="penjual">Penjual</h2>
+    <p>Cek Untung Pro dijual oleh <mark class="keputusan" data-keputusan>KEPUTUSAN PEMILIK: nama penjual atau badan usaha, kota, dan email resmi</mark>.</p>
 
     <h2>Batasan tanggung jawab</h2>
     <ul>

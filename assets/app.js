@@ -1717,10 +1717,10 @@
         <button class="btn" type="button" id="code-apply">Aktifkan kode</button></div></details>`;
       let action;
       const SOON = '<p class="note-box"><span class="badge">Segera hadir</span> Pembelian Pro belum dibuka. Semua fitur gratis tetap bisa Anda pakai. Bila sudah punya kode akses, aktifkan di bawah.</p>';
-      const pendingInfo = pending ? `<p class="note-box">Pesanan <b>${esc(planName(pending.plan))}</b> tercatat ${tgl(pending.created_at)}. Pro aktif setelah pembayaran diverifikasi admin.</p>` : '';
+      const pendingInfo = pending ? `<p class="note-box">Pesanan <b>${esc(planName(pending.plan))}</b> tercatat ${tgl(pending.created_at)}. Pro aktif setelah pembayaran terverifikasi.</p>` : '';
       if (!PAY_READY) action = `${pendingInfo}${SOON}`;
-      else if (cloud.enabled && !account.user) action = '<a class="btn primary" href="akun.html?mode=daftar&next=akun.html%3Fview%3Dpro">Daftar atau masuk untuk membeli Pro</a>';
-      else if (cloud.enabled) action = `${pendingInfo}<a class="btn primary" href="akun.html?view=pro" data-track="buka-checkout">${pending ? 'Lihat status pesanan' : 'Lanjut ke pembelian'}</a><p class="tiny faint">Pilih transfer bank atau QRIS. Pro aktif di akun ini setelah dana kami verifikasi.</p>`;
+      else if (cloud.enabled && !account.user) action = '<a class="btn primary" href="akun.html?view=pro" data-track="buka-checkout">Beli Pro</a><p class="tiny faint">Bisa tanpa daftar dulu. Akun dibuat dari email Anda setelah pembayaran berhasil.</p>';
+      else if (cloud.enabled) action = `${pendingInfo}<a class="btn primary" href="akun.html?view=pro" data-track="buka-checkout">${pending ? 'Lihat status pesanan' : 'Lanjut ke pembelian'}</a><p class="tiny faint">Bayar dengan QRIS. Pro aktif di akun ini setelah pembayaran terverifikasi.</p>`;
       else action = '<p class="small warn">Pembelian Pro membutuhkan akun.</p>';
       d.innerHTML = `${dHead('Cek Untung Pro', 'Untuk keputusan harga dan produk yang berbasis angka.')}
         <div class="d-body"><ul class="benefits"><li>Laporan PDF siap kirim, dengan nama dan logo toko</li><li>Semua produk dengan status rugi, tipis, atau sehat</li><li>Harga impas dan harga target per produk</li><li>Semua temuan, ekspor Excel, riwayat tanpa batas</li></ul>

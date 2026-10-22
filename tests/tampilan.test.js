@@ -523,7 +523,7 @@ test('Harga Pro sekali bayar: Rp149.000 peluncuran, Rp299.000 reguler direncanak
   for (const lama of ['Rp49.000', 'Rp199.000', 'Rp399.000', 'Berlangganan', 'Jasa laporan</h3>', "'pro_bulanan', 'Pro bulanan'"]) truthy(!semua.includes(lama), `tanpa ${lama}`);
   truthy(!/sisa (slot|kuota)|tersisa \d|countdown|\b50 pembeli/i.test(idx + appJs + akun), 'tanpa countdown/sisa kuota/klaim 50 pembeli');
   for (const s of ['id="faq-pro"', 'Apa yang tidak termasuk dalam Pro?', 'Bagaimana cara membeli, dan kapan Pro aktif?', 'Apakah data toko saya ikut dikirim saat membeli Pro?', 'Bagaimana menghubungi bantuan?', 'Ini bukan jaminan bahwa layanan akan beroperasi selamanya.']) truthy(idx.includes(s), `FAQ: ${s}`);
-  truthy(/<h2>Cek Untung Pro \(sekali bayar\)<\/h2>/.test(pv) && /bukan langganan/.test(pv), 'privasi: ketentuan sekali bayar');
+  truthy(/<h2( id="pro")?>Cek Untung Pro \(sekali bayar\)<\/h2>/.test(pv) && /bukan langganan/.test(pv), 'privasi: ketentuan sekali bayar');
 });
 test('Status Pro sekali bayar & checkout: kolom eksplisit, harga/kode/status dari server, klaim bayar bukan pengesahan', () => {
   const cl = src('cloud.js'), adm = fs.readFileSync(path.join(__dirname, '..', 'admin.html'), 'utf8'), appJs = src('app.js'), akun = src('akun.js');

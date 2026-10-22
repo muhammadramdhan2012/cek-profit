@@ -21,3 +21,7 @@ jobs:
         if: github.ref == 'refs/heads/main' || github.base_ref == 'main'
         run: |
           if ls img/qris-uji* >/dev/null 2>&1; then echo "img/qris-uji* hanya untuk branch staging. Hapus sebelum merge ke main."; exit 1; fi
+      - name: Kebijakan tanpa penanda KEPUTUSAN PEMILIK di main (rilis produksi)
+        if: github.ref == 'refs/heads/main' || github.base_ref == 'main'
+        run: |
+          if grep -l 'data-keputusan' *.html; then echo "Isi semua 'KEPUTUSAN PEMILIK' di halaman di atas sebelum merge ke main."; exit 1; fi

@@ -256,7 +256,7 @@
         <p class="tiny faint">Tautan aktivasi akun dikirim ke email ini. Pro aktif setelah Anda membuka tautan tersebut.</p>
         <div class="field"><label for="tm-wa">Nomor WhatsApp (opsional)</label><input class="plain" id="tm-wa" type="tel" inputmode="tel" autocomplete="tel" maxlength="20" placeholder="Contoh: 081234567890" aria-describedby="tm-wa-err">${errSpan('tm-wa')}</div>
         <button class="btn primary" type="submit">Bayar dengan QRIS</button>
-        <p class="tiny faint">Anda akan diarahkan ke halaman pembayaran Midtrans. Nominal terisi otomatis; kode QRIS berlaku 15 menit. Dengan membeli, Anda menyetujui <a href="privasi.html">ketentuan &amp; privasi</a>.</p>
+        <p class="tiny faint">Anda akan diarahkan ke halaman pembayaran Midtrans. Nominal terisi otomatis; kode QRIS berlaku 15 menit. Dengan membeli, Anda menyetujui <a href="privasi.html#pro">ketentuan pembelian</a> dan <a href="privasi.html#refund">kebijakan pengembalian dana</a>.</p>
       </form>
       <p class="switch">Sudah punya akun? <button class="btn link" type="button" data-masuk-akun>Masuk</button></p>`;
     message = null;
@@ -305,7 +305,7 @@
     if (!PAY_READY) return '';
     let k;
     try { k = await cloud.db.klaimPembelian(); } catch (e) { return ''; }   // migrasi belum ada / offline: abaikan
-    if (k && k.aktif > 0) return '<p class="msg ok" role="status">Pembelian Pro Anda sudah aktif di akun ini.</p>';
+    if (k && k.aktif > 0) return '<p class="msg ok" role="status">Pembelian Pro Anda sudah aktif di akun ini. Agar bisa masuk dengan kata sandi lain kali, buat kata sandi lewat tombol <b>Ganti kata sandi</b> di bawah.</p>';
     if (k && k.ganda > 0) return '<p class="msg info">Kami menerima pembayaran Pro tambahan untuk akun yang sudah Pro. Tim kami akan memproses pengembalian dana sesuai kebijakan refund.</p>';
     if (k && k.perlu_tautan_email) return `<div class="msg info"><p>Ada pembelian Pro untuk email ini. Untuk keamanan, aktifkan lewat tautan yang kami kirim ke email Anda.</p><button class="btn sm" type="button" data-kirim-aktivasi>Kirim tautan aktivasi</button></div>`;
     return '';
@@ -347,7 +347,7 @@
     if (!open) {
       card.innerHTML = `${head}${hargaBlok(s.harga_pro)}
         <ul class="benefits"><li>Laporan PDF dengan nama dan logo toko</li><li>Semua produk dan saran harga</li><li>Semua temuan, ekspor Excel, riwayat tanpa batas</li></ul>
-        <p class="tiny faint">Akses Pro berlaku untuk akun ini selama layanan Cek Untung beroperasi. Fitur berbayar baru di masa depan tidak otomatis termasuk. <a href="privasi.html">Ketentuan</a></p>
+        <p class="tiny faint">Akses Pro berlaku untuk akun ini selama layanan Cek Untung beroperasi. Fitur berbayar baru di masa depan tidak otomatis termasuk. <a href="privasi.html#pro">Ketentuan pembelian</a> · <a href="privasi.html#refund">Pengembalian dana</a></p>
         <button class="btn primary" type="button" id="bayar-qris">Bayar dengan QRIS</button>
         <p class="tiny faint">Anda akan diarahkan ke halaman pembayaran Midtrans. Nominal ${rupiah(s.harga_pro)} terisi otomatis; kode QRIS berlaku ${Number(s.qr_berlaku_menit) || 15} menit. Pro aktif otomatis setelah pembayaran terverifikasi.</p>
         ${kontak}${riwayat}${kembali}`;
