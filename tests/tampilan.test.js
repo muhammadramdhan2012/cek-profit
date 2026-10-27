@@ -833,3 +833,14 @@ test('Batch 2 Pusat Data Marketplace V2: kategori lengkap, tombol unggah hanya u
   truthy(/Dipilih untuk \$\{esc\(KIND\[f\.expect\]/.test(appJs), 'file salah kategori diberi tahu');
   for (const s of ["`Berhasil dibaca", "'Duplikat diabaikan'", "'Perlu diperiksa'", "`Format tidak sesuai"]) truthy(appJs.includes(s), `status ringkas ${s}`);
 });
+
+test('Batch 3: rekap hasil unggah, input file terjangkau keyboard, menu bawah HP', () => {
+  const appJs = src('app.js'), css = src('app.css');
+  truthy(/<details class="files-wrap" id="file-wrap" hidden><summary id="file-rekap"><\/summary><ul class="files" id="file-list"><\/ul><\/details>/.test(appJs), 'daftar file di dalam rincian yang bisa dibuka');
+  truthy((appJs.match(/statusFile\(f\)/g) || []).length >= 3, 'rekap dan daftar memakai satu fungsi status yang sama');
+  truthy(/data-rm="\$\{i\}"/.test(appJs), 'tombol hapus per file tetap ada');
+  const panel = appJs.slice(appJs.indexOf('function barisLaporan'), appJs.indexOf('function viewData'));
+  truthy(panel.length > 0 && (panel.match(/type="file"/g) || []).length === 2 && !/type="file"[^>]*\bhidden>/.test(panel), 'input file panel unggah tidak `hidden` (terjangkau Tab)');
+  truthy(/aria-label="Pilih file \$\{NAMA_SINGKAT\[cat\]\} \$\{MP_NAMA\[mp\]\}"/.test(appJs), 'tiap Pilih file punya nama untuk pembaca layar');
+  truthy(/scroll-padding-bottom: calc\(104px/.test(css), 'gulir otomatis berhenti di atas menu bawah HP');
+});
