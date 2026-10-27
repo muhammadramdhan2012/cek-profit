@@ -43,10 +43,10 @@ Hal lain yang sudah disiapkan:
 | Shopee: Export pesanan (jumlah, SKU, variasi) | **Beta**: dibuat dari nama kolom yang umum, belum diuji dengan file asli |
 | TikTok: Export pesanan (CSV, kolom Inggris/Indonesia) | **Beta**: belum diuji dengan file asli |
 | Template modal Cek Untung (`Kode`, `Modal per unit (Rp)`) | Diuji |
-| Shopee: Saldo | Dikenali, **tidak dipakai** dalam laba (memuat pencairan dan mutasi, bukan penjualan) |
+| Shopee: Saldo Penjual (`Transaction Report`) | **Beta** (Money Trace v1, diuji dengan satu file asli): rekonsiliasi saldo, penyesuaian, dan penarikan di Jejak uang. **Tidak dipakai dalam laba.** Penarikan hanya bukti dana keluar dari Shopee; rekonsiliasi bank belum ada |
 | Tokopedia | Lewat Laporan Penghasilan TikTok Shop (kolom sumber pesanan); laporan Tokopedia terpisah belum dibaca |
 | Lazada (semua laporan) | Belum didukung, memerlukan sampel file ekspor asli |
-| Iklan & promosi, pencairan dana, produk/stok (semua marketplace), saldo TikTok | Belum didukung, memerlukan sampel file ekspor asli. Pencairan dana tidak pernah dihitung sebagai penjualan |
+| Iklan & promosi, produk/stok (semua marketplace), saldo & pencairan TikTok, mutasi bank | Belum didukung, memerlukan sampel file ekspor asli. Pencairan dana tidak pernah dihitung sebagai penjualan |
 
 Di dashboard, semua jenis ini tampil di **Pusat Data Marketplace** (Unggah data) per marketplace dan kategori, beserta
 status dukungan, format, cara unduh (hanya yang sudah terverifikasi), dan status unggah/validasi. Hanya kategori
@@ -97,6 +97,7 @@ tests/                uji Node + server tiruan Supabase
 
 ```bash
 node tests/engine.test.js     # mesin hitung dengan data contoh
+node tests/saldo.test.js      # Money Trace Shopee v1 (saldo penjual), data sintetis
 node tests/license.test.js    # kode akses
 node tests/cloud.test.js      # akun & database terhadap server tiruan
 python3 -m http.server 8000   # lalu buka http://localhost:8000/dashboard.html
