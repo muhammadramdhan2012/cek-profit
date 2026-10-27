@@ -1380,7 +1380,7 @@
     const id = `in-${mp}-${cat}`;
     let aksi = '';
     if (cat === 'modal') aksi = '<button class="btn sm" type="button" data-go="data" data-section="modal">Isi modal</button>';
-    else if (!demo && sup.kind) aksi = `<label class="btn sm ${peran === 'utama' ? 'primary' : ''}" for="${id}">Pilih file</label><input id="${id}" type="file" multiple accept="${sup.fmt === '.csv' ? '.csv' : '.xlsx,.xls,.csv'}" data-expect="${sup.kind}" hidden>`;
+    else if (!demo && sup.kind) aksi = `<input id="${id}" class="sr-only pick" type="file" multiple accept="${sup.fmt === '.csv' ? '.csv' : '.xlsx,.xls,.csv'}" data-expect="${sup.kind}" aria-label="Pilih file ${NAMA_SINGKAT[cat]} ${MP_NAMA[mp]}"><label class="btn sm ${peran === 'utama' ? 'primary' : ''}" for="${id}" aria-hidden="true">Pilih file</label>`;
     const st = cat === 'modal' ? [] : statusKategori(mp, cat, sup);
     const bantu = sup.how || sup.note;
     return `<li class="pd-row">
@@ -1413,8 +1413,8 @@
         ${belum.length ? `<details class="pd-lain" ${mp === 'lazada' ? 'open' : ''}><summary>Belum tersedia untuk ${MP_NAMA[mp]} (${num(belum.length)})</summary><ul>${belum.map(([c, nama]) => { const sup = S[c]; return `<li><b>${nama}</b><span>${esc(sup.note || (sup.st === 'na' ? 'Belum berlaku.' : 'Memerlukan sampel file ekspor asli. Belum ada angka yang dihitung.'))}</span></li>`; }).join('')}</ul></details>` : ''}
       </div>
       <div class="drop drop-mini" id="drop"><span><b>Punya beberapa file sekaligus?</b> Tarik ke sini atau <label class="btn link" for="file-input">pilih banyak file</label>. Jenisnya dikenali otomatis dari isi file.</span>
-        <input id="file-input" type="file" multiple accept=".xlsx,.xls,.csv" hidden></div>
-      <ul class="files" id="file-list"></ul>
+        <input id="file-input" type="file" multiple accept=".xlsx,.xls,.csv" class="sr-only pick" aria-label="Pilih banyak file laporan sekaligus"></div>
+      <details class="files-wrap" id="file-wrap" hidden><summary id="file-rekap"></summary><ul class="files" id="file-list"></ul></details>
       <div id="upload-status" aria-live="polite"></div>
       ${files.length ? '<div><button class="btn sm quiet danger" type="button" id="clear-btn">Hapus semua file</button></div>' : ''}
     </section>`;
@@ -1649,7 +1649,7 @@
   async function addFiles(list, expect = '') {
     if (!list || !list.length) return;
     if (demo) { demo = false; files = []; resetView(); }
-    const fl = $('#file-list'); if (fl) fl.insertAdjacentHTML('beforeend', `<li class="file small muted">Membaca ${list.length} file…</li>`);
+    const fw = $('#file-wrap'), fr = $('#file-rekap'); if (fw && fr) { fw.hidden = false; fr.innerHTML = `<span class="fr-main">Membaca ${num(list.length)} file…</span>`; }
     toast(`Membaca ${list.length} file…`);
     const results = await Promise.all([...list].map(readFile));
     if (expect) results.forEach((f) => { f.expect = expect; });
@@ -1741,10 +1741,11 @@
     const el = $('#file-list');
     if (!el) return;
     const list = demo ? CekDemo.make().map((wb) => ({ name: wb.name, demo: true, kind: Engine.detect(wb) })) : files;
+    rekapFile(list);
     el.innerHTML = list.map((f, i) => {
       const [cls, label] = KIND[f.kind] || KIND.unknown;
       const [plat, ...rest] = label.split(', ');
-      const st = f.demo ? 'ok' : f.error || f.kind === 'unknown' ? 'bad' : f.kind === 'shopee_balance' ? 'warn' : /class="warn"/.test(fileStatus(f)) ? 'warn' : 'ok';
+      const st = statusFile(f);
       return `<li class="file fs-${st}"><span class="file-ic ${cls}" aria-hidden="true">${svg('laporan', 18)}</span><div class="file-body"><div class="name">${esc(f.name)}</div>
         <div class="file-tags"><span class="ftag ${cls}">${esc(plat)}</span>${rest.length ? `<span class="ftag">${esc(rest.join(', '))}</span>` : ''}${f.kind === 'shopee_orders' || f.kind === 'tiktok_orders' ? `<span class="ftag beta-tag" title="${BETA_NOTE}">Beta</span>` : ''}<span class="ftag st ${st}">${st === 'ok' ? '✓ Terbaca' : st === 'warn' ? '! Periksa' : '✕ Tidak terbaca'}</span></div>
         <div class="muted file-st">${f.demo ? 'Data contoh' : fileStatus(f)}</div>${!f.demo && FILE_USE[f.kind] ? `<div class="tiny faint file-use">Dipakai untuk: ${FILE_USE[f.kind]}</div>` : ''}</div>
@@ -1757,6 +1758,26 @@
       ['dragleave', 'drop'].forEach((ev) => drop.addEventListener(ev, (e) => { e.preventDefault(); drop.classList.remove('over'); }));
       drop.addEventListener('drop', (e) => addFiles(e.dataTransfer.files));
     }
+  }
+  // Status per file untuk daftar dan rekap: satu sumber agar keduanya tidak pernah berbeda.
+  function statusFile(f) {
+    return f.demo ? 'ok' : f.error || f.kind === 'unknown' ? 'bad' : f.kind === 'shopee_balance' ? 'warn' : /class="warn"/.test(fileStatus(f)) ? 'warn' : 'ok';
+  }
+  function rekapFile(list) {
+    const wrap = $('#file-wrap'), sum = $('#file-rekap');
+    if (!wrap || !sum) return;
+    wrap.hidden = !list.length;
+    if (!list.length) return;
+    const n = { ok: 0, warn: 0, bad: 0 };
+    list.forEach((f) => { n[statusFile(f)]++; });
+    const perlu = list.filter((f) => statusFile(f) !== 'ok').map((f) => esc(f.name));
+    const bagian = [n.ok && `<span class="ok">${num(n.ok)} terbaca</span>`, n.warn && `<span class="warn">${num(n.warn)} perlu diperiksa</span>`,
+      n.bad && `<span class="bad">${num(n.bad)} tidak terbaca</span>`].filter(Boolean).join(' · ');
+    sum.innerHTML = `<span class="fr-main"><b>${demo ? 'Data contoh' : `${num(list.length)} file diunggah`}</b> · ${bagian}</span>
+      ${perlu.length ? `<span class="fr-perlu small">Perlu tindakan: ${perlu.join(', ')}</span>` : ''}<span class="fr-buka small" aria-hidden="true"></span>`;
+    // Tertutup bawaan agar halaman ringkas; pilihan buka/tutup seller dipertahankan saat halaman digambar ulang.
+    wrap.open = !!view.fileOpen;
+    if (!wrap.dataset.bound) { wrap.dataset.bound = '1'; wrap.addEventListener('toggle', () => { view.fileOpen = wrap.open; }); }
   }
   const resetView = () => Object.assign(view, { platform: 'all', from: '', to: '', showAll: false, q: '', costQ: '', costAll: false, compare: null, prodFilter: 'all', prodKey: null, platCol: 'total' });
 
