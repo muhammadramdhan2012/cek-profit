@@ -1002,11 +1002,11 @@
     status_belum_selesai: 'transaksi belum berstatus selesai', jenis_belum_dikenali: 'jenis transaksi belum dikenali',
     laporan_penghasilan_tidak_ada: 'Laporan Penghasilan Shopee belum diunggah', tanpa_nomor_pesanan: 'tanpa nomor pesanan',
     tidak_ada_di_penghasilan: 'nomor pesanan tidak ada di Laporan Penghasilan',
-    tidak_ada_di_penghasilan_hari_terakhir: 'tidak ada di Laporan Penghasilan; terjadi di hari terakhir periodenya, mungkin dilepas setelah laporan diunduh',
+    tidak_ada_di_penghasilan_hari_terakhir: 'masuk saldo di hari terakhir periode Laporan Penghasilan yang diunggah, tetapi tidak ada di laporan itu; kemungkinan dilepas setelah laporan diunduh (di luar cakupan laporan, bukan uang hilang)',
     di_luar_periode_penghasilan: 'di luar periode Laporan Penghasilan yang diunggah', di_luar_periode_saldo: 'di luar periode laporan saldo yang diunggah',
     pasangan_sudah_dipakai: 'pasangannya sudah dipakai baris lain', versi_penghasilan_berbeda: 'isi pesanan berbeda di beberapa Laporan Penghasilan',
     nominal_berbeda: 'nominal berbeda dengan Laporan Penghasilan', tanggal_berbeda: 'tanggal berbeda dengan tanggal dana dilepas',
-    nominal_atau_tanggal_berbeda: 'nominal atau tanggal berbeda dengan saldo', penyesuaian_tanpa_pasangan: 'tidak ada penyesuaian dengan tanggal dan nominal sama di sheet Adjustment',
+    nominal_atau_tanggal_berbeda: 'nominal atau tanggal berbeda dengan saldo', penyesuaian_tanpa_pasangan: 'penyesuaian ini tercatat di saldo, tetapi belum ada pasangan dengan tanggal dan nominal sama di sheet Adjustment Laporan Penghasilan',
     tidak_ada_di_saldo: 'tidak ada di laporan saldo', nilai_nol_tanpa_mutasi: 'bernilai Rp0, tidak ada mutasi saldo untuk dicocokkan',
   };
   const SD_JENIS = { pesanan: 'Penghasilan pesanan', penyesuaian: 'Penyesuaian', penarikan: 'Penarikan dana', lain: 'Transaksi lain' };
@@ -1032,6 +1032,13 @@
         <div class="ts-st">${sdChip(stt, l.length)}<span>${esc(SD_WHY[alasan] || alasan)}.</span></div>${contoh}</li>`;
     }).join('');
     const pj = t.penyesuaian;
+    // Rincian "Belum direkonsiliasi" per penyebab, agar total campuran tidak terbaca sebagai satu angka "uang hilang".
+    const SD_BELUM = { tidak_ada_di_penghasilan_hari_terakhir: 'pesanan di luar cakupan Laporan Penghasilan yang diunggah', tidak_ada_di_penghasilan: 'pesanan belum ada di Laporan Penghasilan',
+      penyesuaian_tanpa_pasangan: 'penyesuaian belum cocok dengan sheet Adjustment', nominal_berbeda: 'pesanan dengan nominal berbeda', tanggal_berbeda: 'pesanan dengan tanggal berbeda',
+      pasangan_sudah_dipakai: 'transaksi yang pasangannya sudah dipakai', versi_penghasilan_berbeda: 'pesanan dengan versi laporan berbeda' };
+    const belum = {};
+    for (const x of t.item) if (x.sumber === 'saldo' && x.status === 'belum_direkonsiliasi') { const b = belum[x.alasan] = belum[x.alasan] || { n: 0, jumlah: 0 }; b.n++; b.jumlah += x.jumlah; }
+    const belumList = Object.entries(belum).map(([k, v]) => `<li><b>${fmt(v.jumlah)}</b> · ${num(v.n)} ${esc(SD_BELUM[k] || SD_WHY[k] || k)}</li>`).join('');
     const peringatan = [
       !S.berantai && `Saldo akhir tidak berantai di ${num(S.putus)} titik, jadi persamaan saldo belum bisa dipastikan. Periode file mungkin terputus.`,
       !t.file.cocokRingkasan && 'Jumlah baris saldo tidak cocok dengan ringkasan di file.',
@@ -1043,7 +1050,8 @@
       <p class="tiny faint">${tgl(t.periode.saldo.dari)} sampai ${tgl(t.periode.saldo.ke)} · seluruh periode file saldo; filter bulan tidak berlaku di sini.${t.file.identik || t.file.barisGanda ? ` ${num(t.file.barisGanda)} baris yang sama di beberapa file dihitung sekali.` : ''}</p>
       <div class="sd-grid">${kotak}</div>
       <p class="sd-eq">${S.berantai && S.persamaan ? '<span class="status verified">Saldo berantai</span> Saldo awal + masuk + keluar = saldo akhir.' : '<span class="status pending">Perlu dicek</span> Saldo dalam file tidak berantai.'}</p>
-      <div class="sd-chips" aria-label="Status rekonsiliasi transaksi saldo">${Object.keys(SD_ST).map((k) => sdChip(k, sal[k].n, sal[k].jumlah)).join('')}</div>
+      <div class="sd-chips" aria-label="Status rekonsiliasi transaksi saldo">${Object.keys(SD_ST).map((k) => sdChip(k, sal[k].n, k === 'belum_direkonsiliasi' ? NaN : sal[k].jumlah)).join('')}</div>
+      ${belumList ? `<div class="sd-belum"><p>Belum direkonsiliasi berarti belum ada pasangannya di laporan lain yang diunggah, <b>bukan uang hilang</b>:</p><ul>${belumList}</ul></div>` : ''}
       ${peringatan.length ? `<ul class="sd-warn">${peringatan.map((x) => `<li>${esc(x)}</li>`).join('')}</ul>` : ''}
       <details class="tr-src"><summary>Rincian rekonsiliasi saldo</summary>
         <ul class="tr-list">${kel}</ul>
