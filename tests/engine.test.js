@@ -1811,5 +1811,70 @@ test('P13-15 tiga mode modal: periode resmi hanya mengubah status, tidak menguba
 
 test('tanggal dd/mm/yyyy dan serial Excel', () => { eq(E.date('05/06/2026'), '2026-06-05'); eq(E.date(46023), '2026-01-01'); });
 
+/* ===== Batch 3C: Tokopedia v1 — rincian produk laporan penghasilan vs export pesanan TikTok/Tokopedia (data SINTETIS) =====
+ * Keputusan PO 27 Okt 2026: tidak menebak. Export dipakai hanya bila subtotal sebelum diskon laporan = Σ subtotal semua baris
+ * export (persis); selain itu kuantitas belum pasti → HPP pesanan dikeluarkan. Indikasi retur hanya ditandai. */
+const TT3C_HEAD = ['Order ID', 'Order Status', 'Cancelation/Return Type', 'SKU ID', 'Seller SKU', 'Product Name', 'Variation', 'Quantity', 'Sku Quantity of return',
+  'SKU Subtotal Before Discount', 'SKU Subtotal After Discount', 'Purchase Channel'];
+/** Export pesanan TikTok/Tokopedia SINTETIS: [orderId, status, sku, qty, subtotalSebelumDiskon, qtyRetur?, channel?] */
+const tt3cExport = (rows, head = TT3C_HEAD) => E.parseWorkbook({ name: 'tt-pesanan-sintetis.csv', sheets: { Sheet1: [head,
+  ...rows.map(([o, st, sku, q, sub, rq = 0, ch = 'Tokopedia']) => head.map((h) => ({ 'Order ID': `${o}\t`, 'Order Status': st, 'Cancelation/Return Type': rq ? 'Return/Refund' : '',
+    'SKU ID': sku, 'Seller SKU': '', 'Product Name': `Produk ${sku}`, Variation: 'Biru', Quantity: q, 'Sku Quantity of return': rq, 'SKU Subtotal Before Discount': sub,
+    'SKU Subtotal After Discount': sub - 1000, 'Purchase Channel': ch })[h]))] } });
+const tt3cInc = (rows) => ttPenghasilan(rows.map(([id, sub, detail, refund = 0]) => ({ id, settle: sub + refund - 10000, sales: sub + refund, sub, refund, detail })));
+const kat3c = ST([cat('', '', 20000, '7001001'), cat('', '', 30000, '7002001'), cat('', '', 50000, '7003001')]);
+test('3C-1 rincian sama di kedua sumber → perilaku lama (laporan penghasilan); multi SKU & qty > 1', () => {
+  const r = E.compute([tt3cInc([['880100000', 140000, '7001001 * 2;7002001 * 1;']]), tt3cExport([['880100000', 'Selesai', '7001001', 2, 80000], ['880100000', 'Selesai', '7002001', 1, 60000]])], kat3c);
+  eq(r.totalModal, 2 * 20000 + 30000); eq(r.ttKuantitas.terbuktiSubtotal, 0); eq(r.ttKuantitas.belumPasti, 0);
+});
+test('3C-2 rincian laporan terpotong, subtotal = Σ export persis → baris export dipakai (HPP lengkap)', () => {
+  const lama = E.compute([tt3cInc([['880200000', 190000, '7001001 * 1;']])], kat3c);
+  const r = E.compute([tt3cInc([['880200000', 190000, '7001001 * 1;']]), tt3cExport([['880200000', 'Selesai', '7001001', 1, 40000], ['880200000', 'Selesai', '7002001', 1, 60000], ['880200000', 'Selesai', '7003001', 1, 90000]])], kat3c);
+  eq(lama.totalModal, 20000, 'tanpa export: rincian laporan saja');
+  eq(r.totalModal, 20000 + 30000 + 50000, 'semua SKU export masuk HPP'); eq(r.ttKuantitas.terbuktiSubtotal, 1); eq(r.ttKuantitas.belumPasti, 0);
+  eq(r.totalSales, lama.totalSales, 'omzet tetap dari laporan penghasilan'); eq(r.totalReceived, lama.totalReceived);
+});
+test('3C-3 berbeda dan subtotal TIDAK cocok (beda Rp1 / SKU lain) → kuantitas belum pasti, HPP dikeluarkan, tidak ditebak', () => {
+  const beda1 = E.compute([tt3cInc([['880300000', 100001, '7001001 * 1;']]), tt3cExport([['880300000', 'Selesai', '7001001', 1, 40000], ['880300000', 'Selesai', '7002001', 1, 60000]])], kat3c);
+  eq(beda1.ttKuantitas.belumPasti, 1); truthy(Number.isNaN(beda1.totalMargin) || beda1.knownSales === 0, 'pesanan tidak masuk laba');
+  eq(beda1.kepastian.cakupan.perMarketplace.tiktok.dikeluarkan.alasan.kuantitas_belum_pasti, 1, 'alasan dicatat');
+  const skuLain = E.compute([tt3cInc([['880400000', 100000, '7003001 * 1;']]), tt3cExport([['880400000', 'Selesai', '7001001', 1, 40000], ['880400000', 'Selesai', '7002001', 1, 60000]])], kat3c);
+  eq(skuLain.ttKuantitas.belumPasti, 1, 'SKU laporan tidak ada di export');
+  const lebih = E.compute([tt3cInc([['880500000', 80000, '7001001 * 3;']]), tt3cExport([['880500000', 'Selesai', '7001001', 2, 80000]])], kat3c);
+  eq(lebih.ttKuantitas.belumPasti, 1, 'qty laporan > export');
+  // Kolom subtotal sebelum diskon tidak ada → tidak bisa dibuktikan (NaN, bukan 0).
+  const tanpaKolom = E.compute([tt3cInc([['880600000', 100000, '7001001 * 1;']]), tt3cExport([['880600000', 'Selesai', '7001001', 1, 40000], ['880600000', 'Selesai', '7002001', 1, 60000]], TT3C_HEAD.filter((h) => h !== 'SKU Subtotal Before Discount'))], kat3c);
+  eq(tanpaKolom.ttKuantitas.belumPasti, 1);
+});
+test('3C-4 pesanan batal / refund penuh: perbedaan tanpa dampak, tidak menambah omzet atau HPP', () => {
+  const r = E.compute([ttPenghasilan([{ id: '880700000', settle: 0, sales: 0, sub: 0, detail: '7001001 * 1;' }]), tt3cExport([['880700000', 'Dibatalkan', '7001001', 1, 40000, 1], ['880700000', 'Dibatalkan', '7002001', 1, 60000, 1]])], kat3c);
+  eq(r.totalSales, 0); eq(r.totalModal, 0); eq(r.orders, 0); eq(r.ttKuantitas.tanpaDampak, 1); eq(r.ttKuantitas.belumPasti, 0);
+  eq(r.ttKuantitas.indikasiRetur.jumlahPesanan, 0, 'pesanan batal bukan indikasi retur pesanan terjual');
+});
+test('3C-5 indikasi retur di export hanya ditandai: HPP tidak berubah', () => {
+  const tanpa = E.compute([tt3cInc([['880800000', 80000, '7001001 * 2;']]), tt3cExport([['880800000', 'Selesai', '7001001', 2, 80000]])], kat3c);
+  const retur = E.compute([tt3cInc([['880800000', 80000, '7001001 * 2;']]), tt3cExport([['880800000', 'Selesai', '7001001', 2, 80000, 1]])], kat3c);
+  eq(retur.totalModal, tanpa.totalModal, 'HPP tidak dikurangi otomatis'); eq(retur.totalMargin, tanpa.totalMargin);
+  eq(retur.ttKuantitas.indikasiRetur.jumlahPesanan, 1); eq(retur.ttKuantitas.indikasiRetur.penjualan, 80000);
+  truthy(E.insights(retur).some((x) => /indikasi retur/.test(x.title)), 'temuan ditampilkan');
+});
+test('3C-6 export & laporan diunggah ulang: tidak ada transaksi ganda; pesanan tanpa rincian memakai export', () => {
+  const inc = tt3cInc([['880900000', 100000, ''], ['881000000', 190000, '7001001 * 1;']]);
+  const ex = tt3cExport([['880900000', 'Selesai', '7002001', 1, 100000], ['881000000', 'Selesai', '7001001', 1, 40000], ['881000000', 'Selesai', '7002001', 1, 60000], ['881000000', 'Selesai', '7003001', 1, 90000]]);
+  const a = E.compute([inc, ex], kat3c), b = E.compute([inc, ex, ex, inc], kat3c);
+  for (const k of ['totalSales', 'totalReceived', 'totalFees', 'totalModal', 'orders']) eq(b[k], a[k], k);
+  eq(a.totalModal, 30000 + 100000); eq(a.ttNoDetail, 0);
+});
+test('3C-7 tanpa export: hasil identik dengan sebelum Batch 3C (transaksi tak terdampak)', () => {
+  const r = E.compute([tt3cInc([['881100000', 140000, '7001001 * 2;7002001 * 1;'], ['881200000', 50000, '']])], kat3c);
+  eq(r.totalModal, 70000); eq(r.ttNoDetail, 1); eq(r.ttKuantitas.terbuktiSubtotal + r.ttKuantitas.belumPasti + r.ttKuantitas.tanpaDampak, 0);
+});
+test('3C-8 Seller SKU kosong tidak dipakai sebagai identitas; Order ID dengan tab di akhir tetap cocok', () => {
+  const ex = tt3cExport([['881300000', 'Selesai', '7002001', 1, 60000]]);
+  eq(ex.lines[0].orderId, '881300000', 'tab dibuang'); eq(ex.lines[0].sellerSku, '');
+  const r = E.compute([tt3cInc([['881300000', 60000, '']]), ex], ST([cat('', '', 11111, '')]).catalog.length ? ST([cat('Produk 7002001', '', 11111, ''), cat('', '', 30000, '7002001')]) : kat3c);
+  eq(r.totalModal, 30000, 'modal dari SKU ID, bukan Seller SKU kosong');
+});
+
 console.log(failed ? `\n${failed} uji GAGAL` : '\nSemua uji lulus');
 process.exitCode = failed ? 1 : 0;

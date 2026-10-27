@@ -858,3 +858,13 @@ test('Batch 3B: saldo Shopee terisolasi dari laba; status & teks jujur', () => {
   truthy(/tidak dikoreksi otomatis/.test(appJs), 'selisih penyesuaian ditampilkan, tidak dikoreksi');
   truthy(/<script src="assets\/saldo\.js\?v=/.test(html) && /'assets\/saldo\.js'/.test(fs.readFileSync(path.join(__dirname, '..', 'sw.js'), 'utf8')), 'saldo.js dimuat & tersedia offline');
 });
+
+test('Batch 3C: tab Tokopedia memakai parser TikTok yang ada; retur & iklan tetap belum tersedia', () => {
+  const appJs = src('app.js');
+  const toko = appJs.slice(appJs.indexOf('    tokopedia: {'), appJs.indexOf('    lazada: {'));
+  truthy(/income: \{ st: 'ok', kind: 'tiktok_income'/.test(toko) && /orders: \{ st: 'beta', kind: 'tiktok_orders'/.test(toko), 'Tokopedia: Laporan Penghasilan gabungan + export (Beta), jenis TikTok');
+  truthy(/ads: PERLU, return: PERLU/.test(toko), 'retur & iklan Tokopedia belum diklaim');
+  truthy(/Satu file berisi transaksi Tokopedia dan TikTok Shop/.test(toko) && /tetap dihitung sekali/.test(toko), 'penjelasan satu file dua kanal');
+  truthy(!/tokopedia_income|tokopedia_orders/.test(appJs + src('engine.js')), 'tanpa parser Tokopedia baru');
+  truthy(/'Jumlah barang belum dapat dipastikan'/.test(appJs) && /'Indikasi retur di export pesanan'/.test(appJs) && /Modal tidak dikurangi otomatis/.test(appJs), 'peringatan konflik qty & indikasi retur');
+});
