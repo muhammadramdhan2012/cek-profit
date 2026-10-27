@@ -655,7 +655,7 @@ test('UX P0 unggah: status jelas, CTA ke Ringkasan, terbaca ≠ tervalidasi', ()
 });
 test('UX P0 pengaturan: grup wajib/opsional, identitas PDF terpisah, input & kunci simpan tetap', () => {
   const a = src('app.js');
-  for (const t of ['Data penghasilan', 'Wajib untuk laba', 'Pengaturan harga reseller', "optSec('biaya', '4', 'Biaya tambahan'", "optSec('target', '5', 'Target bisnis'", "'Identitas laporan PDF (opsional)'"]) truthy(a.includes(t), t);
+  for (const t of ['Laporan utama', 'Wajib untuk laba', 'Pengaturan harga reseller', "optSec('biaya', '4', 'Biaya tambahan'", "optSec('target', '5', 'Target bisnis'", "'Identitas laporan PDF (opsional)'"]) truthy(a.includes(t), t);
   truthy(/<p class="note-box">Informasi ini hanya digunakan sebagai identitas pada laporan PDF\. Tidak memengaruhi perhitungan laba\.<\/p>/.test(a) && /Tidak memengaruhi perhitungan laba\.',/.test(a), 'keterangan identitas PDF (di dalam dan di judul bagian)');
   for (const id of ['s-packing', 's-target', 's-tprofit', 'fc-add', 'pf-store', 'pf-owner', 'pf-logo', 's-mitra', 's-coret', 'add-period']) truthy(a.includes(`id="${id}"`), `input ${id} tetap ada`);
   truthy(/else if \(id === 'pf-store' \|\| id === 'pf-owner'\) \{ profile\[id === 'pf-store' \? 'store' : 'owner'\] = v; saveProfile\(\); return; \}/.test(a), 'identitas tetap disimpan di profil (tidak di pengaturan hitung)');
@@ -815,20 +815,21 @@ test('QRIS simulasi (img/qris-uji*) hanya dipakai di staging terverifikasi dan d
 console.log(failed ? `\n${failed} uji GAGAL` : '\nSemua uji lulus');
 process.exitCode = failed ? 1 : 0;
 
-test('Batch 2 Pusat Data Marketplace: kategori jujur, hanya jenis berparser yang bisa diunggah', () => {
+test('Batch 2 Pusat Data Marketplace V2: kategori lengkap, tombol unggah hanya untuk parser yang ada', () => {
   const appJs = src('app.js');
-  const blok = appJs.slice(appJs.indexOf('const SUMBER = {'), appJs.indexOf('function statusKategori'));
-  const kat = [...appJs.slice(appJs.indexOf('const KATEGORI = ['), appJs.indexOf('const DUK = {')).matchAll(/\['(\w+)', '([^']+)'/g)].map((m) => m[1]);
-  eq(kat.join(','), 'income,orders,ads,return,balance,payout,product,modal', '8 kategori');
+  const blok = appJs.slice(appJs.indexOf('const SUMBER = {'), appJs.indexOf('const PERAN = {'));
+  const kat = [...appJs.slice(appJs.indexOf('const KATEGORI = ['), appJs.indexOf('const PERLU = {')).matchAll(/\['(\w+)', '([^']+)'/g)].map((m) => m[1]);
+  eq(kat.join(','), 'income,orders,ads,return,balance,payout,product,modal', '8 kategori tetap tercatat');
   for (const mp of ['shopee', 'tiktok', 'tokopedia', 'lazada']) truthy(new RegExp(`\\b${mp}: \\{`).test(blok), `marketplace ${mp}`);
-  const tiap = (mp) => blok.slice(blok.indexOf(`${mp}: {`), blok.indexOf('},\n    ', blok.indexOf(`${mp}: {`) + 5) + 3);
-  // Kind hanya boleh yang dikenali engine; Tokopedia/Lazada tanpa parser sendiri (hanya template modal bersama).
   const kinds = [...blok.matchAll(/kind: '(\w+)'/g)].map((m) => m[1]);
   for (const k of kinds) truthy(['shopee_income', 'shopee_orders', 'shopee_return', 'shopee_balance', 'tiktok_income', 'tiktok_orders', 'tiktok_return', 'modal_template'].includes(k), `kind dikenal engine: ${k}`);
   truthy(!/kind: '(tokopedia|lazada)/.test(blok), 'tanpa parser Tokopedia/Lazada');
   truthy(!/payout: \{[^}]*kind:/.test(blok) && !/ads: \{[^}]*kind:/.test(blok) && !/product: \{[^}]*kind:/.test(blok), 'iklan, pencairan, produk tanpa parser');
   truthy(/Pencairan dana tidak pernah dihitung sebagai penjualan/.test(blok), 'pencairan bukan penjualan');
-  truthy(/const bisa = !demo && sup\.kind && \['ok', 'beta'\]\.includes\(sup\.st\)/.test(appJs), 'tombol unggah hanya untuk Didukung/Beta');
+  truthy(/const bisa = \(cat\) => \['ok', 'beta'\]\.includes\(S\[cat\]\.st\) && S\[cat\]\.kind;/.test(appJs), 'baris unggah hanya untuk Didukung/Beta');
+  truthy(/const PERAN = \{ income: 'utama', modal: 'utama', orders: 'pendukung', return: 'pendukung' \}/.test(appJs) && /Wajib untuk laba/.test(appJs), 'wajib: Laporan Penghasilan + modal; pesanan & retur opsional');
+  truthy(/id="file-input" type="file" multiple/.test(appJs) && /id="drop"/.test(appJs), 'unggah massal tetap ada (satu area)');
   truthy(/File kosong: tidak ada data yang bisa dibaca\./.test(appJs), 'file kosong ditolak');
   truthy(/Dipilih untuk \$\{esc\(KIND\[f\.expect\]/.test(appJs), 'file salah kategori diberi tahu');
+  for (const s of ["`Berhasil dibaca", "'Duplikat diabaikan'", "'Perlu diperiksa'", "`Format tidak sesuai"]) truthy(appJs.includes(s), `status ringkas ${s}`);
 });
