@@ -1667,3 +1667,39 @@ input.pick:focus-visible + label, .drop-mini:has(input.pick:focus-visible) label
 .sd-belum p { margin: 0; }
 .sd-belum ul { margin: 0; padding-left: 18px; display: grid; gap: 2px; }
 .sd-belum b { font-variant-numeric: tabular-nums; }
+
+/* ---------- Pajak Seller (Batch 4) ---------- */
+.pajak { display: grid; gap: 14px; }
+.pj-top h3 { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: 0 0 4px; }
+.pj-top p { margin: 0; }
+.pj-tabs { max-width: 420px; }
+.pj-surat { display: grid; gap: 8px; padding: 14px; border: 1px solid var(--line); border-radius: 14px; background: var(--surface); }
+.pj-surat p { margin: 0; }
+.pj-acts { display: flex; flex-wrap: wrap; gap: 10px 16px; align-items: center; margin: 4px 0 10px; }
+.pj-rows { display: grid; gap: 0; border: 1px solid var(--line); border-radius: 12px; overflow: hidden; }
+.pj-row { display: grid; grid-template-columns: 96px minmax(0, 1fr) minmax(0, 1fr); gap: 10px; align-items: center; padding: 8px 10px; background: var(--surface); }
+.pj-row + .pj-row { border-top: 1px solid var(--line); }
+.pj-bln { font-size: 13px; font-weight: 650; color: var(--ink-2); }
+.pj-in { display: grid; gap: 2px; min-width: 0; }
+.pj-in .pj-k { display: none; font-size: 11.5px; color: var(--ink-3); }
+.pj-in .input input { min-width: 0; }
+.pj-src { font-size: 11px; color: var(--info); }
+.pj-res { display: grid; gap: 10px; }
+.pj-per { margin: 0; font-size: 13px; color: var(--ink-2); }
+.pj-dl { margin: 0; display: grid; gap: 4px; }
+.pj-dl div { display: flex; justify-content: space-between; gap: 12px; font-size: 13.5px; }
+.pj-dl dt { color: var(--ink-2); } .pj-dl dd { margin: 0; font-variant-numeric: tabular-nums; text-align: right; }
+.pj-dl .pj-tot { border-top: 1px solid var(--line); padding-top: 6px; font-weight: 700; }
+.pj-card { display: grid; gap: 4px; padding: 12px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); }
+.pj-card p { margin: 0; }
+.pj-card .pj-k { font-size: 12.5px; color: var(--ink-3); font-weight: 650; }
+.pj-v { font-size: 20px; font-variant-numeric: tabular-nums; letter-spacing: -0.01em; }
+.pj-v.unk { font-size: 15px; color: var(--ink-3); }
+.pj-warn { margin: 0; padding-left: 18px; font-size: 12.5px; color: var(--warn); display: grid; gap: 4px; }
+.pajak .tr-src a { color: var(--accent); }
+@media (max-width: 560px) {
+  .pj-row { grid-template-columns: minmax(0, 1fr); gap: 6px; }
+  .pj-in { grid-template-columns: 84px minmax(0, 1fr); align-items: center; column-gap: 8px; }
+  .pj-in .pj-src { grid-column: 2; }
+  .pj-in .pj-k { display: block; }
+}

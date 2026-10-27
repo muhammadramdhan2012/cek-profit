@@ -58,6 +58,7 @@
     produk: '<path d="M21 8l-9-5-9 5 9 5 9-5z"/><path d="M3 8v8l9 5 9-5V8"/><path d="M12 13v8"/>',
     biaya: '<path d="M6 3h12v18l-3-2-3 2-3-2-3 2z"/><path d="M9 8h6M9 12h6"/>',
     retur: '<path d="M9 14l-5-5 5-5"/><path d="M4 9h11a5 5 0 0 1 0 10h-4"/>',
+    pajak: '<path d="M6 3h12v18l-3-2-3 2-3-2-3 2z"/><path d="M9 14l6-6"/><circle cx="9.5" cy="8.5" r="1"/><circle cx="14.5" cy="13.5" r="1"/>',
     simulator: '<path d="M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3M1 14h6M9 8h6M17 16h6"/>',
     riwayat: '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',
     data: '<path d="M12 15V3M7 8l5-5 5 5"/><path d="M4 15v4a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-4"/>',
@@ -218,6 +219,7 @@
     ['retur', 'Retur & refund', 'Barang yang kembali dan yang belum jelas'],
     ['simulator', 'Simulator harga', 'Uji harga dan diskon sebelum dipasang'],
     ['riwayat', 'Laporan & riwayat', 'Unduh laporan, simpan, dan bandingkan periode'],
+    ['pajak', 'Pajak Seller', 'Simulasi PPh marketplace dan surat pernyataan PMK 37/2025'],
     ['data', 'Data & pengaturan', 'Unggah laporan, isi modal, dan atur biaya'],
   ];
   /* Menu: label untuk seller → tampilan yang sudah ada. "Unggah data", "Modal & HPP", dan "Pengaturan" adalah
@@ -225,11 +227,14 @@
   const NAV = [
     ['Utama', [['ringkasan', 'Ringkasan', 'ringkasan'], ['laba', 'Laba', 'biaya'], ['produk', 'Produk', 'produk'], ['retur', 'Retur & refund', 'retur'], ['simulator', 'Simulator harga', 'simulator']]],
     ['Data & laporan', [['laporan', 'Laporan & riwayat', 'riwayat'], ['data', 'Unggah data', 'data', 'unggah'], ['modal', 'Modal & HPP', 'data', 'modal']]],
-    ['Lainnya', [['pengaturan', 'Pengaturan', 'data', 'pengaturan']]],
+    ['Lainnya', [['pajak', 'Pajak Seller', 'pajak'], ['pengaturan', 'Pengaturan', 'data', 'pengaturan']]],
   ];
+  /* Pajak Seller (Batch 4): hanya di staging terverifikasi atau localhost (pengembangan). Produksi: menu tidak ada. */
+  const pajakAktif = () => (window.CEK_CONFIG || {}).pajakSeller === true || /^(localhost|127\.0\.0\.1)$/.test(location.hostname);
+  const navTampil = (i) => i[0] !== 'pajak' || pajakAktif();
   const BOTTOM = ['ringkasan', 'laba', 'produk', 'retur'];
   const SHORT = { retur: 'Retur' };
-  const navItems = () => NAV.flatMap(([, items]) => items);
+  const navItems = () => NAV.flatMap(([, items]) => items).filter(navTampil);
   const isActive = ([, , v, section]) => viewName === v && (v !== 'data' || (view.section || 'unggah') === section);
   function navButton(item, cls = '') {
     const [k, label, v, section] = item;
@@ -244,7 +249,7 @@
   }
   function renderNav() {
     // Menu hanya ditulis ulang bila isinya berubah, agar animasi penanda aktif tidak berulang di setiap ketikan.
-    const side = NAV.map(([group, items]) => `<div class="nav-group" role="group" aria-label="${group}"><span class="nav-label" aria-hidden="true">${group}</span>${items.map((i) => navButton(i)).join('')}</div>`).join('');
+    const side = NAV.map(([group, items]) => `<div class="nav-group" role="group" aria-label="${group}"><span class="nav-label" aria-hidden="true">${group}</span>${items.filter(navTampil).map((i) => navButton(i)).join('')}</div>`).join('');
     if (renderNav.side !== side) { $('#nav').innerHTML = side; renderNav.side = side; }
     // Bilah bawah (HP): 4 menu utama + "Lainnya" untuk sisanya, sehingga tidak ada menu tersembunyi tanpa penanda.
     const more = navItems().filter((i) => !BOTTOM.includes(i[0]));
@@ -281,8 +286,8 @@
    *  data-filter/data-act agar id tidak ganda. */
   function topControls(r, inSheet) {
     const pro = isPro();
-    const filters = !['data', 'riwayat', 'simulator'].includes(viewName) && r;
-    const canExport = r && !['data', 'simulator'].includes(viewName);
+    const filters = !['data', 'riwayat', 'simulator', 'pajak'].includes(viewName) && r;
+    const canExport = r && !['data', 'simulator', 'pajak'].includes(viewName);
     const monthOpts = (sel, label) => `<option value="">${label}</option>` + r.allMonths.map((m) => `<option value="${m}" ${m === sel ? 'selected' : ''}>${monthLabel(m)}</option>`).join('');
     const sel = (k, label, cur) => `<select class="compact" ${inSheet ? `data-filter="${k}"` : `id="${k}"`} aria-label="${label}">${monthOpts(cur, k === 'from' ? 'Dari awal' : 'Sampai akhir')}</select>`;
     const seg = r && r.available.shopee && r.available.tiktok ? `<div class="seg" role="group" aria-label="Marketplace">${[['all', 'Semua'], ['shopee', 'Shopee'], ['tiktok', 'TikTok']].map(([k, l]) => `<button type="button" data-platform="${k}" aria-pressed="${view.platform === k}">${l}</button>`).join('')}</div>` : '';
@@ -386,12 +391,14 @@
   }
 
   function render() {
+    // Satu gerbang untuk semua jalur (hash awal, popstate, go): Pajak Seller tidak pernah tampil bila belum diaktifkan.
+    if (viewName === 'pajak' && !pajakAktif()) viewName = demo ? 'ringkasan' : 'data';
     hideInfo();
     compute();
     renderNav(); renderAccount(); renderTop(); renderSheet();
     const v = $('#view');
     const needData = ['ringkasan', 'produk', 'biaya', 'retur'].includes(viewName) && !last;
-    v.innerHTML = needData ? emptyView() : ({ ringkasan: viewRingkasan, produk: viewProduk, biaya: viewBiaya, retur: viewRetur, simulator: viewSimulator, riwayat: viewRiwayat, data: viewData }[viewName])();
+    v.innerHTML = needData ? emptyView() : ({ ringkasan: viewRingkasan, produk: viewProduk, biaya: viewBiaya, retur: viewRetur, simulator: viewSimulator, riwayat: viewRiwayat, data: viewData, pajak: viewPajak }[viewName])();
     afterRender();
   }
   function afterRender() {
@@ -399,11 +406,12 @@
     if (viewName === 'ringkasan' || viewName === 'biaya') bindTrend($('#monthly'));
     if (viewName === 'produk') renderProducts();
     if (viewName === 'simulator') renderSimOut();
+    if (viewName === 'pajak') renderPajakOut();
     if (viewName === 'data') { renderFiles(); renderCostTable(); }
     if (viewName === 'riwayat') maybeLoadReports();
   }
   function go(name, push = true, section = '') {
-    if (!VIEWS.some((v) => v[0] === name)) name = 'ringkasan';
+    if (!VIEWS.some((v) => v[0] === name) || (name === 'pajak' && !pajakAktif())) name = 'ringkasan';
     viewName = name;
     if (name === 'data') view.section = section || 'unggah';
     // Menu "Pengaturan" / tombol "Atur biaya" langsung membuka bagian biaya tambahan.
@@ -1282,6 +1290,95 @@
     const est = CekTarif.estimate({ platform: plat, status: sim.status, kategori: kat, opsi: sim.opsi, afiliasi: ok(sim.afiliasi) ? sim.afiliasi : 0 });
     return { src, plat, avail, kat, pct: est.pct, fixed: est.fixed, rincian: est.rincian, note: '' };
   }
+  /* ================= Pajak Seller (Batch 4) =================
+   * Simulasi deterministik dari CekPajak (assets/pajak.js). Isian hanya di memori halaman ini: tidak disimpan ke
+   * penyimpanan browser, akun, URL, maupun analytics. Tidak mengubah laporan laba. */
+  const BLN = ['Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni', 'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'];
+  const pajak = { tab: 'kalkulator', tahun: 2026, jenis: 'op', rezim: 'final', syaratFinal: false, surat: 'tidak_tahu', sampai: 12, tanpaUsahaLain: false,
+    bulan: Array.from({ length: 12 }, () => ({ marketplace: null, lain: null })), dipungutAktual: null, dariLaporan: [] };
+  /** Omzet bulanan dari laporan yang diunggah (penjualan engine, tanggal pesanan). Hanya bantuan isian; bisa diubah. */
+  function pajakDariLaporan() {
+    const r = last && last.all;
+    if (!r) return [];
+    return r.months.filter((m) => m.month.startsWith(`${pajak.tahun}-`)).map((m) => ({ bulan: +m.month.slice(5, 7), nilai: Math.round(m.total.sales) }));
+  }
+  function viewPajak() {
+    const tab = (k, l) => `<button type="button" role="tab" data-pj-tab="${k}" aria-selected="${pajak.tab === k}">${l}</button>`;
+    const head = `<div class="pj-top"><h3 id="pj-t">Pajak Seller <span class="pd-tag beta">Simulasi</span></h3>
+      <p class="small muted">Perkiraan PPh dari omzet yang Anda isi, menurut aturan resmi yang berlaku. Bukan bukti pajak telah dibayar dan bukan nasihat pajak. Isian tidak disimpan dan tidak dikirim ke server.</p></div>
+      <div class="pd-mp pj-tabs" role="tablist" aria-label="Pajak Seller">${tab('kalkulator', 'Kalkulator pajak')}${tab('surat', 'Surat PMK 37/2025')}</div>`;
+    if (pajak.tab === 'surat') {
+      return `<section class="panel pajak" aria-labelledby="pj-t">${head}<div class="pj-surat" role="tabpanel">
+        <p><b>Generator surat pernyataan belum tersedia.</b> Kami sedang mencocokkan teks dengan lampiran resmi PMK 37/2025, agar isi surat tidak berbeda dari format yang ditetapkan.</p>
+        <p class="small muted">Sementara itu, gunakan format resmi dari <a href="https://jdih.kemenkeu.go.id/dok/pmk-37-tahun-2025" target="_blank" rel="noopener">JDIH Kementerian Keuangan</a> atau formulir yang disediakan marketplace Anda. Surat pernyataan wajib bermeterai dan disampaikan sendiri ke marketplace; Cek Untung tidak mengirimkannya.</p></div></section>`;
+    }
+    const opt = (id, cur, list) => `<select class="plain" id="${id}">${list.map(([v, l]) => `<option value="${v}" ${String(cur) === String(v) ? 'selected' : ''}>${l}</option>`).join('')}</select>`;
+    const rp = (v) => (v === null || v === undefined ? '' : String(v));
+    const dari = new Set(pajak.dariLaporan);
+    const rows = pajak.bulan.slice(0, pajak.sampai).map((b, i) => `<div class="pj-row"><span class="pj-bln">${BLN[i]}</span>
+      <label class="pj-in"><span class="sr-only">Omzet marketplace pemungut ${BLN[i]}</span><span class="pj-k">Marketplace</span><span class="input"><span>Rp</span><input id="pj-mp-${i}" type="number" inputmode="numeric" min="0" step="1" value="${rp(b.marketplace)}" placeholder="belum diisi"></span>${dari.has(i) ? '<small class="pj-src">dari laporan</small>' : ''}</label>
+      <label class="pj-in"><span class="sr-only">Omzet usaha lain ${BLN[i]}</span><span class="pj-k">Usaha lain</span><span class="input"><span>Rp</span><input id="pj-ln-${i}" type="number" inputmode="numeric" min="0" step="1" value="${pajak.tanpaUsahaLain ? '0' : rp(b.lain)}" placeholder="belum diisi" ${pajak.tanpaUsahaLain ? 'disabled' : ''}></span></label></div>`).join('');
+    const ada = pajakDariLaporan().length;
+    return `<section class="panel pajak" aria-labelledby="pj-t">${head}<div class="sim" role="tabpanel"><div class="sim-in">
+      <fieldset class="sim-grp"><legend><span class="sg-n">1</span>Wajib pajak</legend><div class="fields two align">
+        <div class="field"><label for="pj-tahun">Tahun pajak</label>${opt('pj-tahun', pajak.tahun, [[2026, '2026'], [2025, '2025 (belum didukung)'], [2027, '2027 (belum didukung)']])}</div>
+        <div class="field"><label for="pj-jenis">Jenis wajib pajak</label>${opt('pj-jenis', pajak.jenis, [['op', 'Orang pribadi'], ['badan', 'Badan (CV, firma, PT, dll.)']])}</div>
+        ${pajak.jenis === 'op' ? `<div class="field"><label for="pj-rezim">Cara menghitung PPh</label>${opt('pj-rezim', pajak.rezim, [['final', 'PPh final 0,5% (UMKM)'], ['umum', 'Tarif umum (pembukuan/norma)']])}</div>
+        <div class="field"><label for="pj-surat">Surat pernyataan ≤ Rp500 juta</label>${opt('pj-surat', pajak.surat, [['tidak_tahu', 'Belum tahu'], ['sudah', 'Sudah disampaikan'], ['belum', 'Belum disampaikan']])}</div>
+        ${pajak.rezim === 'final' ? `<label class="check span-all"><input type="checkbox" id="pj-syarat" ${pajak.syaratFinal ? 'checked' : ''}><span>Saya memenuhi syarat PPh final: orang pribadi dengan peredaran bruto seluruh usaha tidak lebih dari Rp4,8 miliar setahun. Bagian Rp500 juta tidak kena pajak hanya dipakai bila ini dicentang.</span></label>` : ''}` : ''}
+      </div></fieldset>
+      <fieldset class="sim-grp"><legend><span class="sg-n">2</span>Omzet (peredaran bruto) per bulan</legend>
+        <div class="fields two align"><div class="field"><label for="pj-sampai">Periode</label>${opt('pj-sampai', pajak.sampai, BLN.map((n, i) => [i + 1, `Januari – ${n} ${pajak.tahun}`]))}</div>
+          <div class="field"><label for="pj-aktual">PPh 22 yang benar-benar dipungut (opsional)</label><div class="input"><span>Rp</span><input id="pj-aktual" type="number" inputmode="numeric" min="0" step="1" value="${rp(pajak.dipungutAktual)}" placeholder="dari bukti pungut"></div></div></div>
+        <p class="tiny faint">Marketplace = omzet di marketplace yang ditunjuk sebagai pemungut PPh 22. Usaha lain = semua omzet usaha di luar itu (toko offline, marketplace lain, jasa). Isi omzet sebelum diskon penjual, bukan dana yang dicairkan dan bukan laba. Bulan kosong tidak dianggap Rp0.</p>
+        <div class="pj-acts">${ada ? `<button class="btn sm" type="button" id="pj-isi">Isi kolom marketplace dari laporan (${num(ada)} bulan)</button>` : '<span class="tiny faint">Unggah laporan penghasilan untuk mengisi kolom marketplace otomatis.</span>'}
+          <label class="check"><input type="checkbox" id="pj-tanpa-lain" ${pajak.tanpaUsahaLain ? 'checked' : ''}><span>Saya tidak punya omzet usaha lain</span></label></div>
+        <div class="pj-rows">${rows}</div>
+      </fieldset>
+    </div><div class="sim-out" id="pj-out" aria-live="polite"></div></div></section>`;
+  }
+  const PJ_ALASAN = {
+    tahun_belum_didukung: 'Tahun pajak ini belum didukung. Kalkulator baru memakai aturan yang berlaku untuk 2026.',
+    badan_belum_didukung: 'PPh badan belum didukung. Sejak PP 20/2026, CV, firma, dan PT baru memakai tarif umum; perhitungannya membutuhkan laba fiskal dan masa transisi masing-masing badan.',
+    rezim_umum_belum_didukung: 'Tarif umum (pembukuan atau norma) belum didukung karena membutuhkan penghasilan neto, bukan omzet saja.',
+    syarat_belum_dikonfirmasi: 'Centang pernyataan syarat PPh final dulu. Bagian Rp500 juta tidak kena pajak tidak dipakai otomatis.',
+    data_belum_lengkap: 'Data belum lengkap: isi semua bulan pada periode (atau nyatakan tidak ada usaha lain). Bulan kosong tidak dianggap Rp0.',
+    melebihi_batas_4_8_miliar: 'Peredaran bruto melebihi Rp4,8 miliar. Perlakuannya belum didukung kalkulator ini.',
+    omzet_marketplace_belum_lengkap: 'Omzet marketplace belum lengkap untuk semua bulan pada periode.',
+    omzet_usaha_lain_belum_diisi: 'Omzet usaha lain belum diisi, padahal batas Rp500 juta dihitung dari seluruh usaha.',
+  };
+  function renderPajakOut() {
+    const box = $('#pj-out');
+    if (!box || typeof CekPajak === 'undefined') return;
+    const h = CekPajak.hitung(pajak);
+    const T = h.terutang, Q = h.pph22, A = h.aktual, sel = CekPajak.selisih(h);
+    const per = `Januari – ${BLN[h.sampai - 1]} ${h.tahun}`;
+    const val = (v) => (v === null ? '<b class="pj-v unk">Belum dapat dihitung</b>' : `<b class="pj-v">${fmt(v)}</b>`);
+    const why = (x) => (x.alasan ? `<p class="small muted">${esc(PJ_ALASAN[x.alasan] || x.alasan)}</p>` : '');
+    const q22 = Q.status === 'rentang' ? `<b class="pj-v">${Q.minimal === null ? '?' : fmt(Q.minimal)} – ${fmt(Q.maksimal)}</b><p class="small muted">Status surat pernyataan belum diketahui. Angka terkecil bila surat sudah disampaikan, terbesar bila belum.</p>`
+      : `${val(Q.nilai)}${why(Q)}${Q.status === 'simulasi' ? `<p class="small muted">${Q.skenario === 'badan' ? 'Badan dipungut atas seluruh omzet marketplace pemungut sejak aturan berlaku; tidak ada pengecualian Rp500 juta.'
+        : Q.skenario === 'tanpa_surat' ? 'Tanpa surat pernyataan, marketplace memungut atas seluruh omzet sejak aturan berlaku.'
+          : Q.bulanLewat500 ? `Omzet seluruh usaha melewati Rp500 juta pada ${BLN[Q.bulanLewat500 - 1]}. Dengan anggapan surat pernyataan baru disampaikan tepat waktu, pemungutan mulai ${Q.mulaiDipungutBulan <= 12 ? BLN[Q.mulaiDipungutBulan - 1] : 'tahun berikutnya'}.` : 'Omzet seluruh usaha belum melewati Rp500 juta dan surat sudah disampaikan, jadi tidak dipungut.'}</p>` : ''}`;
+    const lengkap = h.omzet.lengkap;
+    box.innerHTML = `<div class="pj-res">
+      <p class="pj-per">Periode: <b>${per}</b> · ${h.jenis === 'op' ? 'Orang pribadi' : 'Badan'}</p>
+      <div class="pj-st ${lengkap ? 'ok' : 'warn'}"><span class="status ${lengkap ? 'verified' : 'pending'}">${lengkap ? 'Data lengkap untuk periode ini' : 'Data belum lengkap'}</span></div>
+      <dl class="pj-dl">
+        <div><dt>Omzet marketplace pemungut</dt><dd>${fmt(h.omzet.marketplace)}</dd></div>
+        <div><dt>Omzet usaha lain</dt><dd>${h.omzet.kosongLain.length ? 'Belum diisi' : fmt(h.omzet.lain)}</dd></div>
+        <div class="pj-tot"><dt>Total omzet usaha</dt><dd>${lengkap ? fmt(h.omzet.total) : `${fmt(h.omzet.total)}<small> (dari bulan yang diisi)</small>`}</dd></div>
+      </dl>
+      <div class="pj-card"><span class="pj-k">Simulasi PPh final terutang</span>${val(T.nilai)}${why(T)}
+        ${T.status === 'simulasi' ? `<p class="small muted">Dasar penghitungan: ${fmt(T.dasarKenaPajak)} (omzet di atas Rp500 juta, kumulatif sejak Januari) × 0,5%. Bagian tidak kena pajak terpakai: ${fmt(T.tidakKenaPajak)}.</p>` : ''}</div>
+      <div class="pj-card"><span class="pj-k">Simulasi PPh 22 yang mungkin dipungut marketplace</span>${q22}
+        <p class="small muted">Pemungutan berlaku mulai 1 November 2026 (pengumuman DJP). Omzet sebelum itu tidak dipungut. Tarif 0,5% dari peredaran bruto sebelum diskon penjual, tanpa PPN.</p></div>
+      <div class="pj-card"><span class="pj-k">PPh 22 yang benar-benar dipungut</span>${A.nilai === null ? '<b class="pj-v unk">Belum diisi</b><p class="small muted">Isi dari bukti pungut (dokumen tagihan marketplace atau Coretax). Kalkulator tidak menebak angka ini.</p>' : `<b class="pj-v">${fmt(A.nilai)}</b><p class="small muted">Isian Anda, bukan hasil hitung.</p>`}
+        ${sel !== null ? `<p class="small ${sel ? 'warn-text' : 'muted'}">${sel === 0 ? 'Sama dengan simulasi.' : `${sel > 0 ? 'Lebih besar' : 'Lebih kecil'} ${fmt(Math.abs(sel))} dari simulasi. Bisa karena dasar pungutan sebelum diskon, marketplace yang ditunjuk, waktu surat pernyataan, atau pembatalan/retur.`}</p>` : ''}</div>
+      ${h.catatan.length ? `<ul class="pj-warn">${h.catatan.map((c) => `<li>${esc(c)}</li>`).join('')}</ul>` : ''}
+      <p class="small muted">PPh 22 yang dipungut marketplace adalah bagian dari pelunasan PPh final, bukan pajak tambahan; kekurangannya disetor sendiri. Pajak di sini tidak mengurangi laba pada laporan Cek Untung.</p>
+      <details class="tr-src"><summary>Dasar aturan</summary><ul class="ts-list">${h.aturan.map((a) => `<li><div class="ts-h"><b>${esc(a.kode)}</b></div><p>${esc(a.isi)} Berlaku: ${esc(a.berlaku)}. <a href="${esc(a.sumber)}" target="_blank" rel="noopener">Sumber</a></p></li>`).join('')}</ul>
+        <p class="tiny faint">Diperiksa 27 Oktober 2026. Aturan pajak bisa berubah; periksa kembali di pajak.go.id sebelum dipakai.</p></details></div>`;
+  }
   function viewSimulator() {
     const f = simFee();
     const s = st();
@@ -2025,6 +2122,12 @@
     if (id === 'q') { view.q = v; renderProducts(); return; }
     if (id === 'cost-q') { view.costQ = v; renderCostTable(); return; }
     if (id.startsWith('sim-')) { sim[id.slice(4)] = v === '' ? null : +v; renderSimOut(); return; }
+    if (id.startsWith('pj-mp-') || id.startsWith('pj-ln-')) {
+      const i = +id.slice(6); pajak.bulan[i][id.startsWith('pj-mp-') ? 'marketplace' : 'lain'] = v === '' ? null : +v;
+      if (id.startsWith('pj-mp-')) pajak.dariLaporan = pajak.dariLaporan.filter((x) => x !== i);
+      renderPajakOut(); return;
+    }
+    if (id === 'pj-aktual') { pajak.dipungutAktual = v === '' ? null : +v; renderPajakOut(); return; }
     if (demo) return;
     const n = (x, lo, hi) => (x === '' ? null : Math.min(hi, Math.max(lo, +x)));
     if (id === 's-mitra') settings.mitra = n(v, 0, 99);
@@ -2058,6 +2161,9 @@
     else if (t.id === 'from' || t.dataset.filter === 'from') { view.from = t.value; render(); }
     else if (t.id === 'to' || t.dataset.filter === 'to') { view.to = t.value; render(); }
     else if (t.id === 'sort') { view.sort = t.value; renderProducts(true); }
+    else if (['pj-tahun', 'pj-jenis', 'pj-rezim', 'pj-surat', 'pj-sampai'].includes(t.id)) { const k = t.id.slice(3); pajak[k] = ['tahun', 'sampai'].includes(k) ? +t.value : t.value; render(); $(`#${t.id}`)?.focus(); }
+    else if (t.id === 'pj-syarat') { pajak.syaratFinal = t.checked; renderPajakOut(); }
+    else if (t.id === 'pj-tanpa-lain') { pajak.tanpaUsahaLain = t.checked; render(); $('#pj-tanpa-lain')?.focus(); }
     else if (t.id === 'simx-status' || t.id === 'simx-kat') { sim[t.id.slice(5)] = t.value; resetSimFee(); render(); }
     else if (t.id === 'simx-aff') { sim.afiliasi = Math.min(50, Math.max(0, +t.value || 0)); resetSimFee(); render(); }
     else if (t.dataset.simOpsi) { const k = t.dataset.simOpsi; sim.opsi = t.checked ? [...new Set([...sim.opsi, k])] : sim.opsi.filter((x) => x !== k); resetSimFee(); render(); }
@@ -2097,6 +2203,12 @@
     }
     if (t.dataset.fixModal) { const p = last && last.r.products.find((x) => x.key === t.dataset.fixModal); view.costQ = p ? p.name : ''; closeSheet(); go('data', true, 'modal'); return; }
     if (t.hasAttribute('data-sheet-close')) { closeSheet(); return; }
+    if (t.dataset.pjTab) { pajak.tab = t.dataset.pjTab; render(); const b = document.querySelector(`[data-pj-tab="${t.dataset.pjTab}"]`); if (b) b.focus(); return; }
+    if (t.id === 'pj-isi') {
+      // Bantuan isian: penjualan dari laporan per bulan (tanggal pesanan). Diberi label "dari laporan" dan bisa diubah.
+      for (const { bulan, nilai } of pajakDariLaporan()) { pajak.bulan[bulan - 1].marketplace = nilai; if (!pajak.dariLaporan.includes(bulan - 1)) pajak.dariLaporan.push(bulan - 1); }
+      render(); toast('Kolom marketplace terisi dari laporan. Periksa kembali: dasar pungutan resmi dihitung sebelum diskon penjual.'); return;
+    }
     if (t.dataset.mp) { view.mp = t.dataset.mp; render(); const b = document.querySelector(`[data-mp="${t.dataset.mp}"]`); if (b) b.focus(); return; }
     if (t.dataset.go) { closeSheet(); go(t.dataset.go, true, t.dataset.section); return; }
     // Tombol di lembar Filter & unduh memakai fungsi yang sama dengan menu Unduh di bilah atas.
