@@ -225,7 +225,10 @@ test('U2 nota & jejak uang: struktur, nilai belum diketahui, bukan rekonsiliasi 
   truthy(/\+ \$\{num\(rb\.kerugianTanpaNilai\)\} kasus nilainya belum diketahui\./.test(notaSrc) && /\+ \$\{num\(rb\.kerugianTanpaNilai\)\} kasus nilainya belum diketahui\./.test(labaSrc), '"+ N kasus nilainya belum diketahui."');
   truthy(/ok\(v\) \? fmt\(v\) : '<span class="unk">Belum diketahui<\/span>'/.test(notaSrc), 'nota: nilai tidak diketahui → "Belum diketahui", bukan Rp0');
   truthy(labaSrc.includes('Berdasarkan laporan yang diunggah. Dana dilepas belum tentu sama dengan dana yang sudah masuk rekening.'), 'label jejak uang');
-  truthy(!/saldo|terbaik|peringkat/i.test(labaSrc.replace(/\/\*[\s\S]*?\*\//g, '')), 'tanpa saldo/peringkat platform (di luar komentar)');
+  // Batch 3B: panel Saldo Penjual Shopee (rekonsiliasi, disetujui PO) dikecualikan; di luar panel itu tetap tanpa "saldo".
+  const tanpaPanelSaldo = labaSrc.replace(labaSrc.slice(labaSrc.indexOf('/* ---------- Money Trace Shopee v1'), labaSrc.indexOf('  function moneyTrace(r) {')), '')
+    .split('\n').filter((l) => !/sdT|Unggah Laporan Saldo Penjual Shopee/.test(l)).join('\n');
+  truthy(!/saldo|terbaik|peringkat/i.test(tanpaPanelSaldo.replace(/\/\*[\s\S]*?\*\//g, '')), 'tanpa saldo/peringkat platform (di luar komentar & panel saldo)');
   truthy(/Refund ke pembeli sudah termasuk dalam penjualan, jadi tidak dikurangkan lagi di sini/.test(labaSrc), 'rincian biaya: refund tidak dikurangkan lagi');
 });
 test('MT-A1 jejak uang: status provenance, refund hanya rincian, pencairan tanpa Rp0, angka dari engine', () => {
@@ -784,7 +787,7 @@ test('Batch 2 Pusat Data Marketplace V2: kategori lengkap, tombol unggah hanya u
   truthy(!/payout: \{[^}]*kind:/.test(blok) && !/ads: \{[^}]*kind:/.test(blok) && !/product: \{[^}]*kind:/.test(blok), 'iklan, pencairan, produk tanpa parser');
   truthy(/Pencairan dana tidak pernah dihitung sebagai penjualan/.test(blok), 'pencairan bukan penjualan');
   truthy(/const bisa = \(cat\) => \['ok', 'beta'\]\.includes\(S\[cat\]\.st\) && S\[cat\]\.kind;/.test(appJs), 'baris unggah hanya untuk Didukung/Beta');
-  truthy(/const PERAN = \{ income: 'utama', modal: 'utama', orders: 'pendukung', return: 'pendukung' \}/.test(appJs) && /Wajib untuk laba/.test(appJs), 'wajib: Laporan Penghasilan + modal; pesanan & retur opsional');
+  truthy(/const PERAN = \{ income: 'utama', modal: 'utama', orders: 'pendukung', return: 'pendukung', balance: 'pendukung' \}/.test(appJs) && /Wajib untuk laba/.test(appJs), 'wajib: Laporan Penghasilan + modal; pesanan & retur opsional');
   truthy(/id="file-input" type="file" multiple/.test(appJs) && /id="drop"/.test(appJs), 'unggah massal tetap ada (satu area)');
   truthy(/File kosong: tidak ada data yang bisa dibaca\./.test(appJs), 'file kosong ditolak');
   truthy(/Dipilih untuk \$\{esc\(KIND\[f\.expect\]/.test(appJs), 'file salah kategori diberi tahu');
@@ -800,4 +803,15 @@ test('Batch 3: rekap hasil unggah, input file terjangkau keyboard, menu bawah HP
   truthy(panel.length > 0 && (panel.match(/type="file"/g) || []).length === 2 && !/type="file"[^>]*\bhidden>/.test(panel), 'input file panel unggah tidak `hidden` (terjangkau Tab)');
   truthy(/aria-label="Pilih file \$\{NAMA_SINGKAT\[cat\]\} \$\{MP_NAMA\[mp\]\}"/.test(appJs), 'tiap Pilih file punya nama untuk pembaca layar');
   truthy(/scroll-padding-bottom: calc\(104px/.test(css), 'gulir otomatis berhenti di atas menu bawah HP');
+});
+
+test('Batch 3B: saldo Shopee terisolasi dari laba; status & teks jujur', () => {
+  const appJs = src('app.js');
+  truthy(/const parsedAll = \(\) => \(demo \? .*files\.filter\(\(f\) => f\.parsed && f\.parsed\.kind !== 'modal_template'\)\.map\(\(f\) => f\.parsed\)\);/.test(appJs), 'engine hanya menerima f.parsed');
+  truthy(/resolve\(\{ name: file\.name, kind: parsed\.kind, parsed, \.\.\.\(saldo \? \{ saldo \} : \{\}\) \}\)/.test(appJs), 'hasil CekSaldo disimpan terpisah (f.saldo), parsed tidak diubah');
+  truthy(!/CekSaldo|saldoTrace/.test(src('engine.js')), 'engine tidak memakai modul saldo');
+  for (const s of ["'Cocok'", "'Di luar periode'", "'Belum direkonsiliasi'", "'Tidak cukup data'"]) truthy(appJs.includes(s), `status ${s}`);
+  truthy(/belum dicocokkan dengan rekening bank/.test(appJs) && !/(?<!bukan dana )(sudah|telah) (masuk|diterima) (ke )?(rekening|bank)/i.test(appJs.slice(appJs.indexOf('Money Trace Shopee v1'), appJs.indexOf('function moneyTrace(r)'))), 'penarikan tidak diklaim diterima bank');
+  truthy(/tidak dikoreksi otomatis/.test(appJs), 'selisih penyesuaian ditampilkan, tidak dikoreksi');
+  truthy(/<script src="assets\/saldo\.js\?v=/.test(html) && /'assets\/saldo\.js'/.test(fs.readFileSync(path.join(__dirname, '..', 'sw.js'), 'utf8')), 'saldo.js dimuat & tersedia offline');
 });
