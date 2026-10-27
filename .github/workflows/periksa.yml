@@ -14,6 +14,7 @@ jobs:
           node tests/engine.test.js
           node tests/tampilan.test.js
           node tests/saldo.test.js
+          node tests/pajak.test.js
           node tests/tarif.test.js
           node tests/license.test.js
           node tests/cloud.test.js

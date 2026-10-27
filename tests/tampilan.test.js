@@ -113,9 +113,9 @@ const appJs = src('app.js');
 const daftar = (nama) => { const m = appJs.match(new RegExp(`const ${nama} = \\[([\\s\\S]*?)\\n  \\];`)); truthy(m, `${nama} tidak ditemukan`); return m[1]; };
 test('S1 menu: semua label wajib ada dan setiap menu menuju tampilan yang sudah ada', () => {
   const views = [...daftar('VIEWS').matchAll(/\['(\w+)', '/g)].map((x) => x[1]);
-  eq(views.join(','), 'ringkasan,produk,biaya,retur,simulator,riwayat,data', 'tampilan lama tetap ada');
+  eq(views.join(','), 'ringkasan,produk,biaya,retur,simulator,riwayat,pajak,data', 'tampilan lama tetap ada (+ Pajak Seller, Batch 4)');
   const nav = [...daftar('NAV').matchAll(/\['(\w+)', '([^']+)', '(\w+)'(?:, '(\w+)')?\]/g)].map((x) => ({ k: x[1], label: x[2], view: x[3], section: x[4] }));
-  eq(nav.map((n) => n.label).join(' | '), 'Ringkasan | Laba | Produk | Retur & refund | Simulator harga | Laporan & riwayat | Unggah data | Modal & HPP | Pengaturan');
+  eq(nav.map((n) => n.label).join(' | '), 'Ringkasan | Laba | Produk | Retur & refund | Simulator harga | Laporan & riwayat | Unggah data | Modal & HPP | Pajak Seller | Pengaturan');
   for (const n of nav) truthy(views.includes(n.view), `menu ${n.label} menuju tampilan yang tidak ada: ${n.view}`);
   for (const n of nav.filter((x) => x.section)) truthy(appJs.includes(`id="sec-${n.section}"`), `bagian #sec-${n.section} tidak ada di tampilan Data`);
   for (const g of ['Utama', 'Data & laporan', 'Lainnya']) truthy(daftar('NAV').includes(`['${g}',`), `kelompok ${g}`);
@@ -867,4 +867,16 @@ test('Batch 3C: tab Tokopedia memakai parser TikTok yang ada; retur & iklan teta
   truthy(/Satu file berisi transaksi Tokopedia dan TikTok Shop/.test(toko) && /tetap dihitung sekali/.test(toko), 'penjelasan satu file dua kanal');
   truthy(!/tokopedia_income|tokopedia_orders/.test(appJs + src('engine.js')), 'tanpa parser Tokopedia baru');
   truthy(/'Jumlah barang belum dapat dipastikan'/.test(appJs) && /'Indikasi retur di export pesanan'/.test(appJs) && /Modal tidak dikurangi otomatis/.test(appJs), 'peringatan konflik qty & indikasi retur');
+});
+
+test('Batch 4: Pajak Seller hanya staging/localhost, isian tidak disimpan/dikirim, surat tidak dikarang', () => {
+  const appJs = src('app.js'), cfg = src('config.js');
+  truthy(/pajakSeller: false,/.test(cfg) && /C\.pajakSeller = st\.pajakSeller === true;/.test(cfg), 'produksi mati; hanya staging terverifikasi');
+  truthy(/const navTampil = \(i\) => i\[0\] !== 'pajak' \|\| pajakAktif\(\);/.test(appJs) && /name === 'pajak' && !pajakAktif\(\)/.test(appJs)
+    && /if \(viewName === 'pajak' && !pajakAktif\(\)\) viewName =/.test(appJs), 'menu & rute (termasuk #pajak di URL) tertutup bila tidak aktif');
+  const blok = appJs.slice(appJs.indexOf('/* ================= Pajak Seller (Batch 4)'), appJs.indexOf('  function viewSimulator() {'));
+  truthy(blok.length > 1000 && !/store\.set|localStorage|CekCloud|track\(|fetch\(/.test(blok), 'isian pajak tidak disimpan/dikirim/dilacak');
+  truthy(/Generator surat pernyataan belum tersedia/.test(blok) && !/Yang bertanda tangan di bawah ini/.test(appJs), 'teks surat tidak dikarang sebelum format resmi tersedia');
+  truthy(/Bukan bukti pajak telah dibayar/.test(blok) && /tidak mengurangi laba/.test(blok), 'simulasi tidak diklaim sebagai bukti/pengurang laba');
+  truthy(/<script src="assets\/pajak\.js\?v=/.test(html) && /'assets\/pajak\.js'/.test(fs.readFileSync(path.join(__dirname, '..', 'sw.js'), 'utf8')), 'pajak.js dimuat & offline');
 });

@@ -51,6 +51,10 @@ window.CEK_CONFIG = {
   supabaseAnonKey: 'sb_publishable_KC8qxwwQKwnYe2k-fjeEYw_HNxiscEt',    // "anon public" / "publishable" key — aman untuk publik, dilindungi aturan RLS
   googleLogin: false,     // true setelah login Google diaktifkan di Supabase (Authentication → Providers)
 
+  // Pajak Seller (simulasi PPh marketplace & surat PMK 37/2025). Batch 4: BELUM untuk produksi (keputusan pemilik).
+  // Hanya aktif di staging terverifikasi (lihat staging.pajakSeller) dan localhost.
+  pajakSeller: false,
+
   // ---------- Lingkungan STAGING ----------
   // Panduan: docs/usulan/STAGING_SUPABASE.md. Isi dengan project Supabase STAGING terpisah: URL + publishable key
   // (sb_publishable_…). JANGAN isi secret/service_role. Host yang didaftarkan HANYA memakai staging.
@@ -60,6 +64,7 @@ window.CEK_CONFIG = {
     supabaseAnonKey: 'sb_publishable_yJi7jb0iFM-5ElAbhB2Zxg_helb36Yg',      // publishable key STAGING (publik)
     hosts: ['feature-pro-pricing.cekuntung.pages.dev', 'feature-qris-midtrans.cekuntung.pages.dev'],
     proPembayaranAktif: true,
+    pajakSeller: true,
   },
 };
 /*
@@ -94,6 +99,7 @@ window.CEK_CONFIG = {
     C.supabaseUrl = st.supabaseUrl; C.supabaseAnonKey = st.supabaseAnonKey; C.lingkungan = 'staging';
     // Uji checkout di staging. Database staging tetap punya saklar sendiri (pengaturan_pembayaran.aktif, diatur admin staging).
     C.proPembayaranAktif = st.proPembayaranAktif === true;
+    C.pajakSeller = st.pajakSeller === true;
     return;
   }
   C.supabaseUrl = ''; C.supabaseAnonKey = ''; C.proPembayaranAktif = false; C.lingkungan = 'staging-belum-siap';
