@@ -1319,9 +1319,6 @@
     ['product', 'Produk, SKU, variasi, dan stok', 'Daftar produk dan stok dari Seller Centre.'],
     ['modal', 'Modal, HPP, dan biaya tambahan', 'Modal per produk lewat template Cek Untung. Biaya tetap dan packing diisi di Pengaturan.'],
   ];
-  const DUK = {   // st: ok | beta | via | ignored | need | na
-    ok: ['ok', 'Didukung'], beta: ['beta', 'Beta'], via: ['via', 'Lewat TikTok Shop'], ignored: ['ign', 'Dikenali, tidak dipakai'],
-    need: ['need', 'Memerlukan sampel data'], na: ['need', 'Belum berlaku'] };
   const PERLU = { st: 'need' };
   const BETA_EXPORT = 'Format export marketplace dapat berubah. Hasil pencocokan ditandai bila belum dapat diverifikasi.';
   const MODAL_SUP = { st: 'ok', kind: 'modal_template', fmt: '.xlsx / .csv', how: 'Unduh template di bagian Modal & HPP, isi, lalu unggah kembali.' };
@@ -1350,56 +1347,76 @@
     lazada: { income: PERLU, orders: PERLU, ads: PERLU, return: PERLU, balance: PERLU, payout: PERLU, product: PERLU,
       modal: { st: 'na', note: 'Berlaku setelah laporan Lazada didukung.' } },
   };
-  /** Status unggah & validasi satu kategori: dari file yang terbaca (kind) dan rekonsiliasi engine. */
+  /** Peran laporan di alur unggah: utama (wajib untuk laba) atau pendukung (opsional). Mengikuti parser yang ada. */
+  const PERAN = { income: 'utama', modal: 'utama', orders: 'pendukung', return: 'pendukung' };   // modal: bukan file, tetapi wajib untuk laba
+  const NAMA_SINGKAT = { income: 'Laporan Penghasilan', orders: 'Pesanan', return: 'Retur & refund', modal: 'Modal / HPP' };
+  const GUNA_SINGKAT = { income: 'Sumber utama penjualan, potongan marketplace, dan dana diterima.',
+    orders: 'Membaca jumlah barang, SKU, dan variasi agar modal per produk lebih tepat.',
+    return: 'Memeriksa pengembalian dana dan barang yang tidak kembali.', modal: 'Diisi di bagian Modal & HPP, lewat tabel atau template.' };
+  /**
+   * Status ringkas satu laporan dari hasil validasi nyata (parser + rekonsiliasi engine). Mengembalikan daftar
+   * [kelas, teks]; rincian per file tetap ada di daftar file di bawah.
+   */
   function statusKategori(pf, cat, sup) {
-    const ok1 = files.filter((f) => !f.error && f.kind === sup.kind);
+    const out = [];
     const salah = files.filter((f) => f.expect === sup.kind && f.kind !== sup.kind);
-    const bits = [];
-    if (salah.length) bits.push(`<span class="warn">${num(salah.length)} file yang dipilih di sini bukan ${esc(KIND[sup.kind] ? KIND[sup.kind][1] : 'jenis ini')}</span>`);
-    if (!sup.kind || sup.st === 'via') return bits.join(' · ');
-    if (!ok1.length) return bits.length ? bits.join(' · ') : '<span class="faint">Belum ada file</span>';
-    bits.unshift(`<span class="ok">${num(ok1.length)} file terbaca</span>`);
-    if (sup.st === 'ignored') bits.push('tidak masuk perhitungan');
-    if (cat === 'income') {
+    const ok1 = files.filter((f) => !f.error && f.kind === sup.kind);
+    if (ok1.length) out.push(['ok', `Berhasil dibaca · ${num(ok1.length)} file`]);
+    if (cat === 'income' && ok1.length) {
       const J = last && last.all && last.all.jejakUang && last.all.jejakUang.marketplace && last.all.jejakUang.marketplace[pf];
-      const cocok = ok1.filter((f) => { const p = f.parsed; const ref = pf === 'shopee' ? p.check.summaryTotal : p.check.reportSettle; return ref !== null && Math.abs(ref - p.check.sum) <= 1; }).length;
-      bits.push(cocok === ok1.length ? 'cocok dengan ringkasan resmi' : `<span class="warn">${num(ok1.length - cocok)} file tidak cocok atau tanpa ringkasan</span>`);
-      if (J && J.file && J.file.identik) bits.push(`${num(J.file.identik)} file sama diabaikan`);
-      if (J && J.gabungan) {
-        if (J.gabungan.ditahan) bits.push(`<span class="warn">${num(J.gabungan.ditahan)} transaksi berbeda antarlaporan ditahan</span>`);
-        else if (J.gabungan.duplikatDiabaikan) bits.push(`${num(J.gabungan.duplikatDiabaikan)} baris yang sama di beberapa laporan dihitung sekali`);
-        if (J.gabungan.status === 'periode_perlu_dicek') bits.push('<span class="warn">periode perlu dicek</span>');
-      }
+      const cocok = ok1.filter((f) => { const q = f.parsed; const ref = pf === 'shopee' ? q.check.summaryTotal : q.check.reportSettle; return ref !== null && Math.abs(ref - q.check.sum) <= 1; }).length;
+      if (J && ((J.file && J.file.identik) || (J.gabungan && J.gabungan.duplikatDiabaikan))) out.push(['info', 'Duplikat diabaikan']);
+      if (cocok < ok1.length || (J && J.gabungan && (J.gabungan.ditahan || J.gabungan.status === 'periode_perlu_dicek'))) out.push(['warn', 'Perlu diperiksa']);
     }
-    return bits.join(' · ');
+    if (salah.length) out.push(['bad', `Format tidak sesuai · ${num(salah.length)} file`]);
+    return out;
+  }
+  const chip = ([c, t]) => `<span class="pd-chip ${c}">${esc(t)}</span>`;
+  function barisLaporan(mp, cat) {
+    const sup = SUMBER[mp][cat];
+    const peran = PERAN[cat];
+    const beta = sup.st === 'beta';
+    const tag = `${cat === 'modal' ? '<span class="pd-tag wajib">Wajib untuk laba</span>' : peran === 'utama' ? '<span class="pd-tag wajib">Wajib</span>' : '<span class="pd-tag">Opsional</span>'}${beta ? '<span class="pd-tag beta" title="Belum diuji dengan semua format file asli">Beta</span>' : ''}`;
+    const id = `in-${mp}-${cat}`;
+    let aksi = '';
+    if (cat === 'modal') aksi = '<button class="btn sm" type="button" data-go="data" data-section="modal">Isi modal</button>';
+    else if (!demo && sup.kind) aksi = `<label class="btn sm ${peran === 'utama' ? 'primary' : ''}" for="${id}">Pilih file</label><input id="${id}" type="file" multiple accept="${sup.fmt === '.csv' ? '.csv' : '.xlsx,.xls,.csv'}" data-expect="${sup.kind}" hidden>`;
+    const st = cat === 'modal' ? [] : statusKategori(mp, cat, sup);
+    const bantu = sup.how || sup.note;
+    return `<li class="pd-row">
+      <div class="pd-main"><div class="pd-name"><b>${NAMA_SINGKAT[cat]}</b>${tag}</div>
+        <p>${GUNA_SINGKAT[cat]}${sup.fmt && cat !== 'modal' ? ` <span class="pd-fmt">Format ${esc(sup.fmt)}</span>` : ''}</p>
+        ${st.length ? `<div class="pd-chips">${st.map(chip).join('')}</div>` : ''}</div>
+      <div class="pd-act">${aksi}${bantu && cat !== 'modal' ? `<details class="pd-help"><summary>${sup.how ? 'Cara download' : 'Catatan'}</summary><p>${sup.how ? `${esc(sup.how)}. ` : ''}${sup.note ? esc(sup.note) : ''}</p></details>` : ''}</div>
+    </li>`;
   }
   function pusatData() {
     const ada = (k) => files.some((f) => f.kind && f.kind.startsWith(k));
     const mp = view.mp || (ada('tiktok') && !ada('shopee') ? 'tiktok' : 'shopee');
-    const aktif = KATEGORI.filter(([cat]) => SUMBER[mp][cat].st !== 'need' && SUMBER[mp][cat].st !== 'na');
-    const belum = KATEGORI.filter(([cat]) => !aktif.some(([c]) => c === cat));
-    const baris = aktif.map(([cat, nama, guna]) => {
-      const sup = SUMBER[mp][cat];
-      const [cls, lbl] = DUK[sup.st];
-      const bisa = !demo && sup.kind && ['ok', 'beta'].includes(sup.st);
-      const id = `in-${mp}-${cat}`;
-      const st = statusKategori(mp, cat, sup);
-      return `<li class="pd-k pd-${cls}">
-        <div class="pd-h"><b>${nama}</b><span class="pd-st ${cls}">${lbl}</span></div>
-        <p class="pd-guna">${guna}</p>
-        ${sup.how || sup.fmt ? `<p class="pd-meta">${sup.how ? `<span><span class="pd-l">Cara unduh</span> ${esc(sup.how)}</span>` : ''}${sup.fmt ? `<span><span class="pd-l">Format</span> ${esc(sup.fmt)}</span>` : ''}</p>` : ''}
-        ${sup.note ? `<p class="pd-note">${esc(sup.note)}</p>` : ''}
-        ${bisa || st ? `<div class="pd-foot">${st ? `<span class="pd-v">${st}</span>` : '<span></span>'}${bisa ? `<label class="btn sm" for="${id}">Pilih file</label><input id="${id}" type="file" multiple accept="${sup.fmt && sup.fmt.includes('.csv') && !sup.fmt.includes('.xlsx') ? '.csv' : '.xlsx,.xls,.csv'}" data-expect="${sup.kind}" hidden>` : ''}</div>` : ''}
-      </li>`;
-    }).join('');
-    return `<section class="panel pusat-data" aria-labelledby="pd-t">
-      <div class="panel-head" style="margin-bottom:10px"><h3 id="pd-t">Pusat Data Marketplace</h3><p>Pilih marketplace, lalu unggah laporan sesuai kategorinya. Jenis file tetap dikenali dari isinya, bukan dari nama file.</p></div>
+    const S = SUMBER[mp];
+    const bisa = (cat) => ['ok', 'beta'].includes(S[cat].st) && S[cat].kind;
+    const utama = KATEGORI.filter(([c]) => PERAN[c] === 'utama' && (bisa(c) || (c === 'modal' && S[c].st !== 'na'))).map(([c]) => c);
+    const pend = KATEGORI.filter(([c]) => PERAN[c] === 'pendukung' && bisa(c)).map(([c]) => c);
+    // Belum tersedia: kategori tanpa parser, termasuk saldo Shopee (dikenali tetapi tidak dipakai dalam laba).
+    const belum = KATEGORI.filter(([c]) => !utama.includes(c) && !pend.includes(c) && S[c].st !== 'via');
+    const via = KATEGORI.filter(([c]) => S[c].st === 'via');
+    const isi = mp === 'lazada' || (!utama.length && !via.length)
+      ? `<p class="pd-kosong">Laporan ${MP_NAMA[mp]} belum bisa dibaca. Kami memerlukan sampel file ekspor asli sebelum membuat pembacanya, agar tidak menghasilkan angka yang salah.</p>`
+      : `${via.length ? `<div class="pd-via"><p><b>Pesanan Tokopedia</b> terbaca dari Laporan Penghasilan TikTok Shop. Unggah laporan itu di tab TikTok Shop; jangan unggah laporan Tokopedia terpisah untuk pesanan yang sama.</p><button class="btn sm" type="button" data-mp="tiktok">Buka tab TikTok Shop</button></div>` : ''}
+        ${utama.length ? `<h4 class="pd-g">Laporan utama</h4><ul class="pd-rows">${utama.map((c) => barisLaporan(mp, c)).join('')}</ul>` : ''}
+        ${pend.length ? `<h4 class="pd-g">Laporan pendukung</h4><ul class="pd-rows">${pend.map((c) => barisLaporan(mp, c)).join('')}</ul>` : ''}`;
+    return `<section class="panel pusat-data" id="sec-unggah" aria-labelledby="pd-t">
+      <div class="pd-top"><h3 id="pd-t">Unggah laporan</h3><p class="small muted">Pilih marketplace, lalu unggah laporannya. File diolah di browser Anda, tidak dikirim ke server.</p></div>
       <div class="pd-mp" role="tablist" aria-label="Marketplace">${Object.entries(MP_NAMA).map(([k, l]) => `<button type="button" role="tab" aria-selected="${mp === k}" data-mp="${k}"><i class="sw ${k}" aria-hidden="true"></i>${l}</button>`).join('')}</div>
-      <div role="tabpanel" aria-label="Kategori laporan ${MP_NAMA[mp]}" class="pd-panel">
-        ${aktif.length ? `<ul class="pd-list">${baris}</ul>` : `<p class="pd-kosong">Laporan ${MP_NAMA[mp]} belum bisa dibaca. Kami memerlukan sampel file ekspor asli sebelum membuat pembacanya, agar tidak menghasilkan angka yang salah.</p>`}
-        ${belum.length ? `<details class="pd-lain" ${aktif.length ? '' : 'open'}><summary>${num(belum.length)} kategori belum didukung untuk ${MP_NAMA[mp]}</summary><ul>${belum.map(([cat, nama, guna]) => { const sup = SUMBER[mp][cat]; const [cls, lbl] = DUK[sup.st]; return `<li><div class="pd-h"><b>${nama}</b><span class="pd-st ${cls}">${lbl}</span></div><p class="pd-guna">${guna}</p>${sup.note ? `<p class="pd-note">${esc(sup.note)}</p>` : ''}</li>`; }).join('')}</ul></details>` : ''}
+      <div role="tabpanel" aria-label="Laporan ${MP_NAMA[mp]}" class="pd-panel">
+        ${isi}
+        ${belum.length ? `<details class="pd-lain" ${mp === 'lazada' ? 'open' : ''}><summary>Belum tersedia untuk ${MP_NAMA[mp]} (${num(belum.length)})</summary><ul>${belum.map(([c, nama]) => { const sup = S[c]; return `<li><b>${nama}</b><span>${esc(sup.note || (sup.st === 'na' ? 'Belum berlaku.' : 'Memerlukan sampel file ekspor asli. Belum ada angka yang dihitung.'))}</span></li>`; }).join('')}</ul></details>` : ''}
       </div>
-      <p class="tiny faint">Hanya kategori berstatus Didukung atau Beta yang masuk perhitungan. Kategori "Memerlukan sampel data" belum punya pembaca file dan tidak menghasilkan angka. Unduh semua laporan untuk periode yang sama.</p>
+      <div class="drop drop-mini" id="drop"><span><b>Punya beberapa file sekaligus?</b> Tarik ke sini atau <label class="btn link" for="file-input">pilih banyak file</label>. Jenisnya dikenali otomatis dari isi file.</span>
+        <input id="file-input" type="file" multiple accept=".xlsx,.xls,.csv" hidden></div>
+      <ul class="files" id="file-list"></ul>
+      <div id="upload-status" aria-live="polite"></div>
+      ${files.length ? '<div><button class="btn sm quiet danger" type="button" id="clear-btn">Hapus semua file</button></div>' : ''}
     </section>`;
   }
   function viewData() {
@@ -1418,18 +1435,8 @@
       <ol class="setup-steps" aria-label="Langkah persiapan">${steps.map(([t, done, d], i) => `<li class="${done ? 'done' : ''}"><span class="ss-n" aria-hidden="true">${done ? '✓' : i + 1}</span><span><b>${t}</b><small>${done ? 'selesai' : d}</small></span><span class="sr-only">${done ? 'selesai' : 'belum'}</span></li>`).join('')}</ol>
       <nav class="sec-tabs" aria-label="Bagian halaman data">${[['unggah', 'Unggah data'], ['modal', 'Modal & HPP'], ['pengaturan', 'Pengaturan']].map(([k, l]) => `<button type="button" data-go="data" data-section="${k}" ${sec === k ? 'aria-current="true"' : ''}>${l}</button>`).join('')}</nav>
       ${!demo && (!type || view.typeOpen) ? typePicker(type) : ''}
-      ${pusatData()}
       <div class="grid-2 data-grid" style="align-items:start">
-        <section class="stack" id="sec-unggah" aria-label="Data penghasilan">
-          <div class="grp-head"><span class="grp-n" aria-hidden="true">1</span><b>Data penghasilan</b><span class="badge todo">Wajib</span><span class="tiny faint grp-sub">Laporan Penghasilan dari Seller Centre: sumber penjualan, potongan, dan dana diterima.</span></div>
-          <div class="drop" id="drop"><span class="ic">${svg('data', 24)}</span><strong>Tarik file laporan ke sini</strong>
-            <span class="small muted drop-sub">atau pilih dari komputer / HP Anda. File dibaca di browser ini, tidak dikirim ke server.</span>
-            <label class="btn primary" for="file-input">Pilih file</label><input id="file-input" type="file" multiple accept=".xlsx,.xls,.csv" hidden>
-            <span class="drop-fmt"><span>.xlsx</span><span>.xls</span><span>.csv</span><span class="faint">boleh banyak sekaligus; file yang sama tidak dihitung dua kali</span></span></div>
-          <ul class="files" id="file-list"></ul>
-          <div id="upload-status" aria-live="polite"></div>
-          ${files.length ? '<div><button class="btn sm quiet danger" type="button" id="clear-btn">Hapus semua file</button></div>' : ''}
-        </section>
+        ${pusatData()}
         <section class="panel modal-panel" id="sec-modal" aria-label="Modal dan HPP">
           <div class="panel-head" style="margin:0"><h3><span class="grp-n" aria-hidden="true">2</span>${type === 'produsen' ? 'Modal produksi (HPP)' : 'Modal barang / HPP'}${qi('modal')} <span class="badge todo">Wajib untuk laba</span></h3>${r && r.totalSales ? `<span class="badge ${r.coverage >= 0.98 ? 'ok' : 'todo'}">${r.coverage >= 0.98 ? 'Lengkap' : `${pct(r.coverage, 0)} penjualan`}</span>` : ''}</div>
           ${type ? `<div class="type-chip"><span class="ic">${typeIcon(type, 16)}</span><span>${TYPES[type].label}</span>${demo ? '' : '<button class="btn link" type="button" data-type-open>Ubah</button>'}</div>` : ''}
