@@ -12,7 +12,8 @@ const truthy = (c, msg) => { if (!c) throw new Error(msg); };
 const JT = 1000000;
 /** 12 bulan omzet marketplace yang sama tiap bulan; usaha lain = 0 kecuali diberi. */
 const bulan = (mpPerBulan, lainPerBulan = 0) => Array.from({ length: 12 }, () => ({ marketplace: mpPerBulan, lain: lainPerBulan }));
-const OP = (extra = {}) => ({ tahun: 2026, jenis: 'op', rezim: 'final', syaratFinal: true, surat: 'sudah', sampai: 12, bulan: bulan(30 * JT), ...extra });
+// hariIni setelah 2026 → semua bulan 2026 sudah terjadi (uji proyeksi ada di T15). Cakupan dikonfirmasi kecuali diuji sebaliknya.
+const OP = (extra = {}) => ({ tahun: 2026, jenis: 'op', rezim: 'final', syaratFinal: true, surat: 'sudah', sampai: 12, bulan: bulan(30 * JT), hariIni: '2027-01-15', cakupanDikonfirmasi: true, ...extra });
 
 test('T1 OP omzet < Rp500 juta setahun: PPh final Rp0, tidak ada PPh 22 bila surat sudah disampaikan', () => {
   const h = P.hitung(OP());   // 30 jt × 12 = 360 jt
@@ -40,7 +41,7 @@ test('T4 mendekati lalu melewati batas di tengah bulan: hanya porsi di atas bata
 test('T5 orang pribadi vs badan: badan tidak memakai Rp500 juta; PPh terutang badan "belum didukung"', () => {
   const op = P.hitung(OP()), badan = P.hitung({ ...OP(), jenis: 'badan' });
   eq(badan.terutang.status, 'belum_didukung'); eq(badan.terutang.alasan, 'badan_belum_didukung'); eq(badan.terutang.nilai, null);
-  eq(badan.pph22.skenario, 'badan'); eq(badan.pph22.nilai, 2 * 30 * JT * 0.005, 'badan dipungut Nov–Des tanpa pengecualian Rp500 juta');
+  eq(badan.pph22.skenario, 'bukan_orang_pribadi'); eq(badan.pph22.nilai, 2 * 30 * JT * 0.005, 'badan dipungut Nov–Des tanpa pengecualian Rp500 juta');
   eq(op.pph22.nilai, 0, 'OP dengan surat dan omzet ≤ Rp500 juta tidak dipungut');
 });
 test('T6 beberapa marketplace + usaha lain: batas memakai seluruh usaha; PPh 22 hanya atas omzet marketplace', () => {
@@ -91,6 +92,40 @@ test('T13 pajak tidak mengubah laba: Engine.compute identik, engine tidak memaka
   P.hitung(OP());
   eq(JSON.stringify(E.compute(parsed, {})), a);
   truthy(!/CekPajak/.test(require('fs').readFileSync(require('path').join(__dirname, '..', 'assets', 'engine.js'), 'utf8')), 'engine bebas modul pajak');
+});
+test('T14 status data: "lengkap" hanya bila semua terisi DAN cakupan seluruh usaha dikonfirmasi', () => {
+  const blm = P.hitung(OP({ cakupanDikonfirmasi: false }));
+  eq(blm.omzet.status, 'cakupan_belum_dipastikan'); eq(blm.omzet.lengkap, false); eq(blm.terutang.nilai, null); eq(blm.terutang.alasan, 'cakupan_belum_dipastikan');
+  eq(blm.pph22.status, 'belum_lengkap', 'OP dengan surat butuh cakupan seluruh usaha');
+  eq(P.hitung(OP()).omzet.status, 'lengkap_menurut_isian', 'bukan "terverifikasi"');
+});
+test('T15 bulan mendatang = proyeksi, bukan transaksi aktual; bulan berjalan ditandai', () => {
+  const h = P.hitung(OP({ hariIni: '2026-10-27' }));
+  eq(h.perBulan[8].waktu, 'terjadi'); eq(h.perBulan[9].waktu, 'berjalan'); eq(h.perBulan[10].waktu, 'mendatang');
+  eq(h.omzet.proyeksi.join(), '11,12'); eq(h.terutang.proyeksi, true); eq(h.pph22.proyeksi, true);
+  truthy(h.catatan.some((c) => /belum terjadi\. Angkanya proyeksi/.test(c)) && h.catatan.some((c) => /masih berjalan/.test(c)), 'catatan proyeksi & berjalan');
+  const sampaiSep = P.hitung(OP({ hariIni: '2026-10-27', sampai: 9 }));
+  eq(sampaiSep.terutang.proyeksi, false, 'Jan–Sep: semua sudah terjadi');
+});
+test('T16 omzet dari laporan (setelah diskon) → PPh 22 ditandai perkiraan, bukan dasar resmi', () => {
+  const b = bulan(30 * JT); b[10].sumber = 'laporan';
+  const h = P.hitung({ ...OP({ bulan: b }), jenis: 'badan' });
+  eq(h.pph22.dasarSetelahDiskon, true); eq(h.omzet.dariLaporan.join(), '11');
+  truthy(h.catatan.some((c) => /setelah diskon penjual.*perkiraan, bukan dasar pungutan yang terverifikasi/.test(c)), 'catatan dasar');
+  eq(P.hitung({ ...OP(), jenis: 'badan' }).pph22.dasarSetelahDiskon, false, 'isian manual tidak ditandai');
+});
+test('T17 jenis WP terpisah (PP 20/2026): OP, perseroan perorangan, koperasi, badan lain', () => {
+  const pp = P.hitung(OP({ jenis: 'pp' }));   // 360 jt setahun, tanpa bagian Rp500 juta
+  eq(pp.terutang.status, 'simulasi'); eq(pp.terutang.tidakKenaPajak, 0); eq(pp.terutang.nilai, 360 * JT * 0.005, 'perseroan perorangan: 0,5% × seluruh omzet');
+  eq(pp.pph22.skenario, 'bukan_orang_pribadi'); eq(pp.pph22.nilai, 2 * 30 * JT * 0.005, 'tidak ada pengecualian surat Rp500 juta');
+  eq(P.hitung(OP()).terutang.nilai, 0, 'OP 360 jt: Rp0');
+  eq(P.hitung(OP({ jenis: 'koperasi' })).terutang.alasan, 'koperasi_belum_didukung');
+  eq(P.hitung(OP({ jenis: 'badan' })).terutang.alasan, 'badan_belum_didukung');
+});
+test('T18 PPh final terutang, estimasi PPh 22, dan PPh 22 aktual tetap tiga angka terpisah', () => {
+  const h = P.hitung(OP({ bulan: bulan(50 * JT), dipungutAktual: 260000 }));
+  eq(h.terutang.nilai, 500000); eq(h.pph22.nilai, 250000); eq(h.aktual.nilai, 260000); eq(P.selisih(h), 10000);
+  truthy(h.terutang.nilai !== h.aktual.nilai && !('dipungut' in h.terutang), 'terutang tidak dikurangi pungutan');
 });
 console.log(failed ? `\n${failed} GAGAL` : '\nSEMUA OK');
 process.exit(failed ? 1 : 0);
