@@ -37,77 +37,107 @@ const CekPajak = (() => {
   const angka = (v) => (v === null || v === undefined || v === '' ? null : (typeof v === 'number' ? (isFinite(v) ? v : null) : (isFinite(+v) ? +v : null)));
   const bulat = (v) => Math.round(v);   // ke rupiah terdekat; pembulatan resmi per masa tidak dimodelkan
 
+  /* Jenis wajib pajak (PP 20/2026, dibaca dari ringkasan resmi DJP 27 Okt 2026):
+   *  op       orang pribadi: PPh final 0,5%, tanpa batas waktu, Rp500 juta pertama tidak dikenai (PP 55/2022 Ps. 60(2));
+   *           satu-satunya yang dikecualikan dari pungutan PPh 22 bila ≤ Rp500 juta dan menyampaikan surat (PMK 37/2025 Ps. 10(1)a).
+   *  pp       perseroan perorangan: PPh final 0,5% tanpa batas waktu, TANPA bagian Rp500 juta tidak kena pajak; tetap dipungut PPh 22.
+   *  koperasi dapat memakai 0,5%, tetapi jangka waktunya tidak dinyatakan pada sumber yang dibaca → belum didukung.
+   *  badan    CV, firma, PT, BUMDes: yang baru terdaftar memakai tarif umum; yang lama punya masa transisi → belum didukung. */
+  const JENIS = { op: 'Orang pribadi', pp: 'Perseroan perorangan', koperasi: 'Koperasi', badan: 'Badan lain (CV, firma, PT, BUMDes)' };
+  /** Status waktu bulan terhadap hari ini: bulan mendatang tidak boleh dianggap transaksi yang sudah terjadi. */
+  function waktuBulan(tahun, bulan, hariIni) {
+    const [y, m] = String(hariIni || '').split('-').map(Number);
+    if (!y || !m) return 'tidak_diketahui';
+    if (tahun < y || (tahun === y && bulan < m)) return 'terjadi';
+    if (tahun === y && bulan === m) return 'berjalan';
+    return 'mendatang';
+  }
+
   /**
    * @param {object} p
-   *  tahun, jenis ('op'|'badan'), rezim ('final'|'umum'), syaratFinal (bool: pengguna menyatakan memenuhi syarat PP 55/PP 20),
-   *  surat ('sudah'|'belum'|'tidak_tahu': surat pernyataan ≤ Rp500 juta sudah disampaikan ke marketplace),
-   *  sampai (1–12: periode Januari s.d. bulan ini), bulan: [{ marketplace, lain }] indeks 0 = Januari (null = belum diisi),
-   *  tanpaUsahaLain (bool: pengguna menyatakan tidak ada omzet di luar kolom marketplace), dipungutAktual (angka|null).
+   *  tahun, jenis ('op'|'pp'|'koperasi'|'badan'), rezim ('final'|'umum'), syaratFinal (bool: pengguna menyatakan memenuhi syarat),
+   *  surat ('sudah'|'belum'|'tidak_tahu'), sampai (1–12: periode Januari s.d. bulan ini), hariIni ('YYYY-MM-DD'),
+   *  bulan: [{ marketplace, lain, sumber }] indeks 0 = Januari (null = belum diisi; sumber 'laporan' = dari laporan Cek Untung,
+   *  yaitu penjualan SETELAH diskon penjual), tanpaUsahaLain (bool), cakupanDikonfirmasi (bool: pengguna menyatakan omzet yang
+   *  diisi mencakup seluruh usaha), dipungutAktual (angka|null).
    */
   function hitung(p) {
     const tahun = +p.tahun, sampai = Math.min(12, Math.max(1, +p.sampai || 12));
-    const op = p.jenis === 'op';
+    const jenis = JENIS[p.jenis] ? p.jenis : 'op';
     const catatan = [];
     const rows = Array.from({ length: sampai }, (_, i) => {
       const b = (p.bulan || [])[i] || {};
       const mp = angka(b.marketplace), ln = p.tanpaUsahaLain ? 0 : angka(b.lain);
-      return { bulan: i + 1, marketplace: mp, lain: ln };
+      return { bulan: i + 1, marketplace: mp, lain: ln, sumber: mp === null ? null : b.sumber === 'laporan' ? 'laporan' : 'isian', waktu: waktuBulan(tahun, i + 1, p.hariIni) };
     });
     const negatif = rows.some((r) => (r.marketplace !== null && r.marketplace < 0) || (r.lain !== null && r.lain < 0));
     const kosongMp = rows.filter((r) => r.marketplace === null).map((r) => r.bulan);
     const kosongLain = rows.filter((r) => r.lain === null).map((r) => r.bulan);
-    const lengkap = !kosongMp.length && !kosongLain.length && !negatif;
+    const terisi = !kosongMp.length && !kosongLain.length && !negatif;
+    const cakupan = !!p.cakupanDikonfirmasi;
+    const proyeksi = rows.filter((r) => r.waktu === 'mendatang').map((r) => r.bulan);
+    const berjalan = rows.filter((r) => r.waktu === 'berjalan').map((r) => r.bulan);
+    const dariLaporan = rows.filter((r) => r.sumber === 'laporan').map((r) => r.bulan);
+    // Status data: "lengkap" hanya menurut isian DAN konfirmasi cakupan seluruh usaha; tidak pernah "terverifikasi".
+    const status = !terisi ? 'belum_lengkap' : !cakupan ? 'cakupan_belum_dipastikan' : 'lengkap_menurut_isian';
     const sum = (k) => rows.reduce((a, r) => a + (r[k] || 0), 0);
-    const omzet = { marketplace: sum('marketplace'), lain: sum('lain'), total: sum('marketplace') + sum('lain'), kosongMarketplace: kosongMp, kosongLain, negatif, lengkap };
+    const omzet = { marketplace: sum('marketplace'), lain: sum('lain'), total: sum('marketplace') + sum('lain'), kosongMarketplace: kosongMp, kosongLain, negatif,
+      lengkap: status === 'lengkap_menurut_isian', status, proyeksi, berjalan, dariLaporan };
     if (negatif) catatan.push('Ada omzet bulanan bernilai negatif. Peredaran bruto tidak boleh negatif; periksa isian (refund sudah termasuk dalam penjualan dari laporan).');
     if (kosongMp.length) catatan.push(`Omzet marketplace bulan ${kosongMp.join(', ')} belum diisi. Bulan kosong tidak dianggap Rp0.`);
     if (kosongLain.length) catatan.push('Omzet usaha lain belum diisi. Batas Rp500 juta dan Rp4,8 miliar dihitung dari seluruh usaha, bukan hanya toko yang diunggah.');
+    if (terisi && !cakupan) catatan.push('Cakupan belum dipastikan: centang pernyataan bahwa omzet yang diisi mencakup seluruh usaha Anda.');
+    if (proyeksi.length) catatan.push(`Bulan ${proyeksi.join(', ')} belum terjadi. Angkanya proyeksi Anda, bukan transaksi aktual; hasil yang memakainya adalah proyeksi.`);
+    if (berjalan.length) catatan.push(`Bulan ${berjalan.join(', ')} masih berjalan; omzetnya belum final.`);
+    if (dariLaporan.length) catatan.push('Omzet marketplace dari laporan Cek Untung adalah penjualan setelah diskon penjual. Dasar pungutan PPh 22 resmi dihitung sebelum diskon (PMK 37/2025 Ps. 8), jadi hasil PPh 22 di sini perkiraan, bukan dasar pungutan yang terverifikasi.');
 
     // Kumulatif seluruh usaha, untuk batas Rp500 juta (PPh final OP) dan saat surat > Rp500 juta (PMK 37/2025).
     let kum = 0;
     const perBulan = rows.map((r) => { const bruto = (r.marketplace || 0) + (r.lain || 0); kum += bruto; return { ...r, bruto, kumulatif: kum }; });
     const bulanLewat = (perBulan.find((r) => r.kumulatif > BATAS_SURAT) || {}).bulan || null;
-
-    return { tahun, sampai, jenis: op ? 'op' : 'badan', omzet, perBulan, bulanLewat500: bulanLewat, terutang: terutang(p, tahun, op, lengkap, perBulan, omzet),
-      pph22: pph22(p, tahun, op, lengkap, perBulan), aktual: aktual(p), catatan, aturan: ATURAN };
+    const sifat = { proyeksi: proyeksi.length > 0, dasarSetelahDiskon: dariLaporan.length > 0 };
+    return { tahun, sampai, jenis, jenisLabel: JENIS[jenis], omzet, perBulan, bulanLewat500: bulanLewat,
+      terutang: { ...terutang(p, tahun, jenis, status, perBulan, omzet), proyeksi: sifat.proyeksi },
+      pph22: { ...pph22(p, tahun, jenis, terisi && cakupan, perBulan), ...sifat }, aktual: aktual(p), catatan, aturan: ATURAN };
   }
 
-  /** Simulasi PPh final terutang (hanya WP orang pribadi yang menyatakan memenuhi syarat PP 55/2022 jo. PP 20/2026). */
-  function terutang(p, tahun, op, lengkap, perBulan, omzet) {
+  /** Simulasi PPh final terutang. Hanya orang pribadi dan perseroan perorangan yang menyatakan memenuhi syarat. */
+  function terutang(p, tahun, jenis, status, perBulan, omzet) {
     const belum = (alasan) => ({ status: 'belum_didukung', alasan, nilai: null });
     if (!TAHUN_DIDUKUNG.includes(tahun)) return belum('tahun_belum_didukung');
-    if (!op) return belum('badan_belum_didukung');
+    if (jenis === 'koperasi') return belum('koperasi_belum_didukung');
+    if (jenis === 'badan') return belum('badan_belum_didukung');
     if (p.rezim !== 'final') return belum('rezim_umum_belum_didukung');
     if (!p.syaratFinal) return belum('syarat_belum_dikonfirmasi');
-    if (!lengkap) return { status: 'belum_lengkap', alasan: 'data_belum_lengkap', nilai: null };
+    if (status === 'belum_lengkap') return { status: 'belum_lengkap', alasan: 'data_belum_lengkap', nilai: null };
+    if (status === 'cakupan_belum_dipastikan') return { status: 'belum_lengkap', alasan: 'cakupan_belum_dipastikan', nilai: null };
     if (omzet.total > BATAS_FINAL) return belum('melebihi_batas_4_8_miliar');
-    let sebelum = 0;
+    // Bagian Rp500 juta tidak kena pajak hanya untuk orang pribadi; perseroan perorangan dikenai atas seluruh peredaran bruto.
+    const bebas = jenis === 'op' ? BATAS_TIDAK_KENA : 0;
     const rinci = perBulan.map((r) => {
-      // Bagian yang dikenai pajak bulan ini = peredaran bruto bulan ini di atas sisa batas Rp500 juta.
-      const kena = Math.max(0, Math.min(r.bruto, r.kumulatif - BATAS_TIDAK_KENA));
-      sebelum = r.kumulatif;
-      return { bulan: r.bulan, bruto: r.bruto, dasarKenaPajak: kena, pajak: kena * TARIF };
+      const kena = Math.max(0, Math.min(r.bruto, r.kumulatif - bebas));
+      return { bulan: r.bulan, waktu: r.waktu, bruto: r.bruto, dasarKenaPajak: kena, pajak: kena * TARIF };
     });
     const dasar = rinci.reduce((a, r) => a + r.dasarKenaPajak, 0);
-    return { status: 'simulasi', alasan: '', dasarKenaPajak: dasar, tidakKenaPajak: Math.min(sebelum, BATAS_TIDAK_KENA), nilai: bulat(dasar * TARIF), perBulan: rinci };
+    return { status: 'simulasi', alasan: '', dasarKenaPajak: dasar, tidakKenaPajak: Math.min(omzet.total, bebas), nilai: bulat(dasar * TARIF), perBulan: rinci };
   }
 
   /** Simulasi PPh 22 yang MUNGKIN dipungut marketplace pemungut (PMK 37/2025). Bukan pungutan aktual. */
-  function pph22(p, tahun, op, lengkap, perBulan) {
+  function pph22(p, tahun, jenis, totalLengkap, perBulan) {
     if (!TAHUN_DIDUKUNG.includes(tahun)) return { status: 'belum_didukung', alasan: 'tahun_belum_didukung', nilai: null };
     const mulai = MULAI_PUNGUT[tahun];
     const mpLengkap = perBulan.every((r) => r.marketplace !== null && r.marketplace >= 0);
-    const totalLengkap = lengkap;
     const pungut = (dari) => perBulan.filter((r) => r.bulan >= Math.max(mulai, dari)).reduce((a, r) => a + (r.marketplace || 0) * TARIF, 0);
     const sebelumBerlaku = perBulan.filter((r) => r.bulan < mulai).reduce((a, r) => a + (r.marketplace || 0), 0);
     const dasarBerlaku = perBulan.filter((r) => r.bulan >= mulai).reduce((a, r) => a + (r.marketplace || 0), 0);
     if (!mpLengkap) return { status: 'belum_lengkap', alasan: 'omzet_marketplace_belum_lengkap', nilai: null, mulaiBulan: mulai };
     const base = { mulaiBulan: mulai, omzetSebelumBerlaku: sebelumBerlaku, dasarSetelahBerlaku: dasarBerlaku };
-    // Badan dan OP tanpa surat pernyataan: dipungut atas seluruh peredaran bruto marketplace sejak aturan berlaku.
-    if (!op) return { ...base, status: 'simulasi', skenario: 'badan', nilai: bulat(pungut(1)) };
+    // Selain orang pribadi (perseroan perorangan, koperasi, badan lain) dan OP tanpa surat: dipungut atas seluruh omzet
+    // marketplace pemungut sejak aturan berlaku (pengecualian Rp500 juta hanya untuk orang pribadi).
+    if (jenis !== 'op') return { ...base, status: 'simulasi', skenario: 'bukan_orang_pribadi', nilai: bulat(pungut(1)) };
     if (p.surat === 'belum') return { ...base, status: 'simulasi', skenario: 'tanpa_surat', nilai: bulat(pungut(1)) };
     // OP dengan surat: tidak dipungut sampai peredaran bruto seluruh usaha melewati Rp500 juta; pungutan mulai bulan
-    // berikutnya (anggapan: surat > Rp500 juta disampaikan tepat waktu). Butuh omzet usaha lain untuk menentukan bulannya.
+    // berikutnya (anggapan: surat > Rp500 juta disampaikan tepat waktu). Butuh omzet seluruh usaha untuk menentukan bulannya.
     const lewat = (perBulan.find((r) => r.kumulatif > BATAS_SURAT) || {}).bulan || null;
     const denganSurat = lewat ? bulat(pungut(lewat + 1)) : 0;
     if (p.surat === 'sudah') {
@@ -131,6 +161,6 @@ const CekPajak = (() => {
     return h.aktual.nilai - h.pph22.nilai;
   }
 
-  return { hitung, selisih, ATURAN, TARIF, BATAS_TIDAK_KENA, BATAS_SURAT, BATAS_FINAL, TAHUN_DIDUKUNG, MULAI_PUNGUT };
+  return { hitung, selisih, waktuBulan, JENIS, ATURAN, TARIF, BATAS_TIDAK_KENA, BATAS_SURAT, BATAS_FINAL, TAHUN_DIDUKUNG, MULAI_PUNGUT };
 })();
 if (typeof module !== 'undefined') module.exports = CekPajak;

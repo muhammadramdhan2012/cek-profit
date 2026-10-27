@@ -80,3 +80,11 @@ html.print-preview .report { display: block; background: #fff; }
 .rins em { color: #0e7a5a; font-style: normal; font-weight: 600; font-size: 8.5pt; }
 .rmethod { margin: 0; padding-left: 4.5mm; display: grid; gap: 2.4mm; color: #4b5a52; font-size: 9.5pt; max-width: 160mm; }
 .rwatermark { position: fixed; inset: 0; display: grid; place-items: center; font-family: "Plus Jakarta Sans", sans-serif; font-size: 120pt; font-weight: 800; color: rgb(14 122 90 / 7%); transform: rotate(-30deg); pointer-events: none; z-index: 0; }
+
+/* Surat pernyataan PMK 37/2025: selalu hitam di atas putih (pratinjau & cetak), tidak mengikuti tema. */
+.sr-preview { padding: 16px; border: 1px solid #dfe3d9; border-radius: 12px; background: #fff; color: #111; overflow-x: auto; }
+.surat-cetak { display: none; }
+@media print {
+  html.cetak-surat .report { display: none !important; }
+  html.cetak-surat .surat-cetak { display: block !important; color: #000; background: #fff; }
+}
