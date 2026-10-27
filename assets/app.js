@@ -37,7 +37,7 @@
   const KIND = {
     shopee_income: ['shopee', 'Shopee, laporan penghasilan'], shopee_return: ['shopee', 'Shopee, retur'], shopee_orders: ['shopee', 'Shopee, export pesanan'],
     tiktok_income: ['tiktok', 'TikTok, laporan penghasilan'], tiktok_return: ['tiktok', 'TikTok, retur'], tiktok_orders: ['tiktok', 'TikTok, export pesanan'],
-    modal_template: ['modal', 'Template modal'], shopee_balance: ['', 'Shopee, saldo (tidak diperlukan)'], unknown: ['bad', 'Belum dikenali'],
+    modal_template: ['modal', 'Template modal'], shopee_balance: ['', 'Shopee, saldo penjual'], unknown: ['bad', 'Belum dikenali'],
   };
   // Export pesanan Shopee/TikTok: parser belum diuji dengan semua format file asli (CLAUDE.md §2.5).
   // Pembayaran Pro manual hanya bisa diselesaikan bila kontak WhatsApp sudah diisi (config.js).
@@ -993,10 +993,69 @@
       ${mp.map(([pf, x]) => `<p class="ts-pf">${PLAT_DOT(pf)}${PNAME[pf]} · ${num(x.file.jumlah)} Laporan Penghasilan${x.file.identik ? ` (+${num(x.file.identik)} file sama diabaikan)` : ''}</p>${x.gabungan.ditahan ? `<p class="ts-gab">${trStatus('perlu_rekonsiliasi')} ${num(x.gabungan.ditahan)} transaksi berbeda antarlaporan ditahan, tidak masuk angka di bawah.</p>` : x.gabungan.identitasBelumPasti ? `<p class="ts-gab">${trStatus('perlu_dicek')} ${num(x.gabungan.identitasBelumPasti)} transaksi dengan identitas belum pasti tetap dihitung; total perlu diverifikasi.</p>` : x.gabungan.duplikatDiabaikan ? `<p class="ts-gab">${num(x.gabungan.duplikatDiabaikan)} baris yang sama di beberapa laporan dihitung sekali.</p>` : ''}<ul class="ts-list">${rows(pf, x)}</ul>`).join('')}
       <p class="tiny faint">Angka pesanan dikelompokkan menurut tanggal pesanan, sedangkan periode Laporan Penghasilan mengikuti tanggal dana dilepas atau dibayar. Penyesuaian memakai tanggalnya sendiri. Jadi tidak semua angka di atas memakai basis tanggal yang sama.</p></details>`;
   }
+  /* ---------- Money Trace Shopee v1: saldo penjual (CekSaldo) ----------
+   * Hanya rekonsiliasi; tidak dipakai untuk penjualan, HPP, laba, atau margin. Mencakup seluruh periode file saldo. */
+  const SD_ST = { cocok: ['verified', 'Cocok'], di_luar_periode: ['unknown', 'Di luar periode'], belum_direkonsiliasi: ['pending', 'Belum direkonsiliasi'],
+    tidak_cukup_data: ['unknown', 'Tidak cukup data'] };
+  const SD_WHY = {
+    tanpa_data_bank: 'dana keluar dari Shopee; belum dicocokkan dengan rekening bank karena data bank tidak ada',
+    status_belum_selesai: 'transaksi belum berstatus selesai', jenis_belum_dikenali: 'jenis transaksi belum dikenali',
+    laporan_penghasilan_tidak_ada: 'Laporan Penghasilan Shopee belum diunggah', tanpa_nomor_pesanan: 'tanpa nomor pesanan',
+    tidak_ada_di_penghasilan: 'nomor pesanan tidak ada di Laporan Penghasilan',
+    tidak_ada_di_penghasilan_hari_terakhir: 'tidak ada di Laporan Penghasilan; terjadi di hari terakhir periodenya, mungkin dilepas setelah laporan diunduh',
+    di_luar_periode_penghasilan: 'di luar periode Laporan Penghasilan yang diunggah', di_luar_periode_saldo: 'di luar periode laporan saldo yang diunggah',
+    pasangan_sudah_dipakai: 'pasangannya sudah dipakai baris lain', versi_penghasilan_berbeda: 'isi pesanan berbeda di beberapa Laporan Penghasilan',
+    nominal_berbeda: 'nominal berbeda dengan Laporan Penghasilan', tanggal_berbeda: 'tanggal berbeda dengan tanggal dana dilepas',
+    nominal_atau_tanggal_berbeda: 'nominal atau tanggal berbeda dengan saldo', penyesuaian_tanpa_pasangan: 'tidak ada penyesuaian dengan tanggal dan nominal sama di sheet Adjustment',
+    tidak_ada_di_saldo: 'tidak ada di laporan saldo', nilai_nol_tanpa_mutasi: 'bernilai Rp0, tidak ada mutasi saldo untuk dicocokkan',
+  };
+  const SD_JENIS = { pesanan: 'Penghasilan pesanan', penyesuaian: 'Penyesuaian', penarikan: 'Penarikan dana', lain: 'Transaksi lain' };
+  function saldoTrace() {
+    if (demo || typeof CekSaldo === 'undefined') return null;
+    const sal = files.filter((f) => f.saldo && !f.error), inc = files.filter((f) => f.parsed && f.parsed.kind === 'shopee_income');
+    return sal.length ? CekSaldo.trace(sal.map((f) => f.saldo), inc.map((f) => f.parsed)) : null;
+  }
+  const sdChip = (s, n, v) => { const [c, l] = SD_ST[s]; return `<span class="status ${c} sd-chip">${l} · ${num(n)}${ok(v) && n ? ` · ${fmt(v)}` : ''}</span>`; };
+  function saldoPanel(t) {
+    const S = t.saldo, sal = t.status.saldo;
+    const kotak = [['Saldo awal', S.awal], ['Masuk', S.masuk], ['Keluar', S.keluar], ['Saldo akhir', S.akhir]]
+      .map(([l, v]) => `<div class="sd-k"><span>${l}</span><b class="${v < 0 ? 'neg' : ''}">${fmt(v)}</b></div>`).join('');
+    const kel = ['pesanan', 'penyesuaian', 'penarikan', 'lain'].filter((j) => t.kelompok[j].n)
+      .map((j) => `<li><span>${SD_JENIS[j]}<small>${num(t.kelompok[j].n)} transaksi</small></span><b class="tr-v ${t.kelompok[j].jumlah < 0 ? 'neg' : ''}">${fmt(t.kelompok[j].jumlah)}</b></li>`).join('');
+    const buka = t.item.filter((x) => x.status !== 'cocok');
+    const grup = {};
+    for (const x of buka) { const k = `${x.status}|${x.sumber}|${x.jenis}|${x.alasan}`; (grup[k] = grup[k] || []).push(x); }
+    const rinci = Object.entries(grup).sort(([a], [b]) => SD_ST_ORDER(a) - SD_ST_ORDER(b)).map(([k, l]) => {
+      const [stt, sumber, jenis, alasan] = k.split('|'); const tot = l.reduce((a, x) => a + x.jumlah, 0);
+      const contoh = jenis === 'penarikan' ? '' : `<ul class="sd-ref">${l.slice(0, 20).map((x) => `<li><span>${tgl(x.tanggal)}${x.ref ? ` · ${esc(x.ref)}` : ''}</span><b class="${x.jumlah < 0 ? 'neg' : ''}">${fmt(x.jumlah)}</b></li>`).join('')}${l.length > 20 ? `<li class="faint">dan ${num(l.length - 20)} lainnya</li>` : ''}</ul>`;
+      return `<li><div class="ts-h"><b>${SD_JENIS[jenis]} · ${sumber === 'saldo' ? 'di saldo' : 'di Laporan Penghasilan'}</b><span class="tr-v ${tot < 0 ? 'neg' : ''}">${fmt(tot)}</span></div>
+        <div class="ts-st">${sdChip(stt, l.length)}<span>${esc(SD_WHY[alasan] || alasan)}.</span></div>${contoh}</li>`;
+    }).join('');
+    const pj = t.penyesuaian;
+    const peringatan = [
+      !S.berantai && `Saldo akhir tidak berantai di ${num(S.putus)} titik, jadi persamaan saldo belum bisa dipastikan. Periode file mungkin terputus.`,
+      !t.file.cocokRingkasan && 'Jumlah baris saldo tidak cocok dengan ringkasan di file.',
+      t.file.barisRusak && `${num(t.file.barisRusak)} baris saldo tidak terbaca dan tidak ikut dihitung.`,
+      pj.belumTerjelaskan && `Penyesuaian di saldo ${fmt(pj.saldo)}, yang cocok dengan Laporan Penghasilan ${fmt(pj.cocok)}. Selisih ${fmt(pj.belumTerjelaskan)} belum terjelaskan dan tidak dikoreksi otomatis.`,
+    ].filter(Boolean);
+    return `<div class="sd-panel" id="saldo-shopee">
+      <p class="tr-after-k">${PLAT_DOT('shopee')}Saldo Penjual Shopee <span class="pd-tag beta">Beta</span></p>
+      <p class="tiny faint">${tgl(t.periode.saldo.dari)} sampai ${tgl(t.periode.saldo.ke)} · seluruh periode file saldo; filter bulan tidak berlaku di sini.${t.file.identik || t.file.barisGanda ? ` ${num(t.file.barisGanda)} baris yang sama di beberapa file dihitung sekali.` : ''}</p>
+      <div class="sd-grid">${kotak}</div>
+      <p class="sd-eq">${S.berantai && S.persamaan ? '<span class="status verified">Saldo berantai</span> Saldo awal + masuk + keluar = saldo akhir.' : '<span class="status pending">Perlu dicek</span> Saldo dalam file tidak berantai.'}</p>
+      <div class="sd-chips" aria-label="Status rekonsiliasi transaksi saldo">${Object.keys(SD_ST).map((k) => sdChip(k, sal[k].n, sal[k].jumlah)).join('')}</div>
+      ${peringatan.length ? `<ul class="sd-warn">${peringatan.map((x) => `<li>${esc(x)}</li>`).join('')}</ul>` : ''}
+      <details class="tr-src"><summary>Rincian rekonsiliasi saldo</summary>
+        <ul class="tr-list">${kel}</ul>
+        ${rinci ? `<ul class="ts-list">${rinci}</ul>` : '<p class="tiny faint">Semua transaksi saldo cocok.</p>'}
+        <p class="tiny faint">Dicocokkan per nomor pesanan dengan nominal dan tanggal yang sama persis, satu lawan satu. Transaksi tanpa pasangan tidak dianggap hilang atau salah. Penarikan dana hanya membuktikan dana keluar dari Shopee, bukan dana sudah diterima bank.</p>
+      </details></div>`;
+  }
+  const SD_ST_ORDER = (k) => ['belum_direkonsiliasi', 'di_luar_periode', 'tidak_cukup_data', 'cocok'].indexOf(k.split('|')[0]);
   function moneyTrace(r) {
     const opex = r.fixedMonthly > 0, rb = r.kepastian.risikoBarang, isDrop = typeOf(st()) === 'dropship';
     const out = r.kepastian.cakupan.dikeluarkan;
-    const J = r.jejakUang, JT = J.total;
+    const J = r.jejakUang, JT = J.total, sdT = saldoTrace();
     const others = [
       ...(r.ready && r.knownPacking ? [[isDrop ? 'Biaya dropship' : 'Packing', -r.knownPacking]] : []),
       ...(r.ready && (r.lostCertain || rb.kerugianTanpaNilai) ? [['Kerugian retur', r.lostCertain ? -r.lostCertain : NaN, rb.kerugianTanpaNilai ? `+ ${num(rb.kerugianTanpaNilai)} kasus nilainya belum diketahui.` : '']] : []),
@@ -1023,9 +1082,11 @@
         <p class="tr-after-k">Di luar perhitungan laba</p>
         <ul class="tr-list">
           <li><span>Penyesuaian dari marketplace${adj.jumlah ? `<small>${num(adj.jumlah)} transaksi, dicatat terpisah</small>` : '<small>Tidak ada penyesuaian tercatat di laporan</small>'}${trStatus(adj.status)}</span>${adj.jumlah ? val(adj.nilai) : ''}</li>
-          <li><span>Pencairan dana ke rekening<small>Data pencairan belum tersedia dalam analisis ini.</small>${trStatus(J.pencairan.status)}</span></li>
+          ${sdT ? `<li><span>Penarikan dana dari saldo Shopee<small>${num(sdT.kelompok.penarikan.n)} penarikan. Dana keluar dari Shopee; belum dicocokkan dengan rekening bank. Bukan penjualan.</small>${sdChip('tidak_cukup_data', sdT.kelompok.penarikan.n)}</span>${val(sdT.kelompok.penarikan.jumlah)}</li>`
+            : `<li><span>Pencairan dana ke rekening<small>Data pencairan belum tersedia dalam analisis ini. Unggah Laporan Saldo Penjual Shopee untuk melihat penarikan dana.</small>${trStatus(J.pencairan.status)}</span></li>`}
         </ul>
       </div>
+      ${sdT ? saldoPanel(sdT) : ''}
       ${traceSources(J)}
       ${warnTotal(r)}<p class="tiny faint">Berdasarkan laporan yang diunggah. Dana dilepas belum tentu sama dengan dana yang sudah masuk rekening.</p>`;
   }
@@ -1332,8 +1393,9 @@
       orders: { st: 'beta', kind: 'shopee_orders', fmt: '.xlsx', how: 'Pesanan Saya › Export', note: BETA_EXPORT },
       ads: { st: 'need', note: 'Laporan iklan belum dibaca. Agar tidak terhitung dua kali, biaya iklan bisa dicatat sebagai biaya tetap di Pengaturan.' },
       return: { st: 'ok', kind: 'shopee_return', fmt: '.xlsx' },
-      balance: { st: 'ignored', kind: 'shopee_balance', fmt: '.xlsx', note: 'File saldo dikenali tetapi tidak dipakai dalam laba: isinya memuat pencairan dan mutasi yang bukan penjualan.' },
-      payout: { st: 'need', note: 'Pencairan dana tidak pernah dihitung sebagai penjualan.' },
+      balance: { st: 'beta', kind: 'shopee_balance', fmt: '.xlsx', how: 'Keuangan › Saldo Penjual › Laporan Transaksi › Unduh (pilih periode yang sama dengan Laporan Penghasilan)',
+        note: 'Hanya untuk menelusuri dana di Jejak uang. Tidak mengubah penjualan, modal, atau laba. Format baru diuji dengan satu file asli.' },
+      payout: { st: 'need', note: 'Penarikan dana terlihat dari Laporan Saldo Penjual, tetapi dana masuk ke rekening bank belum bisa dicocokkan. Pencairan tidak pernah dihitung sebagai penjualan.' },
       product: PERLU, modal: MODAL_SUP,
     },
     tiktok: {
@@ -1352,11 +1414,12 @@
       modal: { st: 'na', note: 'Berlaku setelah laporan Lazada didukung.' } },
   };
   /** Peran laporan di alur unggah: utama (wajib untuk laba) atau pendukung (opsional). Mengikuti parser yang ada. */
-  const PERAN = { income: 'utama', modal: 'utama', orders: 'pendukung', return: 'pendukung' };   // modal: bukan file, tetapi wajib untuk laba
-  const NAMA_SINGKAT = { income: 'Laporan Penghasilan', orders: 'Pesanan', return: 'Retur & refund', modal: 'Modal / HPP' };
+  const PERAN = { income: 'utama', modal: 'utama', orders: 'pendukung', return: 'pendukung', balance: 'pendukung' };   // modal: bukan file, tetapi wajib untuk laba
+  const NAMA_SINGKAT = { income: 'Laporan Penghasilan', orders: 'Pesanan', return: 'Retur & refund', balance: 'Saldo Penjual', modal: 'Modal / HPP' };
   const GUNA_SINGKAT = { income: 'Sumber utama penjualan, potongan marketplace, dan dana diterima.',
     orders: 'Membaca jumlah barang, SKU, dan variasi agar modal per produk lebih tepat.',
-    return: 'Memeriksa pengembalian dana dan barang yang tidak kembali.', modal: 'Diisi di bagian Modal & HPP, lewat tabel atau template.' };
+    return: 'Memeriksa pengembalian dana dan barang yang tidak kembali.',
+    balance: 'Menelusuri dana masuk, penyesuaian, dan penarikan. Tidak mengubah laba.', modal: 'Diisi di bagian Modal & HPP, lewat tabel atau template.' };
   /**
    * Status ringkas satu laporan dari hasil validasi nyata (parser + rekonsiliasi engine). Mengembalikan daftar
    * [kelas, teks]; rincian per file tetap ada di daftar file di bawah.
@@ -1644,7 +1707,9 @@
         const isi = Object.values(sheets).some((rows) => (rows || []).some((r) => (r || []).some((c) => c !== null && c !== undefined && String(c).trim() !== '')));
         if (!isi) { resolve({ name: file.name, kind: 'unknown', error: 'File kosong: tidak ada data yang bisa dibaca.' }); return; }
         const parsed = Engine.parseWorkbook({ name: file.name, sheets });
-        resolve({ name: file.name, kind: parsed.kind, parsed });
+        // Saldo Shopee dibaca CekSaldo, disimpan terpisah (f.saldo). parsed tetap {kind} sehingga Engine.compute tidak berubah.
+        const saldo = parsed.kind === 'shopee_balance' && typeof CekSaldo !== 'undefined' ? CekSaldo.parse(sheets) : null;
+        resolve({ name: file.name, kind: parsed.kind, parsed, ...(saldo ? { saldo } : {}) });
       } catch (err) { resolve({ name: file.name, kind: 'unknown', error: err.message || 'File tidak bisa dibaca.' }); }
     };
     reader.onerror = () => resolve({ name: file.name, kind: 'unknown', error: 'File tidak bisa dibaca.' });
@@ -1691,12 +1756,19 @@
     }
     if (p.kind === 'shopee_orders' || p.kind === 'tiktok_orders') return `${num(p.lines.length)} baris produk`;
     if (p.kind === 'shopee_return' || p.kind === 'tiktok_return') return `${p.cases.length} pengajuan retur atau refund`;
-    if (p.kind === 'shopee_balance') return 'Tidak diperlukan. Gunakan Laporan Penghasilan.';
+    if (p.kind === 'shopee_balance') {
+      const q = f.saldo;
+      if (!q) return '<span class="warn">Dikenali sebagai laporan saldo, tetapi belum bisa dibaca.</span>';
+      const per = q.meta.dari ? `, ${tgl(q.meta.dari)} sampai ${tgl(q.meta.ke)}` : '';
+      return `${num(q.rows.length)} transaksi saldo${per}<br>${q.cocokRingkasan === false ? '<span class="warn">Jumlah baris tidak cocok dengan ringkasan di file</span>'
+        : q.cocokRingkasan ? '<span class="ok">Cocok dengan ringkasan di file</span>' : '<span class="warn">Ringkasan tidak ditemukan</span>'}${q.rantai.berantai ? '' : `<br><span class="warn">Saldo akhir tidak berantai di ${num(q.rantai.putus)} baris</span>`}${q.barisRusak.length ? `<br><span class="warn">${num(q.barisRusak.length)} baris tidak terbaca</span>` : ''}`;
+    }
     return '<span class="bad">Format belum dikenali. Lihat daftar file yang dibaca.</span>';
   }
   // Kegunaan tiap jenis file, agar seller tahu mengapa file itu diunggah.
   const FILE_USE = { shopee_income: 'penjualan, potongan marketplace, dan dana diterima', tiktok_income: 'penjualan, potongan marketplace, dan dana diterima',
     shopee_orders: 'jumlah barang dan variasi tiap pesanan, agar modal lebih tepat', tiktok_orders: 'jumlah barang dan variasi tiap pesanan, agar modal lebih tepat',
+    shopee_balance: 'menelusuri saldo, penyesuaian, dan penarikan dana di Jejak uang (tidak masuk laba)',
     shopee_return: 'kasus retur dan refund, termasuk barang yang tidak kembali', tiktok_return: 'kasus retur dan refund, termasuk barang yang tidak kembali',
     modal_template: 'modal per produk' };
   /**
@@ -1765,7 +1837,7 @@
   }
   // Status per file untuk daftar dan rekap: satu sumber agar keduanya tidak pernah berbeda.
   function statusFile(f) {
-    return f.demo ? 'ok' : f.error || f.kind === 'unknown' ? 'bad' : f.kind === 'shopee_balance' ? 'warn' : /class="warn"/.test(fileStatus(f)) ? 'warn' : 'ok';
+    return f.demo ? 'ok' : f.error || f.kind === 'unknown' ? 'bad' : /class="warn"/.test(fileStatus(f)) ? 'warn' : 'ok';
   }
   function rekapFile(list) {
     const wrap = $('#file-wrap'), sum = $('#file-rekap');
