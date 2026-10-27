@@ -476,6 +476,12 @@
       add('pending', 'Refund parsial: jumlah unit belum diketahui', `Sebagian penjualan tidak masuk dalam perhitungan laba karena jumlah unit pada refund parsial belum dapat diverifikasi. ${num(rpBiasa)} pesanan direfund sebagian tanpa jumlah barang yang tercatat. Nilai refund tidak dipakai untuk menebak jumlah barang.`,
         { label: 'Unggah file retur', go: 'data', section: 'unggah' }, 85, `${fmt(rpx.penjualan - (rpx.penjualanKonflik || 0))} penjualan tidak dihitung`);
     }
+    // Batch 3C: TikTok/Tokopedia — rincian produk laporan penghasilan vs export pesanan, dan indikasi retur (tidak mengubah HPP).
+    const tk = r.ttKuantitas || { belumPasti: 0, indikasiRetur: { jumlahPesanan: 0 } };
+    if (tk.belumPasti > 0) add('pending', 'Jumlah barang belum dapat dipastikan', `${num(tk.belumPasti)} pesanan TikTok/Tokopedia punya rincian produk yang berbeda antara Laporan Penghasilan dan export pesanan, dan tidak bisa dibuktikan dari nilainya. Modal pesanan itu tidak dihitung dalam laba.`,
+      { label: 'Lihat file', go: 'data', section: 'unggah' }, 88);
+    if (tk.indikasiRetur.jumlahPesanan > 0) add('pending', 'Indikasi retur di export pesanan', `${num(tk.indikasiRetur.jumlahPesanan)} pesanan TikTok/Tokopedia tercatat ada barang dikembalikan di export pesanan. Modal tidak dikurangi otomatis karena kondisi barang belum diketahui.`,
+      RETUR, 60);
     // P11: transaksi dengan versi berbeda antarlaporan ditahan (tidak masuk total maupun laba).
     const gb = K.gabungan || {}, ditahan = ['shopee', 'tiktok'].reduce((a, k) => a + ((gb[k] || {}).pesananDitahan || 0) + ((gb[k] || {}).penyesuaianDitahan || 0), 0);
     if (ditahan > 0) {
@@ -1409,9 +1415,14 @@
       return: { st: 'ok', kind: 'tiktok_return', fmt: '.csv' },
       balance: PERLU, payout: { st: 'need', note: 'Pencairan dana tidak pernah dihitung sebagai penjualan.' }, product: PERLU, modal: MODAL_SUP,
     },
+    // Batch 3C: laporan keuangan Tokopedia = Laporan Penghasilan TikTok Shop gabungan (diuji dengan file asli); parser TikTok dipakai ulang.
     tokopedia: {
-      income: { st: 'via', note: 'Pesanan bersumber Tokopedia terbaca dari Laporan Penghasilan TikTok Shop. Jangan unggah laporan Tokopedia terpisah untuk pesanan yang sama.' },
-      orders: PERLU, ads: PERLU, return: PERLU,
+      income: { st: 'ok', kind: 'tiktok_income', fmt: '.xlsx', how: 'TikTok Seller Center › Keuangan › Transaksi › Unduh',
+        guna: 'Satu file berisi transaksi Tokopedia dan TikTok Shop. Kanalnya dipisahkan dari kolom "Sumber pesanan".',
+        note: 'File ini sama dengan Laporan Penghasilan di tab TikTok Shop. Cukup unggah sekali; bila terunggah di dua tab, transaksinya tetap dihitung sekali.' },
+      orders: { st: 'beta', kind: 'tiktok_orders', fmt: '.csv', how: 'TikTok Seller Center › Pesanan › Kelola pesanan › Ekspor',
+        guna: 'Membaca SKU, variasi, dan jumlah barang pesanan Tokopedia dan TikTok Shop. Tidak menambah penjualan.', note: BETA_EXPORT },
+      ads: PERLU, return: PERLU,
       balance: PERLU, payout: PERLU, product: PERLU, modal: MODAL_SUP,
     },
     lazada: { income: PERLU, orders: PERLU, ads: PERLU, return: PERLU, balance: PERLU, payout: PERLU, product: PERLU,
@@ -1434,12 +1445,17 @@
     const ok1 = files.filter((f) => !f.error && f.kind === sup.kind);
     if (ok1.length) out.push(['ok', `Berhasil dibaca · ${num(ok1.length)} file`]);
     if (cat === 'income' && ok1.length) {
-      const J = last && last.all && last.all.jejakUang && last.all.jejakUang.marketplace && last.all.jejakUang.marketplace[pf];
+      const J = last && last.all && last.all.jejakUang && last.all.jejakUang.marketplace && last.all.jejakUang.marketplace[pf === 'tokopedia' ? 'tiktok' : pf];
       const cocok = ok1.filter((f) => { const q = f.parsed; const ref = pf === 'shopee' ? q.check.summaryTotal : q.check.reportSettle; return ref !== null && Math.abs(ref - q.check.sum) <= 1; }).length;
       if (J && ((J.file && J.file.identik) || (J.gabungan && J.gabungan.duplikatDiabaikan))) out.push(['info', 'Duplikat diabaikan']);
       if (cocok < ok1.length || (J && J.gabungan && (J.gabungan.ditahan || J.gabungan.status === 'periode_perlu_dicek'))) out.push(['warn', 'Perlu diperiksa']);
     }
     if (salah.length) out.push(['bad', `Format tidak sesuai · ${num(salah.length)} file`]);
+    // Tab Tokopedia: file yang sama dengan tab TikTok Shop; tampilkan bagian Tokopedia yang benar-benar terbaca.
+    if (pf === 'tokopedia' && cat === 'income' && ok1.length) {
+      const toko = last && last.all && last.all.tiktok && last.all.tiktok.bySource && last.all.tiktok.bySource.Tokopedia;
+      out.push(['info', toko ? `Tokopedia: ${num(toko.orders)} pesanan terjual` : 'Belum ada pesanan bersumber Tokopedia']);
+    }
     return out;
   }
   const chip = ([c, t]) => `<span class="pd-chip ${c}">${esc(t)}</span>`;
@@ -1456,7 +1472,7 @@
     const bantu = sup.how || sup.note;
     return `<li class="pd-row">
       <div class="pd-main"><div class="pd-name"><b>${NAMA_SINGKAT[cat]}</b>${tag}</div>
-        <p>${GUNA_SINGKAT[cat]}${sup.fmt && cat !== 'modal' ? ` <span class="pd-fmt">Format ${esc(sup.fmt)}</span>` : ''}</p>
+        <p>${sup.guna || GUNA_SINGKAT[cat]}${sup.fmt && cat !== 'modal' ? ` <span class="pd-fmt">Format ${esc(sup.fmt)}</span>` : ''}</p>
         ${st.length ? `<div class="pd-chips">${st.map(chip).join('')}</div>` : ''}</div>
       <div class="pd-act">${aksi}${bantu && cat !== 'modal' ? `<details class="pd-help"><summary>${sup.how ? 'Cara download' : 'Catatan'}</summary><p>${sup.how ? `${esc(sup.how)}. ` : ''}${sup.note ? esc(sup.note) : ''}</p></details>` : ''}</div>
     </li>`;

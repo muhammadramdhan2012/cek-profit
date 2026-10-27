@@ -95,6 +95,8 @@ const Engine = (() => {
     ttQty: ['Quantity', 'Kuantitas', 'Jumlah'],
     ttSubtotal: ['SKU Subtotal After Discount', 'Subtotal SKU Setelah Diskon', 'Subtotal SKU setelah diskon'],
     ttStatus: ['Order Status', 'Status Pesanan'],
+    ttSubtotalBefore: ['SKU Subtotal Before Discount', 'Subtotal SKU Sebelum Diskon', 'Subtotal SKU sebelum diskon'],
+    ttReturnQty: ['Sku Quantity of return', 'SKU Quantity of return'],
   };
   const isShopeeOrderHeader = (row) => hasAny(row, COL.shopeeOrderId) && hasAny(row, COL.shopeeQty) && hasAny(row, COL.shopeeName)
     && hasAny(row, [...COL.shopeeVar, ...COL.shopeeSku]) && !hasAny(row, ['No. Pengembalian']) && !hasAny(row, ['Lihat berdasarkan']);
@@ -312,7 +314,11 @@ const Engine = (() => {
       const qty = num(g(...COL.ttQty));
       if (!/^\d{6,}$/.test(orderId) || !(qty > 0)) continue;   // baris ke-2 CSV TikTok berisi keterangan kolom
       lines.push({ orderId, skuId: str(g(...COL.ttSkuId)).replace(/^'/, ''), sellerSku: str(g(...COL.ttSellerSku)),
-        name: str(g(...COL.ttName)), variant: str(g(...COL.ttVar)), qty, subtotal: num(g(...COL.ttSubtotal)), status: str(g(...COL.ttStatus)) });
+        name: str(g(...COL.ttName)), variant: str(g(...COL.ttVar)), qty, subtotal: num(g(...COL.ttSubtotal)), status: str(g(...COL.ttStatus)),
+        // Batch 3C (metadata): dipakai hanya sebagai BUKTI kelengkapan baris (subtotal sebelum diskon) dan PENANDA indikasi
+        // retur. Tidak pernah dipakai sebagai omzet dan tidak mengurangi HPP. Kolom tidak ada → NaN (bukan 0).
+        subtotalBefore: hasAny(f.aoa[f.h], COL.ttSubtotalBefore) ? num(g(...COL.ttSubtotalBefore)) : NaN,
+        returnQty: hasAny(f.aoa[f.h], COL.ttReturnQty) ? num(g(...COL.ttReturnQty)) : NaN });
     }
     return { kind: 'tiktok_orders', lines };
   }
@@ -976,6 +982,8 @@ const Engine = (() => {
     const prod = new Map();
     const touchProduct = (key, init) => { if (!prod.has(key)) prod.set(key, { key, rows: 0, qty: 0, qtyKnown: true, sales: 0, received: 0, modal: 0, modalKnown: true, unitCost: NaN, baseCost: NaN, ...init }); return prod.get(key); };
     let qtyAssumed = 0, linesWithoutCost = 0, ttNoDetail = 0, ttNoDetailSales = 0;
+    // Batch 3C: perbedaan rincian produk laporan penghasilan vs export (metadata; lihat pilihBarisTiktok).
+    const ttKuantitas = { terbuktiSubtotal: 0, belumPasti: 0, tanpaDampak: 0, indikasiRetur: { jumlahPesanan: 0, penjualan: 0 } };
     // H2-A: ringkasan kepastian HPP (metadata; tidak mengubah angka). Penjualan = nilai produk setelah refund.
     // "terverifikasi" termasuk total kelompok variasi yang pasti. "tidak_diketahui" tidak punya nilai HPP.
     const K = { hpp: { terverifikasi: 0, estimasi: 0, belum: 0 },
@@ -1448,6 +1456,7 @@ const Engine = (() => {
         const reasons = refundParsial === 'konflik' ? [REFUND_PARSIAL, REFUND_KONFLIK]
           : refundParsial === 'unit_tidak_diketahui' ? [REFUND_PARSIAL]
             : refundParsial === 'susulan_tanpa_pesanan_asal' ? ['refund_susulan_tanpa_pesanan_asal']
+              : refundParsial === 'kuantitas_belum_pasti' ? ['kuantitas_belum_pasti']
               : [mode === 'acuan' ? 'diskon_pemasok_belum_diisi' : !lines.length ? 'tanpa_rincian_produk' : 'modal_belum_diisi'];
         return { status: 'tidak_diketahui', reasons, partial };
       }
@@ -1552,12 +1561,39 @@ const Engine = (() => {
       if (total > 0 && total >= qtyAll) return { units: null, konflik: true };
       return total > 0 ? { units, konflik: false } : none;
     }
+    /*
+     * Batch 3C (keputusan PO 27 Okt 2026): sumber baris produk TikTok/Tokopedia bila "Detail produk terjual" (laporan
+     * penghasilan) dan export pesanan berbeda. Tidak menebak:
+     *  - kuantitas per SKU sama → rincian laporan penghasilan (perilaku lama);
+     *  - rincian laporan ⊂ export DAN "Subtotal sebelum diskon" laporan = Σ "SKU Subtotal Before Discount" semua baris
+     *    export (sama persis) → export lengkap secara nilai, rincian laporan terpotong → baris export dipakai;
+     *  - selain itu → kuantitas belum dapat dipastikan; HPP pesanan dikeluarkan dari laba (bukan ditebak).
+     * Indikasi retur di export (Sku Quantity of return > 0) hanya DITANDAI; tidak mengubah HPP.
+     */
+    const qtyMap = (ls) => ls.reduce((mm, l) => mm.set(String(l.skuId), (mm.get(String(l.skuId)) || 0) + l.qty), new Map());
+    function pilihBarisTiktok(r, exp) {
+      if (!r.lines.length) return { lines: exp, beda: false, belumPasti: false };
+      const merged = r.lines.map((l) => ({ ...l, ...(exp.find((e) => e.skuId === l.skuId) || {}), qty: l.qty }));
+      if (!exp.length) return { lines: merged, beda: false, belumPasti: false };
+      const a = qtyMap(r.lines), b = qtyMap(exp);
+      const sama = a.size === b.size && [...a].every(([k, v]) => b.get(k) === v);
+      if (sama) return { lines: merged, beda: false, belumPasti: false };
+      const subset = [...a].every(([k, v]) => b.has(k) && v <= b.get(k));
+      const sub = exp.reduce((t, l) => t + l.subtotalBefore, 0);
+      if (subset && isOk(sub) && r.preGross > 0 && sub === r.preGross) return { lines: exp, beda: true, belumPasti: false, terbukti: true };
+      return { lines: merged, beda: true, belumPasti: true };
+    }
     function tiktokRowModal(r) {
       // H2-B3b: refund parsial (sebagian nilai pesanan direfund, sisa > 0).
       const partial = isPartialRefund(r.pre, r.preGross, r.pre - r.preGross);
-      if (mode === 'acuan') return partial && isOk(ttRatio) ? { modal: NaN, lines: [], refundParsial: 'unit_tidak_diketahui' } : { modal: r.pre * ttRatio, lines: [], refundParsial: null };
       const exp = m.tiktokLines.get(r.id) || [];
-      const lines = r.lines.length ? r.lines.map((l) => ({ ...l, ...(exp.find((e) => e.skuId === l.skuId) || {}), qty: l.qty })) : exp;
+      const pilih = pilihBarisTiktok(r, exp);
+      const dampak = r.pre > 0;   // pesanan batal / refund penuh: HPP 0, perbedaan baris tidak berdampak
+      if (pilih.beda) ttKuantitas[!dampak ? 'tanpaDampak' : pilih.terbukti ? 'terbuktiSubtotal' : 'belumPasti']++;
+      if (dampak && exp.some((l) => l.returnQty > 0)) { ttKuantitas.indikasiRetur.jumlahPesanan++; ttKuantitas.indikasiRetur.penjualan += r.sales; }
+      if (mode === 'acuan') return partial && isOk(ttRatio) ? { modal: NaN, lines: [], refundParsial: 'unit_tidak_diketahui' } : { modal: r.pre * ttRatio, lines: [], refundParsial: null };
+      const lines = pilih.lines;
+      if (dampak && pilih.belumPasti) return { modal: NaN, lines: lines.map((l) => ({ ...l, cost: NaN, unit: NaN, base: NaN, entry: null, share: NaN, qtyNet: NaN })), refundParsial: 'kuantitas_belum_pasti' };
       // Rumus lama hanya untuk refund PENUH (share 0) dan tanpa refund (share 1). Refund parsial tidak memakai share.
       const share = r.preGross > 0 ? clamp01(r.pre / r.preGross) : (r.sales > 0 ? 1 : 0);
       if (!lines.length) {
@@ -2157,7 +2193,7 @@ const Engine = (() => {
       fixedMonthly, opex, netProfit: ready ? totalMargin - opex : NaN,
       months: monthList, allMonths: [...allMonths].sort(), buckets: buckets.filter((b) => b.orders > 0),
       products, cases, catSummary: Object.values(catSummary), dupes: m.dupes, target,
-      qtyAssumed, shopeeQty, linesWithoutCost, ttNoDetail, ttNoDetailSales, hasOrderExport: { shopee: m.shopeeLines.size > 0, tiktok: m.tiktokLines.size > 0 },
+      qtyAssumed, shopeeQty, linesWithoutCost, ttNoDetail, ttNoDetailSales, ttKuantitas: { ...ttKuantitas, indikasiRetur: { ...ttKuantitas.indikasiRetur } }, hasOrderExport: { shopee: m.shopeeLines.size > 0, tiktok: m.tiktokLines.size > 0 },
       productsWithoutCost: products.filter((p) => !p.modalKnown).length,
     };
     result.kepastian = buildKepastian(result);
@@ -2186,6 +2222,13 @@ const Engine = (() => {
         `${why.join('; ') || 'Sebagian pesanan belum punya modal'}. Margin hanya menghitung penjualan yang modalnya diketahui.`,
         r.ttNoDetail ? 'Unggah export pesanan TikTok, atau isi modal rata-rata (%) sebagai cadangan.' : 'Lengkapi template modal per produk.');
     }
+    const tk = r.ttKuantitas;
+    if (tk && tk.belumPasti) add('warn', 85, `${tk.belumPasti.toLocaleString('id-ID')} pesanan TikTok/Tokopedia: jumlah barang belum dapat dipastikan`,
+      'Rincian produk di laporan penghasilan berbeda dengan export pesanan dan tidak bisa dibuktikan dari nilainya. Modal pesanan itu tidak dihitung dalam laba.', 'Periksa pesanan tersebut di Seller Center.');
+    if (tk && tk.terbuktiSubtotal) add('info', 45, `${tk.terbuktiSubtotal.toLocaleString('id-ID')} pesanan TikTok/Tokopedia memakai rincian produk dari export pesanan`,
+      'Rincian produk di laporan penghasilan tidak lengkap; nilai export pesanan cocok persis dengan subtotal di laporan penghasilan, jadi jumlah barang dari export yang dipakai.');
+    if (tk && tk.indikasiRetur.jumlahPesanan) add('warn', 60, `${tk.indikasiRetur.jumlahPesanan.toLocaleString('id-ID')} pesanan TikTok/Tokopedia ada indikasi retur barang`,
+      'Export pesanan mencatat jumlah barang dikembalikan. Modal tidak dikurangi otomatis karena kondisi barang belum diketahui.', 'Unggah file retur TikTok/Tokopedia untuk periode yang sama, lalu periksa pesanan tersebut.');
     if (r.qtyAssumed > 0) add('info', 40, `${r.qtyAssumed.toLocaleString('id-ID')} item Shopee memakai jumlah = 1`,
       'Laporan penghasilan Shopee tidak mencatat jumlah barang per produk.', 'Unggah export pesanan Shopee agar jumlah barang tepat.');
 
