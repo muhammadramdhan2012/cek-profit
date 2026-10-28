@@ -56,6 +56,19 @@ status dukungan, format, cara unduh (hanya yang sudah terverifikasi), dan status
 berstatus Didukung atau Beta yang bisa diunggah lewat kategorinya; jenis file tetap dikenali dari isinya, bukan dari
 nama file. File kosong ditolak, file yang tidak sesuai kategorinya diberi tahu, dan file/baris yang sama dihitung sekali.
 
+## Pajak Seller (Beta, hanya staging)
+
+Menu **Pajak Seller** berisi kalkulator **simulasi** PPh final UMKM dan PPh Pasal 22 marketplace, serta generator Surat
+Pernyataan peredaran bruto. Hanya aktif di staging terverifikasi dan localhost (`pajakSeller` di `assets/config.js`); di produksi
+menu dan rute `#pajak` tertutup. Isian dan identitas pajak hanya diproses di browser: tidak disimpan, tidak dikirim.
+
+- **Dasar aturan:** PP 55/2022 jo. PP 20/2026, PMK 37/2025 (surat sesuai Lampiran A hal. 14–15), pengumuman DJP (pemungutan
+  PPh 22 berlaku 1 November 2026), FAQ PMK 37/2025.
+- **Keterbatasan:** hasil adalah simulasi, bukan nasihat pajak atau bukti pajak dibayar; hanya tahun 2026; koperasi, badan lain,
+  dan tarif umum belum didukung. Omzet yang diisi otomatis dari laporan adalah penjualan **setelah diskon penjual**, sedangkan
+  dasar pungutan resmi dihitung sebelum diskon, jadi estimasi PPh 22 adalah perkiraan. Estimasi bergantung pada marketplace yang
+  **ditunjuk ulang** DJP sebagai pemungut. Pajak tidak mengubah laporan laba. Belum ditinjau konsultan pajak.
+
 ## Mengatur situs (tanpa coding)
 
 Buka `assets/config.js` di GitHub, klik ikon pensil, ubah isinya, lalu **Commit changes**:

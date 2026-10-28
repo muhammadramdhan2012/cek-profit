@@ -60,6 +60,7 @@ Status masalah lain belum diaudit ulang sejak 14 Okt 2026.
 |---|---|---|
 | Profit Reporting | Berjalan; H1/H2/H3 sebagian selesai, sisanya berlabel perkiraan/belum diketahui | H1, H2, H3, M1, M11, P3, P10 |
 | Profit Optimization | Sebagian | Simulator harga, harga impas/target, batas harga aman. Belum ada skenario tingkat toko. |
+| Pajak Seller | Beta (staging) | Simulasi PPh final & PPh 22 marketplace + Surat Pernyataan PMK 37/2025. Bukan nasihat pajak; hanya 2026; omzet dari laporan = setelah diskon (perkiraan); bergantung penunjukan ulang marketplace pemungut oleh DJP; koperasi/badan lain belum didukung. |
 | Financial Analytics | Sebagian | Tren per bulan, temuan otomatis. **Arus kas belum ada** (`docs/KAMUS_ANGKA.md` A.15). |
 | Financial Control | Awal | Pencocokan total per file dan, sejak Money Trace A1, per komponen (penjualan, refund, potongan, dana dilepas, penyesuaian) dengan ringkasan resmi. Sejak Money Trace Shopee v1 (Beta): saldo penjual Shopee dicocokkan 1:1 dengan Laporan Penghasilan (nomor pesanan, nominal persis, tanggal dana dilepas). **Rekonsiliasi bank belum ada**; saldo/pencairan TikTok belum dibaca. |
 | Profit Confidence | Belum ada | Hanya sinyal terpisah (`coverage`, `qtyAssumed`, `unknownRisk`) |
