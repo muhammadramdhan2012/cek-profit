@@ -432,6 +432,12 @@ Status masalah lain belum diaudit ulang sejak 14 Okt 2026.
 
 ## Riwayat perubahan dokumen
 
+- 28 Okt 2026: Pajak Seller (Batch 4, hanya staging/localhost): kalkulator simulasi PPh final & PPh 22 marketplace
+  (`assets/pajak.js`, T1–T20) dan generator Surat Pernyataan PMK 37/2025 (`assets/surat.js`, U1–U12; teks sama kata demi kata
+  dengan Lampiran A hal. 14). Keterbatasan: simulasi, bukan nasihat pajak; hanya tahun 2026; koperasi/badan lain/tarif umum
+  belum didukung; aturan perseroan perorangan & koperasi dari ringkasan DJP, belum dari teks PP 20/2026; daftar marketplace
+  pemungut akan ditunjuk ulang; dasar dari laporan = setelah diskon (perkiraan); "(1)" di depan judul contoh format ditafsirkan
+  sebagai penomoran lampiran dan tidak dicetak. Belum ditinjau konsultan pajak.
 - 27 Okt 2026: Money Trace Shopee v1 (Beta, `assets/saldo.js`, `tests/saldo.test.js` S1–S15): saldo penjual Shopee
   direkonsiliasi tanpa mengubah laba; README, status pilar, dan P12 diperbarui. Belum ada rekonsiliasi bank. Tanpa angka bisnis asli.
 - 22 Okt 2026: pembayaran otomatis QRIS dinamis Midtrans (branch lokal `feature/qris-midtrans`, belum dijalankan di
