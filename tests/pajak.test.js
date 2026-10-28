@@ -127,5 +127,14 @@ test('T18 PPh final terutang, estimasi PPh 22, dan PPh 22 aktual tetap tiga angk
   eq(h.terutang.nilai, 500000); eq(h.pph22.nilai, 250000); eq(h.aktual.nilai, 260000); eq(P.selisih(h), 10000);
   truthy(h.terutang.nilai !== h.aktual.nilai && !('dipungut' in h.terutang), 'terutang tidak dikurangi pungutan');
 });
+test('T19 bulan mulai pungut: max(bulan berikutnya setelah batas terlewati, 1 Nov 2026); lewat Des → tahun berikutnya', () => {
+  const juli = P.hitung(OP({ bulan: bulan(80 * JT) }));   // kumulatif Jul = 560 jt → lewat Juli; surat akhir Juli; aturan baru berlaku Nov
+  eq(juli.bulanLewat500, 7); eq(juli.pph22.mulaiDipungutBulan, 11, 'tidak dipungut sebelum 1 Nov 2026'); eq(juli.pph22.nilai, 2 * 80 * JT * 0.005);
+  const okt = P.hitung(OP({ bulan: bulan(50 * JT).map((b, i) => (i === 9 ? { ...b, marketplace: 60 * JT } : b)) }));   // lewat Okt (510 jt)
+  eq(okt.bulanLewat500, 10); eq(okt.pph22.mulaiDipungutBulan, 11, 'lewat Okt → mulai Nov');
+  const des = P.hitung(OP({ bulan: bulan(40 * JT).map((b, i) => (i === 11 ? { ...b, marketplace: 80 * JT } : b)) }));
+  eq(des.bulanLewat500, 12); eq(des.pph22.mulaiDipungutBulan, 13, 'lewat Des → mulai Jan tahun berikutnya'); eq(des.pph22.nilai, 0);
+  truthy(P.ATURAN.some((a) => /ditunjuk ulang/.test(a.isi)), 'status marketplace pemungut (penunjukan ulang) dicatat di dasar aturan');
+});
 console.log(failed ? `\n${failed} GAGAL` : '\nSEMUA OK');
 process.exit(failed ? 1 : 0);
