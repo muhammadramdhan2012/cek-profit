@@ -138,15 +138,22 @@ const CekPajak = (() => {
     if (p.surat === 'belum') return { ...base, status: 'simulasi', skenario: 'tanpa_surat', nilai: bulat(pungut(1)) };
     // OP dengan surat: tidak dipungut sampai peredaran bruto seluruh usaha melewati Rp500 juta; pungutan mulai bulan
     // berikutnya (anggapan: surat > Rp500 juta disampaikan tepat waktu). Butuh omzet seluruh usaha untuk menentukan bulannya.
+    // PMK 37/2025 Ps. 6(7): surat "melebihi" paling lambat akhir bulan saat batas terlewati. Ps. 7(3): pemungutan mulai awal
+    // bulan berikutnya setelah surat DITERIMA marketplace. Bila bulan penerimaan tidak diisi, dianggap tepat waktu (asumsi).
     const lewat = (perBulan.find((r) => r.kumulatif > BATAS_SURAT) || {}).bulan || null;
-    const denganSurat = lewat ? bulat(pungut(lewat + 1)) : 0;
+    const isianSurat = angka(p.bulanSuratDiterima);
+    const diterima = lewat ? (isianSurat ?? lewat) : null;
+    const denganSurat = lewat ? bulat(pungut(diterima + 1)) : 0;
     if (p.surat === 'sudah') {
       if (!totalLengkap) return { ...base, status: 'belum_lengkap', alasan: 'omzet_usaha_lain_belum_diisi', nilai: null };
-      return { ...base, status: 'simulasi', skenario: 'dengan_surat', nilai: denganSurat, bulanLewat500: lewat, mulaiDipungutBulan: lewat ? Math.max(mulai, lewat + 1) : null };
+      if (lewat && isianSurat !== null && isianSurat < lewat) return { ...base, status: 'belum_lengkap', alasan: 'bulan_surat_sebelum_batas', nilai: null, bulanLewat500: lewat };
+      return { ...base, status: 'simulasi', skenario: 'dengan_surat', nilai: denganSurat, bulanLewat500: lewat, bulanSuratDiterima: diterima,
+        asumsiSuratTepatWaktu: !!lewat && isianSurat === null, suratTerlambat: !!lewat && isianSurat !== null && isianSurat > lewat,
+        mulaiDipungutBulan: lewat ? Math.max(mulai, diterima + 1) : null };
     }
     // Status surat tidak diketahui: tampilkan rentang dua skenario, bukan satu angka.
     return { ...base, status: 'rentang', skenario: 'surat_tidak_diketahui', nilai: null,
-      minimal: totalLengkap ? denganSurat : null, maksimal: bulat(pungut(1)), bulanLewat500: totalLengkap ? lewat : null };
+      minimal: totalLengkap ? denganSurat : null, maksimal: bulat(pungut(1)), bulanLewat500: totalLengkap ? lewat : null, asumsiSuratTepatWaktu: !!lewat && isianSurat === null };
   }
 
   /** PPh 22 yang benar-benar dipungut: hanya dari isian pengguna (bukti pungut/dokumen tagihan), tidak disimulasikan. */

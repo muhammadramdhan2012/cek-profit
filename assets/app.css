@@ -1711,3 +1711,5 @@ input.pick:focus-visible + label, .drop-mini:has(input.pick:focus-visible) label
 .pj-blocker { padding: 12px 14px; border-radius: 12px; border: 1px solid var(--warn); background: var(--warn-soft); color: var(--ink); font-size: 13px; }
 .pj-surat-wrap { display: grid; gap: 12px; }
 .pj-surat-wrap .pj-warn.pj-note { color: var(--ink-2); }
+/* Grid tidak boleh melebar mengikuti pratinjau A4: pratinjau menggulir di dalam kotaknya sendiri. */
+.pajak, .pj-surat-wrap, .pj-surat-wrap > *, #sr-out { min-width: 0; max-width: 100%; }

@@ -1295,7 +1295,7 @@
    * penyimpanan browser, akun, URL, maupun analytics. Tidak mengubah laporan laba. */
   const BLN = ['Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni', 'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'];
   const pajak = { tab: 'kalkulator', tahun: 2026, jenis: 'op', rezim: 'final', syaratFinal: false, surat: 'tidak_tahu', sampai: 12, tanpaUsahaLain: false,
-    bulan: Array.from({ length: 12 }, () => ({ marketplace: null, lain: null, sumber: null })), dipungutAktual: null, cakupanDikonfirmasi: false };
+    bulan: Array.from({ length: 12 }, () => ({ marketplace: null, lain: null, sumber: null })), dipungutAktual: null, cakupanDikonfirmasi: false, bulanSuratDiterima: null };
   const hariIniLokal = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
   const pajakInput = () => ({ ...pajak, hariIni: hariIniLokal() });
   const WAKTU = { terjadi: '', berjalan: 'bulan berjalan', mendatang: 'proyeksi', tidak_diketahui: '' };
@@ -1322,7 +1322,8 @@
         <div class="field"><label for="pj-tahun">Tahun pajak</label>${opt('pj-tahun', pajak.tahun, [[2026, '2026'], [2025, '2025 (belum didukung)'], [2027, '2027 (belum didukung)']])}</div>
         <div class="field"><label for="pj-jenis">Jenis wajib pajak</label>${opt('pj-jenis', pajak.jenis, Object.entries(CekPajak.JENIS))}</div>
         ${['op', 'pp'].includes(pajak.jenis) ? `<div class="field"><label for="pj-rezim">Cara menghitung PPh</label>${opt('pj-rezim', pajak.rezim, [['final', 'PPh final 0,5% (UMKM)'], ['umum', 'Tarif umum (pembukuan/norma)']])}</div>
-        ${pajak.jenis === 'op' ? `<div class="field"><label for="pj-surat">Surat pernyataan ≤ Rp500 juta</label>${opt('pj-surat', pajak.surat, [['tidak_tahu', 'Belum tahu'], ['sudah', 'Sudah disampaikan'], ['belum', 'Belum disampaikan']])}</div>` : ''}
+        ${pajak.jenis === 'op' ? `<div class="field"><label for="pj-surat">Surat pernyataan ≤ Rp500 juta</label>${opt('pj-surat', pajak.surat, [['tidak_tahu', 'Belum tahu'], ['sudah', 'Sudah disampaikan'], ['belum', 'Belum disampaikan']])}</div>
+        ${pajak.surat === 'sudah' ? `<div class="field"><label for="pj-surat-terima">Surat "melebihi Rp500 juta" diterima marketplace pada</label>${opt('pj-surat-terima', pajak.bulanSuratDiterima ?? '', [['', 'Belum/anggap tepat waktu'], ...BLN.map((n, i) => [i + 1, n])])}</div>` : ''}` : ''}
         ${pajak.rezim === 'final' ? `<label class="check span-all"><input type="checkbox" id="pj-syarat" ${pajak.syaratFinal ? 'checked' : ''}><span>${pajak.jenis === 'op' ? 'Saya memenuhi syarat PPh final: orang pribadi dengan peredaran bruto seluruh usaha tidak lebih dari Rp4,8 miliar setahun. Bagian Rp500 juta tidak kena pajak hanya dipakai bila ini dicentang.' : 'Perseroan perorangan ini memenuhi syarat PPh final: peredaran bruto tidak lebih dari Rp4,8 miliar setahun. Perseroan perorangan tidak mendapat bagian Rp500 juta tidak kena pajak.'}</span></label>` : ''}` : ''}
         ${['koperasi', 'badan'].includes(pajak.jenis) ? '<p class="small muted span-all">PPh terutang untuk jenis ini belum didukung. Kalkulator hanya mengestimasi PPh 22 yang mungkin dipungut marketplace.</p>' : ''}
       </div></fieldset>
@@ -1344,13 +1345,14 @@
     syarat_belum_dikonfirmasi: 'Centang pernyataan syarat PPh final dulu. Bagian Rp500 juta tidak kena pajak tidak dipakai otomatis.',
     data_belum_lengkap: 'Data belum lengkap: isi semua bulan pada periode (atau nyatakan tidak ada usaha lain). Bulan kosong tidak dianggap Rp0.',
     melebihi_batas_4_8_miliar: 'Peredaran bruto melebihi Rp4,8 miliar. Perlakuannya belum didukung kalkulator ini.',
+    bulan_surat_sebelum_batas: 'Bulan surat "melebihi" diterima tidak boleh sebelum bulan omzet melewati Rp500 juta.',
     omzet_marketplace_belum_lengkap: 'Omzet marketplace belum lengkap untuk semua bulan pada periode.',
     omzet_usaha_lain_belum_diisi: 'Omzet seluruh usaha belum diisi atau belum dikonfirmasi, padahal batas Rp500 juta dihitung dari seluruh usaha.',
     cakupan_belum_dipastikan: 'Centang pernyataan bahwa omzet yang diisi mencakup seluruh usaha Anda.',
     koperasi_belum_didukung: 'PPh koperasi belum didukung: jangka waktu tarif 0,5% untuk koperasi belum dapat dipastikan dari sumber resmi yang kami baca.',
   };
   /* Generator surat pernyataan PMK 37/2025. Identitas hanya di memori halaman ini (tidak disimpan, tidak dikirim). */
-  const surat = { nama: '', nomor: '', alamat: '', kedudukan: 'wp', wp: { nama: '', nomor: '', alamat: '' }, pilihan: 'sampai', tahun: 2026, kota: '', tanggal: '',
+  const surat = { nama: '', nomor: '', alamat: '', kedudukan: 'wp', wp: { nama: '', nomor: '', alamat: '' }, pilihan: 'sampai', kota: '', tanggal: '',
     konfirmasi: { seluruhUsaha: false, benar: false }, galat: {}, siap: false };
   function viewSurat() {
     if (!surat.tanggal) surat.tanggal = hariIniLokal();
@@ -1373,19 +1375,31 @@
       <fieldset class="sim-grp"><legend><span class="sg-n">${kuasa ? 3 : 2}</span>Pernyataan</legend><div class="fields two align">
         <div class="field span-all"><span class="label">Peredaran bruto tahun pajak berjalan</span><div class="checks">
           <label class="check"><input type="radio" name="sr-pilihan" value="sampai" ${surat.pilihan === 'sampai' ? 'checked' : ''}><span>Sampai dengan Rp500.000.000,00</span></label>
-          <label class="check"><input type="radio" name="sr-pilihan" value="melebihi" ${surat.pilihan === 'melebihi' ? 'checked' : ''}><span>Melebihi Rp500.000.000,00</span></label></div>${err('pilihan')}${err('jenisWp')}</div>
-        ${inp('tahun', 'tahun', 'Tahun pajak', surat.tahun)}${inp('kota', 'kota', 'Kota', surat.kota)}
+          <label class="check"><input type="radio" name="sr-pilihan" value="melebihi" ${surat.pilihan === 'melebihi' ? 'checked' : ''}><span>Melebihi Rp500.000.000,00</span></label></div>${err('pilihan')}${err('jenisWp')}
+          <p class="tiny faint">${{ melebihi: 'Menurut kalkulator, omzet tahun berjalan yang sudah terjadi melebihi Rp500 juta.', sampai: 'Menurut kalkulator, omzet tahun berjalan sampai bulan ini belum melebihi Rp500 juta.' }[kondisiKalkulator()] || 'Pilihan belum bisa dicocokkan dengan kalkulator (data omzet seluruh usaha belum lengkap atau belum dikonfirmasi). Pastikan pilihan sesuai keadaan sebenarnya.'}</p></div>
+        ${inp('kota', 'kota', 'Kota tempat surat dibuat', surat.kota)}
         <div class="field"><label for="sr-tanggal">Tanggal</label><input class="plain" id="sr-tanggal" type="date" value="${esc(surat.tanggal)}">${err('tanggal')}</div>
         <label class="check span-all"><input type="checkbox" id="sr-k-seluruh" ${surat.konfirmasi.seluruhUsaha ? 'checked' : ''}><span>Peredaran bruto yang saya nyatakan mencakup <b>seluruh usaha</b> wajib pajak (semua marketplace, toko offline, dan jasa). Kewajiban mengungkap omzet usaha lain ada pada saya.</span></label>${err('seluruhUsaha')}
         <label class="check span-all"><input type="checkbox" id="sr-k-benar" ${surat.konfirmasi.benar ? 'checked' : ''}><span>Isi surat ini sesuai keadaan sebenarnya, dan saya memahami akibat hukum bila tidak benar.</span></label>${err('benar')}
       </div></fieldset>
       <div class="pj-acts"><button class="btn primary" type="button" id="sr-periksa">${tersedia ? 'Periksa & buat pratinjau' : 'Periksa isian'}</button>
         ${tersedia && surat.siap ? '<button class="btn" type="button" id="sr-pdf">Unduh PDF</button>' : ''}</div>
-      <div id="sr-out" aria-live="polite">${surat.siap && tersedia ? `<div class="sr-preview">${CekSurat.html(suratData())}</div>` : ''}</div>
+      <div id="sr-out" aria-live="polite">${surat.siap && tersedia ? `<p class="small muted">Pratinjau (format Lampiran A PMK 37/2025). Periksa sebelum mengunduh.</p><div class="sr-preview">${CekSurat.html(suratData())}</div>` : ''}</div>
       <ul class="pj-warn pj-note"><li>Surat wajib ditandatangani dan dibubuhi meterai sesuai ketentuan.</li><li>Surat tidak dikirim otomatis ke marketplace atau DJP. Sampaikan sendiri melalui fasilitas yang disediakan masing-masing marketplace.</li><li>Bila peredaran bruto melewati Rp500 juta, surat "melebihi" disampaikan paling lambat akhir bulan saat batas terlewati (PMK 37/2025 Ps. 6).</li></ul>
     </div>`;
   }
-  const suratData = () => ({ ...surat, jenisWp: pajak.jenis });
+  /** Kondisi peredaran bruto tahun berjalan dari kalkulator, HANYA bulan yang sudah terjadi/berjalan (tanpa proyeksi).
+   *  'melebihi' bila yang sudah terjadi > Rp500 juta; 'sampai' bila data lengkap & dikonfirmasi s.d. bulan ini; selain itu null. */
+  function kondisiKalkulator() {
+    if (typeof CekPajak === 'undefined') return null;
+    const h = CekPajak.hitung(pajakInput());
+    const nyata = h.perBulan.filter((r) => r.waktu === 'terjadi' || r.waktu === 'berjalan');
+    const total = nyata.reduce((a, r) => a + (r.marketplace || 0) + (r.lain || 0), 0);
+    if (total > CekPajak.BATAS_SURAT) return 'melebihi';
+    const mencakupBulanIni = h.perBulan.some((r) => r.waktu === 'berjalan') || h.perBulan.every((r) => r.waktu === 'terjadi');
+    return h.omzet.status === 'lengkap_menurut_isian' && mencakupBulanIni && nyata.length ? 'sampai' : null;
+  }
+  const suratData = () => ({ ...surat, jenisWp: pajak.jenis, kondisiKalkulator: kondisiKalkulator() });
   /** Cetak surat lewat dialog cetak browser ("Simpan sebagai PDF"). Wadah cetak dikosongkan lagi setelah selesai. */
   function cetakSurat() {
     const isi = CekSurat.html(suratData());
@@ -1408,7 +1422,7 @@
     const q22 = Q.status === 'rentang' ? `<b class="pj-v">${Q.minimal === null ? '?' : fmt(Q.minimal)} – ${fmt(Q.maksimal)}</b><p class="small muted">Status surat pernyataan belum diketahui. Angka terkecil bila surat sudah disampaikan, terbesar bila belum.</p>`
       : `${val(Q.nilai)}${why(Q)}${Q.status === 'simulasi' ? `<p class="small muted">${Q.skenario === 'bukan_orang_pribadi' ? 'Selain orang pribadi, dipungut atas seluruh omzet marketplace pemungut sejak aturan berlaku; tidak ada pengecualian Rp500 juta.'
         : Q.skenario === 'tanpa_surat' ? 'Tanpa surat pernyataan, marketplace memungut atas seluruh omzet sejak aturan berlaku.'
-          : Q.bulanLewat500 ? `Omzet seluruh usaha melewati Rp500 juta pada ${BLN[Q.bulanLewat500 - 1]}. Dengan anggapan surat pernyataan baru disampaikan tepat waktu, pemungutan mulai ${Q.mulaiDipungutBulan <= 12 ? BLN[Q.mulaiDipungutBulan - 1] : 'tahun berikutnya'}.` : 'Omzet seluruh usaha belum melewati Rp500 juta dan surat sudah disampaikan, jadi tidak dipungut.'}</p>` : ''}`;
+          : Q.bulanLewat500 ? `Omzet seluruh usaha melewati Rp500 juta pada ${BLN[Q.bulanLewat500 - 1]}; surat "melebihi" wajib disampaikan paling lambat akhir ${BLN[Q.bulanLewat500 - 1]} (Ps. 6 ayat 7). ${Q.asumsiSuratTepatWaktu ? `<b>Asumsi:</b> surat diterima marketplace tepat waktu pada ${BLN[Q.bulanLewat500 - 1]}.` : `Surat diterima marketplace pada ${BLN[Q.bulanSuratDiterima - 1]}${Q.suratTerlambat ? ' (terlambat dari batas akhir bulan)' : ''}.`} Pemungutan mulai awal bulan berikutnya setelah surat diterima (Ps. 7 ayat 3) dan tidak sebelum 1 November 2026: mulai ${Q.mulaiDipungutBulan <= 12 ? BLN[Q.mulaiDipungutBulan - 1] : 'tahun berikutnya'}.` : 'Omzet seluruh usaha belum melewati Rp500 juta dan surat sudah disampaikan, jadi tidak dipungut.'}</p>` : ''}`;
     const lengkap = h.omzet.lengkap;
     box.innerHTML = `<div class="pj-res">
       <p class="pj-per">Periode: <b>${per}</b> · ${esc(h.jenisLabel)}${h.omzet.proyeksi.length ? ` · <span class="warn-text">termasuk proyeksi ${h.omzet.proyeksi.map((b) => BLN[b - 1]).join(', ')}</span>` : ''}</p>
@@ -2180,7 +2194,7 @@
     }
     if (id === 'pj-aktual') { pajak.dipungutAktual = v === '' ? null : +v; renderPajakOut(); return; }
     if (id.startsWith('sr-')) {
-      const map = { 'sr-nama': 'nama', 'sr-nomor': 'nomor', 'sr-alamat': 'alamat', 'sr-kota': 'kota', 'sr-tahun': 'tahun', 'sr-tanggal': 'tanggal' };
+      const map = { 'sr-nama': 'nama', 'sr-nomor': 'nomor', 'sr-alamat': 'alamat', 'sr-kota': 'kota', 'sr-tanggal': 'tanggal' };
       if (map[id]) surat[map[id]] = v; else if (id.startsWith('sr-wp-')) surat.wp[id.slice(6)] = v;
       surat.siap = false; const o = $('#sr-out'); if (o) o.innerHTML = ''; const pdf = $('#sr-pdf'); if (pdf) pdf.remove();
       return;
@@ -2218,6 +2232,7 @@
     else if (t.id === 'from' || t.dataset.filter === 'from') { view.from = t.value; render(); }
     else if (t.id === 'to' || t.dataset.filter === 'to') { view.to = t.value; render(); }
     else if (t.id === 'sort') { view.sort = t.value; renderProducts(true); }
+    else if (t.id === 'pj-surat-terima') { pajak.bulanSuratDiterima = t.value === '' ? null : +t.value; renderPajakOut(); }
     else if (['pj-tahun', 'pj-jenis', 'pj-rezim', 'pj-surat', 'pj-sampai'].includes(t.id)) { const k = t.id.slice(3); pajak[k] = ['tahun', 'sampai'].includes(k) ? +t.value : t.value; render(); $(`#${t.id}`)?.focus(); }
     else if (t.id === 'pj-syarat') { pajak.syaratFinal = t.checked; renderPajakOut(); }
     else if (t.id === 'pj-cakupan') { pajak.cakupanDikonfirmasi = t.checked; renderPajakOut(); }

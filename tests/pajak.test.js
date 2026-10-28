@@ -136,5 +136,14 @@ test('T19 bulan mulai pungut: max(bulan berikutnya setelah batas terlewati, 1 No
   eq(des.bulanLewat500, 12); eq(des.pph22.mulaiDipungutBulan, 13, 'lewat Des → mulai Jan tahun berikutnya'); eq(des.pph22.nilai, 0);
   truthy(P.ATURAN.some((a) => /ditunjuk ulang/.test(a.isi)), 'status marketplace pemungut (penunjukan ulang) dicatat di dasar aturan');
 });
+test('T20 batas terlewati ≠ surat diterima (Ps. 6(7), 7(3)): asumsi tepat waktu ditampilkan; surat terlambat menggeser mulai pungut', () => {
+  const b = bulan(50 * JT).map((x, i) => (i === 10 ? { ...x, marketplace: 100 * JT } : x));   // lewat Nov (600 jt)
+  const asumsi = P.hitung(OP({ bulan: b }));
+  eq(asumsi.pph22.bulanLewat500, 11); eq(asumsi.pph22.asumsiSuratTepatWaktu, true); eq(asumsi.pph22.mulaiDipungutBulan, 12);
+  const telat = P.hitung(OP({ bulan: b, bulanSuratDiterima: 12 }));
+  eq(telat.pph22.asumsiSuratTepatWaktu, false); eq(telat.pph22.suratTerlambat, true); eq(telat.pph22.mulaiDipungutBulan, 13, 'diterima Des → mulai Jan berikutnya'); eq(telat.pph22.nilai, 0);
+  eq(P.hitung(OP({ bulan: b, bulanSuratDiterima: 11 })).pph22.suratTerlambat, false);
+  eq(P.hitung(OP({ bulan: b, bulanSuratDiterima: 9 })).pph22.alasan, 'bulan_surat_sebelum_batas', 'tidak boleh sebelum batas terlewati');
+});
 console.log(failed ? `\n${failed} GAGAL` : '\nSEMUA OK');
 process.exit(failed ? 1 : 0);
