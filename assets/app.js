@@ -229,7 +229,7 @@
     ['Data & laporan', [['laporan', 'Laporan & riwayat', 'riwayat'], ['data', 'Unggah data', 'data', 'unggah'], ['modal', 'Modal & HPP', 'data', 'modal']]],
     ['Lainnya', [['pajak', 'Pajak Seller', 'pajak'], ['pengaturan', 'Pengaturan', 'data', 'pengaturan']]],
   ];
-  /* Pajak Seller (Batch 4): hanya di staging terverifikasi atau localhost (pengembangan). Produksi: menu tidak ada. */
+  /* Pajak Seller (Batch 4): aktif hanya bila CEK_CONFIG.pajakSeller === true (atau localhost untuk pengembangan). false: menu & rute tertutup. */
   const pajakAktif = () => (window.CEK_CONFIG || {}).pajakSeller === true || /^(localhost|127\.0\.0\.1)$/.test(location.hostname);
   const navTampil = (i) => i[0] !== 'pajak' || pajakAktif();
   const BOTTOM = ['ringkasan', 'laba', 'produk', 'retur'];

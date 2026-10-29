@@ -772,8 +772,6 @@ test('Service worker Cloudflare: kunci cache /x, /x.html, /x?q sama; respons red
   truthy(/'assets\/aturan-akun\.js', 'assets\/situs\.js'/.test(code), 'file baru ikut cache offline');
 });
 
-console.log(failed ? `\n${failed} uji GAGAL` : '\nSemua uji lulus');
-process.exitCode = failed ? 1 : 0;
 
 test('Batch 2 Pusat Data Marketplace V2: kategori lengkap, tombol unggah hanya untuk parser yang ada', () => {
   const appJs = src('app.js');
@@ -828,12 +826,21 @@ test('Batch 3C: tab Tokopedia memakai parser TikTok yang ada; retur & iklan teta
 
 test('Batch 4: Pajak Seller hanya staging/localhost, isian tidak disimpan/dikirim, surat tidak dikarang', () => {
   const appJs = src('app.js'), cfg = src('config.js');
-  truthy(/pajakSeller: false,/.test(cfg) && /C\.pajakSeller = st\.pajakSeller === true;/.test(cfg), 'produksi mati; hanya staging terverifikasi');
+  // Flag eksplisit: staging (pajakSeller false + st.pajakSeller) ATAU rilis produksi (pajakSeller true di config, tanpa blok staging).
+  truthy(/pajakSeller: (true|false),/.test(cfg) && (!/staging: \{/.test(cfg) || /C\.pajakSeller = st\.pajakSeller === true;/.test(cfg)), 'flag Pajak Seller eksplisit');
+  truthy(!/proPembayaranAktif: true/.test(cfg.split('staging: {')[0]) && /whatsapp: '',/.test(cfg), 'Pajak Seller tidak membuka pembayaran Pro di produksi');
   truthy(/const navTampil = \(i\) => i\[0\] !== 'pajak' \|\| pajakAktif\(\);/.test(appJs) && /name === 'pajak' && !pajakAktif\(\)/.test(appJs)
     && /if \(viewName === 'pajak' && !pajakAktif\(\)\) viewName =/.test(appJs), 'menu & rute (termasuk #pajak di URL) tertutup bila tidak aktif');
   const blok = appJs.slice(appJs.indexOf('/* ================= Pajak Seller (Batch 4)'), appJs.indexOf('  function viewSimulator() {'));
   truthy(blok.length > 1000 && !/store\.set|localStorage|CekCloud|track\(|fetch\(/.test(blok), 'isian pajak tidak disimpan/dikirim/dilacak');
-  truthy(/Generator surat pernyataan belum tersedia/.test(blok) && !/Yang bertanda tangan di bawah ini/.test(appJs), 'teks surat tidak dikarang sebelum format resmi tersedia');
+  // Teks surat hanya dari assets/surat.js (Lampiran A PMK 37/2025); UI tidak menulis kalimat surat sendiri dan menampilkan
+  // penanda bila teks resmi tidak tersedia.
+  truthy(!/Saya yang bertanda tangan di bawah ini|Demikian Surat Pernyataan ini dibuat/.test(appJs) && /Teks surat resmi belum dimuat/.test(appJs)
+    && /Demikian Surat Pernyataan ini dibuat/.test(src('surat.js')), 'teks surat hanya dari modul surat (format resmi)');
   truthy(/Bukan bukti pajak telah dibayar/.test(blok) && /tidak mengurangi laba/.test(blok), 'simulasi tidak diklaim sebagai bukti/pengurang laba');
   truthy(/<script src="assets\/pajak\.js\?v=/.test(html) && /'assets\/pajak\.js'/.test(fs.readFileSync(path.join(__dirname, '..', 'sw.js'), 'utf8')), 'pajak.js dimuat & offline');
 });
+
+// Ringkasan & kode keluar di AKHIR file, agar kegagalan tes mana pun (termasuk yang ditambahkan belakangan) menggagalkan CI.
+console.log(failed ? `\n${failed} uji GAGAL` : '\nSemua uji lulus');
+process.exitCode = failed ? 1 : 0;

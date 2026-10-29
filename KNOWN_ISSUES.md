@@ -57,11 +57,11 @@ Sumber awal: audit menyeluruh 14 Okt 2026 (read-only), ditambah analisis penghit
 |---|---|---|
 | Profit Reporting | Berjalan, dengan masalah akurasi terbuka | H1, H2, H3, M1, M10, M11, P3, P10 |
 | Profit Optimization | Sebagian | Simulator harga, harga impas/target, batas harga aman. Belum ada skenario tingkat toko. |
-| Pajak Seller | Beta (staging) | Simulasi PPh final & PPh 22 marketplace + Surat Pernyataan PMK 37/2025. Bukan nasihat pajak; hanya 2026; omzet dari laporan = setelah diskon (perkiraan); bergantung penunjukan ulang marketplace pemungut oleh DJP; koperasi/badan lain belum didukung. |
+| Pajak Seller | Beta (flag `pajakSeller`) | Simulasi PPh final & PPh 22 marketplace + Surat Pernyataan PMK 37/2025. Bukan nasihat pajak; hanya 2026; omzet dari laporan = setelah diskon (perkiraan); bergantung penunjukan ulang marketplace pemungut oleh DJP; koperasi/badan lain belum didukung. |
 | Financial Analytics | Sebagian | Tren per bulan, temuan otomatis. **Arus kas belum ada** (`docs/KAMUS_ANGKA.md` A.15). |
 | Financial Control | Awal | Pencocokan total per file dan, sejak Money Trace A1, per komponen (penjualan, refund, potongan, dana dilepas, penyesuaian) dengan ringkasan resmi. Sejak Money Trace Shopee v1 (Beta): saldo penjual Shopee dicocokkan 1:1 dengan Laporan Penghasilan (nomor pesanan, nominal persis, tanggal dana dilepas). **Rekonsiliasi bank belum ada**; saldo/pencairan TikTok belum dibaca. |
 | Profit Confidence | Belum ada | Hanya sinyal terpisah (`coverage`, `qtyAssumed`, `unknownRisk`) |
-| Money Trace | A1 + Shopee v1 (Beta, staging) | Kartu Jejak uang di halaman Laba: penjualan (dengan rincian refund yang sudah termasuk), potongan, dana pesanan dilepas, penyesuaian terpisah, status rekonsiliasi, sumber, dan basis tanggal (`docs/KAMUS_ANGKA.md` B.1b). Shopee v1: panel Saldo Penjual (saldo awal/masuk/keluar/akhir, cek saldo berantai, status Cocok / Di luar periode / Belum direkonsiliasi / Tidak cukup data; selisih ditampilkan, tidak dikoreksi). Keterbatasan: diuji dengan **satu** file saldo asli; penarikan hanya bukti dana keluar dari Shopee, **bukan** diterima bank; panel mencakup seluruh periode file (filter bulan tidak berlaku). |
+| Money Trace | A1 + Shopee v1 (Beta) | Kartu Jejak uang di halaman Laba: penjualan (dengan rincian refund yang sudah termasuk), potongan, dana pesanan dilepas, penyesuaian terpisah, status rekonsiliasi, sumber, dan basis tanggal (`docs/KAMUS_ANGKA.md` B.1b). Shopee v1: panel Saldo Penjual (saldo awal/masuk/keluar/akhir, cek saldo berantai, status Cocok / Di luar periode / Belum direkonsiliasi / Tidak cukup data; selisih ditampilkan, tidak dikoreksi). Keterbatasan: diuji dengan **satu** file saldo asli; penarikan hanya bukti dana keluar dari Shopee, **bukan** diterima bank; panel mencakup seluruh periode file (filter bulan tidak berlaku). |
 | Profit Decision Engine | Sebagian | Temuan otomatis berbasis aturan + simulator |
 
 ---
@@ -395,7 +395,7 @@ Sumber awal: audit menyeluruh 14 Okt 2026 (read-only), ditambah analisis penghit
 
 ## Riwayat perubahan dokumen
 
-- 28 Okt 2026: Pajak Seller (Batch 4, hanya staging/localhost): kalkulator simulasi PPh final & PPh 22 marketplace
+- 28 Okt 2026: Pajak Seller (Batch 4, aktif lewat flag `pajakSeller`): kalkulator simulasi PPh final & PPh 22 marketplace
   (`assets/pajak.js`, T1–T20) dan generator Surat Pernyataan PMK 37/2025 (`assets/surat.js`, U1–U12; teks sama kata demi kata
   dengan Lampiran A hal. 14). Keterbatasan: simulasi, bukan nasihat pajak; hanya tahun 2026; koperasi/badan lain/tarif umum
   belum didukung; aturan perseroan perorangan & koperasi dari ringkasan DJP, belum dari teks PP 20/2026; daftar marketplace

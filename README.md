@@ -53,11 +53,11 @@ status dukungan, format, cara unduh (hanya yang sudah terverifikasi), dan status
 berstatus Didukung atau Beta yang bisa diunggah lewat kategorinya; jenis file tetap dikenali dari isinya, bukan dari
 nama file. File kosong ditolak, file yang tidak sesuai kategorinya diberi tahu, dan file/baris yang sama dihitung sekali.
 
-## Pajak Seller (Beta, hanya staging)
+## Pajak Seller (Beta)
 
 Menu **Pajak Seller** berisi kalkulator **simulasi** PPh final UMKM dan PPh Pasal 22 marketplace, serta generator Surat
-Pernyataan peredaran bruto. Hanya aktif di staging terverifikasi dan localhost (`pajakSeller` di `assets/config.js`); di produksi
-menu dan rute `#pajak` tertutup. Isian dan identitas pajak hanya diproses di browser: tidak disimpan, tidak dikirim.
+Pernyataan peredaran bruto. Aktif hanya bila `pajakSeller: true` di `assets/config.js` (false = menu dan rute `#pajak`
+tertutup). Isian dan identitas pajak hanya diproses di browser: tidak disimpan, tidak dikirim. Tidak berhubungan dengan pembayaran Pro.
 
 - **Dasar aturan:** PP 55/2022 jo. PP 20/2026, PMK 37/2025 (surat sesuai Lampiran A hal. 14–15), pengumuman DJP (pemungutan
   PPh 22 berlaku 1 November 2026), FAQ PMK 37/2025.
