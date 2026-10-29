@@ -309,8 +309,10 @@
     const base = VIEWS.find((v) => v[0] === viewName);
     const meta = viewName === 'data' ? [base[0], ...(DATA_SEC[view.section] || DATA_SEC.unggah)] : base;
     const r = last && last.r;
-    const sub = r ? `${demo ? 'Data contoh, ' : ''}${prof().store ? `${esc(prof().store)}, ` : ''}${tgl(r.first)} sampai ${tgl(r.last)}` : meta[2];
-    const short = r ? `${tgl(r.first)} – ${tgl(r.last)}${view.platform !== 'all' ? `, ${PNAME[view.platform]}` : ''}${view.from || view.to ? ', difilter' : ''}` : meta[2];
+    let sub = r ? `${demo ? 'Data contoh, ' : ''}${prof().store ? `${esc(prof().store)}, ` : ''}${tgl(r.first)} sampai ${tgl(r.last)}` : meta[2];
+    let short = r ? `${tgl(r.first)} – ${tgl(r.last)}${view.platform !== 'all' ? `, ${PNAME[view.platform]}` : ''}${view.from || view.to ? ', difilter' : ''}` : meta[2];
+    // Pajak Seller memakai tahun pajak yang dipilih, bukan rentang tanggal laporan (filter dashboard tidak berubah).
+    if (viewName === 'pajak') { sub = `Tahun Pajak ${pajak.tahun}`; short = sub; }
     const c = topControls(r, false);
     const extra = viewName === 'data' && !demo && !files.length ? '<button class="btn sm" type="button" data-demo>Lihat dengan data contoh</button>'
       : viewName === 'data' && demo ? '<button class="btn sm" type="button" id="exit-demo">Keluar dari mode contoh</button>' : '';
