@@ -1677,7 +1677,7 @@ input.pick:focus-visible + label, .drop-mini:has(input.pick:focus-visible) label
 .pj-surat p { margin: 0; }
 .pj-acts { display: flex; flex-wrap: wrap; gap: 10px 16px; align-items: center; margin: 4px 0 10px; }
 .pj-rows { display: grid; gap: 0; border: 1px solid var(--line); border-radius: 12px; overflow: hidden; }
-.pj-row { display: grid; grid-template-columns: 96px minmax(0, 1fr) minmax(0, 1fr); gap: 10px; align-items: center; padding: 8px 10px; background: var(--surface); }
+.pj-row { display: grid; grid-template-columns: 150px minmax(0, 1fr); gap: 10px; align-items: center; padding: 8px 10px; background: var(--surface); }
 .pj-row + .pj-row { border-top: 1px solid var(--line); }
 .pj-bln { font-size: 13px; font-weight: 650; color: var(--ink-2); }
 .pj-in { display: grid; gap: 2px; min-width: 0; }
@@ -1698,10 +1698,9 @@ input.pick:focus-visible + label, .drop-mini:has(input.pick:focus-visible) label
 .pj-warn { margin: 0; padding-left: 18px; font-size: 12.5px; color: var(--warn); display: grid; gap: 4px; }
 .pajak .tr-src a { color: var(--accent); }
 @media (max-width: 560px) {
-  .pj-row { grid-template-columns: minmax(0, 1fr); gap: 6px; }
-  .pj-in { grid-template-columns: 84px minmax(0, 1fr); align-items: center; column-gap: 8px; }
-  .pj-in .pj-src { grid-column: 2; }
-  .pj-in .pj-k { display: block; }
+  .pj-row { grid-template-columns: 92px minmax(0, 1fr); gap: 8px; padding: 6px 8px; }
+  .pj-bln { font-size: 12.5px; }
+  .pj-bln .pj-w { display: block; }
 }
 
 .pj-w { font-size: 11px; font-weight: 600; color: var(--warn); }
@@ -1713,3 +1712,25 @@ input.pick:focus-visible + label, .drop-mini:has(input.pick:focus-visible) label
 .pj-surat-wrap .pj-warn.pj-note { color: var(--ink-2); }
 /* Grid tidak boleh melebar mengikuti pratinjau A4: pratinjau menggulir di dalam kotaknya sendiri. */
 .pajak, .pj-surat-wrap, .pj-surat-wrap > *, #sr-out { min-width: 0; max-width: 100%; }
+
+/* Batch 4B: Pajak Seller bertahap & ringkas */
+.pj-pil { display: flex; flex-wrap: wrap; gap: 8px; }
+.pj-pil label { display: inline-flex; align-items: center; gap: 8px; min-height: 40px; padding: 8px 14px; border: 1px solid var(--line-strong); border-radius: 10px; background: var(--surface); font-size: 13.5px; cursor: pointer; }
+.pj-pil label:has(input:checked) { border-color: var(--accent); background: var(--accent-soft); font-weight: 650; }
+.pj-pil input { accent-color: var(--accent); margin: 0; }
+.pj-lipat > summary { cursor: pointer; font-weight: 650; font-size: 13px; color: var(--ink-2); padding: 6px 0; }
+.pj-lipat[open] > summary { margin-bottom: 8px; }
+.pj-lipat > p { margin: 0 0 8px; }
+.pj-lap { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; padding: 10px 12px; border-radius: 12px; background: var(--surface-2); font-size: 13.5px; }
+.pj-lap small { display: block; font-size: 11.5px; color: var(--ink-3); }
+.pj-lap b { font-variant-numeric: tabular-nums; white-space: nowrap; }
+#pj-mp-sum { margin: 0; }
+#pj-mp-sum:empty { display: none; }
+.pj-next { display: grid; gap: 8px; justify-items: start; padding: 12px; border-radius: 12px; border: 1px solid var(--warn); background: var(--warn-soft); }
+.pj-next .pj-k, .pj-cek .pj-k { font-size: 12.5px; font-weight: 700; color: var(--ink-2); }
+.pj-next p { margin: 0; }
+.pj-next .btn { white-space: normal; text-align: left; }
+.pj-cek { display: grid; gap: 6px; }
+.pj-res .pj-lipat p { margin: 8px 0 0; }
+.pj-in .input { max-width: 280px; }
+.pj-sub { margin: 4px 0 0; font-weight: 700; color: var(--ink-2); }
