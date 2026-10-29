@@ -80,3 +80,40 @@ html.print-preview .report { display: block; background: #fff; }
 .rins em { color: #0e7a5a; font-style: normal; font-weight: 600; font-size: 8.5pt; }
 .rmethod { margin: 0; padding-left: 4.5mm; display: grid; gap: 2.4mm; color: #4b5a52; font-size: 9.5pt; max-width: 160mm; }
 .rwatermark { position: fixed; inset: 0; display: grid; place-items: center; font-family: "Plus Jakarta Sans", sans-serif; font-size: 120pt; font-weight: 800; color: rgb(14 122 90 / 7%); transform: rotate(-30deg); pointer-events: none; z-index: 0; }
+
+/* Surat pernyataan PMK 37/2025: selalu hitam di atas putih (pratinjau & cetak), tidak mengikuti tema. */
+.sr-preview { padding: 16px; border: 1px solid #dfe3d9; border-radius: 12px; background: #fff; color: #111; overflow-x: auto; max-width: 100%; }
+@media screen and (max-width: 560px) { .sr-preview { padding: 10px; } .sr-preview .surat-doc { font-size: 10.5pt; } .sr-preview .sd-dot { min-width: 30mm; } .sr-preview .sd-k { width: auto; } }
+.surat-cetak { display: none; }
+@media print {
+  html.cetak-surat .report { display: none !important; }
+  html.cetak-surat .surat-cetak { display: block !important; color: #000; background: #fff; }
+}
+
+/* Dokumen surat (Lampiran A PMK 37/2025): A4, Times-like serif agar dekat dengan contoh format resmi. */
+.surat-doc { font-family: "Times New Roman", Times, serif; font-size: 12pt; line-height: 1.45; color: #000; max-width: 170mm; margin: 0 auto; }
+.surat-doc p { margin: 0 0 10pt; }
+.sd-judul { text-align: center; font-size: 12pt; font-weight: 700; margin: 0 0 16pt; letter-spacing: 0; }
+.sd-tab { border-collapse: collapse; margin: 0 0 12pt 8pt; }
+.sd-tab td { padding: 3pt 4pt; vertical-align: top; }
+.sd-k { width: 30mm; white-space: nowrap; } .sd-c { width: 4mm; }
+.sd-sub { margin: 4pt 0 0; } .sd-sub .sd-k { width: 20mm; }
+.sd-pil { display: flex; align-items: center; gap: 8pt; margin: 0 0 4pt; }
+.sd-box { display: inline-grid; place-items: center; width: 12pt; height: 12pt; border: 1px solid #000; font-size: 10pt; line-height: 1; }
+.sd-dot { display: inline-block; min-width: 55mm; border-bottom: 1px dotted #000; height: 1em; }
+.sd-just { text-align: justify; }
+.sd-ttd { margin: 18pt 0 0 auto; width: 75mm; }
+.sd-ttd p { margin: 0 0 6pt; }
+.sd-meterai { width: 30mm; height: 20mm; border: 1px solid #000; padding: 2pt 4pt; font-size: 10pt; margin: 4pt 0; }
+.sd-nama { margin-top: 6pt !important; padding-top: 2pt; border-top: 1px dotted #000; display: inline-block; min-width: 50mm; }
+/* Halaman bernama: margin surat tidak mengubah @page laporan PDF di atas. */
+.surat-cetak { page: surat; }
+@page surat { size: A4; margin: 25mm 25mm 20mm; @bottom-right { content: none; } }
+@media print {
+  html.cetak-surat { background: #fff; }
+  html.cetak-surat .surat-doc { max-width: none; }
+}
+/* Isolasi dari gaya tabel/judul situs: surat selalu polos seperti contoh format resmi. */
+.surat-doc, .surat-doc * { font-family: "Times New Roman", Times, serif !important; color: #000 !important; }
+.surat-doc table, .surat-doc td, .surat-doc th { background: none !important; border: 0 !important; box-shadow: none !important; }
+.surat-doc h1 { font-weight: 700 !important; }

@@ -37,7 +37,7 @@
   const KIND = {
     shopee_income: ['shopee', 'Shopee, laporan penghasilan'], shopee_return: ['shopee', 'Shopee, retur'], shopee_orders: ['shopee', 'Shopee, export pesanan'],
     tiktok_income: ['tiktok', 'TikTok, laporan penghasilan'], tiktok_return: ['tiktok', 'TikTok, retur'], tiktok_orders: ['tiktok', 'TikTok, export pesanan'],
-    modal_template: ['modal', 'Template modal'], shopee_balance: ['', 'Shopee, saldo (tidak diperlukan)'], unknown: ['bad', 'Belum dikenali'],
+    modal_template: ['modal', 'Template modal'], shopee_balance: ['', 'Shopee, saldo penjual'], unknown: ['bad', 'Belum dikenali'],
   };
   // Export pesanan Shopee/TikTok: parser belum diuji dengan semua format file asli (CLAUDE.md §2.5).
   // Pembayaran Pro manual hanya bisa diselesaikan bila kontak WhatsApp sudah diisi (config.js).
@@ -58,6 +58,7 @@
     produk: '<path d="M21 8l-9-5-9 5 9 5 9-5z"/><path d="M3 8v8l9 5 9-5V8"/><path d="M12 13v8"/>',
     biaya: '<path d="M6 3h12v18l-3-2-3 2-3-2-3 2z"/><path d="M9 8h6M9 12h6"/>',
     retur: '<path d="M9 14l-5-5 5-5"/><path d="M4 9h11a5 5 0 0 1 0 10h-4"/>',
+    pajak: '<path d="M6 3h12v18l-3-2-3 2-3-2-3 2z"/><path d="M9 14l6-6"/><circle cx="9.5" cy="8.5" r="1"/><circle cx="14.5" cy="13.5" r="1"/>',
     simulator: '<path d="M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3M1 14h6M9 8h6M17 16h6"/>',
     riwayat: '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',
     data: '<path d="M12 15V3M7 8l5-5 5 5"/><path d="M4 15v4a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-4"/>',
@@ -104,7 +105,7 @@
   let demo = false;
   let license = { ok: false };
   let viewName = 'ringkasan';
-  const view = { openSec: {}, section: 'unggah', platform: 'all', from: '', to: '', metric: 'margin', q: '', sort: 'margin', showAll: false, onlyCheck: true, costQ: '', costAll: false, compare: null, typeOpen: false, prodFilter: 'all', prodKey: null, platCol: 'total' };
+  const view = { openSec: {}, section: 'unggah', platform: 'all', from: '', to: '', metric: 'margin', q: '', sort: 'margin', showAll: false, onlyCheck: true, costQ: '', costAll: false, compare: null, typeOpen: false, prodFilter: 'all', prodKey: null, platCol: 'total', mp: '' };
   const sim = { listPrice: null, disc: null, cost: null, feePct: null, feeFixed: null, src: null, plat: null, status: 'nonmall', kat: null, opsi: [], afiliasi: 0 };
   let last = null;
   const cloud = CekCloud.init({ url: C.supabaseUrl, key: C.supabaseAnonKey });
@@ -218,6 +219,7 @@
     ['retur', 'Retur & refund', 'Barang yang kembali dan yang belum jelas'],
     ['simulator', 'Simulator harga', 'Uji harga dan diskon sebelum dipasang'],
     ['riwayat', 'Laporan & riwayat', 'Unduh laporan, simpan, dan bandingkan periode'],
+    ['pajak', 'Pajak Seller', 'Simulasi PPh marketplace dan surat pernyataan PMK 37/2025'],
     ['data', 'Data & pengaturan', 'Unggah laporan, isi modal, dan atur biaya'],
   ];
   /* Menu: label untuk seller → tampilan yang sudah ada. "Unggah data", "Modal & HPP", dan "Pengaturan" adalah
@@ -225,11 +227,14 @@
   const NAV = [
     ['Utama', [['ringkasan', 'Ringkasan', 'ringkasan'], ['laba', 'Laba', 'biaya'], ['produk', 'Produk', 'produk'], ['retur', 'Retur & refund', 'retur'], ['simulator', 'Simulator harga', 'simulator']]],
     ['Data & laporan', [['laporan', 'Laporan & riwayat', 'riwayat'], ['data', 'Unggah data', 'data', 'unggah'], ['modal', 'Modal & HPP', 'data', 'modal']]],
-    ['Lainnya', [['pengaturan', 'Pengaturan', 'data', 'pengaturan']]],
+    ['Lainnya', [['pajak', 'Pajak Seller', 'pajak'], ['pengaturan', 'Pengaturan', 'data', 'pengaturan']]],
   ];
+  /* Pajak Seller (Batch 4): aktif hanya bila CEK_CONFIG.pajakSeller === true (atau localhost untuk pengembangan). false: menu & rute tertutup. */
+  const pajakAktif = () => (window.CEK_CONFIG || {}).pajakSeller === true || /^(localhost|127\.0\.0\.1)$/.test(location.hostname);
+  const navTampil = (i) => i[0] !== 'pajak' || pajakAktif();
   const BOTTOM = ['ringkasan', 'laba', 'produk', 'retur'];
   const SHORT = { retur: 'Retur' };
-  const navItems = () => NAV.flatMap(([, items]) => items);
+  const navItems = () => NAV.flatMap(([, items]) => items).filter(navTampil);
   const isActive = ([, , v, section]) => viewName === v && (v !== 'data' || (view.section || 'unggah') === section);
   function navButton(item, cls = '') {
     const [k, label, v, section] = item;
@@ -244,7 +249,7 @@
   }
   function renderNav() {
     // Menu hanya ditulis ulang bila isinya berubah, agar animasi penanda aktif tidak berulang di setiap ketikan.
-    const side = NAV.map(([group, items]) => `<div class="nav-group" role="group" aria-label="${group}"><span class="nav-label" aria-hidden="true">${group}</span>${items.map((i) => navButton(i)).join('')}</div>`).join('');
+    const side = NAV.map(([group, items]) => `<div class="nav-group" role="group" aria-label="${group}"><span class="nav-label" aria-hidden="true">${group}</span>${items.filter(navTampil).map((i) => navButton(i)).join('')}</div>`).join('');
     if (renderNav.side !== side) { $('#nav').innerHTML = side; renderNav.side = side; }
     // Bilah bawah (HP): 4 menu utama + "Lainnya" untuk sisanya, sehingga tidak ada menu tersembunyi tanpa penanda.
     const more = navItems().filter((i) => !BOTTOM.includes(i[0]));
@@ -281,8 +286,8 @@
    *  data-filter/data-act agar id tidak ganda. */
   function topControls(r, inSheet) {
     const pro = isPro();
-    const filters = !['data', 'riwayat', 'simulator'].includes(viewName) && r;
-    const canExport = r && !['data', 'simulator'].includes(viewName);
+    const filters = !['data', 'riwayat', 'simulator', 'pajak'].includes(viewName) && r;
+    const canExport = r && !['data', 'simulator', 'pajak'].includes(viewName);
     const monthOpts = (sel, label) => `<option value="">${label}</option>` + r.allMonths.map((m) => `<option value="${m}" ${m === sel ? 'selected' : ''}>${monthLabel(m)}</option>`).join('');
     const sel = (k, label, cur) => `<select class="compact" ${inSheet ? `data-filter="${k}"` : `id="${k}"`} aria-label="${label}">${monthOpts(cur, k === 'from' ? 'Dari awal' : 'Sampai akhir')}</select>`;
     const seg = r && r.available.shopee && r.available.tiktok ? `<div class="seg" role="group" aria-label="Marketplace">${[['all', 'Semua'], ['shopee', 'Shopee'], ['tiktok', 'TikTok']].map(([k, l]) => `<button type="button" data-platform="${k}" aria-pressed="${view.platform === k}">${l}</button>`).join('')}</div>` : '';
@@ -304,8 +309,10 @@
     const base = VIEWS.find((v) => v[0] === viewName);
     const meta = viewName === 'data' ? [base[0], ...(DATA_SEC[view.section] || DATA_SEC.unggah)] : base;
     const r = last && last.r;
-    const sub = r ? `${demo ? 'Data contoh, ' : ''}${prof().store ? `${esc(prof().store)}, ` : ''}${tgl(r.first)} sampai ${tgl(r.last)}` : meta[2];
-    const short = r ? `${tgl(r.first)} – ${tgl(r.last)}${view.platform !== 'all' ? `, ${PNAME[view.platform]}` : ''}${view.from || view.to ? ', difilter' : ''}` : meta[2];
+    let sub = r ? `${demo ? 'Data contoh, ' : ''}${prof().store ? `${esc(prof().store)}, ` : ''}${tgl(r.first)} sampai ${tgl(r.last)}` : meta[2];
+    let short = r ? `${tgl(r.first)} – ${tgl(r.last)}${view.platform !== 'all' ? `, ${PNAME[view.platform]}` : ''}${view.from || view.to ? ', difilter' : ''}` : meta[2];
+    // Pajak Seller memakai tahun pajak yang dipilih, bukan rentang tanggal laporan (filter dashboard tidak berubah).
+    if (viewName === 'pajak') { sub = `Tahun Pajak ${pajak.tahun}`; short = sub; }
     const c = topControls(r, false);
     const extra = viewName === 'data' && !demo && !files.length ? '<button class="btn sm" type="button" data-demo>Lihat dengan data contoh</button>'
       : viewName === 'data' && demo ? '<button class="btn sm" type="button" id="exit-demo">Keluar dari mode contoh</button>' : '';
@@ -386,12 +393,14 @@
   }
 
   function render() {
+    // Satu gerbang untuk semua jalur (hash awal, popstate, go): Pajak Seller tidak pernah tampil bila belum diaktifkan.
+    if (viewName === 'pajak' && !pajakAktif()) viewName = demo ? 'ringkasan' : 'data';
     hideInfo();
     compute();
     renderNav(); renderAccount(); renderTop(); renderSheet();
     const v = $('#view');
     const needData = ['ringkasan', 'produk', 'biaya', 'retur'].includes(viewName) && !last;
-    v.innerHTML = needData ? emptyView() : ({ ringkasan: viewRingkasan, produk: viewProduk, biaya: viewBiaya, retur: viewRetur, simulator: viewSimulator, riwayat: viewRiwayat, data: viewData }[viewName])();
+    v.innerHTML = needData ? emptyView() : ({ ringkasan: viewRingkasan, produk: viewProduk, biaya: viewBiaya, retur: viewRetur, simulator: viewSimulator, riwayat: viewRiwayat, data: viewData, pajak: viewPajak }[viewName])();
     afterRender();
   }
   function afterRender() {
@@ -399,11 +408,12 @@
     if (viewName === 'ringkasan' || viewName === 'biaya') bindTrend($('#monthly'));
     if (viewName === 'produk') renderProducts();
     if (viewName === 'simulator') renderSimOut();
+    if (viewName === 'pajak') renderPajakOut();
     if (viewName === 'data') { renderFiles(); renderCostTable(); }
     if (viewName === 'riwayat') maybeLoadReports();
   }
   function go(name, push = true, section = '') {
-    if (!VIEWS.some((v) => v[0] === name)) name = 'ringkasan';
+    if (!VIEWS.some((v) => v[0] === name) || (name === 'pajak' && !pajakAktif())) name = 'ringkasan';
     viewName = name;
     if (name === 'data') view.section = section || 'unggah';
     // Menu "Pengaturan" / tombol "Atur biaya" langsung membuka bagian biaya tambahan.
@@ -476,6 +486,12 @@
       add('pending', 'Refund parsial: jumlah unit belum diketahui', `Sebagian penjualan tidak masuk dalam perhitungan laba karena jumlah unit pada refund parsial belum dapat diverifikasi. ${num(rpBiasa)} pesanan direfund sebagian tanpa jumlah barang yang tercatat. Nilai refund tidak dipakai untuk menebak jumlah barang.`,
         { label: 'Unggah file retur', go: 'data', section: 'unggah' }, 85, `${fmt(rpx.penjualan - (rpx.penjualanKonflik || 0))} penjualan tidak dihitung`);
     }
+    // Batch 3C: TikTok/Tokopedia — rincian produk laporan penghasilan vs export pesanan, dan indikasi retur (tidak mengubah HPP).
+    const tk = r.ttKuantitas || { belumPasti: 0, indikasiRetur: { jumlahPesanan: 0 } };
+    if (tk.belumPasti > 0) add('pending', 'Jumlah barang belum dapat dipastikan', `${num(tk.belumPasti)} pesanan TikTok/Tokopedia punya rincian produk yang berbeda antara Laporan Penghasilan dan export pesanan, dan tidak bisa dibuktikan dari nilainya. Modal pesanan itu tidak dihitung dalam laba.`,
+      { label: 'Lihat file', go: 'data', section: 'unggah' }, 88);
+    if (tk.indikasiRetur.jumlahPesanan > 0) add('pending', 'Indikasi retur di export pesanan', `${num(tk.indikasiRetur.jumlahPesanan)} pesanan TikTok/Tokopedia tercatat ada barang dikembalikan di export pesanan. Modal tidak dikurangi otomatis karena kondisi barang belum diketahui.`,
+      RETUR, 60);
     // P11: transaksi dengan versi berbeda antarlaporan ditahan (tidak masuk total maupun laba).
     const gb = K.gabungan || {}, ditahan = ['shopee', 'tiktok'].reduce((a, k) => a + ((gb[k] || {}).pesananDitahan || 0) + ((gb[k] || {}).penyesuaianDitahan || 0), 0);
     if (ditahan > 0) {
@@ -989,10 +1005,77 @@
       ${mp.map(([pf, x]) => `<p class="ts-pf">${PLAT_DOT(pf)}${PNAME[pf]} · ${num(x.file.jumlah)} Laporan Penghasilan${x.file.identik ? ` (+${num(x.file.identik)} file sama diabaikan)` : ''}</p>${x.gabungan.ditahan ? `<p class="ts-gab">${trStatus('perlu_rekonsiliasi')} ${num(x.gabungan.ditahan)} transaksi berbeda antarlaporan ditahan, tidak masuk angka di bawah.</p>` : x.gabungan.identitasBelumPasti ? `<p class="ts-gab">${trStatus('perlu_dicek')} ${num(x.gabungan.identitasBelumPasti)} transaksi dengan identitas belum pasti tetap dihitung; total perlu diverifikasi.</p>` : x.gabungan.duplikatDiabaikan ? `<p class="ts-gab">${num(x.gabungan.duplikatDiabaikan)} baris yang sama di beberapa laporan dihitung sekali.</p>` : ''}<ul class="ts-list">${rows(pf, x)}</ul>`).join('')}
       <p class="tiny faint">Angka pesanan dikelompokkan menurut tanggal pesanan, sedangkan periode Laporan Penghasilan mengikuti tanggal dana dilepas atau dibayar. Penyesuaian memakai tanggalnya sendiri. Jadi tidak semua angka di atas memakai basis tanggal yang sama.</p></details>`;
   }
+  /* ---------- Money Trace Shopee v1: saldo penjual (CekSaldo) ----------
+   * Hanya rekonsiliasi; tidak dipakai untuk penjualan, HPP, laba, atau margin. Mencakup seluruh periode file saldo. */
+  const SD_ST = { cocok: ['verified', 'Cocok'], di_luar_periode: ['unknown', 'Di luar periode'], belum_direkonsiliasi: ['pending', 'Belum direkonsiliasi'],
+    tidak_cukup_data: ['unknown', 'Tidak cukup data'] };
+  const SD_WHY = {
+    tanpa_data_bank: 'dana keluar dari Shopee; belum dicocokkan dengan rekening bank karena data bank tidak ada',
+    status_belum_selesai: 'transaksi belum berstatus selesai', jenis_belum_dikenali: 'jenis transaksi belum dikenali',
+    laporan_penghasilan_tidak_ada: 'Laporan Penghasilan Shopee belum diunggah', tanpa_nomor_pesanan: 'tanpa nomor pesanan',
+    tidak_ada_di_penghasilan: 'nomor pesanan tidak ada di Laporan Penghasilan',
+    tidak_ada_di_penghasilan_hari_terakhir: 'masuk saldo di hari terakhir periode Laporan Penghasilan yang diunggah, tetapi tidak ada di laporan itu; kemungkinan dilepas setelah laporan diunduh (di luar cakupan laporan, bukan uang hilang)',
+    di_luar_periode_penghasilan: 'di luar periode Laporan Penghasilan yang diunggah', di_luar_periode_saldo: 'di luar periode laporan saldo yang diunggah',
+    pasangan_sudah_dipakai: 'pasangannya sudah dipakai baris lain', versi_penghasilan_berbeda: 'isi pesanan berbeda di beberapa Laporan Penghasilan',
+    nominal_berbeda: 'nominal berbeda dengan Laporan Penghasilan', tanggal_berbeda: 'tanggal berbeda dengan tanggal dana dilepas',
+    nominal_atau_tanggal_berbeda: 'nominal atau tanggal berbeda dengan saldo', penyesuaian_tanpa_pasangan: 'penyesuaian ini tercatat di saldo, tetapi belum ada pasangan dengan tanggal dan nominal sama di sheet Adjustment Laporan Penghasilan',
+    tidak_ada_di_saldo: 'tidak ada di laporan saldo', nilai_nol_tanpa_mutasi: 'bernilai Rp0, tidak ada mutasi saldo untuk dicocokkan',
+  };
+  const SD_JENIS = { pesanan: 'Penghasilan pesanan', penyesuaian: 'Penyesuaian', penarikan: 'Penarikan dana', lain: 'Transaksi lain' };
+  function saldoTrace() {
+    if (demo || typeof CekSaldo === 'undefined') return null;
+    const sal = files.filter((f) => f.saldo && !f.error), inc = files.filter((f) => f.parsed && f.parsed.kind === 'shopee_income');
+    return sal.length ? CekSaldo.trace(sal.map((f) => f.saldo), inc.map((f) => f.parsed)) : null;
+  }
+  const sdChip = (s, n, v) => { const [c, l] = SD_ST[s]; return `<span class="status ${c} sd-chip">${l} · ${num(n)}${ok(v) && n ? ` · ${fmt(v)}` : ''}</span>`; };
+  function saldoPanel(t) {
+    const S = t.saldo, sal = t.status.saldo;
+    const kotak = [['Saldo awal', S.awal], ['Masuk', S.masuk], ['Keluar', S.keluar], ['Saldo akhir', S.akhir]]
+      .map(([l, v]) => `<div class="sd-k"><span>${l}</span><b class="${v < 0 ? 'neg' : ''}">${fmt(v)}</b></div>`).join('');
+    const kel = ['pesanan', 'penyesuaian', 'penarikan', 'lain'].filter((j) => t.kelompok[j].n)
+      .map((j) => `<li><span>${SD_JENIS[j]}<small>${num(t.kelompok[j].n)} transaksi</small></span><b class="tr-v ${t.kelompok[j].jumlah < 0 ? 'neg' : ''}">${fmt(t.kelompok[j].jumlah)}</b></li>`).join('');
+    const buka = t.item.filter((x) => x.status !== 'cocok');
+    const grup = {};
+    for (const x of buka) { const k = `${x.status}|${x.sumber}|${x.jenis}|${x.alasan}`; (grup[k] = grup[k] || []).push(x); }
+    const rinci = Object.entries(grup).sort(([a], [b]) => SD_ST_ORDER(a) - SD_ST_ORDER(b)).map(([k, l]) => {
+      const [stt, sumber, jenis, alasan] = k.split('|'); const tot = l.reduce((a, x) => a + x.jumlah, 0);
+      const contoh = jenis === 'penarikan' ? '' : `<ul class="sd-ref">${l.slice(0, 20).map((x) => `<li><span>${tgl(x.tanggal)}${x.ref ? ` · ${esc(x.ref)}` : ''}</span><b class="${x.jumlah < 0 ? 'neg' : ''}">${fmt(x.jumlah)}</b></li>`).join('')}${l.length > 20 ? `<li class="faint">dan ${num(l.length - 20)} lainnya</li>` : ''}</ul>`;
+      return `<li><div class="ts-h"><b>${SD_JENIS[jenis]} · ${sumber === 'saldo' ? 'di saldo' : 'di Laporan Penghasilan'}</b><span class="tr-v ${tot < 0 ? 'neg' : ''}">${fmt(tot)}</span></div>
+        <div class="ts-st">${sdChip(stt, l.length)}<span>${esc(SD_WHY[alasan] || alasan)}.</span></div>${contoh}</li>`;
+    }).join('');
+    const pj = t.penyesuaian;
+    // Rincian "Belum direkonsiliasi" per penyebab, agar total campuran tidak terbaca sebagai satu angka "uang hilang".
+    const SD_BELUM = { tidak_ada_di_penghasilan_hari_terakhir: 'pesanan di luar cakupan Laporan Penghasilan yang diunggah', tidak_ada_di_penghasilan: 'pesanan belum ada di Laporan Penghasilan',
+      penyesuaian_tanpa_pasangan: 'penyesuaian belum cocok dengan sheet Adjustment', nominal_berbeda: 'pesanan dengan nominal berbeda', tanggal_berbeda: 'pesanan dengan tanggal berbeda',
+      pasangan_sudah_dipakai: 'transaksi yang pasangannya sudah dipakai', versi_penghasilan_berbeda: 'pesanan dengan versi laporan berbeda' };
+    const belum = {};
+    for (const x of t.item) if (x.sumber === 'saldo' && x.status === 'belum_direkonsiliasi') { const b = belum[x.alasan] = belum[x.alasan] || { n: 0, jumlah: 0 }; b.n++; b.jumlah += x.jumlah; }
+    const belumList = Object.entries(belum).map(([k, v]) => `<li><b>${fmt(v.jumlah)}</b> · ${num(v.n)} ${esc(SD_BELUM[k] || SD_WHY[k] || k)}</li>`).join('');
+    const peringatan = [
+      !S.berantai && `Saldo akhir tidak berantai di ${num(S.putus)} titik, jadi persamaan saldo belum bisa dipastikan. Periode file mungkin terputus.`,
+      !t.file.cocokRingkasan && 'Jumlah baris saldo tidak cocok dengan ringkasan di file.',
+      t.file.barisRusak && `${num(t.file.barisRusak)} baris saldo tidak terbaca dan tidak ikut dihitung.`,
+      pj.belumTerjelaskan && `Penyesuaian di saldo ${fmt(pj.saldo)}, yang cocok dengan Laporan Penghasilan ${fmt(pj.cocok)}. Selisih ${fmt(pj.belumTerjelaskan)} belum terjelaskan dan tidak dikoreksi otomatis.`,
+    ].filter(Boolean);
+    return `<div class="sd-panel" id="saldo-shopee">
+      <p class="tr-after-k">${PLAT_DOT('shopee')}Saldo Penjual Shopee <span class="pd-tag beta">Beta</span></p>
+      <p class="tiny faint">${tgl(t.periode.saldo.dari)} sampai ${tgl(t.periode.saldo.ke)} · seluruh periode file saldo; filter bulan tidak berlaku di sini.${t.file.identik || t.file.barisGanda ? ` ${num(t.file.barisGanda)} baris yang sama di beberapa file dihitung sekali.` : ''}</p>
+      <div class="sd-grid">${kotak}</div>
+      <p class="sd-eq">${S.berantai && S.persamaan ? '<span class="status verified">Saldo berantai</span> Saldo awal + masuk + keluar = saldo akhir.' : '<span class="status pending">Perlu dicek</span> Saldo dalam file tidak berantai.'}</p>
+      <div class="sd-chips" aria-label="Status rekonsiliasi transaksi saldo">${Object.keys(SD_ST).map((k) => sdChip(k, sal[k].n, k === 'belum_direkonsiliasi' ? NaN : sal[k].jumlah)).join('')}</div>
+      ${belumList ? `<div class="sd-belum"><p>Belum direkonsiliasi berarti belum ada pasangannya di laporan lain yang diunggah, <b>bukan uang hilang</b>:</p><ul>${belumList}</ul></div>` : ''}
+      ${peringatan.length ? `<ul class="sd-warn">${peringatan.map((x) => `<li>${esc(x)}</li>`).join('')}</ul>` : ''}
+      <details class="tr-src"><summary>Rincian rekonsiliasi saldo</summary>
+        <ul class="tr-list">${kel}</ul>
+        ${rinci ? `<ul class="ts-list">${rinci}</ul>` : '<p class="tiny faint">Semua transaksi saldo cocok.</p>'}
+        <p class="tiny faint">Dicocokkan per nomor pesanan dengan nominal dan tanggal yang sama persis, satu lawan satu. Transaksi tanpa pasangan tidak dianggap hilang atau salah. Penarikan dana hanya membuktikan dana keluar dari Shopee, bukan dana sudah diterima bank.</p>
+      </details></div>`;
+  }
+  const SD_ST_ORDER = (k) => ['belum_direkonsiliasi', 'di_luar_periode', 'tidak_cukup_data', 'cocok'].indexOf(k.split('|')[0]);
   function moneyTrace(r) {
     const opex = r.fixedMonthly > 0, rb = r.kepastian.risikoBarang, isDrop = typeOf(st()) === 'dropship';
     const out = r.kepastian.cakupan.dikeluarkan;
-    const J = r.jejakUang, JT = J.total;
+    const J = r.jejakUang, JT = J.total, sdT = saldoTrace();
     const others = [
       ...(r.ready && r.knownPacking ? [[isDrop ? 'Biaya dropship' : 'Packing', -r.knownPacking]] : []),
       ...(r.ready && (r.lostCertain || rb.kerugianTanpaNilai) ? [['Kerugian retur', r.lostCertain ? -r.lostCertain : NaN, rb.kerugianTanpaNilai ? `+ ${num(rb.kerugianTanpaNilai)} kasus nilainya belum diketahui.` : '']] : []),
@@ -1019,9 +1102,11 @@
         <p class="tr-after-k">Di luar perhitungan laba</p>
         <ul class="tr-list">
           <li><span>Penyesuaian dari marketplace${adj.jumlah ? `<small>${num(adj.jumlah)} transaksi, dicatat terpisah</small>` : '<small>Tidak ada penyesuaian tercatat di laporan</small>'}${trStatus(adj.status)}</span>${adj.jumlah ? val(adj.nilai) : ''}</li>
-          <li><span>Pencairan dana ke rekening<small>Data pencairan belum tersedia dalam analisis ini.</small>${trStatus(J.pencairan.status)}</span></li>
+          ${sdT ? `<li><span>Penarikan dana dari saldo Shopee<small>${num(sdT.kelompok.penarikan.n)} penarikan. Dana keluar dari Shopee; belum dicocokkan dengan rekening bank. Bukan penjualan.</small>${sdChip('tidak_cukup_data', sdT.kelompok.penarikan.n)}</span>${val(sdT.kelompok.penarikan.jumlah)}</li>`
+            : `<li><span>Pencairan dana ke rekening<small>Data pencairan belum tersedia dalam analisis ini. Unggah Laporan Saldo Penjual Shopee untuk melihat penarikan dana.</small>${trStatus(J.pencairan.status)}</span></li>`}
         </ul>
       </div>
+      ${sdT ? saldoPanel(sdT) : ''}
       ${traceSources(J)}
       ${warnTotal(r)}<p class="tiny faint">Berdasarkan laporan yang diunggah. Dana dilepas belum tentu sama dengan dana yang sudah masuk rekening.</p>`;
   }
@@ -1207,6 +1292,281 @@
     const est = CekTarif.estimate({ platform: plat, status: sim.status, kategori: kat, opsi: sim.opsi, afiliasi: ok(sim.afiliasi) ? sim.afiliasi : 0 });
     return { src, plat, avail, kat, pct: est.pct, fixed: est.fixed, rincian: est.rincian, note: '' };
   }
+  /* ================= Pajak Seller (Batch 4) =================
+   * Simulasi deterministik dari CekPajak (assets/pajak.js). Isian hanya di memori halaman ini: tidak disimpan ke
+   * penyimpanan browser, akun, URL, maupun analytics. Tidak mengubah laporan laba.
+   * Batch 4B: tampilan dibuat bertahap (pertanyaan sederhana → hasil ringkas). Aturan dan angka tetap sepenuhnya dari
+   * CekPajak.hitung; lapisan ini hanya memetakan jawaban ke input yang sama dengan versi sebelumnya. */
+  const BLN = ['Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni', 'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'];
+  const pajak = { tab: 'kalkulator', tahun: 2026, jenis: 'op', rezim: 'final', syaratFinal: false, surat: 'tidak_tahu', sampai: 12,
+    usahaLain: null,   // 'ya' | 'tidak' | 'belum' (belum yakin) | null (belum dijawab)
+    bulan: Array.from({ length: 12 }, () => ({ marketplace: null, lain: null, sumber: null })), dipungutAktual: null, cakupanDikonfirmasi: false, bulanSuratDiterima: null,
+    buka: {} };        // bagian lipat yang sedang terbuka (bertahan saat tampilan dirender ulang)
+  const hariIniLokal = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
+  /** Input CekPajak.hitung dari jawaban. Hanya "Tidak" yang berarti tanpa usaha lain; "Belum yakin" dan belum dijawab membuat
+   *  omzet usaha lain tetap kosong (data belum lengkap), tidak pernah dianggap Rp0. Isian "Ya" yang sudah diketik tidak
+   *  dipakai bila jawabannya diganti. */
+  function pajakInput() {
+    const ya = pajak.usahaLain === 'ya';
+    return { tahun: pajak.tahun, jenis: pajak.jenis, rezim: pajak.rezim, syaratFinal: pajak.syaratFinal, surat: pajak.surat, sampai: pajak.sampai,
+      bulanSuratDiterima: pajak.bulanSuratDiterima, dipungutAktual: pajak.dipungutAktual, cakupanDikonfirmasi: pajak.cakupanDikonfirmasi,
+      tanpaUsahaLain: pajak.usahaLain === 'tidak',
+      bulan: pajak.bulan.map((b) => ({ marketplace: b.marketplace, sumber: b.sumber, lain: ya ? b.lain : null })), hariIni: hariIniLokal() };
+  }
+  const WAKTU = { terjadi: '', berjalan: 'bulan berjalan', mendatang: 'proyeksi', tidak_diketahui: '' };
+  /** Omzet bulanan dari laporan yang diunggah (penjualan engine, tanggal pesanan). Hanya bantuan isian; bisa diubah. */
+  function pajakDariLaporan() {
+    const r = last && last.all;
+    if (!r) return [];
+    return r.months.filter((m) => m.month.startsWith(`${pajak.tahun}-`)).map((m) => ({ bulan: +m.month.slice(5, 7), nilai: Math.round(m.total.sales) }));
+  }
+  function isiPajakDariLaporan() {
+    // Penjualan dari laporan per bulan (tanggal pesanan). Diberi label "dari laporan" dan bisa diubah.
+    for (const { bulan, nilai } of pajakDariLaporan()) Object.assign(pajak.bulan[bulan - 1], { marketplace: nilai, sumber: 'laporan' });
+    render(); toast('Omzet marketplace terisi dari laporan. Periksa kembali: potongan pajak marketplace dihitung dari harga sebelum diskon penjual.');
+  }
+  const rentangBln = (list) => (list.length ? (list.length === 1 ? BLN[list[0] - 1] : `${BLN[list[0] - 1]}–${BLN[list[list.length - 1] - 1]}`) : '');
+  function viewPajak() {
+    const tab = (k, l) => `<button type="button" role="tab" data-pj-tab="${k}" aria-selected="${pajak.tab === k}">${l}</button>`;
+    const head = `<div class="pj-top"><h3 id="pj-t">Pajak Seller <span class="pd-tag beta">Simulasi</span></h3>
+      <p class="small muted">Perkiraan pajak dari omzet Anda. Bukan bukti pajak telah dibayar dan bukan nasihat pajak. Isian tidak disimpan dan tidak dikirim ke server.</p></div>
+      <div class="pd-mp pj-tabs" role="tablist" aria-label="Pajak Seller">${tab('kalkulator', 'Kalkulator pajak')}${tab('surat', 'Surat PMK 37/2025')}</div>`;
+    if (pajak.tab === 'surat') return `<section class="panel pajak" aria-labelledby="pj-t">${head}${viewSurat()}</section>`;
+    const opt = (id, cur, list) => `<select class="plain" id="${id}">${list.map(([v, l]) => `<option value="${v}" ${String(cur) === String(v) ? 'selected' : ''}>${l}</option>`).join('')}</select>`;
+    const pil = (name, cur, list) => `<div class="pj-pil" role="radiogroup">${list.map(([v, l]) => `<label><input type="radio" name="${name}" id="${name}-${v}" value="${v}" ${cur === v ? 'checked' : ''}><span>${l}</span></label>`).join('')}</div>`;
+    const buka = (k) => (pajak.buka[k] ? 'open' : '');
+    const rp = (v) => (v === null || v === undefined ? '' : String(v));
+    const hari = hariIniLokal();
+    const baris = (k, i, b) => {
+      const w = WAKTU[CekPajak.waktuBulan(pajak.tahun, i + 1, hari)];
+      const mp = k === 'mp', val = mp ? b.marketplace : b.lain;
+      return `<div class="pj-row ${w === 'proyeksi' ? 'is-proj' : ''}"><label class="pj-bln" for="pj-${k}-${i}">${BLN[i]}${w ? ` <small class="pj-w">${w}</small>` : ''}<span class="sr-only"> · omzet ${mp ? 'marketplace' : 'usaha lain'}</span></label>
+        <span class="pj-in"><span class="input"><span>Rp</span><input id="pj-${k}-${i}" type="number" inputmode="numeric" min="0" step="1" value="${rp(val)}" placeholder="belum diisi"></span>${mp && b.sumber === 'laporan' ? '<small class="pj-src">dari laporan, setelah diskon</small>' : ''}</span></div>`;
+    };
+    const bulanPeriode = pajak.bulan.slice(0, pajak.sampai);
+    const lap = pajakDariLaporan(), lapTotal = lap.reduce((a, b) => a + b.nilai, 0);
+    const jenisUi = ['koperasi', 'badan'].includes(pajak.jenis) ? 'lain' : pajak.jenis;
+    const final = ['op', 'pp'].includes(pajak.jenis) && pajak.rezim === 'final';
+    return `<section class="panel pajak" aria-labelledby="pj-t">${head}<div class="sim" role="tabpanel"><div class="sim-in">
+      <fieldset class="sim-grp"><legend><span class="sg-n">1</span>Usaha Anda terdaftar sebagai apa?</legend>
+        ${pil('pj-jenis', jenisUi, [['op', 'Perorangan / pribadi'], ['pp', 'PT Perorangan'], ['lain', 'Badan usaha lain']])}
+        ${jenisUi === 'lain' ? `<div class="field"><label for="pj-badan">Jenis badan usaha</label>${opt('pj-badan', pajak.jenis, [['badan', 'CV, firma, PT, BUMDes'], ['koperasi', 'Koperasi']])}</div>` : ''}
+        ${final ? `<label class="check"><input type="checkbox" id="pj-syarat" ${pajak.syaratFinal ? 'checked' : ''}><span>${pajak.jenis === 'op' ? 'Saya memakai tarif UMKM 0,5% dan omzet seluruh usaha saya tidak lebih dari Rp4,8 miliar setahun.' : 'PT Perorangan ini memakai tarif UMKM 0,5% dan omzetnya tidak lebih dari Rp4,8 miliar setahun.'}</span></label>` : ''}
+        ${pajak.jenis === 'op' ? `<div class="field"><span class="label">Sudah mengirim surat pernyataan omzet ke marketplace?</span>
+          ${pil('pj-surat', pajak.surat, [['sudah', 'Sudah'], ['belum', 'Belum'], ['tidak_tahu', 'Belum tahu']])}
+          <span class="tiny faint">Surat bisa dibuat di tab "Surat PMK 37/2025".</span></div>
+          ${pajak.surat === 'sudah' ? `<div class="field"><label for="pj-surat-terima">Bila omzet sudah lewat Rp500 juta: bulan surat "melebihi" diterima marketplace</label>${opt('pj-surat-terima', pajak.bulanSuratDiterima ?? '', [['', 'Belum / anggap tepat waktu'], ...BLN.map((n, i) => [i + 1, n])])}</div>` : ''}` : ''}
+        <details class="pj-lipat" data-pj-buka="lanjut" ${buka('lanjut')}><summary>Pengaturan lain</summary><div class="fields two align">
+          <div class="field"><label for="pj-tahun">Tahun pajak</label>${opt('pj-tahun', pajak.tahun, [[2026, '2026'], [2025, '2025 (belum didukung)'], [2027, '2027 (belum didukung)']])}</div>
+          ${['op', 'pp'].includes(pajak.jenis) ? `<div class="field"><label for="pj-rezim">Cara menghitung pajak</label>${opt('pj-rezim', pajak.rezim, [['final', 'Tarif UMKM 0,5%'], ['umum', 'Tarif umum (pembukuan/norma)']])}</div>` : ''}
+        </div></details>
+      </fieldset>
+      <fieldset class="sim-grp"><legend><span class="sg-n">2</span>Apakah Anda punya omzet dari usaha atau toko lain?</legend>
+        <p class="tiny faint">Misalnya toko offline, marketplace lain yang laporannya belum diunggah, atau jasa. Batas Rp500 juta dihitung dari seluruh usaha.</p>
+        ${pil('pj-lain', pajak.usahaLain, [['ya', 'Ya'], ['tidak', 'Tidak'], ['belum', 'Belum yakin']])}
+        ${pajak.usahaLain === 'ya' ? `<p class="tiny faint">Isi omzet usaha lain per bulan, karena batas Rp500 juta dihitung sejak bulan omzet melewatinya. Bulan kosong tidak dianggap Rp0.</p><div class="pj-rows">${bulanPeriode.map((b, i) => baris('ln', i, b)).join('')}</div>` : ''}
+        ${pajak.usahaLain === 'belum' ? '<p class="small muted">Hasil belum bisa dihitung lengkap sampai omzet usaha lain dipastikan.</p>' : ''}
+      </fieldset>
+      <fieldset class="sim-grp"><legend><span class="sg-n">3</span>Omzet marketplace</legend>
+        ${lap.length ? `<div class="pj-lap"><span>Penjualan dari laporan Cek Untung, ${rentangBln(lap.map((b) => b.bulan))} ${pajak.tahun}<small>setelah diskon penjual</small></span><b>${fmt(lapTotal)}</b></div>
+          <button class="btn sm" type="button" id="pj-isi">Pakai angka laporan</button>`
+    : `<p class="small muted">Belum ada laporan penghasilan ${pajak.tahun}. Unggah laporan, atau isi omzet marketplace di rincian per bulan.</p>`}
+        <p class="small" id="pj-mp-sum" aria-live="polite"></p>
+        <div class="field"><label for="pj-sampai">Hitung sampai bulan</label>${opt('pj-sampai', pajak.sampai, BLN.map((n, i) => [i + 1, `Januari – ${n} ${pajak.tahun}`]))}</div>
+        <details class="pj-lipat" data-pj-buka="rincian" ${buka('rincian')}><summary>Lihat rincian per bulan</summary>
+          <p class="tiny faint">Isi omzet sebelum diskon penjual, bukan dana yang dicairkan dan bukan laba. Bulan yang belum terjadi diberi label proyeksi.</p>
+          <div class="pj-rows">${bulanPeriode.map((b, i) => baris('mp', i, b)).join('')}</div></details>
+      </fieldset>
+      <fieldset class="sim-grp"><legend><span class="sg-n">4</span>Pemeriksaan</legend>
+        <label class="check pj-cakupan"><input type="checkbox" id="pj-cakupan" ${pajak.cakupanDikonfirmasi ? 'checked' : ''}><span>Omzet yang saya isi sudah mencakup <b>seluruh usaha</b> saya pada periode ini (semua marketplace, toko offline, dan jasa).</span></label>
+        <div class="field"><label for="pj-aktual">Pajak yang sudah tercatat dipotong marketplace (opsional)</label><div class="input"><span>Rp</span><input id="pj-aktual" type="number" inputmode="numeric" min="0" step="1" value="${rp(pajak.dipungutAktual)}" placeholder="dari bukti potong"></div></div>
+      </fieldset>
+    </div><div class="sim-out" id="pj-out" aria-live="polite"></div></div></section>`;
+  }
+  /** Alasan singkat "belum bisa dihitung" (bahasa sederhana). Penjelasan aturan lengkap ada di "Penjelasan perhitungan". */
+  const PJ_ALASAN = {
+    tahun_belum_didukung: 'Baru tersedia untuk tahun pajak 2026.',
+    badan_belum_didukung: 'Belum didukung untuk CV, firma, PT, dan BUMDes.',
+    rezim_umum_belum_didukung: 'Tarif umum dihitung dari keuntungan usaha, bukan omzet saja.',
+    syarat_belum_dikonfirmasi: 'Syarat tarif UMKM 0,5% belum dicentang.',
+    data_belum_lengkap: 'Omzet belum lengkap. Bulan kosong tidak dianggap Rp0.',
+    melebihi_batas_4_8_miliar: 'Omzet di atas Rp4,8 miliar setahun belum didukung.',
+    bulan_surat_sebelum_batas: 'Bulan surat diterima lebih awal dari bulan omzet melewati Rp500 juta.',
+    omzet_marketplace_belum_lengkap: 'Omzet marketplace belum diisi untuk semua bulan.',
+    omzet_usaha_lain_belum_diisi: 'Omzet seluruh usaha belum lengkap atau belum dipastikan.',
+    cakupan_belum_dipastikan: 'Belum dipastikan mencakup seluruh usaha.',
+    koperasi_belum_didukung: 'Belum didukung untuk koperasi.',
+  };
+  /** Penjelasan rinci untuk kasus yang belum didukung (ditampilkan di "Penjelasan perhitungan"). */
+  const PJ_ALASAN_RINCI = {
+    badan_belum_didukung: 'Sejak PP 20/2026, CV, firma, PT, dan BUMDes yang baru terdaftar memakai tarif umum; yang lama punya masa transisi masing-masing, dan tarif umum membutuhkan laba fiskal, bukan omzet saja.',
+    koperasi_belum_didukung: 'Jangka waktu tarif 0,5% untuk koperasi belum dapat dipastikan dari sumber resmi yang kami baca.',
+    rezim_umum_belum_didukung: 'Tarif umum (pembukuan atau norma) membutuhkan penghasilan neto, bukan omzet saja.',
+    melebihi_batas_4_8_miliar: 'Di atas Rp4,8 miliar setahun, tarif UMKM 0,5% tidak berlaku lagi; perlakuannya belum didukung kalkulator ini.',
+  };
+  /** Satu langkah berikutnya saat ada angka yang belum bisa dihitung. Urutan = hambatan paling awal dalam alur. */
+  function pajakLangkah(h) {
+    const T = h.terutang, Q = h.pph22, o = h.omzet;
+    const qKurang = Q.status === 'rentang' ? Q.minimal === null : Q.nilai === null;
+    if (T.nilai !== null && !qKurang) return null;
+    if (T.alasan === 'tahun_belum_didukung') return { teks: 'Pilih tahun pajak 2026', ke: 'pj-tahun', buka: 'lanjut' };
+    if (o.negatif) {
+      const r = h.perBulan.find((x) => x.marketplace !== null && x.marketplace < 0);
+      return r ? { teks: `Perbaiki omzet marketplace ${BLN[r.bulan - 1]} yang bernilai minus`, ke: `pj-mp-${r.bulan - 1}`, buka: 'rincian' }
+        : { teks: `Perbaiki omzet usaha lain ${BLN[h.perBulan.find((x) => x.lain !== null && x.lain < 0).bulan - 1]} yang bernilai minus`, ke: `pj-ln-${h.perBulan.find((x) => x.lain !== null && x.lain < 0).bulan - 1}` };
+    }
+    if (o.kosongMarketplace.length) {
+      const lap = pajakDariLaporan().map((b) => b.bulan);
+      if (o.kosongMarketplace.some((b) => lap.includes(b))) return { teks: 'Pakai angka penjualan dari laporan', ke: 'pj-isi' };
+      return { teks: `Isi omzet marketplace ${BLN[o.kosongMarketplace[0] - 1]}`, ke: `pj-mp-${o.kosongMarketplace[0] - 1}`, buka: 'rincian' };
+    }
+    if (o.kosongLain.length) {
+      if (pajak.usahaLain === 'ya') return { teks: `Isi omzet usaha lain ${BLN[o.kosongLain[0] - 1]}`, ke: `pj-ln-${o.kosongLain[0] - 1}` };
+      if (pajak.usahaLain === 'belum') return { teks: 'Pastikan omzet usaha lain, lalu pilih "Ya" atau "Tidak"', ke: 'pj-lain-ya' };
+      return { teks: 'Jawab pertanyaan nomor 2: omzet dari usaha lain', ke: 'pj-lain-ya' };
+    }
+    if (o.status === 'cakupan_belum_dipastikan') return { teks: 'Centang pernyataan "seluruh usaha" di nomor 4', ke: 'pj-cakupan' };
+    if (T.alasan === 'syarat_belum_dikonfirmasi') return { teks: 'Centang syarat tarif UMKM 0,5% di nomor 1', ke: 'pj-syarat' };
+    if (Q.alasan === 'bulan_surat_sebelum_batas') return { teks: 'Periksa bulan surat diterima marketplace', ke: 'pj-surat-terima' };
+    return { teks: 'Hitung bersama konsultan pajak atau kantor pajak (KPP): kalkulator ini belum mendukung kasus Anda.' };
+  }
+
+  /* Generator surat pernyataan PMK 37/2025. Identitas hanya di memori halaman ini (tidak disimpan, tidak dikirim). */
+  const surat = { nama: '', nomor: '', alamat: '', kedudukan: 'wp', wp: { nama: '', nomor: '', alamat: '' }, pilihan: 'sampai', kota: '', tanggal: '',
+    konfirmasi: { seluruhUsaha: false, benar: false }, galat: {}, siap: false };
+  const SR_TUNGGU = '<p class="small muted">Pratinjau dan tombol unduh muncul setelah isian diperiksa.</p>';
+  function viewSurat() {
+    if (!surat.tanggal) surat.tanggal = hariIniLokal();
+    const tersedia = typeof CekSurat !== 'undefined' && CekSurat.tersedia();
+    const g = surat.galat;
+    const err = (k) => (g[k] ? `<span class="pj-err" id="sr-e-${k}">${esc(g[k])}</span>` : '');
+    const inp = (id, k, label, val, extra = '') => `<div class="field ${extra}"><label for="sr-${id}">${label}</label><input class="plain" id="sr-${id}" type="text" value="${esc(val)}" autocomplete="off" ${g[k] ? `aria-invalid="true" aria-describedby="sr-e-${k}"` : ''}>${err(k)}</div>`;
+    const kuasa = surat.kedudukan === 'kuasa';
+    return `<div class="pj-surat-wrap" role="tabpanel">
+      ${tersedia ? '' : `<div class="pj-blocker" role="note"><b>Teks surat resmi belum dimuat.</b> Pratinjau dan PDF baru tersedia setelah teks lampiran PMK 37/2025 (halaman 14–15) disalin kata demi kata dari PDF resmi. Isi surat tidak dikarang.</div>`}
+      <p class="small muted">Satu surat untuk satu NPWP/NIK dan dapat disampaikan ke semua marketplace. Data di bawah hanya diproses di browser ini: tidak disimpan dan tidak dikirim ke server.</p>
+      <fieldset class="sim-grp"><legend><span class="sg-n">1</span>Identitas</legend><div class="fields two align">
+        <div class="field span-all"><span class="label">Yang menandatangani</span><div class="checks">
+          <label class="check"><input type="radio" name="sr-kedudukan" value="wp" ${!kuasa ? 'checked' : ''}><span>Wajib pajak sendiri</span></label>
+          <label class="check"><input type="radio" name="sr-kedudukan" value="kuasa" ${kuasa ? 'checked' : ''}><span>Wakil/kuasa wajib pajak</span></label></div>${err('kedudukan')}</div>
+        ${inp('nama', 'nama', kuasa ? 'Nama wakil/kuasa' : 'Nama', surat.nama)}${inp('nomor', 'nomor', kuasa ? 'NPWP/NIK wakil/kuasa' : 'NPWP/NIK', surat.nomor)}${inp('alamat', 'alamat', kuasa ? 'Alamat wakil/kuasa' : 'Alamat', surat.alamat, 'span-all')}
+        ${kuasa ? `<p class="small span-all pj-sub">Wajib pajak yang diwakili</p>
+        ${inp('wp-nama', 'wpNama', 'Nama wajib pajak', surat.wp.nama)}${inp('wp-nomor', 'wpNomor', 'NPWP/NIK wajib pajak', surat.wp.nomor)}${inp('wp-alamat', 'wpAlamat', 'Alamat wajib pajak', surat.wp.alamat, 'span-all')}` : ''}
+      </div></fieldset>
+      <fieldset class="sim-grp"><legend><span class="sg-n">2</span>Pernyataan omzet</legend>
+        <div class="field"><span class="label">Peredaran bruto (omzet) seluruh usaha pada tahun pajak berjalan</span><div class="checks">
+          <label class="check"><input type="radio" name="sr-pilihan" value="sampai" ${surat.pilihan === 'sampai' ? 'checked' : ''}><span>Sampai dengan Rp500.000.000,00</span></label>
+          <label class="check"><input type="radio" name="sr-pilihan" value="melebihi" ${surat.pilihan === 'melebihi' ? 'checked' : ''}><span>Melebihi Rp500.000.000,00</span></label></div>${err('pilihan')}${err('jenisWp')}
+          <p class="tiny faint">${{ melebihi: 'Menurut kalkulator, omzet tahun berjalan yang sudah terjadi melebihi Rp500 juta.', sampai: 'Menurut kalkulator, omzet tahun berjalan sampai bulan ini belum melebihi Rp500 juta.' }[kondisiKalkulator()] || 'Pilihan belum bisa dicocokkan dengan kalkulator (data omzet seluruh usaha belum lengkap atau belum dikonfirmasi). Pastikan pilihan sesuai keadaan sebenarnya.'}</p></div>
+      </fieldset>
+      <fieldset class="sim-grp"><legend><span class="sg-n">3</span>Pemeriksaan</legend><div class="fields two align">
+        ${inp('kota', 'kota', 'Kota tempat surat dibuat', surat.kota)}
+        <div class="field"><label for="sr-tanggal">Tanggal</label><input class="plain" id="sr-tanggal" type="date" value="${esc(surat.tanggal)}">${err('tanggal')}</div>
+        <label class="check span-all"><input type="checkbox" id="sr-k-seluruh" ${surat.konfirmasi.seluruhUsaha ? 'checked' : ''}><span>Peredaran bruto yang saya nyatakan mencakup <b>seluruh usaha</b> wajib pajak (semua marketplace, toko offline, dan jasa). Kewajiban mengungkap omzet usaha lain ada pada saya.</span></label>${err('seluruhUsaha')}
+        <label class="check span-all"><input type="checkbox" id="sr-k-benar" ${surat.konfirmasi.benar ? 'checked' : ''}><span>Isi surat ini sesuai keadaan sebenarnya, dan saya memahami akibat hukum bila tidak benar.</span></label>${err('benar')}
+      </div>
+        <div class="pj-acts"><button class="btn primary" type="button" id="sr-periksa">${tersedia ? 'Periksa & buat pratinjau' : 'Periksa isian'}</button></div>
+      </fieldset>
+      <fieldset class="sim-grp"><legend><span class="sg-n">4</span>Unduh PDF</legend>
+        <div id="sr-out" aria-live="polite">${surat.siap && tersedia ? `<div class="pj-acts"><button class="btn primary" type="button" id="sr-pdf">Unduh PDF</button></div><p class="small muted">Pratinjau (format Lampiran A PMK 37/2025). Periksa sebelum mengunduh.</p><div class="sr-preview">${CekSurat.html(suratData())}</div>` : SR_TUNGGU}</div>
+        <ul class="pj-warn pj-note"><li>Surat wajib ditandatangani dan dibubuhi meterai sesuai ketentuan.</li><li>Surat tidak dikirim otomatis ke marketplace atau DJP. Sampaikan sendiri melalui fasilitas yang disediakan masing-masing marketplace.</li><li>Bila peredaran bruto melewati Rp500 juta, surat "melebihi" disampaikan paling lambat akhir bulan saat batas terlewati (PMK 37/2025 Ps. 6).</li></ul>
+      </fieldset>
+    </div>`;
+  }
+  /** Kondisi peredaran bruto tahun berjalan dari kalkulator, HANYA bulan yang sudah terjadi/berjalan (tanpa proyeksi).
+   *  'melebihi' bila yang sudah terjadi > Rp500 juta; 'sampai' bila data lengkap & dikonfirmasi s.d. bulan ini; selain itu null. */
+  function kondisiKalkulator() {
+    if (typeof CekPajak === 'undefined') return null;
+    const h = CekPajak.hitung(pajakInput());
+    const nyata = h.perBulan.filter((r) => r.waktu === 'terjadi' || r.waktu === 'berjalan');
+    const total = nyata.reduce((a, r) => a + (r.marketplace || 0) + (r.lain || 0), 0);
+    if (total > CekPajak.BATAS_SURAT) return 'melebihi';
+    const mencakupBulanIni = h.perBulan.some((r) => r.waktu === 'berjalan') || h.perBulan.every((r) => r.waktu === 'terjadi');
+    return h.omzet.status === 'lengkap_menurut_isian' && mencakupBulanIni && nyata.length ? 'sampai' : null;
+  }
+  const suratData = () => ({ ...surat, jenisWp: pajak.jenis, kondisiKalkulator: kondisiKalkulator() });
+  /** Cetak surat lewat dialog cetak browser ("Simpan sebagai PDF"). Wadah cetak dikosongkan lagi setelah selesai. */
+  function cetakSurat() {
+    const isi = CekSurat.html(suratData());
+    if (!isi) return;
+    const box = $('#surat-cetak'); box.innerHTML = isi;
+    document.documentElement.classList.add('cetak-surat');
+    const old = document.title; document.title = 'Surat Pernyataan Peredaran Bruto';
+    const selesai = () => { document.documentElement.classList.remove('cetak-surat'); box.innerHTML = ''; document.title = old; window.removeEventListener('afterprint', selesai); };
+    window.addEventListener('afterprint', selesai);
+    window.print();
+  }
+  function renderPajakOut() {
+    const box = $('#pj-out');
+    if (!box || typeof CekPajak === 'undefined') return;
+    const h = CekPajak.hitung(pajakInput());
+    const T = h.terutang, Q = h.pph22, A = h.aktual, o = h.omzet, sel = CekPajak.selisih(h);
+    const per = `Januari – ${BLN[h.sampai - 1]} ${h.tahun}`;
+    const BELUM = '<b class="pj-v unk">Belum bisa dihitung</b>';
+    const why = (x) => (x.alasan ? `<p class="small muted">${esc(PJ_ALASAN[x.alasan] || x.alasan)}</p>` : '');
+    const proy = (x) => (x.proyeksi ? ' <small class="pj-w">termasuk proyeksi</small>' : '');
+    // Ringkasan omzet marketplace di langkah 3 (diperbarui saat mengetik).
+    const sum = $('#pj-mp-sum');
+    if (sum) {
+      const terisi = h.sampai - o.kosongMarketplace.length;
+      sum.innerHTML = terisi ? `Omzet marketplace yang dihitung: <b>${fmt(o.marketplace)}</b> <span class="muted">(${terisi} dari ${h.sampai} bulan terisi)</span>` : '<span class="muted">Omzet marketplace belum diisi.</span>';
+    }
+    // 1. Pajak usaha
+    const v1 = T.nilai === null ? `${BELUM}${why(T)}` : `<b class="pj-v">${fmt(T.nilai)}</b>`;
+    // 2. Potongan pajak marketplace
+    let v2;
+    if (Q.status === 'rentang') {
+      v2 = Q.minimal === null ? `<b class="pj-v">Paling besar ${fmt(Q.maksimal)}</b><p class="small muted">Batas bawah belum bisa dihitung: omzet seluruh usaha belum lengkap atau belum dipastikan.</p>`
+        : `<b class="pj-v">${fmt(Q.minimal)} – ${fmt(Q.maksimal)}</b>`;
+      v2 += '<p class="small muted">Status surat pernyataan belum diketahui: angka terkecil bila surat sudah dikirim, terbesar bila belum.</p>';
+    } else if (Q.nilai === null) v2 = `${BELUM}${why(Q)}`;
+    else {
+      const lewat = Q.bulanLewat500 ? BLN[Q.bulanLewat500 - 1] : '';
+      const mulai = Q.mulaiDipungutBulan ? (Q.mulaiDipungutBulan <= 12 ? BLN[Q.mulaiDipungutBulan - 1] : 'tahun berikutnya') : '';
+      const ket = { bukan_orang_pribadi: 'Dipotong dari seluruh omzet marketplace sejak 1 November 2026.', tanpa_surat: 'Tanpa surat pernyataan: dipotong dari seluruh omzet marketplace sejak 1 November 2026.' }[Q.skenario]
+        || (lewat ? `Omzet seluruh usaha melewati Rp500 juta pada ${lewat}; dipotong mulai ${mulai}.` : 'Omzet seluruh usaha belum melewati Rp500 juta dan surat sudah dikirim, jadi tidak dipotong.');
+      const asumsi = Q.asumsiSuratTepatWaktu ? `<p class="small warn-text"><b>Asumsi:</b> surat "melebihi" diterima marketplace tepat waktu pada ${lewat}.</p>`
+        : Q.suratTerlambat ? `<p class="small warn-text">Surat diterima marketplace pada ${BLN[Q.bulanSuratDiterima - 1]} (terlambat dari batas akhir bulan).</p>` : '';
+      v2 = `<b class="pj-v">${fmt(Q.nilai)}</b><p class="small muted">${ket}</p>${asumsi}`;
+    }
+    // 3. Pajak yang sudah tercatat (isian pengguna, tidak ditebak)
+    const v3 = A.nilai === null ? '<b class="pj-v unk">Belum diisi</b><p class="small muted">Isi dari bukti potong marketplace di nomor 4. Angka ini tidak ditebak.</p>'
+      : `<b class="pj-v">${fmt(A.nilai)}</b><p class="small muted">Isian Anda, bukan hasil hitung.</p>${sel !== null && sel !== 0 ? `<p class="small warn-text">${sel > 0 ? 'Lebih besar' : 'Lebih kecil'} ${fmt(Math.abs(sel))} dari perkiraan.</p>` : sel === 0 ? '<p class="small muted">Sama dengan perkiraan.</p>' : ''}`;
+    // 4. Yang masih perlu diperiksa (peringatan digabung; empat peringatan material selalu dipertahankan bila berlaku)
+    const cek = [];
+    if (o.dariLaporan.length) cek.push('Omzet dari laporan Cek Untung adalah penjualan setelah diskon penjual. Marketplace memotong pajak dari harga sebelum diskon, jadi potongan sebenarnya bisa lebih besar.');
+    cek.push('Laporan marketplace yang diunggah belum tentu mencakup seluruh usaha Anda (toko lain, toko offline, jasa).');
+    if (o.proyeksi.length || o.berjalan.length) cek.push([o.proyeksi.length ? `${rentangBln(o.proyeksi)} belum terjadi: angkanya proyeksi, bukan transaksi nyata.` : '', o.berjalan.length ? `${rentangBln(o.berjalan)} masih berjalan, omzetnya belum final.` : ''].filter(Boolean).join(' '));
+    if (sel) cek.push('Selisih potongan tercatat dengan perkiraan bisa karena harga sebelum diskon, marketplace yang ditunjuk, waktu surat pernyataan, atau pembatalan/retur.');
+    cek.push('Semua angka di sini perkiraan. Bukan bukti pajak telah dibayar atau dipotong.');
+    const langkah = pajakLangkah(h);
+    const status = { belum_lengkap: 'Data belum lengkap', cakupan_belum_dipastikan: 'Cakupan seluruh usaha belum dipastikan', lengkap_menurut_isian: 'Lengkap menurut isian Anda (belum diverifikasi)' }[o.status];
+    // Penjelasan teknis (dasar pengenaan, PPh final/PPh 22, tanggal surat, sumber aturan).
+    const rinci = PJ_ALASAN_RINCI[T.alasan];
+    const jelas1 = T.status === 'simulasi' ? `Dasar penghitungan: ${fmt(T.dasarKenaPajak)} × 0,5%${h.jenis === 'op' ? ` (omzet di atas Rp500 juta, kumulatif sejak Januari; bagian tidak kena pajak terpakai ${fmt(T.tidakKenaPajak)})` : ' (seluruh peredaran bruto; perseroan perorangan tidak mendapat bagian Rp500 juta)'}.`
+      : rinci || esc(PJ_ALASAN[T.alasan] || '');
+    const jelas2 = Q.skenario === 'dengan_surat' && Q.bulanLewat500 ? `Surat "melebihi" wajib disampaikan paling lambat akhir ${BLN[Q.bulanLewat500 - 1]} (PMK 37/2025 Ps. 6 ayat 7). Pemotongan mulai awal bulan berikutnya setelah surat diterima marketplace (Ps. 7 ayat 3) dan tidak sebelum 1 November 2026. ` : '';
+    box.innerHTML = `<div class="pj-res">
+      <p class="pj-per">Periode: <b>${per}</b> · ${esc(h.jenisLabel)}${o.proyeksi.length ? ` · <span class="warn-text">termasuk proyeksi ${o.proyeksi.map((b) => BLN[b - 1]).join(', ')}</span>` : ''}</p>
+      <div class="pj-st"><span class="status ${o.status === 'lengkap_menurut_isian' ? 'estimate' : 'pending'}">${status}</span></div>
+      ${langkah ? `<div class="pj-next" role="note"><span class="pj-k">Langkah berikutnya</span>${langkah.ke ? `<button type="button" class="btn sm primary" data-pj-ke="${langkah.ke}" ${langkah.buka ? `data-pj-buka-ke="${langkah.buka}"` : ''}>${esc(langkah.teks)}</button>` : `<p class="small">${esc(langkah.teks)}</p>`}</div>` : ''}
+      <div class="pj-card" data-pj="terutang"><span class="pj-k">Perkiraan pajak usaha (PPh final)${T.nilai !== null ? proy(T) : ''}</span>${v1}</div>
+      <div class="pj-card" data-pj="pph22"><span class="pj-k">Perkiraan potongan pajak marketplace (PPh 22)${Q.nilai !== null || Q.status === 'rentang' ? proy(Q) : ''}</span>${v2}</div>
+      <div class="pj-card" data-pj="aktual"><span class="pj-k">Pajak yang sudah tercatat dipotong marketplace</span>${v3}</div>
+      <div class="pj-cek"><span class="pj-k">Yang masih perlu diperiksa</span><ul class="pj-warn">${cek.map((c) => `<li>${esc(c)}</li>`).join('')}</ul></div>
+      <details class="tr-src pj-lipat" data-pj-buka="penjelasan" ${pajak.buka.penjelasan ? 'open' : ''}><summary>Penjelasan perhitungan</summary>
+        <dl class="pj-dl">
+          <div><dt>Omzet marketplace</dt><dd>${fmt(o.marketplace)}</dd></div>
+          <div><dt>Omzet usaha lain</dt><dd>${o.kosongLain.length ? 'Belum diisi' : fmt(o.lain)}</dd></div>
+          <div class="pj-tot"><dt>Total omzet usaha</dt><dd>${o.lengkap ? fmt(o.total) : `${fmt(o.total)}<small> (dari bulan yang diisi)</small>`}</dd></div>
+        </dl>
+        <p class="small"><b>Pajak usaha (PPh final 0,5%).</b> ${jelas1}</p>
+        <p class="small"><b>Potongan marketplace (PPh Pasal 22).</b> ${jelas2}Berlaku mulai 1 November 2026 (pengumuman DJP); omzet sebelum itu tidak dipotong. Tarif 0,5% dari peredaran bruto sebelum diskon penjual, tanpa PPN. Orang pribadi dengan omzet seluruh usaha sampai Rp500 juta yang sudah mengirim surat pernyataan tidak dipotong. Daftar marketplace pemotong akan ditunjuk ulang oleh DJP; hitungan ini menganggap omzet marketplace berasal dari marketplace yang ditunjuk.</p>
+        <p class="small">PPh 22 yang dipotong marketplace adalah bagian dari pelunasan PPh final, bukan pajak tambahan; kekurangannya disetor sendiri. Pajak di sini tidak mengurangi laba pada laporan Cek Untung.</p>
+        <p class="small"><b>Dasar aturan</b></p>
+        <ul class="ts-list">${h.aturan.map((a) => `<li><div class="ts-h"><b>${esc(a.kode)}</b></div><p>${esc(a.isi)} Berlaku: ${esc(a.berlaku)}. <a href="${esc(a.sumber)}" target="_blank" rel="noopener">Sumber</a></p></li>`).join('')}</ul>
+        <p class="tiny faint">Diperiksa 27 Oktober 2026. Aturan pajak bisa berubah; periksa kembali di pajak.go.id sebelum dipakai.</p></details></div>`;
+  }
   function viewSimulator() {
     const f = simFee();
     const s = st();
@@ -1304,6 +1664,133 @@
         <span class="ic">${typeIcon(k)}</span><span><b>${t.label}</b><span>${t.desc}</span></span></button>`).join('')}</div>
       ${cur ? '<div><button class="btn sm quiet" type="button" data-type-close>Batal</button></div>' : ''}</section>`;
   }
+  /* ---------- Pusat Data Marketplace ----------
+   * Peta jenis laporan per marketplace dan kategori. Hanya jenis yang punya parser di engine yang bisa diunggah;
+   * sisanya ditampilkan jujur sebagai "Memerlukan sampel data" (tanpa parser, tanpa angka). Status unggah diambil dari
+   * hasil parser dan engine (files, last.all.jejakUang), bukan dihitung ulang di sini. */
+  const MP_NAMA = { shopee: 'Shopee', tiktok: 'TikTok Shop', tokopedia: 'Tokopedia', lazada: 'Lazada' };
+  const KATEGORI = [
+    ['income', 'Penghasilan dan biaya marketplace', 'Sumber penjualan, potongan marketplace, dan dana diterima. Wajib untuk analisis laba.'],
+    ['orders', 'Penjualan dan pesanan', 'Jumlah barang, SKU, dan variasi tiap pesanan agar modal per produk lebih tepat. Tidak menambah penjualan.'],
+    ['ads', 'Iklan dan promosi', 'Biaya iklan dan promosi di luar potongan per pesanan.'],
+    ['return', 'Retur dan refund', 'Kasus retur dan refund, termasuk barang yang tidak kembali.'],
+    ['balance', 'Saldo marketplace', 'Mutasi saldo penjual.'],
+    ['payout', 'Penarikan atau pencairan dana', 'Dana yang dipindahkan ke rekening Anda.'],
+    ['product', 'Produk, SKU, variasi, dan stok', 'Daftar produk dan stok dari Seller Centre.'],
+    ['modal', 'Modal, HPP, dan biaya tambahan', 'Modal per produk lewat template Cek Untung. Biaya tetap dan packing diisi di Pengaturan.'],
+  ];
+  const PERLU = { st: 'need' };
+  const BETA_EXPORT = 'Format export marketplace dapat berubah. Hasil pencocokan ditandai bila belum dapat diverifikasi.';
+  const MODAL_SUP = { st: 'ok', kind: 'modal_template', fmt: '.xlsx / .csv', how: 'Unduh template di bagian Modal & HPP, isi, lalu unggah kembali.' };
+  const SUMBER = {
+    shopee: {
+      income: { st: 'ok', kind: 'shopee_income', fmt: '.xlsx', how: 'Keuangan › Penghasilan Saya › tab Sudah Dilepas › Unduh' },
+      orders: { st: 'beta', kind: 'shopee_orders', fmt: '.xlsx', how: 'Pesanan Saya › Export', note: BETA_EXPORT },
+      ads: { st: 'need', note: 'Laporan iklan belum dibaca. Agar tidak terhitung dua kali, biaya iklan bisa dicatat sebagai biaya tetap di Pengaturan.' },
+      return: { st: 'ok', kind: 'shopee_return', fmt: '.xlsx' },
+      balance: { st: 'beta', kind: 'shopee_balance', fmt: '.xlsx', how: 'Keuangan › Saldo Penjual › Laporan Transaksi › Unduh (pilih periode yang sama dengan Laporan Penghasilan)',
+        note: 'Hanya untuk menelusuri dana di Jejak uang. Tidak mengubah penjualan, modal, atau laba. Format baru diuji dengan satu file asli.' },
+      payout: { st: 'need', note: 'Penarikan dana terlihat dari Laporan Saldo Penjual, tetapi dana masuk ke rekening bank belum bisa dicocokkan. Pencairan tidak pernah dihitung sebagai penjualan.' },
+      product: PERLU, modal: MODAL_SUP,
+    },
+    tiktok: {
+      income: { st: 'ok', kind: 'tiktok_income', fmt: '.xlsx', how: 'Keuangan › Transaksi › Unduh (pesanan Tokopedia ikut di sini)' },
+      orders: { st: 'beta', kind: 'tiktok_orders', fmt: '.csv', how: 'Pesanan › Kelola pesanan › Ekspor', note: BETA_EXPORT },
+      ads: { st: 'need', note: 'Laporan iklan belum dibaca. Agar tidak terhitung dua kali, biaya iklan bisa dicatat sebagai biaya tetap di Pengaturan.' },
+      return: { st: 'ok', kind: 'tiktok_return', fmt: '.csv' },
+      balance: PERLU, payout: { st: 'need', note: 'Pencairan dana tidak pernah dihitung sebagai penjualan.' }, product: PERLU, modal: MODAL_SUP,
+    },
+    // Batch 3C: laporan keuangan Tokopedia = Laporan Penghasilan TikTok Shop gabungan (diuji dengan file asli); parser TikTok dipakai ulang.
+    tokopedia: {
+      income: { st: 'ok', kind: 'tiktok_income', fmt: '.xlsx', how: 'TikTok Seller Center › Keuangan › Transaksi › Unduh',
+        guna: 'Satu file berisi transaksi Tokopedia dan TikTok Shop. Kanalnya dipisahkan dari kolom "Sumber pesanan".',
+        note: 'File ini sama dengan Laporan Penghasilan di tab TikTok Shop. Cukup unggah sekali; bila terunggah di dua tab, transaksinya tetap dihitung sekali.' },
+      orders: { st: 'beta', kind: 'tiktok_orders', fmt: '.csv', how: 'TikTok Seller Center › Pesanan › Kelola pesanan › Ekspor',
+        guna: 'Membaca SKU, variasi, dan jumlah barang pesanan Tokopedia dan TikTok Shop. Tidak menambah penjualan.', note: BETA_EXPORT },
+      ads: PERLU, return: PERLU,
+      balance: PERLU, payout: PERLU, product: PERLU, modal: MODAL_SUP,
+    },
+    lazada: { income: PERLU, orders: PERLU, ads: PERLU, return: PERLU, balance: PERLU, payout: PERLU, product: PERLU,
+      modal: { st: 'na', note: 'Berlaku setelah laporan Lazada didukung.' } },
+  };
+  /** Peran laporan di alur unggah: utama (wajib untuk laba) atau pendukung (opsional). Mengikuti parser yang ada. */
+  const PERAN = { income: 'utama', modal: 'utama', orders: 'pendukung', return: 'pendukung', balance: 'pendukung' };   // modal: bukan file, tetapi wajib untuk laba
+  const NAMA_SINGKAT = { income: 'Laporan Penghasilan', orders: 'Pesanan', return: 'Retur & refund', balance: 'Saldo Penjual', modal: 'Modal / HPP' };
+  const GUNA_SINGKAT = { income: 'Sumber utama penjualan, potongan marketplace, dan dana diterima.',
+    orders: 'Membaca jumlah barang, SKU, dan variasi agar modal per produk lebih tepat.',
+    return: 'Memeriksa pengembalian dana dan barang yang tidak kembali.',
+    balance: 'Menelusuri dana masuk, penyesuaian, dan penarikan. Tidak mengubah laba.', modal: 'Diisi di bagian Modal & HPP, lewat tabel atau template.' };
+  /**
+   * Status ringkas satu laporan dari hasil validasi nyata (parser + rekonsiliasi engine). Mengembalikan daftar
+   * [kelas, teks]; rincian per file tetap ada di daftar file di bawah.
+   */
+  function statusKategori(pf, cat, sup) {
+    const out = [];
+    const salah = files.filter((f) => f.expect === sup.kind && f.kind !== sup.kind);
+    const ok1 = files.filter((f) => !f.error && f.kind === sup.kind);
+    if (ok1.length) out.push(['ok', `Berhasil dibaca · ${num(ok1.length)} file`]);
+    if (cat === 'income' && ok1.length) {
+      const J = last && last.all && last.all.jejakUang && last.all.jejakUang.marketplace && last.all.jejakUang.marketplace[pf === 'tokopedia' ? 'tiktok' : pf];
+      const cocok = ok1.filter((f) => { const q = f.parsed; const ref = pf === 'shopee' ? q.check.summaryTotal : q.check.reportSettle; return ref !== null && Math.abs(ref - q.check.sum) <= 1; }).length;
+      if (J && ((J.file && J.file.identik) || (J.gabungan && J.gabungan.duplikatDiabaikan))) out.push(['info', 'Duplikat diabaikan']);
+      if (cocok < ok1.length || (J && J.gabungan && (J.gabungan.ditahan || J.gabungan.status === 'periode_perlu_dicek'))) out.push(['warn', 'Perlu diperiksa']);
+    }
+    if (salah.length) out.push(['bad', `Format tidak sesuai · ${num(salah.length)} file`]);
+    // Tab Tokopedia: file yang sama dengan tab TikTok Shop; tampilkan bagian Tokopedia yang benar-benar terbaca.
+    if (pf === 'tokopedia' && cat === 'income' && ok1.length) {
+      const toko = last && last.all && last.all.tiktok && last.all.tiktok.bySource && last.all.tiktok.bySource.Tokopedia;
+      out.push(['info', toko ? `Tokopedia: ${num(toko.orders)} pesanan terjual` : 'Belum ada pesanan bersumber Tokopedia']);
+    }
+    return out;
+  }
+  const chip = ([c, t]) => `<span class="pd-chip ${c}">${esc(t)}</span>`;
+  function barisLaporan(mp, cat) {
+    const sup = SUMBER[mp][cat];
+    const peran = PERAN[cat];
+    const beta = sup.st === 'beta';
+    const tag = `${cat === 'modal' ? '<span class="pd-tag wajib">Wajib untuk laba</span>' : peran === 'utama' ? '<span class="pd-tag wajib">Wajib</span>' : '<span class="pd-tag">Opsional</span>'}${beta ? '<span class="pd-tag beta" title="Belum diuji dengan semua format file asli">Beta</span>' : ''}`;
+    const id = `in-${mp}-${cat}`;
+    let aksi = '';
+    if (cat === 'modal') aksi = '<button class="btn sm" type="button" data-go="data" data-section="modal">Isi modal</button>';
+    else if (!demo && sup.kind) aksi = `<input id="${id}" class="sr-only pick" type="file" multiple accept="${sup.fmt === '.csv' ? '.csv' : '.xlsx,.xls,.csv'}" data-expect="${sup.kind}" aria-label="Pilih file ${NAMA_SINGKAT[cat]} ${MP_NAMA[mp]}"><label class="btn sm ${peran === 'utama' ? 'primary' : ''}" for="${id}" aria-hidden="true">Pilih file</label>`;
+    const st = cat === 'modal' ? [] : statusKategori(mp, cat, sup);
+    const bantu = sup.how || sup.note;
+    return `<li class="pd-row">
+      <div class="pd-main"><div class="pd-name"><b>${NAMA_SINGKAT[cat]}</b>${tag}</div>
+        <p>${sup.guna || GUNA_SINGKAT[cat]}${sup.fmt && cat !== 'modal' ? ` <span class="pd-fmt">Format ${esc(sup.fmt)}</span>` : ''}</p>
+        ${st.length ? `<div class="pd-chips">${st.map(chip).join('')}</div>` : ''}</div>
+      <div class="pd-act">${aksi}${bantu && cat !== 'modal' ? `<details class="pd-help"><summary>${sup.how ? 'Cara download' : 'Catatan'}</summary><p>${sup.how ? `${esc(sup.how)}. ` : ''}${sup.note ? esc(sup.note) : ''}</p></details>` : ''}</div>
+    </li>`;
+  }
+  function pusatData() {
+    const ada = (k) => files.some((f) => f.kind && f.kind.startsWith(k));
+    const mp = view.mp || (ada('tiktok') && !ada('shopee') ? 'tiktok' : 'shopee');
+    const S = SUMBER[mp];
+    const bisa = (cat) => ['ok', 'beta'].includes(S[cat].st) && S[cat].kind;
+    const utama = KATEGORI.filter(([c]) => PERAN[c] === 'utama' && (bisa(c) || (c === 'modal' && S[c].st !== 'na'))).map(([c]) => c);
+    const pend = KATEGORI.filter(([c]) => PERAN[c] === 'pendukung' && bisa(c)).map(([c]) => c);
+    // Belum tersedia: kategori tanpa parser, termasuk saldo Shopee (dikenali tetapi tidak dipakai dalam laba).
+    const belum = KATEGORI.filter(([c]) => !utama.includes(c) && !pend.includes(c) && S[c].st !== 'via');
+    const via = KATEGORI.filter(([c]) => S[c].st === 'via');
+    const isi = mp === 'lazada' || (!utama.length && !via.length)
+      ? `<p class="pd-kosong">Laporan ${MP_NAMA[mp]} belum bisa dibaca. Kami memerlukan sampel file ekspor asli sebelum membuat pembacanya, agar tidak menghasilkan angka yang salah.</p>`
+      : `${via.length ? `<div class="pd-via"><p><b>Pesanan Tokopedia</b> terbaca dari Laporan Penghasilan TikTok Shop. Unggah laporan itu di tab TikTok Shop; jangan unggah laporan Tokopedia terpisah untuk pesanan yang sama.</p><button class="btn sm" type="button" data-mp="tiktok">Buka tab TikTok Shop</button></div>` : ''}
+        ${utama.length ? `<h4 class="pd-g">Laporan utama</h4><ul class="pd-rows">${utama.map((c) => barisLaporan(mp, c)).join('')}</ul>` : ''}
+        ${pend.length ? `<h4 class="pd-g">Laporan pendukung</h4><ul class="pd-rows">${pend.map((c) => barisLaporan(mp, c)).join('')}</ul>` : ''}`;
+    return `<section class="panel pusat-data" id="sec-unggah" aria-labelledby="pd-t">
+      <div class="pd-top"><h3 id="pd-t">Unggah laporan</h3><p class="small muted">Pilih marketplace, lalu unggah laporannya. File diolah di browser Anda, tidak dikirim ke server.</p></div>
+      <div class="pd-mp" role="tablist" aria-label="Marketplace">${Object.entries(MP_NAMA).map(([k, l]) => `<button type="button" role="tab" aria-selected="${mp === k}" data-mp="${k}"><i class="sw ${k}" aria-hidden="true"></i>${l}</button>`).join('')}</div>
+      <div role="tabpanel" aria-label="Laporan ${MP_NAMA[mp]}" class="pd-panel">
+        ${isi}
+        ${belum.length ? `<details class="pd-lain" ${mp === 'lazada' ? 'open' : ''}><summary>Belum tersedia untuk ${MP_NAMA[mp]} (${num(belum.length)})</summary><ul>${belum.map(([c, nama]) => { const sup = S[c]; return `<li><b>${nama}</b><span>${esc(sup.note || (sup.st === 'na' ? 'Belum berlaku.' : 'Memerlukan sampel file ekspor asli. Belum ada angka yang dihitung.'))}</span></li>`; }).join('')}</ul></details>` : ''}
+      </div>
+      <div class="drop drop-mini" id="drop"><span><b>Punya beberapa file sekaligus?</b> Tarik ke sini atau <label class="btn link" for="file-input">pilih banyak file</label>. Jenisnya dikenali otomatis dari isi file.</span>
+        <input id="file-input" type="file" multiple accept=".xlsx,.xls,.csv" class="sr-only pick" aria-label="Pilih banyak file laporan sekaligus"></div>
+      <details class="files-wrap" id="file-wrap" hidden><summary id="file-rekap"></summary><ul class="files" id="file-list"></ul></details>
+      <div id="upload-status" aria-live="polite"></div>
+      ${files.length ? '<div><button class="btn sm quiet danger" type="button" id="clear-btn">Hapus semua file</button></div>' : ''}
+    </section>`;
+  }
   function viewData() {
     const s = st();
     const r = last && last.all;
@@ -1315,28 +1802,13 @@
     const steps = [['Jenis usaha', !!type, 'cara modal dihitung'], ['Laporan penghasilan', hasIncome || demo, 'wajib, dari Seller Centre'],
       ['Modal & HPP', !!(r && r.totalSales && r.coverage >= 0.98), r && r.totalSales ? `${pct(r.coverage, 0)} penjualan punya modal` : 'agar laba bisa dihitung'], ['Biaya & target', !!((s.fixedCosts || []).length || ok(s.packing)), 'opsional']];
     const sec = view.section || 'unggah';
-    const SUP = [['Wajib', 'req', [['shopee', 'Shopee', 'Laporan Penghasilan', 'Keuangan › Penghasilan Saya › tab Sudah Dilepas › Unduh'], ['tiktok', 'TikTok Shop', 'Laporan Penghasilan', 'Keuangan › Transaksi › Unduh (pesanan Tokopedia ikut di sini)']]],
-      ['Disarankan', 'rec', [['shopee', 'Shopee', 'Export pesanan', 'Pesanan Saya › Export, untuk jumlah barang dan SKU', true], ['tiktok', 'TikTok Shop', 'Export pesanan', 'Pesanan › Kelola pesanan › Ekspor', true]]],
-      ['Opsional', 'opt', [['', 'Shopee / TikTok', 'File retur atau pengembalian', 'untuk menandai barang yang tidak kembali'], ['modal', 'Cek Untung', 'Template modal terisi', 'diunduh dari bagian Modal & HPP']]]];
     return `
       ${demo ? '<p class="note-box warn">Mode contoh memakai data dan modal Toko Contoh Sejahtera. Unggah file Anda untuk mulai; data contoh akan diganti.</p>' : ''}
       <ol class="setup-steps" aria-label="Langkah persiapan">${steps.map(([t, done, d], i) => `<li class="${done ? 'done' : ''}"><span class="ss-n" aria-hidden="true">${done ? '✓' : i + 1}</span><span><b>${t}</b><small>${done ? 'selesai' : d}</small></span><span class="sr-only">${done ? 'selesai' : 'belum'}</span></li>`).join('')}</ol>
       <nav class="sec-tabs" aria-label="Bagian halaman data">${[['unggah', 'Unggah data'], ['modal', 'Modal & HPP'], ['pengaturan', 'Pengaturan']].map(([k, l]) => `<button type="button" data-go="data" data-section="${k}" ${sec === k ? 'aria-current="true"' : ''}>${l}</button>`).join('')}</nav>
       ${!demo && (!type || view.typeOpen) ? typePicker(type) : ''}
       <div class="grid-2 data-grid" style="align-items:start">
-        <section class="stack" id="sec-unggah" aria-label="Data penghasilan">
-          <div class="grp-head"><span class="grp-n" aria-hidden="true">1</span><b>Data penghasilan</b><span class="badge todo">Wajib</span><span class="tiny faint grp-sub">Laporan Penghasilan dari Seller Centre: sumber penjualan, potongan, dan dana diterima.</span></div>
-          <div class="drop" id="drop"><span class="ic">${svg('data', 24)}</span><strong>Tarik file laporan ke sini</strong>
-            <span class="small muted drop-sub">atau pilih dari komputer / HP Anda. File dibaca di browser ini, tidak dikirim ke server.</span>
-            <label class="btn primary" for="file-input">Pilih file</label><input id="file-input" type="file" multiple accept=".xlsx,.xls,.csv" hidden>
-            <span class="drop-fmt"><span>.xlsx</span><span>.xls</span><span>.csv</span><span class="faint">boleh banyak sekaligus; file yang sama tidak dihitung dua kali</span></span></div>
-          <ul class="files" id="file-list"></ul>
-          <div id="upload-status" aria-live="polite"></div>
-          ${files.length ? '<div><button class="btn sm quiet danger" type="button" id="clear-btn">Hapus semua file</button></div>' : ''}
-          <section class="panel sup" aria-labelledby="sup-h"><div class="panel-head" style="margin:0 0 4px"><h3 id="sup-h">Laporan yang didukung</h3><p>Unduh untuk periode yang sama di semua laporan</p></div>
-            ${SUP.map(([lvl, cls, items]) => `<div class="sup-g ${cls}"><span class="sup-lvl">${lvl}</span><ul>${items.map(([p, pl, t, how, beta]) => `<li><span class="sup-plat">${p ? `<i class="sw" style="background:var(--${p === 'modal' ? 'accent' : p})"></i>` : ''}${pl}</span><b>${t}${beta ? ' <span class="beta-tag" title="Belum diuji dengan semua format file asli">Beta</span>' : ''}</b><small>${how}</small></li>`).join('')}${cls === 'rec' ? '<li class="beta-note">Format export marketplace dapat berubah. Hasil pencocokan ditandai bila belum dapat diverifikasi.</li>' : ''}</ul></div>`).join('')}
-            <p class="tiny faint">Jenis file dikenali dari nama sheet dan kolom di dalamnya, bukan dari nama file. Nama menu di Seller Centre bisa sedikit berubah dari waktu ke waktu.</p></section>
-        </section>
+        ${pusatData()}
         <section class="panel modal-panel" id="sec-modal" aria-label="Modal dan HPP">
           <div class="panel-head" style="margin:0"><h3><span class="grp-n" aria-hidden="true">2</span>${type === 'produsen' ? 'Modal produksi (HPP)' : 'Modal barang / HPP'}${qi('modal')} <span class="badge todo">Wajib untuk laba</span></h3>${r && r.totalSales ? `<span class="badge ${r.coverage >= 0.98 ? 'ok' : 'todo'}">${r.coverage >= 0.98 ? 'Lengkap' : `${pct(r.coverage, 0)} penjualan`}</span>` : ''}</div>
           ${type ? `<div class="type-chip"><span class="ic">${typeIcon(type, 16)}</span><span>${TYPES[type].label}</span>${demo ? '' : '<button class="btn link" type="button" data-type-open>Ubah</button>'}</div>` : ''}
@@ -1535,19 +2007,26 @@
       try {
         if (!window.XLSX) throw new Error('Pembaca Excel gagal dimuat. Muat ulang halaman.');
         const wbx = isCsv ? XLSX.read(reader.result, { type: 'string', raw: true }) : XLSX.read(new Uint8Array(reader.result), { type: 'array' });
-        const parsed = Engine.parseWorkbook({ name: file.name, sheets: Engine.sheetsFromSheetJS(XLSX, wbx) });
-        resolve({ name: file.name, kind: parsed.kind, parsed });
+        const sheets = Engine.sheetsFromSheetJS(XLSX, wbx);
+        // File tanpa satu pun sel berisi: beri tahu terus terang, jangan dianggap laporan dengan nilai nol.
+        const isi = Object.values(sheets).some((rows) => (rows || []).some((r) => (r || []).some((c) => c !== null && c !== undefined && String(c).trim() !== '')));
+        if (!isi) { resolve({ name: file.name, kind: 'unknown', error: 'File kosong: tidak ada data yang bisa dibaca.' }); return; }
+        const parsed = Engine.parseWorkbook({ name: file.name, sheets });
+        // Saldo Shopee dibaca CekSaldo, disimpan terpisah (f.saldo). parsed tetap {kind} sehingga Engine.compute tidak berubah.
+        const saldo = parsed.kind === 'shopee_balance' && typeof CekSaldo !== 'undefined' ? CekSaldo.parse(sheets) : null;
+        resolve({ name: file.name, kind: parsed.kind, parsed, ...(saldo ? { saldo } : {}) });
       } catch (err) { resolve({ name: file.name, kind: 'unknown', error: err.message || 'File tidak bisa dibaca.' }); }
     };
     reader.onerror = () => resolve({ name: file.name, kind: 'unknown', error: 'File tidak bisa dibaca.' });
     if (isCsv) reader.readAsText(file, 'utf-8'); else reader.readAsArrayBuffer(file);
   });
-  async function addFiles(list) {
+  async function addFiles(list, expect = '') {
     if (!list || !list.length) return;
     if (demo) { demo = false; files = []; resetView(); }
-    const fl = $('#file-list'); if (fl) fl.insertAdjacentHTML('beforeend', `<li class="file small muted">Membaca ${list.length} file…</li>`);
+    const fw = $('#file-wrap'), fr = $('#file-rekap'); if (fw && fr) { fw.hidden = false; fr.innerHTML = `<span class="fr-main">Membaca ${num(list.length)} file…</span>`; }
     toast(`Membaca ${list.length} file…`);
     const results = await Promise.all([...list].map(readFile));
+    if (expect) results.forEach((f) => { f.expect = expect; });
     for (const f of results) if (f.parsed && f.parsed.kind === 'modal_template') { mergeCatalog(f.parsed.entries); f.note = `${num(f.parsed.entries.length)} modal produk dimuat`; toast(f.note); }
     const hadIncome = !!last;
     files.push(...results);
@@ -1559,6 +2038,11 @@
     const box = $('#upload-status'); if (box && box.firstElementChild) box.scrollIntoView({ block: 'center' });
   }
   function fileStatus(f) {
+    const beda = f.expect && f.kind !== f.expect
+      ? `<br><span class="warn">Dipilih untuk ${esc(KIND[f.expect] ? KIND[f.expect][1] : 'kategori lain')}, tetapi ${f.kind === 'unknown' ? 'isinya tidak sesuai format itu' : `isinya ${esc(KIND[f.kind] ? KIND[f.kind][1] : 'jenis lain')}. Diproses sesuai isinya`}.</span>` : '';
+    return fileStatusDasar(f) + beda;
+  }
+  function fileStatusDasar(f) {
     if (f.error) return `<span class="bad">${esc(f.error)}</span>`;
     if (f.note) return `<span class="ok">${esc(f.note)}</span>`;
     const p = f.parsed;
@@ -1577,12 +2061,19 @@
     }
     if (p.kind === 'shopee_orders' || p.kind === 'tiktok_orders') return `${num(p.lines.length)} baris produk`;
     if (p.kind === 'shopee_return' || p.kind === 'tiktok_return') return `${p.cases.length} pengajuan retur atau refund`;
-    if (p.kind === 'shopee_balance') return 'Tidak diperlukan. Gunakan Laporan Penghasilan.';
+    if (p.kind === 'shopee_balance') {
+      const q = f.saldo;
+      if (!q) return '<span class="warn">Dikenali sebagai laporan saldo, tetapi belum bisa dibaca.</span>';
+      const per = q.meta.dari ? `, ${tgl(q.meta.dari)} sampai ${tgl(q.meta.ke)}` : '';
+      return `${num(q.rows.length)} transaksi saldo${per}<br>${q.cocokRingkasan === false ? '<span class="warn">Jumlah baris tidak cocok dengan ringkasan di file</span>'
+        : q.cocokRingkasan ? '<span class="ok">Cocok dengan ringkasan di file</span>' : '<span class="warn">Ringkasan tidak ditemukan</span>'}${q.rantai.berantai ? '' : `<br><span class="warn">Saldo akhir tidak berantai di ${num(q.rantai.putus)} baris</span>`}${q.barisRusak.length ? `<br><span class="warn">${num(q.barisRusak.length)} baris tidak terbaca</span>` : ''}`;
+    }
     return '<span class="bad">Format belum dikenali. Lihat daftar file yang dibaca.</span>';
   }
   // Kegunaan tiap jenis file, agar seller tahu mengapa file itu diunggah.
   const FILE_USE = { shopee_income: 'penjualan, potongan marketplace, dan dana diterima', tiktok_income: 'penjualan, potongan marketplace, dan dana diterima',
     shopee_orders: 'jumlah barang dan variasi tiap pesanan, agar modal lebih tepat', tiktok_orders: 'jumlah barang dan variasi tiap pesanan, agar modal lebih tepat',
+    shopee_balance: 'menelusuri saldo, penyesuaian, dan penarikan dana di Jejak uang (tidak masuk laba)',
     shopee_return: 'kasus retur dan refund, termasuk barang yang tidak kembali', tiktok_return: 'kasus retur dan refund, termasuk barang yang tidak kembali',
     modal_template: 'modal per produk' };
   /**
@@ -1631,10 +2122,11 @@
     const el = $('#file-list');
     if (!el) return;
     const list = demo ? CekDemo.make().map((wb) => ({ name: wb.name, demo: true, kind: Engine.detect(wb) })) : files;
+    rekapFile(list);
     el.innerHTML = list.map((f, i) => {
       const [cls, label] = KIND[f.kind] || KIND.unknown;
       const [plat, ...rest] = label.split(', ');
-      const st = f.demo ? 'ok' : f.error || f.kind === 'unknown' ? 'bad' : f.kind === 'shopee_balance' ? 'warn' : /class="warn"/.test(fileStatus(f)) ? 'warn' : 'ok';
+      const st = statusFile(f);
       return `<li class="file fs-${st}"><span class="file-ic ${cls}" aria-hidden="true">${svg('laporan', 18)}</span><div class="file-body"><div class="name">${esc(f.name)}</div>
         <div class="file-tags"><span class="ftag ${cls}">${esc(plat)}</span>${rest.length ? `<span class="ftag">${esc(rest.join(', '))}</span>` : ''}${f.kind === 'shopee_orders' || f.kind === 'tiktok_orders' ? `<span class="ftag beta-tag" title="${BETA_NOTE}">Beta</span>` : ''}<span class="ftag st ${st}">${st === 'ok' ? '✓ Terbaca' : st === 'warn' ? '! Periksa' : '✕ Tidak terbaca'}</span></div>
         <div class="muted file-st">${f.demo ? 'Data contoh' : fileStatus(f)}</div>${!f.demo && FILE_USE[f.kind] ? `<div class="tiny faint file-use">Dipakai untuk: ${FILE_USE[f.kind]}</div>` : ''}</div>
@@ -1647,6 +2139,26 @@
       ['dragleave', 'drop'].forEach((ev) => drop.addEventListener(ev, (e) => { e.preventDefault(); drop.classList.remove('over'); }));
       drop.addEventListener('drop', (e) => addFiles(e.dataTransfer.files));
     }
+  }
+  // Status per file untuk daftar dan rekap: satu sumber agar keduanya tidak pernah berbeda.
+  function statusFile(f) {
+    return f.demo ? 'ok' : f.error || f.kind === 'unknown' ? 'bad' : /class="warn"/.test(fileStatus(f)) ? 'warn' : 'ok';
+  }
+  function rekapFile(list) {
+    const wrap = $('#file-wrap'), sum = $('#file-rekap');
+    if (!wrap || !sum) return;
+    wrap.hidden = !list.length;
+    if (!list.length) return;
+    const n = { ok: 0, warn: 0, bad: 0 };
+    list.forEach((f) => { n[statusFile(f)]++; });
+    const perlu = list.filter((f) => statusFile(f) !== 'ok').map((f) => esc(f.name));
+    const bagian = [n.ok && `<span class="ok">${num(n.ok)} terbaca</span>`, n.warn && `<span class="warn">${num(n.warn)} perlu diperiksa</span>`,
+      n.bad && `<span class="bad">${num(n.bad)} tidak terbaca</span>`].filter(Boolean).join(' · ');
+    sum.innerHTML = `<span class="fr-main"><b>${demo ? 'Data contoh' : `${num(list.length)} file diunggah`}</b> · ${bagian}</span>
+      ${perlu.length ? `<span class="fr-perlu small">Perlu tindakan: ${perlu.join(', ')}</span>` : ''}<span class="fr-buka small" aria-hidden="true"></span>`;
+    // Tertutup bawaan agar halaman ringkas; pilihan buka/tutup seller dipertahankan saat halaman digambar ulang.
+    wrap.open = !!view.fileOpen;
+    if (!wrap.dataset.bound) { wrap.dataset.bound = '1'; wrap.addEventListener('toggle', () => { view.fileOpen = wrap.open; }); }
   }
   const resetView = () => Object.assign(view, { platform: 'all', from: '', to: '', showAll: false, q: '', costQ: '', costAll: false, compare: null, prodFilter: 'all', prodKey: null, platCol: 'total' });
 
@@ -1798,6 +2310,18 @@
     if (id === 'q') { view.q = v; renderProducts(); return; }
     if (id === 'cost-q') { view.costQ = v; renderCostTable(); return; }
     if (id.startsWith('sim-')) { sim[id.slice(4)] = v === '' ? null : +v; renderSimOut(); return; }
+    if (id.startsWith('pj-mp-') || id.startsWith('pj-ln-')) {
+      const i = +id.slice(6); pajak.bulan[i][id.startsWith('pj-mp-') ? 'marketplace' : 'lain'] = v === '' ? null : +v;
+      if (id.startsWith('pj-mp-')) pajak.bulan[i].sumber = null;   // diubah pengguna → isian, bukan lagi dari laporan
+      renderPajakOut(); return;
+    }
+    if (id === 'pj-aktual') { pajak.dipungutAktual = v === '' ? null : +v; renderPajakOut(); return; }
+    if (id.startsWith('sr-')) {
+      const map = { 'sr-nama': 'nama', 'sr-nomor': 'nomor', 'sr-alamat': 'alamat', 'sr-kota': 'kota', 'sr-tanggal': 'tanggal' };
+      if (map[id]) surat[map[id]] = v; else if (id.startsWith('sr-wp-')) surat.wp[id.slice(6)] = v;
+      surat.siap = false; const o = $('#sr-out'); if (o) o.innerHTML = SR_TUNGGU;
+      return;
+    }
     if (demo) return;
     const n = (x, lo, hi) => (x === '' ? null : Math.min(hi, Math.max(lo, +x)));
     if (id === 's-mitra') settings.mitra = n(v, 0, 99);
@@ -1831,10 +2355,24 @@
     else if (t.id === 'from' || t.dataset.filter === 'from') { view.from = t.value; render(); }
     else if (t.id === 'to' || t.dataset.filter === 'to') { view.to = t.value; render(); }
     else if (t.id === 'sort') { view.sort = t.value; renderProducts(true); }
+    else if (t.id === 'pj-surat-terima') { pajak.bulanSuratDiterima = t.value === '' ? null : +t.value; renderPajakOut(); }
+    else if (['pj-tahun', 'pj-rezim', 'pj-sampai'].includes(t.id)) { const k = t.id.slice(3); pajak[k] = ['tahun', 'sampai'].includes(k) ? +t.value : t.value; render(); $(`#${t.id}`)?.focus(); }
+    else if (t.id === 'pj-badan') { pajak.jenis = t.value; render(); $('#pj-badan')?.focus(); }
+    else if (['pj-jenis', 'pj-surat', 'pj-lain'].includes(t.name)) {
+      // "Badan usaha lain" → CV/firma/PT/BUMDes sampai jenisnya dipilih; jawaban lain dipetakan apa adanya.
+      if (t.name === 'pj-jenis') pajak.jenis = t.value === 'lain' ? 'badan' : t.value; else pajak[{ 'pj-surat': 'surat', 'pj-lain': 'usahaLain' }[t.name]] = t.value;
+      render(); $(`#${t.name}-${t.value}`)?.focus();
+    }
+    else if (t.id === 'pj-syarat') { pajak.syaratFinal = t.checked; renderPajakOut(); }
+    else if (t.id === 'pj-cakupan') { pajak.cakupanDikonfirmasi = t.checked; renderPajakOut(); }
+    else if (t.name === 'sr-kedudukan' || t.name === 'sr-pilihan') { surat[t.name.slice(3)] = t.value; surat.siap = false; render(); document.querySelector(`[name="${t.name}"][value="${t.value}"]`)?.focus(); }
+    else if (t.id === 'sr-k-seluruh' || t.id === 'sr-k-benar') { surat.konfirmasi[t.id === 'sr-k-seluruh' ? 'seluruhUsaha' : 'benar'] = t.checked; surat.siap = false; }
+    else if (t.id === 'sr-tanggal') { surat.tanggal = t.value; surat.siap = false; }
     else if (t.id === 'simx-status' || t.id === 'simx-kat') { sim[t.id.slice(5)] = t.value; resetSimFee(); render(); }
     else if (t.id === 'simx-aff') { sim.afiliasi = Math.min(50, Math.max(0, +t.value || 0)); resetSimFee(); render(); }
     else if (t.dataset.simOpsi) { const k = t.dataset.simOpsi; sim.opsi = t.checked ? [...new Set([...sim.opsi, k])] : sim.opsi.filter((x) => x !== k); resetSimFee(); render(); }
     else if (t.id === 'file-input' || t.id === 'tpl-input') { addFiles(t.files); t.value = ''; }
+    else if (t.dataset.expect) { addFiles(t.files, t.dataset.expect); t.value = ''; }
     else if (t.id === 'pf-logo' && t.files[0]) {
       const f = t.files[0];
       if (f.size > 400000) { toast('Logo maksimal 400 KB.'); t.value = ''; return; }
@@ -1869,6 +2407,24 @@
     }
     if (t.dataset.fixModal) { const p = last && last.r.products.find((x) => x.key === t.dataset.fixModal); view.costQ = p ? p.name : ''; closeSheet(); go('data', true, 'modal'); return; }
     if (t.hasAttribute('data-sheet-close')) { closeSheet(); return; }
+    if (t.id === 'sr-periksa') {
+      const v = CekSurat.validasi(suratData()); surat.galat = v.galat; surat.siap = v.ok && CekSurat.tersedia(); render();
+      const first = Object.keys(v.galat)[0]; const fe = first && document.querySelector('[aria-invalid="true"], .pj-err');
+      if (fe) fe.scrollIntoView({ block: 'center' }); else toast(CekSurat.tersedia() ? 'Pratinjau surat siap. Periksa kembali sebelum mengunduh.' : 'Isian lengkap. Pratinjau menunggu teks resmi PMK 37/2025.');
+      return;
+    }
+    if (t.id === 'sr-pdf') { cetakSurat(); return; }
+    if (t.dataset.pjTab) { pajak.tab = t.dataset.pjTab; render(); const b = document.querySelector(`[data-pj-tab="${t.dataset.pjTab}"]`); if (b) b.focus(); return; }
+    if (t.id === 'pj-isi') { isiPajakDariLaporan(); return; }
+    if (t.dataset.pjKe) {
+      // Satu langkah berikutnya: buka bagian terkait lalu arahkan ke isiannya.
+      const ke = t.dataset.pjKe;
+      if (ke === 'pj-isi') { isiPajakDariLaporan(); return; }
+      if (t.dataset.pjBukaKe) { pajak.buka[t.dataset.pjBukaKe] = true; render(); }
+      const el = document.getElementById(ke); if (el) { el.scrollIntoView({ block: 'center' }); el.focus(); }
+      return;
+    }
+    if (t.dataset.mp) { view.mp = t.dataset.mp; render(); const b = document.querySelector(`[data-mp="${t.dataset.mp}"]`); if (b) b.focus(); return; }
     if (t.dataset.go) { closeSheet(); go(t.dataset.go, true, t.dataset.section); return; }
     // Tombol di lembar Filter & unduh memakai fungsi yang sama dengan menu Unduh di bilah atas.
     if (t.dataset.act) { closeSheet(); ({ pdf: openReport, export: exportXlsx, 'save-hist': saveHistory })[t.dataset.act](); return; }
@@ -1968,7 +2524,7 @@
   $('#sheet').addEventListener('close', () => document.querySelectorAll('tr.is-selected').forEach((tr) => tr.classList.remove('is-selected')));
   // Bilah judul: garis bawah & bayangan tipis muncul setelah halaman digulir (penanda di atas halaman, bukan event scroll).
   if ('IntersectionObserver' in window && $('#top-sentinel')) new IntersectionObserver(([en]) => $('#main-top').classList.toggle('is-stuck', !en.isIntersecting)).observe($('#top-sentinel'));
-  document.addEventListener('toggle', (e) => { if (!e.target.classList) return; if (e.target.classList.contains('rincian')) view.rincian = e.target.open; if (e.target.id === 'month-table') view.monthOpen = e.target.open; if (e.target.dataset && e.target.dataset.sec) view.openSec[e.target.dataset.sec] = e.target.open; }, true);
+  document.addEventListener('toggle', (e) => { if (!e.target.classList) return; if (e.target.classList.contains('rincian')) view.rincian = e.target.open; if (e.target.id === 'month-table') view.monthOpen = e.target.open; if (e.target.dataset && e.target.dataset.sec) view.openSec[e.target.dataset.sec] = e.target.open; if (e.target.dataset && e.target.dataset.pjBuka) pajak.buka[e.target.dataset.pjBuka] = e.target.open; }, true);
   document.addEventListener('keydown', (e) => {
     if (e.key !== 'Escape') return;
     hideInfo();

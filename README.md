@@ -43,6 +43,28 @@ Hal lain yang sudah disiapkan:
 | Shopee: Export pesanan (jumlah, SKU, variasi) | **Beta**: dibuat dari nama kolom yang umum, belum diuji dengan file asli |
 | TikTok: Export pesanan (CSV, kolom Inggris/Indonesia) | **Beta**: belum diuji dengan file asli |
 | Template modal Cek Untung (`Kode`, `Modal per unit (Rp)`) | Diuji |
+| Shopee: Saldo Penjual (`Transaction Report`) | **Beta** (Money Trace v1, diuji dengan satu file asli): rekonsiliasi saldo, penyesuaian, dan penarikan di Jejak uang. **Tidak dipakai dalam laba.** Penarikan hanya bukti dana keluar dari Shopee; rekonsiliasi bank belum ada |
+| Tokopedia | Lewat Laporan Penghasilan TikTok Shop (kolom sumber pesanan); laporan Tokopedia terpisah belum dibaca |
+| Lazada (semua laporan) | Belum didukung, memerlukan sampel file ekspor asli |
+| Iklan & promosi, produk/stok (semua marketplace), saldo & pencairan TikTok, mutasi bank | Belum didukung, memerlukan sampel file ekspor asli. Pencairan dana tidak pernah dihitung sebagai penjualan |
+
+Di dashboard, semua jenis ini tampil di **Pusat Data Marketplace** (Unggah data) per marketplace dan kategori, beserta
+status dukungan, format, cara unduh (hanya yang sudah terverifikasi), dan status unggah/validasi. Hanya kategori
+berstatus Didukung atau Beta yang bisa diunggah lewat kategorinya; jenis file tetap dikenali dari isinya, bukan dari
+nama file. File kosong ditolak, file yang tidak sesuai kategorinya diberi tahu, dan file/baris yang sama dihitung sekali.
+
+## Pajak Seller (Beta)
+
+Menu **Pajak Seller** berisi kalkulator **simulasi** PPh final UMKM dan PPh Pasal 22 marketplace, serta generator Surat
+Pernyataan peredaran bruto. Aktif hanya bila `pajakSeller: true` di `assets/config.js` (false = menu dan rute `#pajak`
+tertutup). Isian dan identitas pajak hanya diproses di browser: tidak disimpan, tidak dikirim. Tidak berhubungan dengan pembayaran Pro.
+
+- **Dasar aturan:** PP 55/2022 jo. PP 20/2026, PMK 37/2025 (surat sesuai Lampiran A hal. 14–15), pengumuman DJP (pemungutan
+  PPh 22 berlaku 1 November 2026), FAQ PMK 37/2025.
+- **Keterbatasan:** hasil adalah simulasi, bukan nasihat pajak atau bukti pajak dibayar; hanya tahun 2026; koperasi, badan lain,
+  dan tarif umum belum didukung. Omzet yang diisi otomatis dari laporan adalah penjualan **setelah diskon penjual**, sedangkan
+  dasar pungutan resmi dihitung sebelum diskon, jadi estimasi PPh 22 adalah perkiraan. Estimasi bergantung pada marketplace yang
+  **ditunjuk ulang** DJP sebagai pemungut. Pajak tidak mengubah laporan laba. Belum ditinjau konsultan pajak.
 
 ## Mengatur situs (tanpa coding)
 
@@ -88,6 +110,7 @@ tests/                uji Node + server tiruan Supabase
 
 ```bash
 node tests/engine.test.js     # mesin hitung dengan data contoh
+node tests/saldo.test.js      # Money Trace Shopee v1 (saldo penjual), data sintetis
 node tests/license.test.js    # kode akses
 node tests/cloud.test.js      # akun & database terhadap server tiruan
 python3 -m http.server 8000   # lalu buka http://localhost:8000/dashboard.html

@@ -49,4 +49,8 @@ window.CEK_CONFIG = {
   supabaseUrl: 'https://ikjcbgfexhpksbewkpym.supabase.co',
   supabaseAnonKey: 'sb_publishable_KC8qxwwQKwnYe2k-fjeEYw_HNxiscEt',    // "anon public" / "publishable" key — aman untuk publik, dilindungi aturan RLS
   googleLogin: false,     // true setelah login Google diaktifkan di Supabase (Authentication → Providers)
+
+  // Pajak Seller (simulasi PPh marketplace & Surat Pernyataan PMK 37/2025, Beta). Rilis dashboard-v2: diaktifkan di produksi
+  // atas daftar rilis pemilik (29 Okt 2026). false = menu & rute #pajak tertutup. Tidak berhubungan dengan pembayaran Pro.
+  pajakSeller: true,
 };

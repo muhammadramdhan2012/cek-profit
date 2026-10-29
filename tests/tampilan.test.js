@@ -113,9 +113,9 @@ const appJs = src('app.js');
 const daftar = (nama) => { const m = appJs.match(new RegExp(`const ${nama} = \\[([\\s\\S]*?)\\n  \\];`)); truthy(m, `${nama} tidak ditemukan`); return m[1]; };
 test('S1 menu: semua label wajib ada dan setiap menu menuju tampilan yang sudah ada', () => {
   const views = [...daftar('VIEWS').matchAll(/\['(\w+)', '/g)].map((x) => x[1]);
-  eq(views.join(','), 'ringkasan,produk,biaya,retur,simulator,riwayat,data', 'tampilan lama tetap ada');
+  eq(views.join(','), 'ringkasan,produk,biaya,retur,simulator,riwayat,pajak,data', 'tampilan lama tetap ada (+ Pajak Seller, Batch 4)');
   const nav = [...daftar('NAV').matchAll(/\['(\w+)', '([^']+)', '(\w+)'(?:, '(\w+)')?\]/g)].map((x) => ({ k: x[1], label: x[2], view: x[3], section: x[4] }));
-  eq(nav.map((n) => n.label).join(' | '), 'Ringkasan | Laba | Produk | Retur & refund | Simulator harga | Laporan & riwayat | Unggah data | Modal & HPP | Pengaturan');
+  eq(nav.map((n) => n.label).join(' | '), 'Ringkasan | Laba | Produk | Retur & refund | Simulator harga | Laporan & riwayat | Unggah data | Modal & HPP | Pajak Seller | Pengaturan');
   for (const n of nav) truthy(views.includes(n.view), `menu ${n.label} menuju tampilan yang tidak ada: ${n.view}`);
   for (const n of nav.filter((x) => x.section)) truthy(appJs.includes(`id="sec-${n.section}"`), `bagian #sec-${n.section} tidak ada di tampilan Data`);
   for (const g of ['Utama', 'Data & laporan', 'Lainnya']) truthy(daftar('NAV').includes(`['${g}',`), `kelompok ${g}`);
@@ -225,7 +225,10 @@ test('U2 nota & jejak uang: struktur, nilai belum diketahui, bukan rekonsiliasi 
   truthy(/\+ \$\{num\(rb\.kerugianTanpaNilai\)\} kasus nilainya belum diketahui\./.test(notaSrc) && /\+ \$\{num\(rb\.kerugianTanpaNilai\)\} kasus nilainya belum diketahui\./.test(labaSrc), '"+ N kasus nilainya belum diketahui."');
   truthy(/ok\(v\) \? fmt\(v\) : '<span class="unk">Belum diketahui<\/span>'/.test(notaSrc), 'nota: nilai tidak diketahui → "Belum diketahui", bukan Rp0');
   truthy(labaSrc.includes('Berdasarkan laporan yang diunggah. Dana dilepas belum tentu sama dengan dana yang sudah masuk rekening.'), 'label jejak uang');
-  truthy(!/saldo|terbaik|peringkat/i.test(labaSrc.replace(/\/\*[\s\S]*?\*\//g, '')), 'tanpa saldo/peringkat platform (di luar komentar)');
+  // Batch 3B: panel Saldo Penjual Shopee (rekonsiliasi, disetujui PO) dikecualikan; di luar panel itu tetap tanpa "saldo".
+  const tanpaPanelSaldo = labaSrc.replace(labaSrc.slice(labaSrc.indexOf('/* ---------- Money Trace Shopee v1'), labaSrc.indexOf('  function moneyTrace(r) {')), '')
+    .split('\n').filter((l) => !/sdT|Unggah Laporan Saldo Penjual Shopee/.test(l)).join('\n');
+  truthy(!/saldo|terbaik|peringkat/i.test(tanpaPanelSaldo.replace(/\/\*[\s\S]*?\*\//g, '')), 'tanpa saldo/peringkat platform (di luar komentar & panel saldo)');
   truthy(/Refund ke pembeli sudah termasuk dalam penjualan, jadi tidak dikurangkan lagi di sini/.test(labaSrc), 'rincian biaya: refund tidak dikurangkan lagi');
 });
 test('MT-A1 jejak uang: status provenance, refund hanya rincian, pencairan tanpa Rp0, angka dari engine', () => {
@@ -468,7 +471,7 @@ test('B3b UI: label Beta export pesanan + alasan refund parsial tampil (bukan Rp
   const note = 'Format export marketplace dapat berubah. Hasil pencocokan ditandai bila belum dapat diverifikasi.';
   truthy(appJs.includes(note), 'helper Beta di dashboard');
   truthy(/f\.kind === 'shopee_orders' \|\| f\.kind === 'tiktok_orders' \? `<span class="ftag beta-tag"/.test(appJs), 'tag Beta pada file export pesanan');
-  truthy(/Export pesanan', '[^']+', true\]/.test(appJs), 'daftar laporan didukung: export pesanan bertanda Beta');
+  truthy(/orders: \{ st: 'beta', kind: 'shopee_orders'/.test(appJs) && /orders: \{ st: 'beta', kind: 'tiktok_orders'/.test(appJs), 'Pusat Data: export pesanan bertanda Beta');
   truthy(/export pesanan \(Beta\)/.test(src('../index.html')), 'FAQ halaman depan menyebut Beta');
   truthy(/'Refund parsial: jumlah unit belum diketahui'/.test(appJs), 'item kepastian refund parsial');
   truthy(appJs.includes('Sebagian penjualan tidak masuk dalam perhitungan laba karena jumlah unit pada refund parsial belum dapat diverifikasi.'), 'teks refund parsial sesuai keputusan pemilik');
@@ -623,7 +626,7 @@ test('UX P0 unggah: status jelas, CTA ke Ringkasan, terbaca ≠ tervalidasi', ()
 });
 test('UX P0 pengaturan: grup wajib/opsional, identitas PDF terpisah, input & kunci simpan tetap', () => {
   const a = src('app.js');
-  for (const t of ['Data penghasilan', 'Wajib untuk laba', 'Pengaturan harga reseller', "optSec('biaya', '4', 'Biaya tambahan'", "optSec('target', '5', 'Target bisnis'", "'Identitas laporan PDF (opsional)'"]) truthy(a.includes(t), t);
+  for (const t of ['Laporan utama', 'Wajib untuk laba', 'Pengaturan harga reseller', "optSec('biaya', '4', 'Biaya tambahan'", "optSec('target', '5', 'Target bisnis'", "'Identitas laporan PDF (opsional)'"]) truthy(a.includes(t), t);
   truthy(/<p class="note-box">Informasi ini hanya digunakan sebagai identitas pada laporan PDF\. Tidak memengaruhi perhitungan laba\.<\/p>/.test(a) && /Tidak memengaruhi perhitungan laba\.',/.test(a), 'keterangan identitas PDF (di dalam dan di judul bagian)');
   for (const id of ['s-packing', 's-target', 's-tprofit', 'fc-add', 'pf-store', 'pf-owner', 'pf-logo', 's-mitra', 's-coret', 'add-period']) truthy(a.includes(`id="${id}"`), `input ${id} tetap ada`);
   truthy(/else if \(id === 'pf-store' \|\| id === 'pf-owner'\) \{ profile\[id === 'pf-store' \? 'store' : 'owner'\] = v; saveProfile\(\); return; \}/.test(a), 'identitas tetap disimpan di profil (tidak di pengaturan hitung)');
@@ -769,5 +772,75 @@ test('Service worker Cloudflare: kunci cache /x, /x.html, /x?q sama; respons red
   truthy(/'assets\/aturan-akun\.js', 'assets\/situs\.js'/.test(code), 'file baru ikut cache offline');
 });
 
+
+test('Batch 2 Pusat Data Marketplace V2: kategori lengkap, tombol unggah hanya untuk parser yang ada', () => {
+  const appJs = src('app.js');
+  const blok = appJs.slice(appJs.indexOf('const SUMBER = {'), appJs.indexOf('const PERAN = {'));
+  const kat = [...appJs.slice(appJs.indexOf('const KATEGORI = ['), appJs.indexOf('const PERLU = {')).matchAll(/\['(\w+)', '([^']+)'/g)].map((m) => m[1]);
+  eq(kat.join(','), 'income,orders,ads,return,balance,payout,product,modal', '8 kategori tetap tercatat');
+  for (const mp of ['shopee', 'tiktok', 'tokopedia', 'lazada']) truthy(new RegExp(`\\b${mp}: \\{`).test(blok), `marketplace ${mp}`);
+  const kinds = [...blok.matchAll(/kind: '(\w+)'/g)].map((m) => m[1]);
+  for (const k of kinds) truthy(['shopee_income', 'shopee_orders', 'shopee_return', 'shopee_balance', 'tiktok_income', 'tiktok_orders', 'tiktok_return', 'modal_template'].includes(k), `kind dikenal engine: ${k}`);
+  truthy(!/kind: '(tokopedia|lazada)/.test(blok), 'tanpa parser Tokopedia/Lazada');
+  truthy(!/payout: \{[^}]*kind:/.test(blok) && !/ads: \{[^}]*kind:/.test(blok) && !/product: \{[^}]*kind:/.test(blok), 'iklan, pencairan, produk tanpa parser');
+  truthy(/Pencairan dana tidak pernah dihitung sebagai penjualan/.test(blok), 'pencairan bukan penjualan');
+  truthy(/const bisa = \(cat\) => \['ok', 'beta'\]\.includes\(S\[cat\]\.st\) && S\[cat\]\.kind;/.test(appJs), 'baris unggah hanya untuk Didukung/Beta');
+  truthy(/const PERAN = \{ income: 'utama', modal: 'utama', orders: 'pendukung', return: 'pendukung', balance: 'pendukung' \}/.test(appJs) && /Wajib untuk laba/.test(appJs), 'wajib: Laporan Penghasilan + modal; pesanan & retur opsional');
+  truthy(/id="file-input" type="file" multiple/.test(appJs) && /id="drop"/.test(appJs), 'unggah massal tetap ada (satu area)');
+  truthy(/File kosong: tidak ada data yang bisa dibaca\./.test(appJs), 'file kosong ditolak');
+  truthy(/Dipilih untuk \$\{esc\(KIND\[f\.expect\]/.test(appJs), 'file salah kategori diberi tahu');
+  for (const s of ["`Berhasil dibaca", "'Duplikat diabaikan'", "'Perlu diperiksa'", "`Format tidak sesuai"]) truthy(appJs.includes(s), `status ringkas ${s}`);
+});
+
+test('Batch 3: rekap hasil unggah, input file terjangkau keyboard, menu bawah HP', () => {
+  const appJs = src('app.js'), css = src('app.css');
+  truthy(/<details class="files-wrap" id="file-wrap" hidden><summary id="file-rekap"><\/summary><ul class="files" id="file-list"><\/ul><\/details>/.test(appJs), 'daftar file di dalam rincian yang bisa dibuka');
+  truthy((appJs.match(/statusFile\(f\)/g) || []).length >= 3, 'rekap dan daftar memakai satu fungsi status yang sama');
+  truthy(/data-rm="\$\{i\}"/.test(appJs), 'tombol hapus per file tetap ada');
+  const panel = appJs.slice(appJs.indexOf('function barisLaporan'), appJs.indexOf('function viewData'));
+  truthy(panel.length > 0 && (panel.match(/type="file"/g) || []).length === 2 && !/type="file"[^>]*\bhidden>/.test(panel), 'input file panel unggah tidak `hidden` (terjangkau Tab)');
+  truthy(/aria-label="Pilih file \$\{NAMA_SINGKAT\[cat\]\} \$\{MP_NAMA\[mp\]\}"/.test(appJs), 'tiap Pilih file punya nama untuk pembaca layar');
+  truthy(/scroll-padding-bottom: calc\(104px/.test(css), 'gulir otomatis berhenti di atas menu bawah HP');
+});
+
+test('Batch 3B: saldo Shopee terisolasi dari laba; status & teks jujur', () => {
+  const appJs = src('app.js');
+  truthy(/const parsedAll = \(\) => \(demo \? .*files\.filter\(\(f\) => f\.parsed && f\.parsed\.kind !== 'modal_template'\)\.map\(\(f\) => f\.parsed\)\);/.test(appJs), 'engine hanya menerima f.parsed');
+  truthy(/resolve\(\{ name: file\.name, kind: parsed\.kind, parsed, \.\.\.\(saldo \? \{ saldo \} : \{\}\) \}\)/.test(appJs), 'hasil CekSaldo disimpan terpisah (f.saldo), parsed tidak diubah');
+  truthy(!/CekSaldo|saldoTrace/.test(src('engine.js')), 'engine tidak memakai modul saldo');
+  for (const s of ["'Cocok'", "'Di luar periode'", "'Belum direkonsiliasi'", "'Tidak cukup data'"]) truthy(appJs.includes(s), `status ${s}`);
+  truthy(/belum dicocokkan dengan rekening bank/.test(appJs) && !/(?<!bukan dana )(sudah|telah) (masuk|diterima) (ke )?(rekening|bank)/i.test(appJs.slice(appJs.indexOf('Money Trace Shopee v1'), appJs.indexOf('function moneyTrace(r)'))), 'penarikan tidak diklaim diterima bank');
+  truthy(/tidak dikoreksi otomatis/.test(appJs), 'selisih penyesuaian ditampilkan, tidak dikoreksi');
+  truthy(/<script src="assets\/saldo\.js\?v=/.test(html) && /'assets\/saldo\.js'/.test(fs.readFileSync(path.join(__dirname, '..', 'sw.js'), 'utf8')), 'saldo.js dimuat & tersedia offline');
+});
+
+test('Batch 3C: tab Tokopedia memakai parser TikTok yang ada; retur & iklan tetap belum tersedia', () => {
+  const appJs = src('app.js');
+  const toko = appJs.slice(appJs.indexOf('    tokopedia: {'), appJs.indexOf('    lazada: {'));
+  truthy(/income: \{ st: 'ok', kind: 'tiktok_income'/.test(toko) && /orders: \{ st: 'beta', kind: 'tiktok_orders'/.test(toko), 'Tokopedia: Laporan Penghasilan gabungan + export (Beta), jenis TikTok');
+  truthy(/ads: PERLU, return: PERLU/.test(toko), 'retur & iklan Tokopedia belum diklaim');
+  truthy(/Satu file berisi transaksi Tokopedia dan TikTok Shop/.test(toko) && /tetap dihitung sekali/.test(toko), 'penjelasan satu file dua kanal');
+  truthy(!/tokopedia_income|tokopedia_orders/.test(appJs + src('engine.js')), 'tanpa parser Tokopedia baru');
+  truthy(/'Jumlah barang belum dapat dipastikan'/.test(appJs) && /'Indikasi retur di export pesanan'/.test(appJs) && /Modal tidak dikurangi otomatis/.test(appJs), 'peringatan konflik qty & indikasi retur');
+});
+
+test('Batch 4: Pajak Seller hanya staging/localhost, isian tidak disimpan/dikirim, surat tidak dikarang', () => {
+  const appJs = src('app.js'), cfg = src('config.js');
+  // Flag eksplisit: staging (pajakSeller false + st.pajakSeller) ATAU rilis produksi (pajakSeller true di config, tanpa blok staging).
+  truthy(/pajakSeller: (true|false),/.test(cfg) && (!/staging: \{/.test(cfg) || /C\.pajakSeller = st\.pajakSeller === true;/.test(cfg)), 'flag Pajak Seller eksplisit');
+  truthy(!/proPembayaranAktif: true/.test(cfg.split('staging: {')[0]) && /whatsapp: '',/.test(cfg), 'Pajak Seller tidak membuka pembayaran Pro di produksi');
+  truthy(/const navTampil = \(i\) => i\[0\] !== 'pajak' \|\| pajakAktif\(\);/.test(appJs) && /name === 'pajak' && !pajakAktif\(\)/.test(appJs)
+    && /if \(viewName === 'pajak' && !pajakAktif\(\)\) viewName =/.test(appJs), 'menu & rute (termasuk #pajak di URL) tertutup bila tidak aktif');
+  const blok = appJs.slice(appJs.indexOf('/* ================= Pajak Seller (Batch 4)'), appJs.indexOf('  function viewSimulator() {'));
+  truthy(blok.length > 1000 && !/store\.set|localStorage|CekCloud|track\(|fetch\(/.test(blok), 'isian pajak tidak disimpan/dikirim/dilacak');
+  // Teks surat hanya dari assets/surat.js (Lampiran A PMK 37/2025); UI tidak menulis kalimat surat sendiri dan menampilkan
+  // penanda bila teks resmi tidak tersedia.
+  truthy(!/Saya yang bertanda tangan di bawah ini|Demikian Surat Pernyataan ini dibuat/.test(appJs) && /Teks surat resmi belum dimuat/.test(appJs)
+    && /Demikian Surat Pernyataan ini dibuat/.test(src('surat.js')), 'teks surat hanya dari modul surat (format resmi)');
+  truthy(/Bukan bukti pajak telah dibayar/.test(blok) && /tidak mengurangi laba/.test(blok), 'simulasi tidak diklaim sebagai bukti/pengurang laba');
+  truthy(/<script src="assets\/pajak\.js\?v=/.test(html) && /'assets\/pajak\.js'/.test(fs.readFileSync(path.join(__dirname, '..', 'sw.js'), 'utf8')), 'pajak.js dimuat & offline');
+});
+
+// Ringkasan & kode keluar di AKHIR file, agar kegagalan tes mana pun (termasuk yang ditambahkan belakangan) menggagalkan CI.
 console.log(failed ? `\n${failed} uji GAGAL` : '\nSemua uji lulus');
 process.exitCode = failed ? 1 : 0;
