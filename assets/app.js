@@ -427,9 +427,21 @@
   }
 
   /* ================= 5. tampilan ================= */
-  const emptyView = () => `<div class="panel empty"><span class="ic">${svg('data', 24)}</span><h2>Mulai dari laporan penghasilan</h2>
-    <p>Unggah Laporan Penghasilan Shopee atau TikTok Shop. Hitungan terjadi di browser Anda; file tidak dikirim ke mana pun.</p>
-    <button class="btn primary" type="button" data-go="data">Unggah laporan</button><button class="btn link" type="button" data-demo>atau lihat dengan data contoh</button></div>`;
+  /** Halaman yang belum punya data: apa yang nanti tampil di sini, tiga langkah yang sama dengan halaman Unggah, dan satu
+   *  tombol utama. Tidak ada angka, tabel, atau kartu kosong. */
+  const KOSONG = {
+    ringkasan: ['ringkasan', 'Ringkasan laba toko Anda tampil di sini', 'Penjualan, potongan marketplace, modal, dan laba dari data yang tersedia, dalam satu nota.'],
+    biaya: ['laba', 'Rincian laba tampil di sini', 'Ke mana uang penjualan pergi: potongan marketplace, modal barang, dan biaya lain.'],
+    produk: ['produk', 'Laba per produk tampil di sini', 'Produk yang paling menguntungkan dan produk yang perlu diperhatikan, setelah modal barang diisi.'],
+    retur: ['retur', 'Retur dan refund tampil di sini', 'Uang yang dikembalikan ke pembeli dan barang yang belum jelas kembali. Unggah Laporan Penghasilan dulu, lalu file retur bila ada.'],
+  };
+  const emptyView = () => {
+    const [ic, judul, isi] = KOSONG[viewName] || KOSONG.ringkasan;
+    return `<div class="panel empty empty-arah"><span class="ic">${svg(ic, 24)}</span><h2>${judul}</h2><p>${isi}</p>
+    <ol class="empty-steps" aria-label="Langkah"><li><b>1</b>Unggah laporan</li><li><b>2</b>Isi modal barang</li><li><b>3</b>Lihat laba</li></ol>
+    <button class="btn primary" type="button" data-go="data">Unggah laporan</button>
+    <p class="tiny faint">File diolah di browser Anda, tidak dikirim ke server. <button class="btn link" type="button" data-demo>Lihat dengan data contoh</button></p></div>`;
+  };
 
   /* ---------- ringkasan ---------- */
   /* ---------- ringkasan (UI-2): semua angka diambil apa adanya dari engine ---------- */

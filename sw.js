@@ -2,7 +2,7 @@
  * Strategi: jaringan dulu untuk HTML/JS/CSS (agar pembaruan langsung terlihat), cache sebagai cadangan offline.
  * Naikkan VERSION setiap rilis agar cache lama dibersihkan.
  */
-const VERSION = 'cekprofit-db52a3eae0';
+const VERSION = 'cekprofit-95015c54e1';
 const CORE = ['./', 'index.html', 'dashboard.html', 'akun.html', 'privasi.html', 'icon.svg', 'icon-cek-untung.svg', 'apple-touch-icon.png',
   'assets/base.css', 'assets/app.css', 'assets/site.css', 'assets/report.css', 'assets/account.css',
   'assets/config.js', 'assets/theme.js', 'assets/motion.js', 'assets/analytics.js', 'assets/engine.js', 'assets/saldo.js', 'assets/pajak.js', 'assets/surat.js', 'assets/demo.js', 'assets/license.js', 'assets/cloud.js', 'assets/report.js', 'assets/tarif.js', 'assets/penjelasan.js', 'assets/app.js', 'assets/akun.js', 'assets/aturan-akun.js', 'assets/situs.js',
