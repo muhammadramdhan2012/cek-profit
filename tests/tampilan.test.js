@@ -626,7 +626,7 @@ test('UX P0 unggah: status jelas, CTA ke Ringkasan, terbaca ≠ tervalidasi', ()
 });
 test('UX P0 pengaturan: grup wajib/opsional, identitas PDF terpisah, input & kunci simpan tetap', () => {
   const a = src('app.js');
-  for (const t of ['Laporan utama', 'Wajib untuk laba', 'Pengaturan harga reseller', "optSec('biaya', '4', 'Biaya tambahan'", "optSec('target', '5', 'Target bisnis'", "'Identitas laporan PDF (opsional)'"]) truthy(a.includes(t), t);
+  for (const t of ['Laporan tambahan', 'Wajib untuk laba', 'Pengaturan harga reseller', "optSec('biaya', '4', 'Biaya tambahan'", "optSec('target', '5', 'Target bisnis'", "'Identitas laporan PDF (opsional)'"]) truthy(a.includes(t), t);
   truthy(/<p class="note-box">Informasi ini hanya digunakan sebagai identitas pada laporan PDF\. Tidak memengaruhi perhitungan laba\.<\/p>/.test(a) && /Tidak memengaruhi perhitungan laba\.',/.test(a), 'keterangan identitas PDF (di dalam dan di judul bagian)');
   for (const id of ['s-packing', 's-target', 's-tprofit', 'fc-add', 'pf-store', 'pf-owner', 'pf-logo', 's-mitra', 's-coret', 'add-period']) truthy(a.includes(`id="${id}"`), `input ${id} tetap ada`);
   truthy(/else if \(id === 'pf-store' \|\| id === 'pf-owner'\) \{ profile\[id === 'pf-store' \? 'store' : 'owner'\] = v; saveProfile\(\); return; \}/.test(a), 'identitas tetap disimpan di profil (tidak di pengaturan hitung)');
@@ -797,9 +797,12 @@ test('Batch 3: rekap hasil unggah, input file terjangkau keyboard, menu bawah HP
   truthy(/<details class="files-wrap" id="file-wrap" hidden><summary id="file-rekap"><\/summary><ul class="files" id="file-list"><\/ul><\/details>/.test(appJs), 'daftar file di dalam rincian yang bisa dibuka');
   truthy((appJs.match(/statusFile\(f\)/g) || []).length >= 3, 'rekap dan daftar memakai satu fungsi status yang sama');
   truthy(/data-rm="\$\{i\}"/.test(appJs), 'tombol hapus per file tetap ada');
-  const panel = appJs.slice(appJs.indexOf('function barisLaporan'), appJs.indexOf('function viewData'));
+  // Panel unggah: satu pembuat input per laporan (inputLaporan) + satu input unggah massal.
+  const panel = appJs.slice(appJs.indexOf('const inputLaporan'), appJs.indexOf('function viewData'));
   truthy(panel.length > 0 && (panel.match(/type="file"/g) || []).length === 2 && !/type="file"[^>]*\bhidden>/.test(panel), 'input file panel unggah tidak `hidden` (terjangkau Tab)');
   truthy(/aria-label="Pilih file \$\{NAMA_SINGKAT\[cat\]\} \$\{MP_NAMA\[mp\]\}"/.test(appJs), 'tiap Pilih file punya nama untuk pembaca layar');
+  truthy(/document\.querySelectorAll\('#drop, \.pd-drop'\)/.test(appJs) && /class="pu-drop pd-drop"/.test(appJs), 'kotak Laporan Penghasilan juga menerima seret-lepas');
+  truthy(/<ol class="data-steps" aria-label="Langkah">/.test(appJs) && /'Unggah laporan'/.test(appJs) && /'Isi modal barang'/.test(appJs), 'langkah 1–3 halaman Data');
   truthy(/scroll-padding-bottom: calc\(104px/.test(css), 'gulir otomatis berhenti di atas menu bawah HP');
 });
 
