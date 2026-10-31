@@ -1767,11 +1767,13 @@
     const sup = SUMBER[mp][cat];
     const st = statusKategori(mp, cat, sup);
     const bantu = sup.how || sup.note;
-    return `<li class="pd-card">
+    // Pola sama dengan kotak Laporan Penghasilan (ikon, tombol hijau, seret-lepas), tetapi kotaknya lebih kecil.
+    return `<li class="pd-card pd-drop">
+      <span class="pu-ic" aria-hidden="true">${svg('data', 20)}</span>
       <div class="pd-name"><b>${NAMA_SINGKAT[cat]}</b>${tagLaporan(cat, sup)}</div>
       <p>${sup.guna || GUNA_SINGKAT[cat]}${sup.fmt ? ` <span class="pd-fmt">Format ${esc(sup.fmt)}</span>` : ''}</p>
       ${st.length ? `<div class="pd-chips">${st.map(chip).join('')}</div>` : ''}
-      <div class="pd-act">${inputLaporan(mp, cat, sup)}${demo || !sup.kind ? '' : `<label class="btn sm" for="in-${mp}-${cat}" aria-hidden="true">Pilih file</label>`}
+      <div class="pd-act">${inputLaporan(mp, cat, sup)}${demo || !sup.kind ? '' : `<label class="btn primary" for="in-${mp}-${cat}" aria-hidden="true">Pilih file</label><span class="tiny faint">atau tarik file ke kotak ini</span>`}
         ${bantu ? `<details class="pd-help"><summary>${sup.how ? 'Cara download' : 'Catatan'}</summary><p>${sup.how ? `${esc(sup.how)}. ` : ''}${sup.note ? esc(sup.note) : ''}</p></details>` : ''}</div>
     </li>`;
   }

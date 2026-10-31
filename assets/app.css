@@ -1843,3 +1843,16 @@ body.app .empty-arah > p:not(.tiny) { font-size: 15px; max-width: 46ch; }
 .pu-how li { font-size: 14px; }
 .pd-card > p { font-size: 13.5px; }
 @media (max-width: 900px) { .main-top .sub { font-size: 13px; } body.app .empty-arah { padding: 36px 18px; } }
+
+/* Kartu laporan tambahan memakai pola yang sama dengan kotak Laporan Penghasilan (lebih kecil). */
+.pd-card.pd-drop { justify-items: center; text-align: center; gap: 8px; padding: 18px 14px; border: 2px dashed var(--line-strong); background: var(--surface-2);
+  transition: border-color var(--dur-fast) var(--ease), background-color var(--dur-fast) var(--ease); }
+.pd-card.pd-drop:hover, .pd-card.pd-drop:focus-within { border-color: var(--accent); }
+.pd-card.pd-drop.over { border-style: solid; border-color: var(--accent); background: var(--accent-soft); }
+.pd-card .pu-ic { width: 42px; height: 42px; border-radius: 12px; }
+.pd-card .pd-name { justify-content: center; }
+.pd-card .pd-chips { justify-content: center; }
+.pd-card .pd-act { justify-items: center; gap: 6px; margin-top: 2px; }
+.pd-card .pd-act .btn.primary { min-height: 42px; padding-inline: 20px; }
+.pd-card .pd-help p { text-align: center; }
+@media (max-width: 560px) { .pd-card .pd-act { display: grid; justify-items: center; } }
