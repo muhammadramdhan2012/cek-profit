@@ -793,6 +793,30 @@ test('H16 KETERBATASAN (H2-B): hitung ganda tanpa export tetap mungkin → kerug
   eq(r.kepastian.laba.final, false); truthy(r.kepastian.laba.alasanTidakFinal.includes('kerugian_retur_sementara'), 'alasan');
 });
 
+/* ---------- P10 (verifikasi 31 Okt 2026): refund dicatat sebagai PENYESUAIAN, bukan di baris pesanan (data SINTETIS) ----------
+ * Terbukti (scratchpad p10-eksplor): 2 kaos @50.000, modal 20.000/unit, refund 1 unit sebagai penyesuaian, export
+ * returned 1, file retur 1 unit "Tidak kembali" → HPP 2 unit (40.000) + kerugian retur 1 unit (20.000) = 60.000,
+ * padahal modal 2 kaos hanya 40.000 (melanggar usulan A.9). Selain itu refund di penyesuaian tidak mengurangi penjualan
+ * (P3). Angka yang salah ini SENGAJA tidak dikunci di tes; perbaikannya menunggu keputusan pemilik (Tahap B).
+ * Yang dikunci: laba tidak pernah disebut final dan alasannya tampil. */
+const p10Penghasilan = (adjRows) => { const wb = Sint.penghasilan([{ id: 'SINT-K1', items: [{ name: 'Kaos', harga: 100000, refund: 0 }] }]);
+  wb.sheets.Adjustment = [['Ringkasan Biaya Penyesuaian'], ['Total Penyesuaian', null, null, null, adjRows.reduce((a, x) => a + x.amount, 0)], [],
+    ['No.', 'Tanggal Penyesuaian Dibuat', 'Tipe Penyesuaian | Deskripsi', 'Alasan Penyesuaian', 'Biaya Penyesuaian', 'No. Pesanan Terhubung'],
+    ...adjRows.map((x, i) => [i + 1, '2026-01-25', x.type, '', x.amount, x.order])];
+  return E.parseWorkbook(wb); };
+test('P10 KETERBATASAN: refund sebagai penyesuaian + barang tidak kembali → laba tidak final, alasan tampil (angka menunggu Tahap B)', () => {
+  const refundPenyesuaian = [{ type: 'Pengembalian dana', amount: -50000, order: 'SINT-K1' }];
+  for (const [label, files] of [
+    ['export returned 1', [p10Penghasilan(refundPenyesuaian), E.parseWorkbook(Sint.exportPesanan([{ order: 'SINT-K1', name: 'Kaos', qty: 2, price: 50000, returned: 1, returnStatus: 'Permintaan Disetujui' }]))]],
+    ['export returned 0', [p10Penghasilan(refundPenyesuaian), E.parseWorkbook(Sint.exportPesanan([{ order: 'SINT-K1', name: 'Kaos', qty: 2, price: 50000 }]))]],
+    ['tanpa export', [p10Penghasilan(refundPenyesuaian)]]]) {
+    const r = E.compute([...files, returShopee([{ order: 'SINT-K1', product: 'Kaos', qty: 1, amount: 50000 }])], stUnit, { [ksKaos]: 'hilang' });
+    eq(r.adjustments, -50000, `${label}: refund tercatat sebagai penyesuaian`);
+    eq(r.kepastian.laba.final, false, `${label}: laba tidak final`);
+    truthy(r.kepastian.laba.alasanTidakFinal.includes('penyesuaian_belum_diklasifikasikan'), `${label}: alasan penyesuaian tampil (${r.kepastian.laba.alasanTidakFinal})`);
+  }
+});
+
 /* ---------- H2-B1: buku unit, modal per unit, Shopee dengan export (data SINTETIS) ---------- */
 /** 1 pesanan 2 kaos @50.000; export format `fmt` ('baru' punya Returned quantity, 'lama' tidak). */
 const filesB1 = (refund, returned, fmt = 'baru', variant = '') => [E.parseWorkbook(Sint.penghasilan([{ id: 'SINT-K1', items: [{ name: 'Kaos', harga: 100000, refund }] }])),
