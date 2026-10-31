@@ -1185,6 +1185,7 @@ const Engine = (() => {
             if (ledger.unitLedgerComplete) {
               ledgerStats.lengkap++; ledgerStats.unitBelumDiketahui += ledger.qtyUnknown;
               ledgerStats.nilaiUnitBelumDiketahui += entry.cost * ledger.qtyUnknown;
+              if (ledger.qtyUnknown > 0) eksposurBukuUnit.push({ platform: 'shopee', orderId: o.id, product: it.name, value: entry.cost * ledger.qtyUnknown });
             }
           }
           if (entry && ledger && ledger.unitLedgerComplete) { cost = entry.cost * ledger.qtySold; qtyBasis = 'buku_unit'; }
@@ -1278,6 +1279,8 @@ const Engine = (() => {
       shopeeCasesByOrder.get(c.orderId).push(c);
     }
     const ledgerStats = { baris: 0, lengkap: 0, unitBelumDiketahui: 0, nilaiUnitBelumDiketahui: 0, invariantGagal: 0, status: {} };
+    // B1: modal unit refund yang kondisi fisiknya belum diketahui, per pesanan + produk (untuk rentang laba).
+    const eksposurBukuUnit = [];
 
     /**
      * H2-B1: buku unit untuk SATU baris pesanan Shopee yang terpasang pasti ke satu baris export.
@@ -1800,6 +1803,11 @@ const Engine = (() => {
       return { units, unitStatus: u.status, unitSource: u.source };
     }
 
+    // B3 (keputusan pemilik 31 Okt 2026): kasus retur untuk pesanan yang TIDAK ada di Laporan Penghasilan yang diunggah
+    // (pesanan periode lain) tidak mengurangi laba periode ini. Kerugian dan risikonya dicatat terpisah (periodeLain).
+    const oidN = (x) => String(x).replace(/^'/, '');
+    const ttOrderIds = new Set([...m.tiktok.values()].filter((x) => x.isOrder).map((x) => oidN(x.id)));
+    const diLuarLaporan = (c) => (c.platform === 'shopee' ? !shopeeOrderDate.has(c.orderId) : !ttOrderIds.has(oidN(c.orderId)));
     const cases = [...m.cases.values()].filter((c) => want.has(c.platform) && inRange(c.platform === 'shopee' ? (shopeeOrderDate.get(c.orderId) || c.date) : c.date)).map((c) => {
       const { units, unitStatus, unitSource } = returnUnits(c);
       let estModal, usesUnits = false, modalSource = null, modalKeyOk = false;
@@ -1836,18 +1844,22 @@ const Engine = (() => {
         : !usesUnits ? 'nilai_refund_x_rasio' : !modalKeyOk ? 'modal_tingkat_produk' : `jumlah_${unitStatus}`;
       const needsCheck = CHECK_CATS.has(c.cat);
       return { ...c, estModal, estReason, units, unitStatus, unitSource, modalSource, lossBasis, lossCertainty, lossReason,
-        needsCheck, state: needsCheck ? (caseState[c.key] || 'belum') : 'na' };
+        needsCheck, state: needsCheck ? (caseState[c.key] || 'belum') : 'na', diLuarLaporan: diLuarLaporan(c) };
     });
     // Angka risiko/kerugian hanya menjumlahkan kasus yang nilainya diketahui. Kasus tanpa nilai dihitung terpisah
     // (kerugianTanpaNilai / risikoTanpaNilai) agar "Rp0" tidak disalahartikan sebagai "tidak ada risiko".
     const sumOk = (arr) => arr.reduce((a, c) => a + (isOk(c.estModal) ? c.estModal : 0), 0);
-    const lostCertain = sumOk(cases.filter((c) => c.state === 'hilang'));
-    const unknownRisk = sumOk(cases.filter((c) => c.state === 'belum'));
-    const lostNoValue = cases.filter((c) => c.state === 'hilang' && !isOk(c.estModal)).length;
-    const riskNoValue = cases.filter((c) => c.state === 'belum' && !isOk(c.estModal)).length;
+    const dalam = cases.filter((c) => !c.diLuarLaporan), luar = cases.filter((c) => c.diLuarLaporan);
+    const lostCertain = sumOk(dalam.filter((c) => c.state === 'hilang'));
+    const unknownRisk = sumOk(dalam.filter((c) => c.state === 'belum'));
+    const lostNoValue = dalam.filter((c) => c.state === 'hilang' && !isOk(c.estModal)).length;
+    const riskNoValue = dalam.filter((c) => c.state === 'belum' && !isOk(c.estModal)).length;
     // P5: kerugian yang masuk laba (lostCertain) dipecah menurut kepastiannya; jumlah keduanya = lostCertain.
-    const lostVerified = sumOk(cases.filter((c) => c.state === 'hilang' && c.lossCertainty === 'terverifikasi'));
-    const lostProvisional = sumOk(cases.filter((c) => c.state === 'hilang' && c.lossCertainty === 'sementara'));
+    const lostVerified = sumOk(dalam.filter((c) => c.state === 'hilang' && c.lossCertainty === 'terverifikasi'));
+    const lostProvisional = sumOk(dalam.filter((c) => c.state === 'hilang' && c.lossCertainty === 'sementara'));
+    // B3: kasus dari pesanan periode lain (tidak masuk laba periode ini). Kasus tanpa nilai dihitung terpisah, bukan Rp0.
+    const periodeLain = { kasus: luar.length, kerugian: sumOk(luar.filter((c) => c.state === 'hilang')), risiko: sumOk(luar.filter((c) => c.state === 'belum')),
+      kerugianTanpaNilai: luar.filter((c) => c.state === 'hilang' && !isOk(c.estModal)).length, risikoTanpaNilai: luar.filter((c) => c.state === 'belum' && !isOk(c.estModal)).length };
     const catSummary = {};
     for (const c of cases) {
       const k = `${c.platform}|${c.cat}`;
@@ -1878,6 +1890,38 @@ const Engine = (() => {
     const fixedMonthly = fixedPerMonth(settings);
     const opex = fixedMonthly * monthsSpan;
     const monthList = [...months.values()].filter((x) => x.month !== '—').sort((a, b) => a.month.localeCompare(b.month));
+    /* B4 / A.17 (DITETAPKAN pemilik 31 Okt 2026): bulan pesanan M dianggap LENGKAP untuk satu marketplace bila periode
+     * resmi Laporan Penghasilan (tanggal dana dilepas) mencakup tanggal 1 bulan M sampai paling sedikit 14 hari setelah
+     * akhir bulan M. Periode resmi tidak ada/rusak → tidak_diketahui (bukan lengkap). Beberapa file digabung bila
+     * periodenya bersambung. Angka bulan tidak diubah; status ini dipakai untuk label dan perbandingan. */
+    const HARI_SETELAH_BULAN = 14;
+    const tambahHari = (iso, n) => { const t = new Date(`${iso}T00:00:00Z`); t.setUTCDate(t.getUTCDate() + n); return t.toISOString().slice(0, 10); };
+    const akhirBulan = (ym) => { const [y, mo] = ym.split('-').map(Number); return new Date(Date.UTC(y, mo, 0)).toISOString().slice(0, 10); };
+    const cakupanResmi = (pf) => {
+      const per = parsed.filter((p) => p.kind === `${pf}_income`).map((p) => (pf === 'shopee'
+        ? (p.check.from && p.check.to ? { from: p.check.from, to: p.check.to } : null)
+        : (p.check.periode && p.check.periode.status === 'resmi' ? { from: p.check.periode.from, to: p.check.periode.to } : null)));
+      if (!per.length || per.some((x) => !x)) return null;
+      const merged = [];
+      for (const x of per.sort((a, b) => a.from.localeCompare(b.from))) {
+        const last = merged[merged.length - 1];
+        if (last && x.from <= tambahHari(last.to, 1)) { if (x.to > last.to) last.to = x.to; } else merged.push({ ...x });
+      }
+      return merged;
+    };
+    const cak = { shopee: cakupanResmi('shopee'), tiktok: cakupanResmi('tiktok') };
+    const statusBulan = (pf, ym) => {
+      if (!cak[pf]) return 'tidak_diketahui';
+      const need = { from: `${ym}-01`, to: tambahHari(akhirBulan(ym), HARI_SETELAH_BULAN) };
+      return cak[pf].some((x) => x.from <= need.from && x.to >= need.to) ? 'lengkap' : 'belum_lengkap';
+    };
+    for (const x of monthList) {
+      const per = {};
+      for (const pf of ['shopee', 'tiktok']) if (has[pf] && x[pf].orders > 0) per[pf] = statusBulan(pf, x.month);
+      const v = Object.values(per);
+      x.lengkap = { status: !v.length ? 'tidak_diketahui' : v.includes('tidak_diketahui') ? 'tidak_diketahui' : v.includes('belum_lengkap') ? 'belum_lengkap' : 'lengkap',
+        perMarketplace: per, hariSetelahBulan: HARI_SETELAH_BULAN };
+    }
     for (const x of monthList) {
       const sel = [has.shopee && x.shopee, has.tiktok && x.tiktok].filter(Boolean);
       x.total = { sales: sel.reduce((a, v) => a + v.sales, 0), fees: sel.reduce((a, v) => a + v.fees, 0), received: sel.reduce((a, v) => a + v.received, 0),
@@ -1907,7 +1951,9 @@ const Engine = (() => {
      *  kasus_belum_dicek        ada kasus yang belum ditandai seller (tumpang tindih dengan risiko kasus lama)
      *  kasus_tidak_menjelaskan  ada kasus, tetapi tidak ada tanda seller untuk semua barang (termasuk indikasi saja)
      */
+    const eksposurRefund = [];   // B1: diisi refundTanpaCatatanFisik (refund penuh yang kondisi fisiknya belum diketahui)
     function refundTanpaCatatanFisik() {
+      eksposurRefund.length = 0;
       const st = (c) => (CHECK_CATS.has(c.cat) ? (caseState[c.key] || 'belum') : 'na');
       const sellerMark = (c) => CHECK_CATS.has(c.cat) && (st(c) === 'kembali' || st(c) === 'hilang');
       const oid = (x) => String(x).replace(/^'/, '');
@@ -1951,6 +1997,7 @@ const Engine = (() => {
           continue;
         } else kondisi = 'kasus_tidak_menjelaskan';
         orders[f.platform].add(f.orderId);
+        eksposurRefund.push({ key: keyOf(f.platform, f.orderId, f.product), value: f.value });
         o.jumlahTransaksi++;
         if (isOk(f.units)) o.jumlahUnitDiketahui += f.units; else o.transaksiUnitTidakDiketahui++;
         if (isOk(f.value)) o.nilaiModalDiketahui += f.value; else o.kasusModalTidakDiketahui++;
@@ -1994,6 +2041,34 @@ const Engine = (() => {
       };
     }
 
+    /**
+     * B1 (DITETAPKAN pemilik 31 Okt 2026): laba dalam rentang bila ada barang refund/retur yang nasibnya belum diketahui.
+     *  atas  = laba dari data tersedia (angka yang sudah ada; anggapan barang kembali)
+     *  bawah = atas − modal barang yang nasibnya belum diketahui (anggapan barang tidak kembali)
+     * Sumber: kasus retur "belum dicek" (pesanan dalam laporan), refund penuh tanpa catatan fisik, dan unit refund buku
+     * unit yang kondisinya belum diketahui. Satu barang bisa muncul di beberapa sumber, jadi nilai dikelompokkan per
+     * pesanan + produk dan yang dipakai NILAI TERBESAR, bukan dijumlahkan (aturan anti hitung ganda, A.9).
+     * Kelompok tanpa nilai yang diketahui dihitung terpisah (kelompokTanpaNilai), bukan Rp0.
+     * Harus dipanggil setelah refundTanpaCatatanFisik() (pengisi eksposurRefund).
+     */
+    function rentangLaba(r) {
+      const oid = (x) => String(x).replace(/^'/, '');
+      const keyOf = (pf, orderId, product) => (pf === 'shopee' ? `S|${oid(orderId)}|${norm(product)}` : `T|${oid(orderId)}`);
+      const grup = new Map();
+      const tambah = (key, value) => { if (!grup.has(key)) grup.set(key, []); grup.get(key).push(value); };
+      for (const c of r.cases) if (!c.diLuarLaporan && c.state === 'belum') tambah(keyOf(c.platform, c.orderId, c.product), c.estModal);
+      for (const x of eksposurRefund) tambah(x.key, x.value);
+      for (const x of eksposurBukuUnit) tambah(keyOf(x.platform, x.orderId, x.product), x.value);
+      let eksposur = 0, tanpaNilai = 0;
+      for (const vals of grup.values()) {
+        const known = vals.filter(isOk);
+        if (known.length) eksposur += Math.max(...known); else tanpaNilai++;
+      }
+      if (!r.ready || (!grup.size)) return null;
+      const op = r.fixedMonthly > 0;
+      return { atas: r.totalMargin, bawah: r.totalMargin - eksposur, eksposur, kelompok: grup.size, kelompokTanpaNilai: tanpaNilai,
+        setelahOperasional: op ? { atas: r.netProfit, bawah: r.netProfit - eksposur } : null };
+    }
     function buildKepastian(r) {
       const why = [];
       if (!r.ready) why.push('laba_belum_dapat_dihitung');
@@ -2024,16 +2099,26 @@ const Engine = (() => {
         if (ref === null || ref === undefined) { if (!why.includes('ringkasan_resmi_tidak_ada')) why.push('ringkasan_resmi_tidak_ada'); }
         else if (Math.abs(ref - p.check.sum) > 1 && !why.includes('total_file_tidak_cocok')) why.push('total_file_tidak_cocok');
       }
-      // Kelengkapan periode (bulan lengkap, A.17) belum bisa dibuktikan oleh engine → laba tidak pernah final dulu.
-      why.push('periode_belum_divalidasi');
+      // B4 / A.17: laba tidak final bila ada bulan dalam tampilan yang belum lengkap atau periodenya tidak bisa dipastikan.
+      const st = r.months.filter((x) => x.total.orders > 0).map((x) => x.lengkap.status);
+      if (!st.length || st.includes('tidak_diketahui')) why.push('periode_belum_divalidasi');
+      if (st.includes('belum_lengkap')) why.push('bulan_belum_lengkap');
+      // Pengaman: syarat "laba final" belum ditetapkan pemilik. Biaya di luar laporan marketplace (iklan di luar laporan,
+      // packing, biaya operasional) tidak bisa dibuktikan lengkap oleh engine, jadi laba tidak pernah final dulu.
+      why.push('syarat_final_belum_ditetapkan');
       const unitRetur = {};
       for (const c of check) unitRetur[c.unitStatus] = (unitRetur[c.unitStatus] || 0) + 1;
       const files = (kind) => parsed.filter((p) => p.kind === kind).length;
       return {
         laba: { dariDataTersedia: r.totalMargin, final: why.length === 0, alasanTidakFinal: why },
+        // B4 / A.17: bulan (basis pesanan) per status kelengkapan, untuk label di tampilan.
+        bulan: { belumLengkap: r.months.filter((x) => x.total.orders > 0 && x.lengkap.status === 'belum_lengkap').map((x) => x.month),
+          tidakDiketahui: r.months.filter((x) => x.total.orders > 0 && x.lengkap.status === 'tidak_diketahui').map((x) => x.month), hariSetelahBulan: 14 },
         hpp: { ...K.hpp }, penjualan: { ...K.penjualan }, baris: { ...K.baris },
         // H2-B3a: cakupan per pesanan (lihat buildCakupan). Penjualan di sini = totalSales, berbeda dari penjualan di atas.
         cakupan: buildCakupan(r),
+        // B1: setelah buildCakupan (yang mengisi eksposurRefund lewat refundTanpaCatatanFisik).
+        rentangLaba: rentangLaba(r),
         // P11: hasil penggabungan Laporan Penghasilan (metadata). Transaksi yang ditahan TIDAK masuk angka mana pun.
         gabungan: Object.fromEntries(['shopee', 'tiktok'].map((k) => [k, { ...m.gabungan[k], pesananDitahan: m.gabungan[k].pesananDitahan.length,
           penyesuaianDitahan: (m.gabungan[k].penyesuaianDitahan || []).length,
@@ -2045,7 +2130,7 @@ const Engine = (() => {
         bukuUnit: { ...ledgerStats, status: { ...ledgerStats.status } },
         // kerugianTerverifikasi + kerugianSementara = kerugian yang saat ini masuk laba (lostCertain).
         risikoBarang: { kerugianTerverifikasi: lostVerified, kerugianSementara: lostProvisional, risikoTerhitung: unknownRisk,
-          kerugianTanpaNilai: lostNoValue, risikoTanpaNilai: riskNoValue, unitRetur },
+          kerugianTanpaNilai: lostNoValue, risikoTanpaNilai: riskNoValue, unitRetur, periodeLain: { ...periodeLain } },
         sumberData: {
           laporanPenghasilan: { shopee: files('shopee_income'), tiktok: files('tiktok_income') },
           exportPesanan: { shopee: files('shopee_orders'), tiktok: files('tiktok_orders') },
@@ -2237,7 +2322,8 @@ const Engine = (() => {
       `Total ${rp(-r.totalFees)} dipotong marketplace. Rata-rata ${rp(-r.totalFees / Math.max(r.orders, 1))} per pesanan.`);
 
     // tren potongan: 2 bulan terakhir vs 3 bulan pertama
-    const ms = r.months.filter((x) => x.total.sales > 0);
+    // B4 / A.17: perbandingan antarbulan hanya memakai bulan yang lengkap.
+    const ms = r.months.filter((x) => x.total.sales > 0 && x.lengkap && x.lengkap.status === 'lengkap');
     if (ms.length >= 4) {
       const avg = (arr) => arr.reduce((a, x) => a - x.total.fees, 0) / Math.max(arr.reduce((a, x) => a + x.total.sales, 0), 1);
       const early = avg(ms.slice(0, 3)), late = avg(ms.slice(-2));

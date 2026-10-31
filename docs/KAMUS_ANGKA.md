@@ -100,7 +100,10 @@ Tidak termasuk ongkir ke pembeli.
 - Jumlah unit untuk HPP **tidak boleh** diturunkan dari nominal refund (aturan resmi, A.19.1).
 
 ### A.7 Kerugian barang retur
-Status: **DIUSULKAN — BELUM DISETUJUI**
+Status: **DITETAPKAN pemilik (31 Okt 2026)** untuk kalimat pertama dan butir "barang kembali" (barang tidak kembali =
+kerugian sebesar modal unitnya). Butir "kembali tetapi rusak" dan kompensasi (A.10) tetap **DIUSULKAN**.
+Kerugian dari pesanan yang tidak ada di Laporan Penghasilan yang diunggah dicatat terpisah, tidak mengurangi laba
+periode itu (A.20).
 
 Biaya perolehan barang yang sudah keluar dari stok, direfund ke pembeli, dan tidak kembali dalam kondisi layak jual.
 - Barang kembali dan layak jual: kerugian 0.
@@ -114,7 +117,8 @@ Biaya variabel yang dikeluarkan penjual per pesanan dan tidak tercatat di lapora
 atau biaya dropship.
 
 ### A.9 Aturan anti penghitungan ganda HPP dan retur
-Status: **DIUSULKAN — BELUM DISETUJUI**
+Status: **DITETAPKAN pemilik (31 Okt 2026)**. Penerapan untuk refund yang dicatat sebagai penyesuaian belum dibuat
+(belum ada contoh jenis penyesuaian refund di file asli; lihat P10 di `KNOWN_ISSUES.md`).
 
 Untuk setiap unit barang, tepat satu dari tiga kondisi berlaku:
 
@@ -136,7 +140,10 @@ Konsekuensinya:
 Status:
 - **Prinsip DITETAPKAN pemilik (14 Okt 2026):** penyesuaian diklasifikasikan berdasarkan substansi transaksi, tidak
   otomatis dikeluarkan dari laba.
-- **Tabel klasifikasi di bawah: DIUSULKAN — BELUM DISETUJUI.**
+- **Tabel klasifikasi (31 Okt 2026):** baris "Refund atau koreksi atas pesanan tertentu" dan "Tidak bisa
+  diklasifikasikan" **DITETAPKAN pemilik**. Baris kompensasi, penggantian logistik, dan denda masih **DIUSULKAN**
+  (perlakuannya menunggu keputusan; jenis yang ditemukan pada data uji pemilik: "Kompensasi atas pesanan hilang" dan
+  "Logistik", keduanya tertaut nomor pesanan).
 
 Diklasifikasikan menurut **substansi transaksi**, tidak otomatis dikeluarkan dari laba:
 
@@ -201,15 +208,19 @@ Calon komponen (rumus dan bobot menunggu keputusan):
 - parser Beta.
 
 ### A.17 Periode dan bulan lengkap
-Status: **DIUSULKAN — BELUM DISETUJUI**
+Status: **DITETAPKAN pemilik (31 Okt 2026)**, batas **14 hari**.
 
 Laporan Penghasilan berisi pesanan yang **dananya sudah dilepas** dalam rentang tanggal tertentu. Akibatnya, pesanan
 yang dibuat di akhir periode tetapi belum dilepas tidak ada di laporan.
 
-Suatu bulan (basis pesanan) dianggap **lengkap** bila rentang dana dilepas mencakup awal bulan itu sampai
-setidaknya beberapa hari setelah akhir bulan. Batas harinya perlu keputusan pemilik. Pada data uji pemilik ditemukan
-jeda beberapa hari antara pesanan dan dana dilepas. Bulan yang tidak lengkap diberi label dan tidak dipakai untuk
-perbandingan atau temuan.
+Bulan pesanan M dianggap **lengkap** untuk satu marketplace bila periode resmi Laporan Penghasilan (Shopee: Dari/ke di
+Summary; TikTok: baris "Periode") mencakup tanggal 1 bulan M sampai paling sedikit **14 hari setelah akhir bulan M**.
+Beberapa file digabung bila periodenya bersambung (tanpa celah). Periode resmi tidak ada atau rusak → kelengkapan
+**tidak diketahui** (bukan lengkap). Bulan yang tidak lengkap diberi label dan tidak dipakai untuk perbandingan atau
+temuan antarbulan. Angka bulan itu tidak diubah.
+
+Penerapan: `assets/engine.js` (`lengkap` per bulan, alasan `bulan_belum_lengkap` / `periode_belum_divalidasi`).
+Tes: "B4 bulan lengkap ..." (`node tests/engine.test.js`).
 
 ### A.18 Tarif efektif
 Status: **DIUSULKAN — BELUM DISETUJUI**
@@ -352,6 +363,25 @@ Catatan:
 - Struktur modal lain (stok sendiri, produsen, dropshipper) tetap didukung.
 
 ---
+
+### A.20 Laba dalam rentang dan kasus dari pesanan periode lain
+Status: **DITETAPKAN pemilik (31 Okt 2026)**.
+
+- **Laba dalam rentang.** Bila ada barang refund/retur yang nasibnya belum diketahui (kasus retur "belum dicek",
+  refund penuh tanpa catatan kondisi barang, unit refund yang kondisinya belum diketahui):
+  - batas atas = laba dari data tersedia (anggapan barang kembali; angka yang sudah ada);
+  - batas bawah = batas atas − modal barang yang nasibnya belum diketahui (anggapan barang tidak kembali).
+  - Satu barang yang muncul di beberapa sumber dikelompokkan per pesanan + produk dan dihitung **sekali** (nilai
+    terbesar), sesuai A.9. Kelompok tanpa nilai disebut terpisah, bukan Rp0.
+  - Setelah seller menandai "Kembali" atau "Tidak kembali", barang itu keluar dari rentang (batas bawah = laba bila
+    ditandai tidak kembali).
+- **Pesanan periode lain.** Kerugian/risiko retur dari pesanan yang tidak ada di Laporan Penghasilan yang diunggah
+  tidak mengurangi laba periode itu; ditampilkan terpisah.
+- **Laba final.** Syarat "laba final" belum ditetapkan. Karena biaya di luar laporan marketplace (iklan di luar
+  laporan, packing, operasional) tidak bisa dibuktikan lengkap, laba tetap "belum final" (`syarat_final_belum_ditetapkan`).
+
+Penerapan: `assets/engine.js` (`kepastian.rentangLaba`, `kepastian.risikoBarang.periodeLain`), tampilan di Ringkasan,
+halaman Laba, nota, halaman Retur, dan PDF. Tes: "B1 rentang laba ...", "B3 kerugian/risiko retur ...".
 
 ## B. Implementasi kode saat ini (`assets/engine.js`, per 14 Okt 2026, commit `a31eddb`)
 

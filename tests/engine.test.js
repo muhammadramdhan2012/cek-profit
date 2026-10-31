@@ -709,7 +709,7 @@ test('H10 kepastian: HPP per status = total modal; modal diketahui ≠ terverifi
   const r = hitungFmt(satu, [[[bs]]], ST([cat('Kaos', 'M', 20000)]));
   const k = r.kepastian;
   eq(k.hpp.terverifikasi + k.hpp.estimasi + k.hpp.belum, r.totalModal); eq(k.hpp.terverifikasi, 20000); eq(r.coverage, 1);
-  eq(k.laba.dariDataTersedia, r.totalMargin); eq(k.laba.final, false); eq(k.laba.alasanTidakFinal.join(), 'periode_belum_divalidasi');
+  eq(k.laba.dariDataTersedia, r.totalMargin); eq(k.laba.final, false); eq(k.laba.alasanTidakFinal.join(), 'bulan_belum_lengkap,syarat_final_belum_ditetapkan', 'B4: periode Jan s.d. 31 Jan → Januari belum lengkap; pengaman final');
   const rata = hitungFmt(satu, [[[bs]]], stRata);
   eq(rata.coverage, 1, 'modal "diketahui" 100%'); eq(rata.kepastian.hpp.terverifikasi, 0); eq(rata.kepastian.hpp.estimasi, 20000);
   truthy(rata.kepastian.laba.alasanTidakFinal.includes('hpp_estimasi'), 'estimasi tercatat sebagai alasan');
@@ -743,7 +743,8 @@ test('H12 TikTok: jumlah 0/kosong/tidak ada/1 dan harga kosong/tidak valid/nol e
   eq(c(3, 50000).qty, 3, 'jumlah tidak diturunkan dari nominal'); eq(c(3, 50000).amount, 150000);
   // Mode reseller: nominal tidak diketahui → risiko tanpa nilai, bukan risiko Rp0.
   const r = E.compute([ttFile([{ qty: 0, price: 50000 }])], { modalMode: 'acuan', mitra: 60, coret: 100, periods: [{ start: '', markup: 0, disc: 0 }] });
-  eq(r.unknownRisk, 0); eq(r.kepastian.risikoBarang.risikoTanpaNilai, 1);
+  // B3: tanpa Laporan Penghasilan, pesanannya tidak ada di laporan → dicatat di periodeLain (tetap risiko tanpa nilai, bukan Rp0).
+  eq(r.unknownRisk, 0); eq(r.kepastian.risikoBarang.periodeLain.risikoTanpaNilai, 1); eq(r.kepastian.risikoBarang.periodeLain.risiko, 0);
 });
 test('H13 Shopee: nominal refund kosong/tidak valid → tidak diketahui; nol eksplisit tetap 0', () => {
   const amt = (amount) => returShopee([{ order: 'X', product: 'Kaos', qty: 1, amount }]).cases[0];
@@ -751,7 +752,7 @@ test('H13 Shopee: nominal refund kosong/tidak valid → tidak diketahui; nol eks
   truthy(Number.isNaN(amt('-').amount) && amt('-').amountInfo === 'tidak_valid', 'teks');
   eq(amt(0).amount, 0); eq(amt(0).amountInfo, 'ada'); eq(amt(25000).amount, 25000); eq(amt(25000).amountSource, 'file_retur');
   const r = E.compute([returShopee([{ order: 'X', product: 'Kaos', qty: 1, amount: '' }])], { modalMode: 'acuan', mitra: 60, periods: [{ start: '', markup: 0, disc: 0 }] });
-  truthy(Number.isNaN(r.cases[0].estModal), 'mode reseller tanpa nominal → perkiraan modal tidak diketahui'); eq(r.kepastian.risikoBarang.risikoTanpaNilai, 1);
+  truthy(Number.isNaN(r.cases[0].estModal), 'mode reseller tanpa nominal → perkiraan modal tidak diketahui'); eq(r.kepastian.risikoBarang.periodeLain.risikoTanpaNilai, 1, 'B3: pesanan tidak ada di laporan');
 });
 test('H14 ringkasan kategori: campuran nilai diketahui & tidak diketahui → total tidak disajikan seolah lengkap', () => {
   const r = E.compute([ttFile([{ qty: 1, price: 50000 }, { qty: '', price: 50000 }, { qty: 2, price: 30000 }])], ST([]));
@@ -791,6 +792,26 @@ test('H16 KETERBATASAN (H2-B): hitung ganda tanpa export tetap mungkin → kerug
   eq(r.totalModal, 0, 'HPP refund parsial tidak dihitung menurut nominal'); eq(r.totalModal + r.lostCertain, 40000, 'tidak melebihi modal 2 kaos');
   eq(r.cases[0].lossCertainty, 'sementara'); eq(r.kepastian.risikoBarang.kerugianTerverifikasi, 0);
   eq(r.kepastian.laba.final, false); truthy(r.kepastian.laba.alasanTidakFinal.includes('kerugian_retur_sementara'), 'alasan');
+});
+
+/* ---------- B3 (keputusan pemilik 31 Okt 2026): kerugian retur dari pesanan di luar laporan → terpisah (data SINTETIS) ---------- */
+test('B3 kerugian/risiko retur pesanan di luar laporan tidak mengurangi laba; dicatat terpisah; pesanan dalam laporan tetap', () => {
+  const base = E.compute(filesKaos(0, 0), stUnit);
+  const luar = returShopee([{ id: 'RT9', order: 'LUAR-1', product: 'Kaos', qty: 1, amount: 50000 }]);
+  const hilangLuar = E.compute([...filesKaos(0, 0), luar], stUnit, { 'S|RT9|Kaos|': 'hilang' });
+  eq(hilangLuar.totalMargin, base.totalMargin, 'laba periode ini tidak berubah'); eq(hilangLuar.lostCertain, 0);
+  const PL = hilangLuar.kepastian.risikoBarang.periodeLain;
+  eq(PL.kasus, 1); eq(PL.kerugian, 20000, 'kerugian tetap terlihat: 1 unit × modal'); eq(PL.risiko, 0);
+  truthy(hilangLuar.cases[0].diLuarLaporan, 'kasus ditandai di luar laporan');
+  const belumLuar = E.compute([...filesKaos(0, 0), luar], stUnit);
+  eq(belumLuar.unknownRisk, 0, 'risiko periode lain tidak masuk risiko periode ini'); eq(belumLuar.kepastian.risikoBarang.periodeLain.risiko, 20000);
+  // Pesanan yang ADA di laporan: perilaku lama tetap (kerugian mengurangi laba).
+  const dalam = E.compute([...filesKaos(-50000, 1), returShopee([{ order: 'SINT-K1', product: 'Kaos', qty: 1, amount: 50000 }])], stUnit, { [ksKaos]: 'hilang' });
+  truthy(dalam.lostCertain > 0 && !dalam.cases[0].diLuarLaporan, 'kasus dalam laporan tetap mengurangi laba');
+  eq(dalam.kepastian.risikoBarang.periodeLain.kasus, 0);
+  // Nilai tidak diketahui di periode lain: dihitung sebagai kasus tanpa nilai, bukan Rp0.
+  const tanpaNilai = E.compute([...filesKaos(0, 0), returShopee([{ id: 'RT9', order: 'LUAR-1', product: 'Kaos', qty: '', amount: 50000 }])], stUnit, { 'S|RT9|Kaos|': 'hilang' });
+  eq(tanpaNilai.kepastian.risikoBarang.periodeLain.kerugianTanpaNilai, 1); eq(tanpaNilai.kepastian.risikoBarang.periodeLain.kerugian, 0);
 });
 
 /* ---------- P10 (verifikasi 31 Okt 2026): refund dicatat sebagai PENYESUAIAN, bukan di baris pesanan (data SINTETIS) ----------
@@ -1129,7 +1150,7 @@ test('I4–I5 seluruh insight data contoh & variasi mode tanpa NaN/Infinity', ()
 test('I6 insight bulan dengan laba tertinggi tidak memakai "Margin Rp"; nilainya tetap', () => {
   const ins = r.insights.find((i) => /^Laba tertinggi di /.test(i.title));
   truthy(ins, 'insight bulan ada');
-  const ms = r.months.filter((x) => x.total.sales > 0), best = ms.reduce((a, x) => (x.total.margin > a.total.margin ? x : a));
+  const ms = r.months.filter((x) => x.total.sales > 0 && x.lengkap.status === 'lengkap'), best = ms.reduce((a, x) => (x.total.margin > a.total.margin ? x : a));   // B4: hanya bulan lengkap
   truthy(ins.detail.startsWith(`Laba setelah modal ${best.total.margin < 0 ? '−' : ''}Rp${Math.abs(Math.round(best.total.margin)).toLocaleString('id-ID')}`), ins.detail);
   truthy(!/Margin\s*−?Rp/.test(insTeks(r)), 'masih ada "Margin Rp"');
 });
@@ -1360,12 +1381,14 @@ test('P0-3 statusHpp: semua tidak diketahui / sebagian / lengkap / HPP benar-ben
   eq(pl.statusHpp.shopee, 'lengkap'); eq(pl.statusHpp.tiktok, 'tidak_diketahui'); eq(pl.statusHpp.total, 'sebagian');
 });
 /** Empat bulan sintetis: Jan modal lengkap, Feb tanpa modal, Mar sebagian, Apr laba benar-benar Rp0. */
-const bulanP0 = () => [E.parseWorkbook(Sint.penghasilan([
+/** Ubah periode resmi (Summary Dari/ke) workbook Laporan Penghasilan Shopee sintetis. */
+const denganPeriode = (wb, from, to) => ({ ...wb, sheets: { ...wb.sheets, Summary: wb.sheets.Summary.map((row) => (row[0] === 'Dari' ? ['Dari', from] : row[0] === 'ke' ? ['ke', to] : row)) } });
+const bulanP0 = () => [E.parseWorkbook(denganPeriode(Sint.penghasilan([
   { id: 'B-JAN', orderDate: '2026-01-10 10:00', items: [{ name: 'Kaos', harga: 100000 }] },
   { id: 'B-FEB', orderDate: '2026-02-10 10:00', items: [{ name: 'Topi', harga: 100000 }] },
   { id: 'B-MAR1', orderDate: '2026-03-10 10:00', items: [{ name: 'Kaos', harga: 100000 }] },
   { id: 'B-MAR2', orderDate: '2026-03-11 10:00', items: [{ name: 'Topi', harga: 100000 }] },
-  { id: 'B-APR', orderDate: '2026-04-10 10:00', items: [{ name: 'Gelas', harga: 100000 }] }]))];
+  { id: 'B-APR', orderDate: '2026-04-10 10:00', items: [{ name: 'Gelas', harga: 100000 }] }]), '2026-01-01', '2026-05-14'))];   // B4: Jan–Apr lengkap (≥14 hari setelah April)
 const stBulan = ST([cat('Kaos', '', 20000), cat('Gelas', '', 100000)]);
 test('P0-4 laba bulanan: status per bulan (lengkap / belum diketahui / sebagian / Rp0 aktual); angka bulan tidak berubah', () => {
   const r = E.compute(bulanP0(), stBulan), by = Object.fromEntries(r.months.map((m) => [m.month, m.total]));
@@ -1898,6 +1921,63 @@ test('3C-8 Seller SKU kosong tidak dipakai sebagai identitas; Order ID dengan ta
   eq(ex.lines[0].orderId, '881300000', 'tab dibuang'); eq(ex.lines[0].sellerSku, '');
   const r = E.compute([tt3cInc([['881300000', 60000, '']]), ex], ST([cat('', '', 11111, '')]).catalog.length ? ST([cat('Produk 7002001', '', 11111, ''), cat('', '', 30000, '7002001')]) : kat3c);
   eq(r.totalModal, 30000, 'modal dari SKU ID, bukan Seller SKU kosong');
+});
+
+/* ---------- B4 / A.17 (keputusan pemilik 31 Okt 2026): bulan lengkap = periode resmi mencakup s.d. 14 hari setelah akhir bulan ---------- */
+test('B4 bulan lengkap: batas 14 hari, file bersambung/terputus, periode tidak terbaca, TikTok, angka bulan tetap, laba tidak final', () => {
+  const OJ = { id: 'L-JAN', orderDate: '2026-01-20 10:00', items: [{ name: 'Kaos', harga: 100000 }] }, OF = { id: 'L-FEB', orderDate: '2026-02-05 10:00', items: [{ name: 'Kaos', harga: 100000 }] };
+  const file = (orders, from, to, i = 0) => E.parseWorkbook({ ...denganPeriode(Sint.penghasilan(orders), from, to), name: `p${i}.xlsx` });
+  const st = (r) => Object.fromEntries(r.months.map((m) => [m.month, m.lengkap.status]));
+  const satu = E.compute([file([OJ, OF], '2026-01-01', '2026-02-14')], stUnit);
+  eq(st(satu)['2026-01'], 'lengkap', 'tepat 14 hari setelah 31 Jan'); eq(st(satu)['2026-02'], 'belum_lengkap', 'Feb butuh s.d. 14 Mar');
+  truthy(satu.kepastian.laba.alasanTidakFinal.includes('bulan_belum_lengkap')); eq(satu.kepastian.bulan.belumLengkap.join(), '2026-02');
+  eq(st(E.compute([file([OJ], '2026-01-01', '2026-02-13')], stUnit))['2026-01'], 'belum_lengkap', '13 hari belum cukup');
+  eq(st(E.compute([file([OJ], '2026-01-02', '2026-02-28')], stUnit))['2026-01'], 'belum_lengkap', 'tidak mulai tanggal 1');
+  const sambung = E.compute([file([OJ], '2026-01-01', '2026-01-31', 0), file([OF], '2026-02-01', '2026-03-14', 1)], stUnit);
+  eq(st(sambung)['2026-01'], 'lengkap', 'dua file bersambung digabung'); eq(st(sambung)['2026-02'], 'lengkap');
+  truthy(!sambung.kepastian.laba.alasanTidakFinal.includes('bulan_belum_lengkap') && !sambung.kepastian.laba.alasanTidakFinal.includes('periode_belum_divalidasi'), 'semua bulan lengkap');
+  eq(sambung.kepastian.laba.final, false, 'pengaman: syarat final belum ditetapkan'); truthy(sambung.kepastian.laba.alasanTidakFinal.includes('syarat_final_belum_ditetapkan'));
+  const putus = E.compute([file([OJ], '2026-01-01', '2026-01-31', 0), file([OF], '2026-02-05', '2026-03-14', 1)], stUnit);
+  eq(st(putus)['2026-01'], 'belum_lengkap', 'celah 1–4 Feb: tidak digabung');
+  const tanpa = { ...Sint.penghasilan([OJ]) }; tanpa.sheets = { ...tanpa.sheets, Summary: tanpa.sheets.Summary.filter((row) => row[0] !== 'Dari' && row[0] !== 'ke') };
+  const rT = E.compute([E.parseWorkbook(tanpa)], stUnit);
+  eq(st(rT)['2026-01'], 'tidak_diketahui', 'periode resmi tidak ada → bukan lengkap'); truthy(rT.kepastian.laba.alasanTidakFinal.includes('periode_belum_divalidasi'));
+  // Angka bulan tidak berubah oleh status kelengkapan.
+  const a = E.compute([file([OJ, OF], '2026-01-01', '2026-02-14')], stUnit), b = E.compute([file([OJ, OF], '2026-01-01', '2026-03-31')], stUnit);
+  eq(a.months.map((m) => m.total.margin).join(), b.months.map((m) => m.total.margin).join()); eq(a.totalMargin, b.totalMargin);
+  // TikTok memakai baris "Periode" resmi.
+  const tt = (per) => st(E.compute([A1tt([{ id: 'T-J', sub: 100000, date: '2026/01/10', pay: '2026/01/20' }], { period: per })], ST([], { fallbackPct: 50 })));
+  eq(tt('2026/01/01-2026/02/14')['2026-01'], 'lengkap'); eq(tt('2026/01/01-2026/01/31')['2026-01'], 'belum_lengkap'); eq(tt(null)['2026-01'], 'tidak_diketahui');
+});
+
+/* ---------- B1 (keputusan pemilik 31 Okt 2026): laba dalam rentang (data SINTETIS) ---------- */
+/** Toko: pesanan K2 (2 kaos terjual normal) + pesanan K1 (2 kaos @50.000) dengan refund & returned tertentu. */
+const filesB1toko = (refund, returned, withExport = true) => [E.parseWorkbook(Sint.penghasilan([{ id: 'SINT-K2', items: [{ name: 'Kaos', harga: 100000 }] },
+  { id: 'SINT-K1', items: [{ name: 'Kaos', harga: 100000, refund }] }])),
+  ...(withExport ? [E.parseWorkbook(Sint.exportPesanan([{ order: 'SINT-K2', name: 'Kaos', qty: 2, price: 50000 },
+    { order: 'SINT-K1', name: 'Kaos', qty: 2, price: 50000, returned, returnStatus: refund ? 'Permintaan Disetujui' : '' }]))] : [])];
+const retK1 = (qty) => returShopee([{ order: 'SINT-K1', product: 'Kaos', qty, amount: 50000 * qty }]);
+test('B1 rentang laba: atas = laba tetap; bawah = atas − modal barang yang nasibnya belum diketahui; tanpa hitung ganda', () => {
+  const RL = (r) => r.kepastian.rentangLaba;
+  eq(RL(E.compute(filesB1toko(0, 0), stUnit)), null, 'tanpa refund/retur → tidak ada rentang');
+  // Refund penuh 2 kaos + kasus retur 2 unit "belum dicek" pada pesanan yang sama → satu barang, satu nilai (maks), bukan dua.
+  const dobel = E.compute([...filesB1toko(-100000, 2), retK1(2)], stUnit);
+  eq(RL(dobel).atas, dobel.totalMargin, 'batas atas = laba dari data tersedia (angka tidak berubah)');
+  eq(RL(dobel).eksposur, 40000, '2 kaos × 20.000, tidak dijumlah dua/tiga kali'); eq(RL(dobel).bawah, dobel.totalMargin - 40000); eq(RL(dobel).kelompok, 1);
+  // Seller menandai: kembali → rentang hilang; tidak kembali → kerugian masuk laba (= batas bawah sebelumnya), rentang hilang.
+  eq(RL(E.compute([...filesB1toko(-100000, 2), retK1(2)], stUnit, { [ksKaos]: 'kembali' })), null);
+  const hilang = E.compute([...filesB1toko(-100000, 2), retK1(2)], stUnit, { [ksKaos]: 'hilang' });
+  eq(RL(hilang), null); eq(hilang.totalMargin, RL(dobel).bawah, 'batas bawah = laba bila barang ditandai tidak kembali');
+  // Refund penuh tanpa file retur → eksposur dari modal × unit export.
+  const tanpaRetur = E.compute(filesB1toko(-100000, 2), stUnit);
+  eq(RL(tanpaRetur).eksposur, 40000); eq(RL(tanpaRetur).kelompokTanpaNilai, 0);
+  // Unit tidak diketahui (tanpa export) → kelompok tanpa nilai, bukan Rp0.
+  const tanpaExport = E.compute(filesB1toko(-100000, 0, false), stUnit);
+  eq(RL(tanpaExport).eksposur, 0); eq(RL(tanpaExport).kelompokTanpaNilai, 1); eq(RL(tanpaExport).bawah, tanpaExport.totalMargin);
+  // Kasus retur pesanan di luar laporan tidak masuk rentang (B3).
+  eq(RL(E.compute([...filesB1toko(0, 0), returShopee([{ id: 'RT9', order: 'LUAR-1', product: 'Kaos', qty: 1, amount: 50000 }])], stUnit)), null);
+  // Laba belum bisa dihitung (tanpa modal) → tidak ada rentang.
+  eq(RL(E.compute(filesB1toko(-100000, 2), ST([]))), null);
 });
 
 console.log(failed ? `\n${failed} uji GAGAL` : '\nSemua uji lulus');

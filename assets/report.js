@@ -97,6 +97,11 @@ const CekReport = (() => {
       `Marketplace memotong <b>${rp(-r.totalFees)}</b> (${pc(-r.totalFees / r.totalSales)} dari penjualan), sehingga dana yang diterima ${rp(r.totalReceived)}.`,
       r.ready ? `Setelah modal barang${r.totalPacking ? ', packing' : ''}${r.lostCertain ? ' dan barang retur yang hilang' : ''}, laba setelah modal <b>${rp(r.totalMargin)}</b> (${pc(marginPct)} dari penjualan yang modalnya diketahui)${hasOpex ? `; setelah biaya operasional yang tercatat ${rp(r.opex)}, laba dari data tersedia <b>${rp(r.netProfit)}</b>` : ''}.` : 'Modal barang belum diisi, sehingga laba belum dapat dihitung.',
       r.ready && r.coverage < 0.98 ? `Catatan: modal baru diketahui untuk ${pc(r.coverage, 0)} penjualan; laba di laporan ini hanya mencakup bagian tersebut.` : '',
+      // B1: rentang laba (angka dari engine) bila ada barang refund/retur yang nasibnya belum diketahui.
+      r.ready && r.kepastian && r.kepastian.rentangLaba && r.kepastian.rentangLaba.eksposur > 0 ? (() => { const R = r.kepastian.rentangLaba, v = hasOpex && R.setelahOperasional ? R.setelahOperasional : R;
+        return `Rentang laba: ${rp(v.bawah)} bila barang refund yang nasibnya belum jelas tidak kembali, sampai ${rp(v.atas)} bila kembali${R.kelompokTanpaNilai ? `; ${R.kelompokTanpaNilai} pesanan refund nilainya belum diketahui, jadi bisa lebih rendah` : ''}.`; })() : '',
+      // B3: kasus retur dari pesanan di luar laporan tidak dikurangkan dari laba periode ini.
+      r.kepastian && r.kepastian.risikoBarang && r.kepastian.risikoBarang.periodeLain && r.kepastian.risikoBarang.periodeLain.kasus ? `${r.kepastian.risikoBarang.periodeLain.kasus} kasus retur berasal dari pesanan di luar laporan ini dan tidak dikurangkan dari laba periode ini.` : '',
       best ? `${PN[best]} memberi margin per rupiah penjualan yang lebih tinggi pada periode ini.` : '',
     ].filter(Boolean).join(' ');
 

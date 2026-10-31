@@ -52,8 +52,10 @@ Pemeriksaan ulang kode `main` (`349e596`) terhadap masalah akurasi High. Perinta
 | H1 jumlah barang Shopee | Terbuka | **Ditangani, menunggu konfirmasi pemilik untuk ditutup** | Commit `6de740d`, `fbc1c27`, `f8fc951`. Tes P7e, T3, T10, T16. Tanpa export: estimasi minimum 1 unit berlabel (A.19.1), nota "Belum final", temuan "Laba sebenarnya bisa lebih kecil" (dicek di browser 31 Okt 2026). |
 | H3 variasi tergabung / unit ganda | Terbuka | **Ditangani, menunggu konfirmasi pemilik untuk ditutup** | Commit `fbc1c27`, `f8fc951`. Tes T3, T10, T16. Belum diverifikasi: isian modal per variasi tanpa SKU di tabel produk (AC-S3). |
 | M10 jumlah retur Shopee | Terbuka | **Selesai** | Commit `ae96ffc` (H2-A). Tes "H1 parser retur Shopee: 3, 1, kosong, tidak ada, teks, nol, kolom lama". |
-| P10 penghitungan ganda HPP | Perlu verifikasi | **Terbuka (terbukti dengan data sintetis)** | Tes "P10 KETERBATASAN". Lihat rincian P10 di bawah. |
-| H2 refund penuh tanpa kondisi barang | Dikerjakan | Dikerjakan | Pemilik setuju arah tampilan **laba dalam rentang** (31 Okt 2026); rumus belum diubah. |
+| P10 penghitungan ganda HPP | Perlu verifikasi | **Terbuka (terbukti dengan data sintetis)** | Tes "P10 KETERBATASAN". Aturan A.9 & baris refund A.10 ditetapkan 31 Okt 2026, tetapi penerapannya ditunda: jenis penyesuaian refund tidak ditemukan di data uji pemilik (yang ada: "Kompensasi atas pesanan hilang", "Logistik"). Butuh contoh file. |
+| H2 refund penuh tanpa kondisi barang | Dikerjakan | **Ditangani dengan rentang laba (Tahap B1), menunggu konfirmasi pemilik untuk ditutup** | `docs/KAMUS_ANGKA.md` A.20. Tes "B1 rentang laba ...". Batas bawah = laba bila barang ditandai tidak kembali (diuji). Kompensasi barang hilang (H2-B2) belum. |
+| M1 bulan pertama/terakhir tidak lengkap | Terbuka | **Selesai (Tahap B4)** | A.17 ditetapkan (14 hari). Tes "B4 bulan lengkap ...", "I6", "P0-4", "H10" (`node tests/engine.test.js`, lulus 31 Okt 2026). Label "belum lengkap" di grafik/tabel; perbandingan & temuan hanya bulan lengkap. Belum diuji dengan beberapa file asli bersambung. |
+| (baru) Kerugian retur dari pesanan di luar laporan | — | **Selesai (Tahap B3)** | Keputusan pemilik 31 Okt 2026: tidak mengurangi laba periode ini, ditampilkan terpisah. Tes "B3 kerugian/risiko retur ...". |
 
 ## Ringkasan (14 Okt 2026)
 
@@ -70,12 +72,12 @@ Tabel ini angka audit awal; perubahan setelahnya ada di "Pembaruan status (31 Ok
 
 | Pilar | Status | Catatan |
 |---|---|---|
-| Profit Reporting | Berjalan, dengan masalah akurasi terbuka | Terbuka: H2 (refund penuh), M1, M11, P3, P10. Ditangani, menunggu konfirmasi: H1, H3. Selesai: M10. |
+| Profit Reporting | Berjalan, dengan masalah akurasi terbuka | Terbuka: M11, P3, P10. Ditangani, menunggu konfirmasi: H1, H2, H3. Selesai: M1, M10. |
 | Profit Optimization | Sebagian | Simulator harga, harga impas/target, batas harga aman. Belum ada skenario tingkat toko. |
 | Pajak Seller | Beta (flag `pajakSeller`) | Simulasi PPh final & PPh 22 marketplace + Surat Pernyataan PMK 37/2025. Bukan nasihat pajak; hanya 2026; omzet dari laporan = setelah diskon (perkiraan); bergantung penunjukan ulang marketplace pemungut oleh DJP; koperasi/badan lain belum didukung. |
 | Financial Analytics | Sebagian | Tren per bulan, temuan otomatis. **Arus kas belum ada** (`docs/KAMUS_ANGKA.md` A.15). |
 | Financial Control | Awal | Pencocokan total per file dan, sejak Money Trace A1, per komponen (penjualan, refund, potongan, dana dilepas, penyesuaian) dengan ringkasan resmi. Sejak Money Trace Shopee v1 (Beta): saldo penjual Shopee dicocokkan 1:1 dengan Laporan Penghasilan (nomor pesanan, nominal persis, tanggal dana dilepas). **Rekonsiliasi bank belum ada**; saldo/pencairan TikTok belum dibaca. |
-| Profit Confidence | Awal | Panel Kepastian Profit (sejak H2-B3a): porsi penjualan per status (terverifikasi, perkiraan, perkiraan minimum, perlu dicek, belum diketahui) dan alasan laba belum final. Belum ada laba dalam rentang (disetujui arahnya 31 Okt 2026). |
+| Profit Confidence | Awal | Panel Kepastian Profit (sejak H2-B3a): porsi penjualan per status (terverifikasi, perkiraan, perkiraan minimum, perlu dicek, belum diketahui) dan alasan laba belum final. Sejak Tahap B (31 Okt 2026): laba dalam rentang, status bulan lengkap, kasus retur periode lain terpisah. Syarat "laba final" belum ditetapkan. |
 | Money Trace | A1 + Shopee v1 (Beta) | Kartu Jejak uang di halaman Laba: penjualan (dengan rincian refund yang sudah termasuk), potongan, dana pesanan dilepas, penyesuaian terpisah, status rekonsiliasi, sumber, dan basis tanggal (`docs/KAMUS_ANGKA.md` B.1b). Shopee v1: panel Saldo Penjual (saldo awal/masuk/keluar/akhir, cek saldo berantai, status Cocok / Di luar periode / Belum direkonsiliasi / Tidak cukup data; selisih ditampilkan, tidak dikoreksi). Keterbatasan: diuji dengan **satu** file saldo asli; penarikan hanya bukti dana keluar dari Shopee, **bukan** diterima bank; panel mencakup seluruh periode file (filter bulan tidak berlaku). |
 | Profit Decision Engine | Sebagian | Temuan otomatis berbasis aturan + simulator |
 
@@ -242,7 +244,7 @@ Tabel ini angka audit awal; perubahan setelahnya ada di "Pembaruan status (31 Ok
 ## Medium
 
 ### M1 · Dasar periode tercampur; bulan pertama dan terakhir tidak lengkap
-- **Status:** Terbuka · **Pilar:** Financial Analytics · **Kompleksitas:** S (1 hari)
+- **Status:** Selesai (Tahap B4, 31 Okt 2026; lihat "Pembaruan status") · **Pilar:** Financial Analytics · **Kompleksitas:** S (1 hari)
 - **Lokasi:**
   - `assets/engine.js:480`: rentang memakai tanggal dana dilepas;
   - `assets/engine.js:482`: grafik memakai tanggal pesanan;
