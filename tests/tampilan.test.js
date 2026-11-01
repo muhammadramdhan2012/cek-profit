@@ -520,10 +520,12 @@ test('P0 Pro: tanpa kontak pembayaran, CTA bayar tidak tampil dan status "Segera
   truthy(/id="req-upgrade">Lanjut ke pembayaran/.test(appJs) && /t\.id === 'req-upgrade'/.test(appJs), 'alur pembayaran lama tetap ada');
   truthy(/data-pay="pro"/.test(idx) && /if \(!C\.whatsapp\) \{[^]*?'Segera hadir'/.test(idx), 'halaman depan: tombol Pro → Segera hadir');
   truthy(/C\.whatsapp \? '<a class="btn sm" href="dashboard\.html#upgrade">Upgrade<\/a>' : '<span class="badge">Pro segera hadir<\/span>'/.test(akun), 'halaman akun');
-  // Harga Pro sekali bayar (keputusan pemilik 21 Okt 2026); pembelian tetap tertutup karena whatsapp kosong.
-  truthy(/prices: \{[^}]*pro: 'Rp149\.000',\s*proUnit: 'sekali bayar'/.test(cfg) && /whatsapp: '',/.test(cfg), 'harga Pro sekali bayar, kontak pembayaran tetap kosong');
+  // Harga Pro per tahun (keputusan pemilik 1 Nov 2026; sebelumnya sekali bayar); pembelian tetap tertutup karena whatsapp kosong.
+  truthy(/prices: \{[^}]*pro: 'Rp149\.000',\s*proUnit: 'per tahun'/.test(cfg) && /whatsapp: '',/.test(cfg), 'harga Pro per tahun, kontak pembayaran tetap kosong');
+  truthy(!/sekali bayar|bayar satu kali|dibayar sekali|selama layanan/i.test(idx + fs.readFileSync(path.join(__dirname, '..', 'privasi.html'), 'utf8')), 'tidak ada sisa teks "sekali bayar"');
+  truthy(/untuk tahun pertama/.test(idx) && /untuk tahun pertama/.test(fs.readFileSync(path.join(__dirname, '..', 'assets', 'app.js'), 'utf8')), 'harga pengguna awal: tahun pertama saja');
   for (const lama of ['Rp49.000', 'Rp399.000', 'Berlangganan Pro', 'data-price="proUnit">/ bulan', 'Jasa laporan</h3>', 'Rp299.000']) truthy(!idx.includes(lama) && !cfg.includes(`'${lama}'`), `tanpa harga/teks lama: ${lama}`);
-  truthy(/data-price="pro">Rp149\.000</.test(idx) && /data-price="proUnit">sekali bayar</.test(idx), 'halaman depan: Rp149.000 sekali bayar');
+  truthy(/data-price="pro">Rp149\.000</.test(idx) && /data-price="proUnit">per tahun</.test(idx), 'halaman depan: Rp149.000 per tahun');
 });
 test('P0 laba bulanan PDF: Belum diketahui / sebagian (*) / Rp0 aktual / lengkap; tanpa NaN', () => {
   const inc = E.parseWorkbook(Sint.penghasilan([
