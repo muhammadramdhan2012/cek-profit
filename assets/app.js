@@ -2311,7 +2311,7 @@
       const harga = esc(C.hargaPenggunaAwal || 'Rp99.000');
       d.innerHTML = `${dHead('Masa beta gratis', `Semua fitur Pro gratis sampai ${tgl(betaGratis())}`)}
         <div class="d-body"><ul class="benefits"><li>Laporan PDF dengan nama dan logo toko</li><li>Analisis semua produk dan saran harga</li><li>Semua temuan, ekspor Excel, riwayat tanpa batas</li></ul>
-        <p class="note-box">Yang membuat akun selama masa beta mendapat <b>harga khusus ${harga} untuk tahun pertama</b> saat pembelian Pro dibuka. Setelah masa beta, fitur Pro kembali hanya untuk akun Pro; riwayat yang sudah tersimpan tidak dihapus.</p>
+        <p class="note-box">Yang membuat akun selama masa beta mendapat <b>harga khusus ${harga} untuk tahun pertama</b>, berlaku bila membeli dalam 30 hari sejak pembelian Pro dibuka. Setelah masa beta, fitur Pro kembali hanya untuk akun Pro; riwayat yang sudah tersimpan tidak dihapus.</p>
         ${cloud.enabled && !account.user ? '<a class="btn primary" href="akun.html?mode=daftar&next=dashboard.html">Daftar gratis</a>' : ''}</div>`;
     } else if (isPro() && !demo) {
       d.innerHTML = `${dHead('Pro aktif', CekCloud.isPro(p) ? `Sampai ${tgl(p.pro_until)}` : license.ok ? `Kode atas nama ${esc(license.name || '-')}${license.exp ? `, sampai ${tgl(license.exp)}` : ''}` : '')}

@@ -217,7 +217,7 @@ node tests/cloud.test.js          # memakai server tiruan tests/mock-supabase.js
 - ⏳ Harga Pro ditetapkan pemilik (21 Okt 2026): Rp149.000; diubah pemilik 1 Nov 2026 menjadi **Rp149.000 per tahun**, berlaku 1 tahun, tanpa perpanjangan otomatis (harga peluncuran; reguler yang direncanakan Rp299.000), tampil di halaman depan sejak rilis UI. Harga reguler tidak ditampilkan dan Jasa laporan tidak ditawarkan di halaman publik (keputusan pemilik 22 Okt 2026; nilai `jasa` di config dipertahankan). Pembelian belum dibuka: `whatsapp` tetap kosong, dan alur pembayaran lama di dashboard (paket bulanan/tahunan) belum diganti.
 - ⏳ Masa beta gratis (keputusan pemilik 1 Nov 2026): semua fitur Pro terbuka sampai 13 Des 2026 (`betaGratisSampai` di
   `assets/config.js`), lalu kunci Pro kembali otomatis. Pengguna yang membuat akun selama beta dijanjikan harga khusus
-  Rp99.000 **untuk tahun pertama** saat pembelian dibuka, perpanjangan harga normal (`hargaPenggunaAwal`); mekanisme pemberiannya dibuat bersama penguncian Pro di server.
+  Rp99.000 **untuk tahun pertama**, bila membeli dalam 30 hari sejak pembelian dibuka, perpanjangan harga normal (`hargaPenggunaAwal`); mekanisme pemberiannya dibuat bersama penguncian Pro di server.
   Pembayaran tetap belum dibuka. Syarat membuka pembayaran: 20–30 seller mencoba dengan laporan asli, tanpa keluhan angka
   salah yang serius, 3–5 testimoni, atau paling lambat akhir masa beta.
 - ⏳ Supabase URL Configuration (Site URL dan Redirect URL ke domain GitHub Pages) belum dikonfirmasi.

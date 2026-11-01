@@ -37,7 +37,7 @@ window.CEK_CONFIG = {
   // Masa BETA GRATIS (keputusan pemilik 1 Nov 2026): sampai tanggal ini (inklusif, 'YYYY-MM-DD') semua fitur Pro terbuka
   // untuk semua pengunjung; setelahnya kunci Pro kembali otomatis. Kosongkan ('') untuk menghentikan beta lebih awal.
   // Pengguna yang membuat akun selama beta dijanjikan harga khusus Rp99.000 untuk TAHUN PERTAMA Pro (perpanjangan
-  // berikutnya harga normal). Keputusan pemilik 1 Nov 2026.
+  // berikutnya harga normal), bila membeli dalam 30 hari sejak pembelian dibuka. Keputusan pemilik 1 Nov 2026.
   // Tidak membuka pembayaran (pembayaran tetap mengikuti `whatsapp`).
   betaGratisSampai: '2026-12-13',
   hargaPenggunaAwal: 'Rp99.000',

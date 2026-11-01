@@ -524,6 +524,7 @@ test('P0 Pro: tanpa kontak pembayaran, CTA bayar tidak tampil dan status "Segera
   truthy(/prices: \{[^}]*pro: 'Rp149\.000',\s*proUnit: 'per tahun'/.test(cfg) && /whatsapp: '',/.test(cfg), 'harga Pro per tahun, kontak pembayaran tetap kosong');
   truthy(!/sekali bayar|bayar satu kali|dibayar sekali|selama layanan/i.test(idx + fs.readFileSync(path.join(__dirname, '..', 'privasi.html'), 'utf8')), 'tidak ada sisa teks "sekali bayar"');
   truthy(/untuk tahun pertama/.test(idx) && /untuk tahun pertama/.test(fs.readFileSync(path.join(__dirname, '..', 'assets', 'app.js'), 'utf8')), 'harga pengguna awal: tahun pertama saja');
+  truthy(/dalam 30 hari sejak pembelian Pro dibuka/.test(idx) && /dalam 30 hari sejak pembelian Pro dibuka/.test(fs.readFileSync(path.join(__dirname, '..', 'privasi.html'), 'utf8')), 'batas klaim harga pengguna awal 30 hari');
   for (const lama of ['Rp49.000', 'Rp399.000', 'Berlangganan Pro', 'data-price="proUnit">/ bulan', 'Jasa laporan</h3>', 'Rp299.000']) truthy(!idx.includes(lama) && !cfg.includes(`'${lama}'`), `tanpa harga/teks lama: ${lama}`);
   truthy(/data-price="pro">Rp149\.000</.test(idx) && /data-price="proUnit">per tahun</.test(idx), 'halaman depan: Rp149.000 per tahun');
 });
