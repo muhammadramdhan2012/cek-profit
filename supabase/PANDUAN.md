@@ -23,6 +23,32 @@ Aturan keamanan di file ini sudah diuji dengan PostgreSQL 16:
 - pengguna tidak bisa mengaktifkan Pro untuk dirinya sendiri;
 - hanya admin yang bisa mengubah status Pro.
 
+### 2b. Tahap 2: status Pro, masa beta, dan batas riwayat di server (November 2026)
+
+File `schema.sql` aman dijalankan ulang. Bagian akhirnya ("TAHAP 2") menambah:
+- tabel **site_settings**: tanggal akhir masa beta (awal: 13 Des 2026) dan tanggal pembelian Pro dibuka;
+- kolom **profiles.pengguna_awal**: akun yang dibuat sampai akhir masa beta. Akun lama yang dibuat paling lambat
+  13 Des 2026 otomatis ditandai;
+- tabel **pro_purchases**: catatan pembelian Pro (harga, mulai, sampai, catatan), hanya bisa diisi admin;
+- fungsi **status_situs** dan **status_akun**: tanggal hari ini menurut server (zona Jakarta), masa beta, status Pro;
+- batas **3 riwayat** untuk akun gratis, ditegakkan database. Selama masa beta tidak dibatasi. Riwayat yang sudah
+  tersimpan tidak pernah dihapus.
+
+Cara menjalankan:
+1. **SQL Editor** → **New query**.
+2. Salin seluruh isi `supabase/schema.sql` yang terbaru, tempel, lalu klik **Run**. Hasilnya harus *Success*.
+   Muncul peringatan "destructive operation"? Itu karena ada perintah `drop policy/trigger if exists` yang lalu dibuat
+   ulang; klik **Run this query**.
+3. Cek: **Table Editor** → tabel **site_settings** berisi 1 baris dengan `beta_gratis_sampai` = 2026-12-13.
+   Tabel **profiles** punya kolom `pengguna_awal` = `true` untuk akun yang sudah ada.
+4. Buka **admin.html**. Harus ada bagian **Masa beta & pembelian** dengan tanggal server hari ini.
+
+Jalankan SQL ini **sebelum** versi website tahap 2 dipasang. Bila urutannya terbalik pun website tetap aman: selama
+fungsi tahap 2 belum ada, dashboard memakai tanggal perangkat dan `betaGratisSampai` di `config.js` seperti sebelumnya.
+
+Yang tetap dikunci di browser (keputusan pemilik 1 Nov 2026): fitur yang dihitung dari file laporan (PDF, Excel,
+analisis semua produk), karena file tidak pernah dikirim ke server.
+
 ## 3. Atur alamat situs
 
 **Authentication** → **URL Configuration**. Ini diperlukan agar tautan konfirmasi email dan reset sandi kembali ke
@@ -89,10 +115,20 @@ berstatus *Verified* (SPF dan DKIM). Uji dengan mendaftar akun penguji dan memin
 1. Pengguna klik **Berlangganan Pro** → pilih paket → **Lanjut ke pembayaran**.
    Permintaannya tercatat, dan WhatsApp Anda terbuka dengan pesan yang sudah berisi email akun dan paket.
 2. Anda kirim nomor rekening atau QRIS, lalu pengguna membayar.
-3. Buka **admin.html** → bagian **Permintaan upgrade** → klik **Aktifkan 1 bulan** atau **1 tahun**.
-4. Pro aktif di akun pengguna begitu halamannya dimuat ulang.
+3. Buka **admin.html** → cari pengguna → klik **Catat pembelian**.
+   - Harga terisi otomatis: Rp149.000, atau Rp99.000 bila akun pengguna awal yang masih berhak (tahun pertama saja,
+     dibeli paling lambat 30 hari sejak tanggal pembelian dibuka). Database menolak harga khusus yang tidak berhak.
+   - Isi catatan (mis. "transfer BCA 3 Jan"), lalu **Simpan & aktifkan 1 tahun**.
+4. Pro aktif 1 tahun di akun pengguna begitu halamannya dimuat ulang. Bila Pro masih aktif (perpanjangan), tahun baru
+   dimulai sehari setelah masa lama berakhir, jadi sisa hari tidak hilang.
 
-Untuk memperpanjang, klik **+1 bln** atau **+1 thn** di daftar pengguna. Masa berlaku dihitung dari tanggal berakhir yang lama, jadi sisa hari tidak hilang.
+Saat pembelian dibuka: isi **Pembelian Pro dibuka pada** di admin.html → **Simpan**. Batas klaim harga pengguna awal
+(30 hari) dihitung dari tanggal ini. Memperpanjang atau mengakhiri masa beta juga lewat bagian yang sama.
+
+Tombol **+1 bln**, **+1 thn**, dan **Matikan** hanya untuk koreksi manual; tidak tercatat sebagai pembelian.
+
+Kode akses (CP1…): sejak 1 Nov 2026 tidak diterbitkan lagi (keputusan pemilik); Pro hanya lewat akun. Kode yang
+sudah pernah diberikan tetap berlaku sampai tanggalnya.
 
 ## Opsional
 
@@ -140,4 +176,15 @@ Untuk memperpanjang, klik **+1 bln** atau **+1 thn** di daftar pengguna. Masa be
 ```bash
 node tests/mock-supabase.js 54321    # server tiruan Supabase
 # lalu set supabaseUrl: 'http://127.0.0.1:54321', supabaseAnonKey: 'anon' di config.js lokal
+```
+
+Uji aturan database dengan PostgreSQL 16 lokal (database kosong; setiap baris hasil `nama|t`, `f` = gagal; pesan
+ERROR yang tercetak adalah penolakan yang memang diharapkan):
+
+```bash
+createdb uji && psql -d uji -f supabase/tests/shim.sql
+psql -d uji -v ON_ERROR_STOP=1 -f supabase/schema.sql
+psql -d uji -tA -f supabase/tests/test.sql          # T1–T12 (dasar)
+createdb uji2 && psql -d uji2 -f supabase/tests/shim.sql && psql -d uji2 -v ON_ERROR_STOP=1 -f supabase/schema.sql
+psql -d uji2 -tA -f supabase/tests/test-tahap2.sql  # U1–U19 (tahap 2)
 ```

@@ -243,6 +243,70 @@ const memStore = () => { const m = new Map(); return { getItem: (k) => (m.has(k)
     truthy(S.alamatPindah(cfg, { hostname: 'cekuntung.pages.dev', pathname: '/' }) === '' && S.alamatPindah(cfg, { hostname: 'localhost', pathname: '/' }) === '', 'staging/lokal tidak tampil');
     truthy(S.alamatPindah({ domainResmi: 'http://cekuntung.id' }, gh('/cek-profit/')) === '' && S.alamatPindah({ domainResmi: 'bukan url' }, gh('/cek-profit/')) === '', 'hanya https');
   });
+  await t('Tahap 2: status_situs tanpa login, status_akun, batas riwayat ditegakkan server dengan pesan Indonesia', async () => {
+    const m = createMock(); await new Promise((r) => m.server.listen(0, r));
+    const u = `http://127.0.0.1:${m.server.address().port}`;
+    m.situs.hari = '2026-11-10';
+    const anon = fresh().init({ url: u, key: 'anon', store: memStore() });
+    const s1 = await anon.db.statusSitus();
+    truthy(s1.hari_ini === '2026-11-10' && s1.beta_aktif === true && s1.beta_gratis_sampai === '2026-12-13', 'status situs tanpa login');
+    const U = fresh().init({ url: u, key: 'anon', store: memStore() });
+    await U.auth.signUp({ email: 'awal@toko.id', password: 'sandiku123' });
+    let st = await U.db.statusAkun();
+    truthy(st.pengguna_awal === true && st.batas_riwayat === null && st.harga_awal_tersedia === true, 'daftar saat beta = pengguna awal, tanpa batas');
+    for (let i = 0; i < 4; i++) await U.db.addReport({ title: `R${i}`, summary: {} });
+    m.situs.hari = '2026-12-14';
+    st = await U.db.statusAkun();
+    truthy(st.beta_aktif === false && st.batas_riwayat === 3 && st.jumlah_riwayat === 4, 'setelah beta: batas 3, riwayat lama tetap');
+    try { await U.db.addReport({ title: 'R5', summary: {} }); throw new Error('harus ditolak'); }
+    catch (e) { truthy(e.message === 'Akun gratis menyimpan 3 riwayat. Hapus riwayat lama atau upgrade ke Pro.', e.message); truthy(/BATAS_RIWAYAT/.test(e.body.message)); }
+    truthy((await U.db.listReports()).length === 4, 'riwayat lama tidak dihapus');
+    // admin: buka pembelian, catat harga pengguna awal, tidak bisa dua kali
+    m.addUser('adm@toko.id', 'adminadmin', {}); m.makeAdmin('adm@toko.id');
+    const A = fresh().init({ url: u, key: 'anon', store: memStore() }); await A.auth.signIn({ email: 'adm@toko.id', password: 'adminadmin' });
+    const me = await U.db.profile();
+    try { await fresh().init({ url: u, key: 'anon', store: memStore() }).db.statusAkun(); throw new Error('anon harus ditolak'); } catch (e) { truthy(e.status === 401, e.message); }
+    try { await A.db.adminCatatPembelian(me.id, 99000, true, ''); throw new Error('harus ditolak'); } catch (e) { truthy(/belum dibuka/.test(e.message), e.message); }
+    await A.db.adminSetSitus('2026-12-13', '2027-01-01'); m.situs.hari = '2027-01-15';
+    const r = await A.db.adminCatatPembelian(me.id, 99000, true, 'transfer');
+    truthy(r.mulai === '2027-01-15' && r.sampai === '2028-01-14', JSON.stringify(r));
+    try { await A.db.adminCatatPembelian(me.id, 99000, true, ''); throw new Error('harus ditolak'); } catch (e) { truthy(/hanya tahun pertama/.test(e.message), e.message); }
+    try { await U.db.adminCatatPembelian(me.id, 0, false, ''); throw new Error('harus ditolak'); } catch (e) { truthy(/Hanya admin/.test(e.message), e.message); }
+    st = await U.db.statusAkun();
+    truthy(st.pro_aktif && !st.harga_awal_tersedia && st.batas_riwayat === null, 'setelah membeli: Pro, harga awal terpakai');
+    truthy((await A.db.adminPurchases()).length === 1, 'catatan pembelian tersimpan');
+    m.server.close();
+  });
+  await t('Tahap 2: database lama (SQL tahap 2 belum dijalankan) → status gagal dengan sopan, fitur lama tetap jalan', async () => {
+    const m = createMock({ tahap2: false }); await new Promise((r) => m.server.listen(0, r));
+    const u = `http://127.0.0.1:${m.server.address().port}`;
+    const U = fresh().init({ url: u, key: 'anon', store: memStore() });
+    try { await U.db.statusSitus(); throw new Error('harus gagal'); } catch (e) { truthy(e.status === 404, e.message); }
+    await U.auth.signUp({ email: 'lama@toko.id', password: 'sandiku123' });
+    try { await U.db.statusAkun(); throw new Error('harus gagal'); } catch (e) { truthy(e.status === 404, e.message); }
+    truthy(U.auth.user() && (await U.db.profile()), 'sesi & profil tetap ada');
+    for (let i = 0; i < 4; i++) await U.db.addReport({ title: `R${i}`, summary: {} });
+    m.server.close();
+  });
+  await t('Tahap 2: pengumuman beta dari server (status_situs); jawaban aneh/gagal → tetap config', async () => {
+    truthy(S.betaDariServer({ hari_ini: '2026-12-14', beta_gratis_sampai: '2026-12-13', beta_aktif: false }).aktif === false);
+    const b = S.betaDariServer({ hari_ini: '2026-12-20', beta_gratis_sampai: '2027-01-31', beta_aktif: true });
+    truthy(b.aktif && b.label === '31 Januari 2027', 'diperpanjang admin');
+    truthy(S.betaDariServer({ hari_ini: '2026-12-20', beta_gratis_sampai: null, beta_aktif: false }).aktif === false, 'beta dihentikan');
+    for (const bad of [null, 'x', {}, { hari_ini: 'kemarin' }, { hari_ini: '2026-12-20', beta_gratis_sampai: '<b>' }]) truthy(S.betaDariServer(bad) === null, `jawaban aneh: ${JSON.stringify(bad)}`);
+    const el = () => ({ dataset: {}, hidden: false, textContent: '' });
+    const els = [el(), el()];
+    const doc = { querySelectorAll: (q) => (q === '[data-beta]' ? [els[0]] : q === '[data-beta-sampai]' ? [els[1]] : []) };
+    const cfg = { supabaseUrl: 'https://x.supabase.co/', supabaseAnonKey: 'pk' };
+    let dipanggil = null;
+    await S.segarkanBeta(doc, cfg, async (u, o) => { dipanggil = { u, o }; return { ok: true, json: async () => ({ hari_ini: '2026-12-20', beta_gratis_sampai: '2027-01-31', beta_aktif: true }) }; });
+    truthy(dipanggil.u === 'https://x.supabase.co/rest/v1/rpc/status_situs' && !dipanggil.o.headers.Authorization && dipanggil.o.headers.apikey === 'pk', 'tanpa token login');
+    truthy(els[0].hidden === false && els[1].textContent === '31 Januari 2027', 'diperbarui dari server');
+    els[0].hidden = true;
+    truthy(await S.segarkanBeta(doc, cfg, async () => { throw new Error('offline'); }) === null && els[0].hidden === true, 'offline → diam');
+    truthy(await S.segarkanBeta(doc, cfg, async () => ({ ok: false })) === null && els[0].hidden === true, 'fungsi belum ada (404) → diam');
+    truthy(await S.segarkanBeta(doc, {}, async () => { throw new Error('tidak boleh dipanggil'); }) === null, 'akun belum aktif → tidak memanggil server');
+  });
   mock.server.close();
   console.log(failed ? `${failed} uji GAGAL` : 'Semua uji lulus');
   process.exitCode = failed ? 1 : 0;

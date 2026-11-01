@@ -44,6 +44,9 @@ const CekCloud = (() => {
     if (m === 'tautan_kedaluwarsa') return 'Tautan sudah tidak berlaku. Silakan minta tautan baru.';
     if (m === 'oauth_gagal') return 'Masuk dengan Google gagal. Silakan coba lagi beberapa saat lagi.';
     if (m.includes('code verifier') || m.includes('flow state') || m.includes('auth code')) return 'Proses masuk dengan Google kedaluwarsa. Silakan ulangi dari awal.';
+    // Penolakan dari database (tahap 2), mis. batas riwayat akun gratis: pesannya sudah berbahasa Indonesia.
+    const tolak = String(raw).match(/^BATAS_RIWAYAT:\s*(.+)$/);
+    if (tolak) return tolak[1];
     if (status === 0) return 'Tidak bisa terhubung ke server. Periksa koneksi internet.';
     return raw || `Permintaan gagal (${status}).`;
   }
@@ -209,11 +212,17 @@ const CekCloud = (() => {
     addReport: (row) => http('/rest/v1/reports', { method: 'POST', body: row, headers: { Prefer: 'return=representation' } }).then((r) => r && r[0]),
     deleteReport: (id) => http(`/rest/v1/reports?id=eq.${enc(id)}`, { method: 'DELETE' }),
     requestUpgrade: (plan, note) => http('/rest/v1/upgrade_requests', { method: 'POST', body: { plan, note: note || '' }, headers: { Prefer: 'return=representation' } }).then((r) => r && r[0]),
+    /* status resmi dari server (tahap 2): tanggal server, masa beta, Pro, pengguna awal, batas riwayat */
+    statusSitus: () => http('/rest/v1/rpc/status_situs', { method: 'POST', body: {}, auth: false }),
+    statusAkun: () => http('/rest/v1/rpc/status_akun', { method: 'POST', body: {} }),
     myRequests: () => http('/rest/v1/upgrade_requests?select=*&order=created_at.desc&limit=5'),
     /* admin */
     adminProfiles: () => http('/rest/v1/profiles?select=*&order=created_at.desc&limit=500'),
     adminRequests: () => http('/rest/v1/upgrade_requests?select=*&order=created_at.desc&limit=200'),
     adminSetPro: (target, until) => http('/rest/v1/rpc/admin_set_pro', { method: 'POST', body: { target, until } }),
+    adminPurchases: () => http('/rest/v1/pro_purchases?select=*&order=created_at.desc&limit=500'),
+    adminCatatPembelian: (target, harga, pakaiHargaAwal, catatan) => http('/rest/v1/rpc/admin_catat_pembelian', { method: 'POST', body: { target, harga, pakai_harga_awal: !!pakaiHargaAwal, catatan: catatan || '' } }),
+    adminSetSitus: (betaSampai, dibukaPada) => http('/rest/v1/rpc/admin_set_situs', { method: 'POST', body: { beta_sampai: betaSampai || null, dibuka_pada: dibukaPada || null } }),
     adminSetRequestStatus: (id, status) => http(`/rest/v1/upgrade_requests?id=eq.${enc(id)}`, { method: 'PATCH', body: { status } }),
   };
 

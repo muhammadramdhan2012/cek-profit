@@ -854,7 +854,11 @@ test('Masa beta gratis: config, isPro, label beta terpisah dari Pro sendiri, pem
   truthy(/betaGratisSampai: '2026-12-13',/.test(cfg) && /hargaPenggunaAwal: 'Rp99\.000',/.test(cfg), 'tanggal beta & harga pengguna awal di config');
   truthy(/whatsapp: '',/.test(cfg) && !/proPembayaranAktif: true/.test(cfg), 'beta tidak membuka pembayaran');
   truthy(/const isPro = \(\) => demo \|\| proSendiri\(\) \|\| !!betaGratis\(\);/.test(appJs), 'isPro memakai masa beta');
-  truthy(/new Date\(\)\.toLocaleDateString\('sv-SE'\) <= s/.test(appJs), 'beta inklusif sampai tanggal config');
+  truthy(/TGL_ISO\.test\(s\) && hariIni\(\) <= s/.test(appJs), 'beta inklusif sampai tanggal config (cadangan bila server tidak tersedia)');
+  // Tahap 2: tanggal & masa beta dari server bila tersedia; tanggal perangkat hanya cadangan (offline/belum dimigrasi).
+  truthy(/if \(serverStatus\) return serverStatus\.beta_aktif === true/.test(appJs) && /const hariIni = \(\) => \(serverStatus \? serverStatus\.hari_ini : new Date\(\)/.test(appJs), 'server lebih dulu, perangkat cadangan');
+  truthy(/const proAkun = \(p = account\.profile\) => CekCloud\.isPro\(p, hariIni\(\)\)/.test(appJs) && !/CekCloud\.isPro\(p\)|CekCloud\.isPro\(account\.profile\)/.test(appJs), 'status Pro akun memakai tanggal server');
+  truthy(/if \(account\.user\) loadAccount\(\); else loadStatus\(\);/.test(appJs) && /render\(\);\n    loadStatus\(\);\n  \}/.test(appJs), 'status dimuat saat buka dashboard & setelah akun dimuat');
   truthy(/dHead\('Masa beta gratis'/.test(appJs) && /harga khusus \$\{harga\}/.test(appJs), 'dialog beta + janji harga khusus');
   truthy((idx.match(/data-beta hidden/g) || []).length >= 2, 'pengumuman beta di halaman depan, tersembunyi bawaan');
   truthy(/Masa beta\.<\/b> Sampai 13 Desember 2026/.test(priv), 'ketentuan masa beta');

@@ -282,7 +282,11 @@ Tabel ini angka audit awal; perubahan setelahnya ada di "Pembaruan status (31 Ok
   pertahankan sesi dan coba lagi nanti.
 
 ### M5 · Batas 3 riwayat gratis hanya di browser
-- **Status:** Terbuka · **Kompleksitas:** S (½ hari, perlu migrasi SQL yang dijalankan pemilik)
+- **Status:** Diperbaiki di kode (tahap 2, 1 Nov 2026), **menunggu pemilik menjalankan `schema.sql` di Supabase**.
+  Trigger `reports_batas_gratis` menolak riwayat ke-4 akun gratis (kecuali selama masa beta); riwayat lama tidak dihapus.
+  Bukti: `supabase/tests/test-tahap2.sql` U5–U10, U16 (PostgreSQL 16 lokal, semua `t`); `node tests/cloud.test.js`
+  ("Tahap 2: …"). Belum diuji di Supabase sungguhan.
+- **Kompleksitas:** S (½ hari, perlu migrasi SQL yang dijalankan pemilik)
 - **Lokasi:** `supabase/schema.sql:85`, `assets/app.js:927`
 - **Dampak (bisnis):** pengguna gratis bisa menyimpan riwayat tanpa batas lewat API.
 - **Rekomendasi (audit):** trigger `before insert` pada `reports` yang menolak bila pengguna bukan Pro dan sudah
@@ -293,6 +297,12 @@ Tabel ini angka audit awal; perubahan setelahnya ada di "Pembaruan status (31 Ok
 - **Catatan masa beta (1 Nov 2026):** selama beta (`betaGratisSampai`) semua fitur Pro terbuka; berakhirnya beta memakai
   tanggal perangkat pengguna, jadi bisa diakali dengan memundurkan jam. Celah ini bagian dari M6 dan ditutup bersama
   penguncian Pro di server.
+- **Tahap 2 (1 Nov 2026, menunggu SQL dijalankan pemilik):**
+  - Tanggal hari ini, masa beta, dan status Pro akun diambil dari server (`status_situs`/`status_akun`); memundurkan
+    jam perangkat tidak lagi membuka beta bila sedang online. Offline / SQL belum dijalankan → tanggal perangkat (cadangan).
+  - Kode akses tidak diterbitkan lagi (keputusan pemilik); kode lama tetap berlaku sampai tanggalnya.
+  - **Sisa yang diterima pemilik:** fitur yang dihitung dari file (PDF, Excel, analisis semua produk) tetap dikunci di
+    browser dan bisa dibuka lewat DevTools, demi janji file tidak dikirim ke server. Status M6: sebagian.
 - **Lokasi:** `assets/app.js:76`, `assets/license.js:34-35`
 - **Dampak (bisnis):** fitur Pro bisa dibuka lewat DevTools; satu kode akses bisa dibagikan ke banyak orang.
 - **Rekomendasi (audit):**

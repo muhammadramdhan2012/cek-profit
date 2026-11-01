@@ -111,14 +111,29 @@
   const cloud = CekCloud.init({ url: C.supabaseUrl, key: C.supabaseAnonKey });
   const account = { user: cloud.auth.user(), profile: null, sync: '', reports: null, loading: false, menu: false };
 
-  /** Masa beta gratis (keputusan pemilik 1 Nov 2026): sampai C.betaGratisSampai (inklusif) semua fitur Pro terbuka.
-   *  Aturan sama dengan CekSitus.betaGratis (situs.js dimuat setelah file ini, jadi tidak dipakai di sini). */
+  /** Status resmi dari server (tahap 2, RPC status_akun/status_situs): tanggal server, masa beta, Pro, batas riwayat.
+   *  null = belum/tidak tersedia (offline, akun belum aktif, atau SQL tahap 2 belum dijalankan) → aturan lokal di bawah
+   *  (tanggal perangkat + config) tetap dipakai, agar website tetap jalan offline. */
+  let serverStatus = null;
+  const TGL_ISO = /^\d{4}-\d{2}-\d{2}$/;
+  const hariIni = () => (serverStatus ? serverStatus.hari_ini : new Date().toLocaleDateString('sv-SE'));
+  /** Masa beta gratis (keputusan pemilik 1 Nov 2026): sampai tanggal akhir (inklusif) semua fitur Pro terbuka.
+   *  Sumber: server bila tersedia; selain itu C.betaGratisSampai dengan tanggal perangkat (sama dengan CekSitus.betaGratis). */
   const betaGratis = () => {
+    if (serverStatus) return serverStatus.beta_aktif === true && TGL_ISO.test(String(serverStatus.beta_gratis_sampai || '')) ? serverStatus.beta_gratis_sampai : '';
     const s = String(C.betaGratisSampai || '').trim();
-    return /^\d{4}-\d{2}-\d{2}$/.test(s) && new Date().toLocaleDateString('sv-SE') <= s ? s : '';
+    return TGL_ISO.test(s) && hariIni() <= s ? s : '';
   };
+  async function loadStatus() {
+    if (!cloud.enabled) return;
+    let st = null;
+    try { st = account.user ? await cloud.db.statusAkun() : await cloud.db.statusSitus(); } catch (e) { /* offline / belum dimigrasi */ }
+    serverStatus = st && typeof st === 'object' && TGL_ISO.test(String(st.hari_ini || '')) ? st : null;
+    render();
+  }
+  const proAkun = (p = account.profile) => CekCloud.isPro(p, hariIni());
   /** Pro yang benar-benar dimiliki (akun/kode), bukan karena masa beta. */
-  const proSendiri = () => license.ok || CekCloud.isPro(account.profile);
+  const proSendiri = () => license.ok || proAkun();
   const isPro = () => demo || proSendiri() || !!betaGratis();
   const st = () => (demo ? CekDemo.settings() : settings);
   const prof = () => (demo ? CekDemo.profile() : profile);
@@ -183,6 +198,7 @@
     } catch (e) { account.sync = e.message; }
     account.loading = false;
     render();
+    loadStatus();
   }
 
   async function checkLicense(code, quiet) {
@@ -270,7 +286,7 @@
   function renderAccount() {
     const p = account.profile, u = account.user;
     const pro = isPro();
-    const planText = demo ? 'Mode contoh' : CekCloud.isPro(p) ? `Pro sampai ${tgl(p.pro_until)}` : license.ok ? `Pro (kode)${license.exp ? ` sampai ${tgl(license.exp)}` : ''}` : betaGratis() ? `Beta gratis sampai ${tgl(betaGratis())}` : 'Paket gratis';
+    const planText = demo ? 'Mode contoh' : proAkun(p) ? `Pro sampai ${tgl(p.pro_until)}` : license.ok ? `Pro (kode)${license.exp ? ` sampai ${tgl(license.exp)}` : ''}` : betaGratis() ? `Beta gratis sampai ${tgl(betaGratis())}` : 'Paket gratis';
     const beta = !demo && !proSendiri() && betaGratis();
     $('#plan-box').innerHTML = beta ? `<button class="plan-pro plan-beta" type="button" data-upgrade aria-label="Masa beta gratis sampai ${tgl(beta)}. Lihat keterangan"><span class="badge pro">BETA</span><span>Gratis semua fitur sampai ${tgl(beta)}</span></button>`
       : pro ? `<div class="plan-pro"><span class="badge pro">PRO</span><span>${demo ? 'Mode contoh: semua fitur terbuka' : 'Semua fitur Pro aktif'}</span></div>` : `<button class="upsell-sm" type="button" data-upgrade aria-label="Lihat paket Cek Untung Pro" title="Laporan PDF, analisis semua produk, dan saran harga"><span class="badge pro">PRO</span><span class="us-t">Cek Untung Pro</span><span class="us-go" aria-hidden="true">Lihat →</span></button>`;
@@ -394,7 +410,7 @@
   /** Ringkasan akun untuk lembar "Lainnya" (di HP menu samping tidak tampil). */
   function accountSheet() {
     const p = account.profile, u = account.user, pro = isPro();
-    const plan = demo ? 'Mode contoh' : CekCloud.isPro(p) ? `Pro sampai ${tgl(p.pro_until)}` : license.ok ? 'Pro (kode akses)' : betaGratis() ? `Beta gratis sampai ${tgl(betaGratis())}` : 'Paket gratis';
+    const plan = demo ? 'Mode contoh' : proAkun(p) ? `Pro sampai ${tgl(p.pro_until)}` : license.ok ? 'Pro (kode akses)' : betaGratis() ? `Beta gratis sampai ${tgl(betaGratis())}` : 'Paket gratis';
     const up = pro ? '' : '<button class="btn sm" type="button" data-upgrade>Lihat paket Pro</button>';
     if (!cloud.enabled) return `<div class="sheet-acct"><span class="small">${plan}. Tersimpan di browser ini.</span>${up}</div>`;
     if (!u) return `<div class="sheet-acct"><a class="btn sm primary" href="akun.html?mode=daftar&next=dashboard.html">Daftar gratis</a><a class="btn sm" href="akun.html?next=dashboard.html">Masuk</a>${up}</div>`;
@@ -2314,7 +2330,7 @@
         <p class="note-box">Yang membuat akun selama masa beta mendapat <b>harga khusus ${harga} untuk tahun pertama</b>, berlaku bila membeli dalam 30 hari sejak pembelian Pro dibuka. Setelah masa beta, fitur Pro kembali hanya untuk akun Pro; riwayat yang sudah tersimpan tidak dihapus.</p>
         ${cloud.enabled && !account.user ? '<a class="btn primary" href="akun.html?mode=daftar&next=dashboard.html">Daftar gratis</a>' : ''}</div>`;
     } else if (isPro() && !demo) {
-      d.innerHTML = `${dHead('Pro aktif', CekCloud.isPro(p) ? `Sampai ${tgl(p.pro_until)}` : license.ok ? `Kode atas nama ${esc(license.name || '-')}${license.exp ? `, sampai ${tgl(license.exp)}` : ''}` : '')}
+      d.innerHTML = `${dHead('Pro aktif', proAkun(p) ? `Sampai ${tgl(p.pro_until)}` : license.ok ? `Kode atas nama ${esc(license.name || '-')}${license.exp ? `, sampai ${tgl(license.exp)}` : ''}` : '')}
         <div class="d-body"><ul class="benefits"><li>Laporan PDF dengan nama dan logo toko</li><li>Analisis semua produk dan saran harga</li><li>Semua temuan, ekspor Excel, riwayat tanpa batas</li></ul>
         ${license.ok ? '<button class="btn quiet" type="button" id="code-remove">Hapus kode dari browser ini</button>' : ''}</div>`;
     } else {
@@ -2537,7 +2553,7 @@
     if (t.hasAttribute('data-upgrade')) { closeSheet(); account.menu = false; renderAccount(); openUpgrade(); return; }
     if (t.dataset.close !== undefined) { dlg().close(); return; }
     if (t.id === 'acct-toggle') { account.menu = !account.menu; renderAccount(); return; }
-    if (t.id === 'logout') { await cloud.auth.signOut(); account.user = null; account.profile = null; account.reports = null; account.menu = false; toast('Anda sudah keluar.'); render(); return; }
+    if (t.id === 'logout') { await cloud.auth.signOut(); account.user = null; account.profile = null; account.reports = null; account.menu = false; toast('Anda sudah keluar.'); render(); loadStatus(); return; }
     if (t.id === 'code-apply') {
       busy(t, true);
       const res = await checkLicense($('#code-input').value, false);
@@ -2565,7 +2581,11 @@
         const row = await cloud.db.addReport({ title: $('#hist-title').value.trim() || 'Tanpa judul', period_from: r.first || null, period_to: r.last || null, summary: snapshot(r) });
         account.reports = [row, ...(account.reports || [])];
         markDone('saved'); dlg().close(); toast('Tersimpan di riwayat.'); track('simpan-riwayat'); render();
-      } catch (err) { toast(err.message); busy(t, false); }
+      } catch (err) {
+        toast(err.message); busy(t, false);
+        // Ditolak server karena batas riwayat akun gratis (tahap 2): status lokal mungkin usang → segarkan.
+        if (/BATAS_RIWAYAT/.test(String(err.body && err.body.message))) { account.reports = null; loadStatus(); }
+      }
       return;
     }
     if (t.dataset.compare) { view.compare = view.compare === t.dataset.compare ? null : t.dataset.compare; $('#view').innerHTML = viewRiwayat(); return; }
@@ -2639,7 +2659,7 @@
   window.addEventListener('scroll', () => { const pop = $('#info-pop'); if (pop && !pop.hidden && !pop.classList.contains('sheet')) hideInfo(); }, { passive: true });
   window.addEventListener('resize', hideInfo);
   window.addEventListener('popstate', () => go(location.hash.slice(1) || 'ringkasan', false));
-  cloud.auth.onChange((s) => { if (!s && account.user) { account.user = null; account.profile = null; renderAccount(); } });
+  cloud.auth.onChange((s) => { if (!s && account.user) { account.user = null; account.profile = null; renderAccount(); loadStatus(); } });
 
   const params = new URLSearchParams(location.search);
   if (params.has('demo')) demo = true;
@@ -2648,8 +2668,8 @@
   render();
   const savedCode = store.get(KEYS.license, '');
   if (savedCode) checkLicense(savedCode, true).then(render);
-  if (account.user) loadAccount();
+  if (account.user) loadAccount(); else loadStatus();
   if (hash === 'upgrade' || params.has('pro')) openUpgrade();
   if (params.has('demo') && params.has('print')) { buildReport(); document.documentElement.classList.add('print-preview'); }
-  window.CekApp = { buildReport, state: () => ({ demo, files: files.length, view: viewName, license: license.ok, account: { user: !!account.user, pro: CekCloud.isPro(account.profile) }, last }) };
+  window.CekApp = { buildReport, state: () => ({ demo, files: files.length, view: viewName, license: license.ok, account: { user: !!account.user, pro: proAkun() }, server: !!serverStatus, last }) };
 })();
