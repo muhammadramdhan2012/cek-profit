@@ -100,6 +100,9 @@ const CekReport = (() => {
       // B1: rentang laba (angka dari engine) bila ada barang refund/retur yang nasibnya belum diketahui.
       r.ready && r.kepastian && r.kepastian.rentangLaba && r.kepastian.rentangLaba.eksposur > 0 ? (() => { const R = r.kepastian.rentangLaba, v = hasOpex && R.setelahOperasional ? R.setelahOperasional : R;
         return `Rentang laba: ${rp(v.bawah)} bila barang refund yang nasibnya belum jelas tidak kembali, sampai ${rp(v.atas)} bila kembali${R.kelompokTanpaNilai ? `; ${R.kelompokTanpaNilai} pesanan refund nilainya belum diketahui, jadi bisa lebih rendah` : ''}.`; })() : '',
+      // B2: kompensasi barang hilang (keputusan pemilik 1 Nov 2026).
+      r.penyesuaian && r.penyesuaian.kompensasi.masukLaba.length ? `Laba sudah termasuk kompensasi barang hilang bersih ${rp(r.penyesuaian.kompensasi.bersih)} (ganti rugi marketplace dikurangi modal barang yang hilang).` : '',
+      r.penyesuaian && (r.penyesuaian.kompensasi.tanpaModal.length || r.penyesuaian.perluDicek.length) ? `Sebagian penyesuaian dari marketplace belum masuk laba karena modal barang yang hilang belum diketahui atau jenisnya perlu dicek.` : '',
       // B3: kasus retur dari pesanan di luar laporan tidak dikurangkan dari laba periode ini.
       r.kepastian && r.kepastian.risikoBarang && r.kepastian.risikoBarang.periodeLain && r.kepastian.risikoBarang.periodeLain.kasus ? `${r.kepastian.risikoBarang.periodeLain.kasus} kasus retur berasal dari pesanan di luar laporan ini dan tidak dikurangkan dari laba periode ini.` : '',
       best ? `${PN[best]} memberi margin per rupiah penjualan yang lebih tinggi pada periode ini.` : '',

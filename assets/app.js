@@ -791,6 +791,8 @@
       if (r.knownPacking) L('−', isDrop ? 'Biaya dropship' : 'Packing', -r.knownPacking, 'minus', '', isDrop ? 'dropship_fee' : 'packing');
       // Kasus "tidak kembali" tanpa nilai tidak dikurangkan dan tidak ditampilkan sebagai Rp0.
       if (r.lostCertain || rb.kerugianTanpaNilai) L('−', 'Kerugian retur', r.lostCertain ? -r.lostCertain : NaN, 'minus', rb.kerugianTanpaNilai ? `+ ${num(rb.kerugianTanpaNilai)} kasus nilainya belum diketahui.` : 'barang yang Anda tandai tidak kembali', 'retur_hilang');
+      // B2: kompensasi barang hilang yang modalnya diketahui (kompensasi − modal barang hilang).
+      if (r.penyesuaian && r.penyesuaian.kompensasi.masukLaba.length) L(r.penyesuaian.kompensasi.bersih < 0 ? '−' : '+', 'Kompensasi barang hilang (bersih)', r.penyesuaian.kompensasi.bersih, r.penyesuaian.kompensasi.bersih < 0 ? 'minus' : '', 'ganti rugi marketplace dikurangi modal barang yang hilang');
       if (opex) { L('=', 'Laba setelah modal', r.totalMargin, 'sub', '', 'margin_kotor'); L('−', 'Biaya operasional', -r.opex, 'minus', `${fmt(r.fixedMonthly)} per bulan yang Anda isi`, 'opex'); }
     } else L('−', 'Modal / HPP', NaN, 'minus', 'modal produk belum diisi', 'modal');
     const total = opex ? r.netProfit : r.totalMargin;
@@ -1138,6 +1140,21 @@
     return `<li class="cb-row"><div class="cb-l"><b>${esc(label)}</b>${info ? `<span>${esc(info.a)}</span>` : ''}${src ? `<span class="cb-src">Sumber: ${esc(src)}</span>` : ''}</div>
       <div class="cb-v"><b class="${ok(v) && v < 0 ? 'neg' : ''}">${ok(v) ? fmt(v) : 'Belum diketahui'}</b>${ok(share) ? `<span class="faint">${pct(share)} dari penjualan</span>` : ''}</div></li>`;
   }
+  /** B2 (keputusan pemilik 1 Nov 2026): penyesuaian marketplace per klasifikasi. Angka dari engine (r.penyesuaian). */
+  function penyesuaianGroup(r) {
+    const P = r.penyesuaian;
+    if (!P || (!P.kompensasi.masukLaba.length && !P.kompensasi.tanpaModal.length && !P.perluDicek.length)) return '';
+    const K = P.kompensasi, rows = [];
+    if (K.masukLaba.length) {
+      const nilai = K.masukLaba.reduce((a, x) => a + x.nilai, 0), modal = K.masukLaba.reduce((a, x) => a + x.modal, 0);
+      rows.push(costRow('Kompensasi barang hilang (bersih)', K.bersih, '', `kompensasi ${fmt(nilai)} dikurangi modal barang yang hilang ${fmt(modal)}, ${num(K.masukLaba.length)} pesanan; masuk laba`));
+    }
+    if (K.tanpaModal.length) rows.push(costRow('Kompensasi, belum masuk laba', K.tanpaModal.reduce((a, x) => a + x.nilai, 0), '',
+      `${num(K.tanpaModal.length)} pesanan: modal barang yang hilang belum diketahui. Unggah export pesanan periode itu atau isi modal produknya.`));
+    for (const x of P.perluDicek) rows.push(costRow(`${x.jenis} (perlu dicek)`, x.nilai, '', `${num(x.jumlah)} baris; jenisnya belum bisa dipastikan, jadi belum masuk laba`));
+    return `<div class="cost-groups">${costGroup('Penyesuaian dari marketplace', K.bersih, rows, false,
+      'Hanya kompensasi barang hilang yang modalnya diketahui yang masuk laba. Semua penyesuaian tetap tercatat di Jejak uang.')}</div>`;
+  }
   function costGroup(title, total, rows, open = false, note = '') {
     return `<details class="cost-group" ${open ? 'open' : ''}><summary><span class="cg-t">${title}</span><span class="cg-v ${ok(total) && total < 0 ? 'neg' : ''}">${ok(total) ? fmt(total) : 'Belum diketahui'}</span><span class="cg-chev" aria-hidden="true"></span></summary>
       <div class="cg-body">${rows.length ? `<ul class="cb-list">${rows.join('')}</ul>` : ''}${note ? `<p class="tiny faint">${note}</p>` : ''}</div></details>`;
@@ -1172,7 +1189,7 @@
         <div class="cc-bar">${comp.map(([, v, c]) => `<i class="${c}" style="flex:${Math.abs(v).toFixed(0)}"></i>`).join('')}</div>
         <ul class="cc-leg">${comp.map(([l, v, c]) => `<li><i class="${c}" aria-hidden="true"></i>${l}<b>${fmt(v)}</b></li>`).join('')}</ul></div>` : '';
     return `<div class="card-header"><h3 id="cost-t">Rincian biaya</h3><p>Ketuk untuk membuka rincian</p></div>${compBar}<div class="cost-groups">${groups.join('')}</div>
-      ${r.adjustments ? `<p class="small muted">Kompensasi atau penyesuaian dari platform ${fmt(r.adjustments)} ditampilkan terpisah dan belum dihitung dalam laba.</p>` : ''}`;
+      ${penyesuaianGroup(r)}`;
   }
   /** Perbandingan per platform: nilai engine per platform berdampingan. Tidak ada peringkat "platform terbaik". */
   function platformCompare(r) {

@@ -141,9 +141,16 @@ Status:
 - **Prinsip DITETAPKAN pemilik (14 Okt 2026):** penyesuaian diklasifikasikan berdasarkan substansi transaksi, tidak
   otomatis dikeluarkan dari laba.
 - **Tabel klasifikasi (31 Okt 2026):** baris "Refund atau koreksi atas pesanan tertentu" dan "Tidak bisa
-  diklasifikasikan" **DITETAPKAN pemilik**. Baris kompensasi, penggantian logistik, dan denda masih **DIUSULKAN**
-  (perlakuannya menunggu keputusan; jenis yang ditemukan pada data uji pemilik: "Kompensasi atas pesanan hilang" dan
-  "Logistik", keduanya tertaut nomor pesanan).
+  diklasifikasikan" **DITETAPKAN pemilik**. Baris penggantian logistik dan denda masih **DIUSULKAN**.
+- **Kompensasi barang hilang (DITETAPKAN pemilik 1 Nov 2026, B2):** "Kompensasi atas pesanan hilang" yang tertaut
+  pesanan yang **tidak ada** di Laporan Penghasilan masuk laba sebagai **kompensasi − modal barang yang hilang**
+  (satu nilai per pesanan). Modal dari export pesanan (jumlah × modal per produk) atau, bila tidak ada, dari kasus retur
+  pesanan itu yang nilainya diketahui; kasus retur itu tidak dihitung lagi di "periode lain". Modal tidak diketahui →
+  tidak masuk laba, ditampilkan terpisah. Kompensasi untuk pesanan yang ada di laporan → perlu dicek (belum terlihat
+  di data asli).
+- **"Logistik" (DITETAPKAN pemilik 1 Nov 2026):** perlu dicek, tidak masuk laba, sampai polanya jelas dari lebih banyak
+  data (pada data uji pemilik: uang masuk, alasan kosong, pesanan tidak ada di laporan).
+- Penerapan: `assets/engine.js` (`r.penyesuaian`), tampilan halaman Laba, nota, PDF. Tes "B2 kompensasi ..." (2 tes).
 
 Diklasifikasikan menurut **substansi transaksi**, tidak otomatis dikeluarkan dari laba:
 

@@ -1849,7 +1849,50 @@ const Engine = (() => {
     // Angka risiko/kerugian hanya menjumlahkan kasus yang nilainya diketahui. Kasus tanpa nilai dihitung terpisah
     // (kerugianTanpaNilai / risikoTanpaNilai) agar "Rp0" tidak disalahartikan sebagai "tidak ada risiko".
     const sumOk = (arr) => arr.reduce((a, c) => a + (isOk(c.estModal) ? c.estModal : 0), 0);
-    const dalam = cases.filter((c) => !c.diLuarLaporan), luar = cases.filter((c) => c.diLuarLaporan);
+    /* B2 (DITETAPKAN pemilik 1 Nov 2026): klasifikasi penyesuaian Shopee.
+     *  - "Kompensasi atas pesanan hilang" (uang masuk, tertaut pesanan yang TIDAK ada di Laporan Penghasilan):
+     *    masuk laba sebagai kompensasi − modal barang yang hilang, satu nilai per pesanan. Modal dari export pesanan
+     *    (jumlah × modal per produk), atau bila tidak ada, dari kasus retur pesanan itu yang nilainya diketahui.
+     *    Kasus retur yang dipakai sebagai sumber modal tidak lagi dihitung di "periode lain" (barang dihitung sekali, A.9).
+     *    Modal tidak diketahui → tidak masuk laba (tanpaModal), bukan dianggap 0.
+     *  - Kompensasi untuk pesanan yang ADA di laporan: belum pernah terlihat di data asli → perlu dicek (tidak ditebak).
+     *  - Jenis lain (mis. "Logistik"), nilai ≤ 0, atau tanpa nomor pesanan → perlu dicek; tidak masuk laba.
+     * Jejak uang (penyesuaian) tidak berubah. */
+    const JENIS_KOMPENSASI = /^kompensasi atas pesanan hilang$/i;
+    const penyesuaian = { kompensasi: { masukLaba: [], tanpaModal: [], dalamLaporan: [], bersih: 0 }, perluDicek: [] };
+    {
+      const shOrderIds = new Set([...shopeeOrderDate.keys()].map(oidN));
+      const cek = new Map();
+      const perluDicek = (type, amount) => { const k = str(type) || '(tanpa jenis)'; const x = cek.get(k) || { jenis: k, jumlah: 0, nilai: 0 }; x.jumlah++; x.nilai += isOk(amount) ? amount : 0; cek.set(k, x); };
+      const komp = new Map();   // nomor pesanan → total kompensasi (beberapa baris untuk pesanan sama digabung)
+      if (want.has('shopee')) {
+        for (const a of [...m.shopeeAdj.values()].filter((x) => inRange(x.date))) {
+          const o = oidN(a.orderId || '');
+          if (!JENIS_KOMPENSASI.test(str(a.type)) || !o || !(a.amount > 0)) { perluDicek(a.type, a.amount); continue; }
+          komp.set(o, (komp.get(o) || 0) + a.amount);
+        }
+      }
+      for (const [o, nilai] of komp) {
+        if (shOrderIds.has(o)) { penyesuaian.kompensasi.dalamLaporan.push({ orderId: o, nilai }); perluDicek('Kompensasi atas pesanan hilang (pesanan ada di laporan)', nilai); continue; }
+        const lines = m.shopeeLines.get(o) || [];
+        let modal = NaN, sumberModal = null;
+        if (lines.length) {
+          const parts = lines.map((l) => { const { entry } = shopeeCostOf({ name: l.name, productId: '' }, l); return entry && isOk(l.qty) && l.qty > 0 ? entry.cost * l.qty : NaN; });
+          if (parts.every(isOk)) { modal = parts.reduce((x, y) => x + y, 0); sumberModal = 'export_pesanan'; }
+        }
+        const kasus = cases.filter((c) => c.platform === 'shopee' && oidN(c.orderId) === o && c.cat !== 'batal');
+        if (!isOk(modal) && kasus.length && kasus.every((c) => isOk(c.estModal))) { modal = kasus.reduce((x, c) => x + c.estModal, 0); sumberModal = 'file_retur'; }
+        if (isOk(modal)) {
+          for (const c of kasus) c.dipasangkanKompensasi = true;   // barang sudah dihitung di kompensasi bersih
+          penyesuaian.kompensasi.masukLaba.push({ orderId: o, nilai, modal, bersih: nilai - modal, sumberModal });
+          penyesuaian.kompensasi.bersih += nilai - modal;
+        } else penyesuaian.kompensasi.tanpaModal.push({ orderId: o, nilai });
+      }
+      // TikTok: penyesuaian belum diklasifikasikan per jenis (tidak ada contoh jenisnya di data asli).
+      if (want.has('tiktok') && T.adj) perluDicek('Penyesuaian TikTok/Tokopedia', T.adj);
+      penyesuaian.perluDicek = [...cek.values()];
+    }
+    const dalam = cases.filter((c) => !c.diLuarLaporan), luar = cases.filter((c) => c.diLuarLaporan && !c.dipasangkanKompensasi);
     const lostCertain = sumOk(dalam.filter((c) => c.state === 'hilang'));
     const unknownRisk = sumOk(dalam.filter((c) => c.state === 'belum'));
     const lostNoValue = dalam.filter((c) => c.state === 'hilang' && !isOk(c.estModal)).length;
@@ -1881,7 +1924,7 @@ const Engine = (() => {
     const coverage = totalSales > 0 ? knownSales / totalSales : 0;
     const ready = knownSales > 0;
     const marginRaw = pick((p) => (isOk(p.margin) ? p.margin : 0));
-    const totalMargin = ready ? marginRaw - lostCertain : NaN;
+    const totalMargin = ready ? marginRaw - lostCertain + penyesuaian.kompensasi.bersih : NaN;   // B2: kompensasi bersih (modal diketahui)
     const first = [has.shopee && S.first, has.tiktok && T.first].filter(Boolean).sort()[0] || '';
     const last = [has.shopee && S.last, has.tiktok && T.last].filter(Boolean).sort().slice(-1)[0] || '';
     const days = daysBetween(first, last);
@@ -2083,7 +2126,8 @@ const Engine = (() => {
       if (lostProvisional) why.push('kerugian_retur_sementara');
       if (ledgerStats.unitBelumDiketahui) why.push('kondisi_fisik_unit_refund_belum_diketahui');
       if (CK.shopee.dikeluarkan.refundParsial.jumlahPesanan + CK.tiktok.dikeluarkan.refundParsial.jumlahPesanan) why.push(REFUND_PARSIAL);
-      if (r.adjustments) why.push('penyesuaian_belum_diklasifikasikan');
+      // B2: hanya penyesuaian yang belum masuk laba secara sah (perlu dicek / kompensasi tanpa modal) yang membuat tidak final.
+      if (r.penyesuaian.perluDicek.length || r.penyesuaian.kompensasi.tanpaModal.length) why.push('penyesuaian_belum_diklasifikasikan');
       // P11: konflik versi antarlaporan ditahan dari total dan laba; laporan yang tidak saling lengkap perlu dicek.
       const G = m.gabungan, pfs = ['shopee', 'tiktok'].filter((k) => want.has(k));
       if (pfs.some((k) => G[k].pesananDitahan.length || (G[k].penyesuaianDitahan || []).length)) why.push('konflik_antar_laporan');
@@ -2270,7 +2314,7 @@ const Engine = (() => {
     const statusHpp = { total: statusOf(totalSales, knownSales), shopee: statusOf(S.sales, S.knownSales), tiktok: statusOf(T.sales, T.knownSales) };
 
     const result = {
-      mode, ready, coverage, knownSales, statusHpp, has, available, shopee: S, tiktok: T, lostCertain, unknownRisk, totalMargin,
+      mode, ready, coverage, knownSales, statusHpp, has, available, shopee: S, tiktok: T, lostCertain, unknownRisk, totalMargin, penyesuaian,
       totalSales, totalFees: pick((p) => p.feeTotal), totalReceived: pick((p) => p.received),
       totalModal: pick((p) => p.modal), totalPacking: pick((p) => p.packing), knownReceived: pick((p) => p.knownReceived), knownPacking: pick((p) => p.knownPacking), adjustments: pick((p) => p.adj),
       orders, first, last, days, monthsSpan, feeModel: feeModels,

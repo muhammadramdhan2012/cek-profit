@@ -76,6 +76,8 @@ Bila dokumen rujukan bertentangan dengan file ini, file ini yang berlaku. Lapork
      - aturan anti hitung ganda HPP/retur (A.9), kerugian barang tidak kembali (A.7, sebagian), baris refund dan
        "tidak bisa diklasifikasikan" pada tabel penyesuaian (A.10), bulan lengkap 14 hari (A.17), serta laba dalam
        rentang dan kasus retur dari pesanan periode lain (A.20) (31 Okt 2026).
+     - kompensasi barang hilang = kompensasi − modal barang hilang bila modal diketahui; "Logistik" perlu dicek
+       (A.10, 1 Nov 2026).
      Semua rumus, bobot, ambang batas, dan definisi keuangan rinci lainnya tetap **DIUSULKAN — BELUM DISETUJUI**.
    - **Nominal refund tidak boleh digunakan untuk menentukan jumlah unit HPP.** Bila jumlah unit pada refund parsial tidak dapat diverifikasi, HPP dan laba terkait tidak boleh dihitung menggunakan proporsi nominal refund. Penerapannya (disetujui 19 Okt 2026):
      - berlaku untuk ketiga mode modal (per produk, harga acuan, modal rata-rata);
