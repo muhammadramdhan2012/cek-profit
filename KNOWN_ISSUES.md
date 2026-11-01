@@ -290,6 +290,9 @@ Tabel ini angka audit awal; perubahan setelahnya ada di "Pembaruan status (31 Ok
 
 ### M6 · Status Pro dan kode akses hanya dikunci di browser
 - **Status:** Terbuka (keterbatasan desain yang sudah diketahui) · **Kompleksitas:** M
+- **Catatan masa beta (1 Nov 2026):** selama beta (`betaGratisSampai`) semua fitur Pro terbuka; berakhirnya beta memakai
+  tanggal perangkat pengguna, jadi bisa diakali dengan memundurkan jam. Celah ini bagian dari M6 dan ditutup bersama
+  penguncian Pro di server.
 - **Lokasi:** `assets/app.js:76`, `assets/license.js:34-35`
 - **Dampak (bisnis):** fitur Pro bisa dibuka lewat DevTools; satu kode akses bisa dibagikan ke banyak orang.
 - **Rekomendasi (audit):**

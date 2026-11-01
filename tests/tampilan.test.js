@@ -520,10 +520,13 @@ test('P0 Pro: tanpa kontak pembayaran, CTA bayar tidak tampil dan status "Segera
   truthy(/id="req-upgrade">Lanjut ke pembayaran/.test(appJs) && /t\.id === 'req-upgrade'/.test(appJs), 'alur pembayaran lama tetap ada');
   truthy(/data-pay="pro"/.test(idx) && /if \(!C\.whatsapp\) \{[^]*?'Segera hadir'/.test(idx), 'halaman depan: tombol Pro → Segera hadir');
   truthy(/C\.whatsapp \? '<a class="btn sm" href="dashboard\.html#upgrade">Upgrade<\/a>' : '<span class="badge">Pro segera hadir<\/span>'/.test(akun), 'halaman akun');
-  // Harga Pro sekali bayar (keputusan pemilik 21 Okt 2026); pembelian tetap tertutup karena whatsapp kosong.
-  truthy(/prices: \{[^}]*pro: 'Rp149\.000',\s*proUnit: 'sekali bayar'/.test(cfg) && /whatsapp: '',/.test(cfg), 'harga Pro sekali bayar, kontak pembayaran tetap kosong');
+  // Harga Pro per tahun (keputusan pemilik 1 Nov 2026; sebelumnya sekali bayar); pembelian tetap tertutup karena whatsapp kosong.
+  truthy(/prices: \{[^}]*pro: 'Rp149\.000',\s*proUnit: 'per tahun'/.test(cfg) && /whatsapp: '',/.test(cfg), 'harga Pro per tahun, kontak pembayaran tetap kosong');
+  truthy(!/sekali bayar|bayar satu kali|dibayar sekali|selama layanan/i.test(idx + fs.readFileSync(path.join(__dirname, '..', 'privasi.html'), 'utf8')), 'tidak ada sisa teks "sekali bayar"');
+  truthy(/untuk tahun pertama/.test(idx) && /untuk tahun pertama/.test(fs.readFileSync(path.join(__dirname, '..', 'assets', 'app.js'), 'utf8')), 'harga pengguna awal: tahun pertama saja');
+  truthy(/dalam 30 hari sejak pembelian Pro dibuka/.test(idx) && /dalam 30 hari sejak pembelian Pro dibuka/.test(fs.readFileSync(path.join(__dirname, '..', 'privasi.html'), 'utf8')), 'batas klaim harga pengguna awal 30 hari');
   for (const lama of ['Rp49.000', 'Rp399.000', 'Berlangganan Pro', 'data-price="proUnit">/ bulan', 'Jasa laporan</h3>', 'Rp299.000']) truthy(!idx.includes(lama) && !cfg.includes(`'${lama}'`), `tanpa harga/teks lama: ${lama}`);
-  truthy(/data-price="pro">Rp149\.000</.test(idx) && /data-price="proUnit">sekali bayar</.test(idx), 'halaman depan: Rp149.000 sekali bayar');
+  truthy(/data-price="pro">Rp149\.000</.test(idx) && /data-price="proUnit">per tahun</.test(idx), 'halaman depan: Rp149.000 per tahun');
 });
 test('P0 laba bulanan PDF: Belum diketahui / sebagian (*) / Rp0 aktual / lengkap; tanpa NaN', () => {
   const inc = E.parseWorkbook(Sint.penghasilan([
@@ -845,5 +848,16 @@ test('Batch 4: Pajak Seller hanya staging/localhost, isian tidak disimpan/dikiri
 });
 
 // Ringkasan & kode keluar di AKHIR file, agar kegagalan tes mana pun (termasuk yang ditambahkan belakangan) menggagalkan CI.
+test('Masa beta gratis: config, isPro, label beta terpisah dari Pro sendiri, pembayaran tetap tertutup, pengumuman', () => {
+  const cfg = src('config.js'), appJs = src('app.js'), idx = fs.readFileSync(path.join(__dirname, '..', 'index.html'), 'utf8');
+  const priv = fs.readFileSync(path.join(__dirname, '..', 'privasi.html'), 'utf8');
+  truthy(/betaGratisSampai: '2026-12-13',/.test(cfg) && /hargaPenggunaAwal: 'Rp99\.000',/.test(cfg), 'tanggal beta & harga pengguna awal di config');
+  truthy(/whatsapp: '',/.test(cfg) && !/proPembayaranAktif: true/.test(cfg), 'beta tidak membuka pembayaran');
+  truthy(/const isPro = \(\) => demo \|\| proSendiri\(\) \|\| !!betaGratis\(\);/.test(appJs), 'isPro memakai masa beta');
+  truthy(/new Date\(\)\.toLocaleDateString\('sv-SE'\) <= s/.test(appJs), 'beta inklusif sampai tanggal config');
+  truthy(/dHead\('Masa beta gratis'/.test(appJs) && /harga khusus \$\{harga\}/.test(appJs), 'dialog beta + janji harga khusus');
+  truthy((idx.match(/data-beta hidden/g) || []).length >= 2, 'pengumuman beta di halaman depan, tersembunyi bawaan');
+  truthy(/Masa beta\.<\/b> Sampai 13 Desember 2026/.test(priv), 'ketentuan masa beta');
+});
 console.log(failed ? `\n${failed} uji GAGAL` : '\nSemua uji lulus');
 process.exitCode = failed ? 1 : 0;

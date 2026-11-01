@@ -499,3 +499,13 @@ section.st { position: relative; isolation: isolate; padding-block: clamp(80px, 
 .ilus-tag { display: inline-flex; align-items: center; margin-right: 8px; padding: 3px 10px; border-radius: 999px; font-size: 11.5px; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; vertical-align: 1px;
   color: var(--warn); background: var(--warn-soft); border: 1px solid color-mix(in srgb, var(--warn) 30%, transparent); }
 .cmp-t caption.sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+
+/* Masa beta gratis (keputusan pemilik 1 Nov 2026). Tampil hanya selama beta aktif (situs.js, [data-beta]). */
+.ed-beta { margin: 12px 0 0; font-size: 14px; color: var(--ink-2); text-align: inherit; line-height: 1.6; }
+.ed-beta .badge { margin-right: 6px; vertical-align: 1px; }
+.beta-note { max-width: 880px; margin: 0 auto 24px; display: flex; align-items: center; justify-content: space-between; gap: 12px 20px; flex-wrap: wrap;
+  padding: 14px 18px; border-radius: 16px; border: 1px solid var(--accent); background: var(--accent-soft); }
+.beta-note p { margin: 0; font-size: 14.5px; color: var(--ink); max-width: 62ch; }
+.beta-note .badge, .ed-beta .badge { background: var(--accent); color: var(--accent-ink); }
+[data-beta][hidden] { display: none !important; }
+

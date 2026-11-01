@@ -219,6 +219,20 @@ const memStore = () => { const m = new Map(); return { getItem: (k) => (m.has(k)
     truthy(u.searchParams.get('text') === 'Halo Cek Untung, saya butuh bantuan menggunakan website (halaman: Dashboard).', u.searchParams.get('text'));
     truthy(/halaman: Beranda/.test(decodeURIComponent(S.waSupportUrl({ waSupport: '6281234567890' }, '<b>x</b>'))), 'nama halaman di luar daftar → Beranda');
   });
+  await t('masa beta gratis: aktif s.d. tanggal (inklusif), mati setelahnya/format salah; elemen [data-beta] ikut', async () => {
+    const cfg = { betaGratisSampai: '2026-12-13', hargaPenggunaAwal: 'Rp99.000' };
+    truthy(S.betaGratis(cfg, '2026-11-01').aktif && S.betaGratis(cfg, '2026-12-13').aktif, 'aktif sampai & termasuk 13 Des');
+    truthy(!S.betaGratis(cfg, '2026-12-14').aktif, 'mati mulai 14 Des');
+    for (const bad of ['', '13-12-2026', '2026/12/13', null]) truthy(!S.betaGratis({ betaGratisSampai: bad }, '2026-11-01').aktif, `format salah/kosong: ${bad}`);
+    truthy(S.betaGratis(cfg, '2026-11-01').label === '13 Desember 2026', 'label tanggal');
+    const el = (attr) => ({ dataset: {}, hidden: true, textContent: '', attr, removeAttribute() {}, setAttribute() {} });
+    const els = [el('beta'), el('sampai'), el('harga')];
+    const doc = { querySelectorAll: (q) => (q === '[data-beta]' ? [els[0]] : q === '[data-beta-sampai]' ? [els[1]] : q === '[data-harga-awal]' ? [els[2]] : []), getElementById: () => null };
+    S.pasang(doc, cfg, { hostname: 'cekuntung.id', pathname: '/' }, null, '2026-11-01');
+    truthy(els[0].hidden === false && els[1].textContent === '13 Desember 2026' && els[2].textContent === 'Rp99.000', 'tampil selama beta');
+    S.pasang(doc, cfg, { hostname: 'cekuntung.id', pathname: '/' }, null, '2026-12-14');
+    truthy(els[0].hidden === true, 'tersembunyi setelah beta');
+  });
   await t('pindah alamat: hanya di *.github.io bila domainResmi diisi; tanpa query/hash', async () => {
     const gh = (path) => ({ hostname: 'muhammadramdhan2012.github.io', pathname: path });
     truthy(S.alamatPindah({}, gh('/cek-profit/')) === '', 'domainResmi kosong → tidak tampil');

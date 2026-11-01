@@ -1861,3 +1861,7 @@ body.app .empty-arah > p:not(.tiny) { font-size: 15px; max-width: 46ch; }
 .rt-luar { display: inline-block; margin-top: 4px; font-size: 12px; font-weight: 650; color: var(--info); }
 .rt-luar-note { margin: 0; }
 
+/* Masa beta gratis: kartu di sidebar bisa diketuk untuk melihat keterangan. */
+.plan-beta { width: 100%; box-sizing: border-box; font: inherit; text-align: left; cursor: pointer; color: inherit; }
+.side .plan-beta { color: var(--side-ink); }
+

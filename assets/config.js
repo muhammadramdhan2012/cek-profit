@@ -21,17 +21,26 @@ window.CEK_CONFIG = {
   // pemberitahuan pindah alamat. Kosong = tidak ada pemberitahuan. Tidak ada pengalihan otomatis.
   domainResmi: '',
 
-  // Harga Cek Untung Pro (sekali bayar, bukan langganan). Keputusan pemilik: Rp149.000 harga peluncuran (21 Okt 2026);
+  // Harga Cek Untung Pro: Rp149.000 per tahun (keputusan pemilik 1 Nov 2026; sebelumnya sekali bayar, 21 Okt 2026).
+  // Berlaku 1 tahun sejak aktif, tanpa perpanjangan otomatis (pembayaran masih manual).
   // harga reguler tidak ditampilkan dan Jasa laporan tidak ditawarkan di halaman publik (22 Okt 2026). Nilai `jasa`
   // dipertahankan untuk kompatibilitas. Teks tampilan saja; pembelian belum dibuka (whatsapp kosong).
   // JANGAN mengisi `whatsapp` di rilis ini: alur pembayaran lama di dashboard masih berbasis paket bulanan/tahunan.
   prices: {
     pro: 'Rp149.000',
-    proUnit: 'sekali bayar',
+    proUnit: 'per tahun',
     proLabel: 'Harga Peluncuran',
     jasa: 'Rp199.000',
     jasaUnit: '/ toko / bulan',
   },
+
+  // Masa BETA GRATIS (keputusan pemilik 1 Nov 2026): sampai tanggal ini (inklusif, 'YYYY-MM-DD') semua fitur Pro terbuka
+  // untuk semua pengunjung; setelahnya kunci Pro kembali otomatis. Kosongkan ('') untuk menghentikan beta lebih awal.
+  // Pengguna yang membuat akun selama beta dijanjikan harga khusus Rp99.000 untuk TAHUN PERTAMA Pro (perpanjangan
+  // berikutnya harga normal), bila membeli dalam 30 hari sejak pembelian dibuka. Keputusan pemilik 1 Nov 2026.
+  // Tidak membuka pembayaran (pembayaran tetap mengikuti `whatsapp`).
+  betaGratisSampai: '2026-12-13',
+  hargaPenggunaAwal: 'Rp99.000',
 
   // Analytics ramah privasi (GoatCounter, gratis, tanpa cookie).
   // Daftar di https://www.goatcounter.com lalu isi kode situs, mis. 'cekprofit' → cekprofit.goatcounter.com
