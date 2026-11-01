@@ -215,6 +215,11 @@ node tests/cloud.test.js          # memakai server tiruan tests/mock-supabase.js
 - ✅ Jenis usaha (reseller, stok sendiri, produsen, dropshipper) dengan fitur masing-masing; tombol "?" penjelasan angka (`assets/penjelasan.js`); tarif efektif dari laporan + tabel tarif umum (`assets/tarif.js`, diperbarui manual dengan tanggal dan sumber).
 - ⏳ Tarif umum di `assets/tarif.js` dicek 14 Okt 2026 dari sumber sekunder; perlu dicocokkan ulang saat marketplace mengumumkan perubahan tarif.
 - ⏳ Harga Pro ditetapkan pemilik (21 Okt 2026): Rp149.000 sekali bayar (harga peluncuran; reguler yang direncanakan Rp299.000), tampil di halaman depan sejak rilis UI. Harga reguler tidak ditampilkan dan Jasa laporan tidak ditawarkan di halaman publik (keputusan pemilik 22 Okt 2026; nilai `jasa` di config dipertahankan). Pembelian belum dibuka: `whatsapp` tetap kosong, dan alur pembayaran lama di dashboard (paket bulanan/tahunan) belum diganti.
+- ⏳ Masa beta gratis (keputusan pemilik 1 Nov 2026): semua fitur Pro terbuka sampai 13 Des 2026 (`betaGratisSampai` di
+  `assets/config.js`), lalu kunci Pro kembali otomatis. Pengguna yang membuat akun selama beta dijanjikan harga khusus
+  Rp99.000 saat pembelian dibuka (`hargaPenggunaAwal`); mekanisme pemberiannya dibuat bersama penguncian Pro di server.
+  Pembayaran tetap belum dibuka. Syarat membuka pembayaran: 20–30 seller mencoba dengan laporan asli, tanpa keluhan angka
+  salah yang serius, 3–5 testimoni, atau paling lambat akhir masa beta.
 - ⏳ Supabase URL Configuration (Site URL dan Redirect URL ke domain GitHub Pages) belum dikonfirmasi.
 - ⏳ Parser export pesanan Shopee dan TikTok tetap berlabel Beta (keputusan pemilik 19 Okt 2026). Export Shopee baru dicocokkan dengan satu file asli; export TikTok asli belum diuji.
 - ⏳ Statistik GoatCounter belum aktif (`goatcounter: ''`).

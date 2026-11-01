@@ -27,8 +27,23 @@ const CekSitus = (() => {
     return new URL(file, resmi.origin).href;
   }
 
+  const BULAN = ['Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni', 'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'];
+  /** Masa beta gratis (CEK_CONFIG.betaGratisSampai 'YYYY-MM-DD', inklusif). hariIni 'YYYY-MM-DD' (tanggal perangkat).
+   *  Format salah/kosong → tidak aktif. Aturan yang sama ada di assets/app.js (betaGratis). */
+  function betaGratis(cfg, hariIni) {
+    const s = String((cfg && cfg.betaGratisSampai) || '').trim();
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(s)) return { aktif: false, sampai: '', label: '' };
+    const [y, m, d] = s.split('-').map(Number);
+    return { aktif: String(hariIni) <= s, sampai: s, label: `${d} ${BULAN[m - 1]} ${y}` };
+  }
+
   const TUTUP_KEY = 'cekprofit.pindahTutup';
-  function pasang(doc, cfg, loc, store) {
+  function pasang(doc, cfg, loc, store, hariIni = new Date().toLocaleDateString('sv-SE')) {
+    // Masa beta: elemen [data-beta] tampil hanya selama beta aktif; [data-beta-sampai] / [data-harga-awal] diisi dari config.
+    const beta = betaGratis(cfg, hariIni);
+    doc.querySelectorAll('[data-beta]').forEach((el) => { el.hidden = !beta.aktif; });
+    doc.querySelectorAll('[data-beta-sampai]').forEach((el) => { if (beta.label) el.textContent = beta.label; });
+    doc.querySelectorAll('[data-harga-awal]').forEach((el) => { if (cfg && cfg.hargaPenggunaAwal) el.textContent = cfg.hargaPenggunaAwal; });
     doc.querySelectorAll('[data-wa-support]').forEach((el) => {
       const url = waSupportUrl(cfg, el.dataset.waSupport);
       if (url) { el.href = url; el.target = '_blank'; el.rel = 'noopener'; el.hidden = false; }
@@ -57,6 +72,6 @@ const CekSitus = (() => {
     const run = () => { let st = null; try { st = sessionStorage; } catch (e) { /* abaikan */ } pasang(document, window.CEK_CONFIG || {}, location, st); };
     if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', run); else run();
   }
-  return { waSupportUrl, alamatPindah, pasang };
+  return { waSupportUrl, alamatPindah, pasang, betaGratis };
 })();
 if (typeof module !== 'undefined') module.exports = CekSitus;

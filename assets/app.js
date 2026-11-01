@@ -111,7 +111,15 @@
   const cloud = CekCloud.init({ url: C.supabaseUrl, key: C.supabaseAnonKey });
   const account = { user: cloud.auth.user(), profile: null, sync: '', reports: null, loading: false, menu: false };
 
-  const isPro = () => demo || license.ok || CekCloud.isPro(account.profile);
+  /** Masa beta gratis (keputusan pemilik 1 Nov 2026): sampai C.betaGratisSampai (inklusif) semua fitur Pro terbuka.
+   *  Aturan sama dengan CekSitus.betaGratis (situs.js dimuat setelah file ini, jadi tidak dipakai di sini). */
+  const betaGratis = () => {
+    const s = String(C.betaGratisSampai || '').trim();
+    return /^\d{4}-\d{2}-\d{2}$/.test(s) && new Date().toLocaleDateString('sv-SE') <= s ? s : '';
+  };
+  /** Pro yang benar-benar dimiliki (akun/kode), bukan karena masa beta. */
+  const proSendiri = () => license.ok || CekCloud.isPro(account.profile);
+  const isPro = () => demo || proSendiri() || !!betaGratis();
   const st = () => (demo ? CekDemo.settings() : settings);
   const prof = () => (demo ? CekDemo.profile() : profile);
   const cases = () => (demo ? {} : caseState);
@@ -262,8 +270,10 @@
   function renderAccount() {
     const p = account.profile, u = account.user;
     const pro = isPro();
-    const planText = demo ? 'Mode contoh' : CekCloud.isPro(p) ? `Pro sampai ${tgl(p.pro_until)}` : license.ok ? `Pro (kode)${license.exp ? ` sampai ${tgl(license.exp)}` : ''}` : 'Paket gratis';
-    $('#plan-box').innerHTML = pro ? `<div class="plan-pro"><span class="badge pro">PRO</span><span>${demo ? 'Mode contoh: semua fitur terbuka' : 'Semua fitur Pro aktif'}</span></div>` : `<button class="upsell-sm" type="button" data-upgrade aria-label="Lihat paket Cek Untung Pro" title="Laporan PDF, analisis semua produk, dan saran harga"><span class="badge pro">PRO</span><span class="us-t">Cek Untung Pro</span><span class="us-go" aria-hidden="true">Lihat →</span></button>`;
+    const planText = demo ? 'Mode contoh' : CekCloud.isPro(p) ? `Pro sampai ${tgl(p.pro_until)}` : license.ok ? `Pro (kode)${license.exp ? ` sampai ${tgl(license.exp)}` : ''}` : betaGratis() ? `Beta gratis sampai ${tgl(betaGratis())}` : 'Paket gratis';
+    const beta = !demo && !proSendiri() && betaGratis();
+    $('#plan-box').innerHTML = beta ? `<button class="plan-pro plan-beta" type="button" data-upgrade aria-label="Masa beta gratis sampai ${tgl(beta)}. Lihat keterangan"><span class="badge pro">BETA</span><span>Gratis semua fitur sampai ${tgl(beta)}</span></button>`
+      : pro ? `<div class="plan-pro"><span class="badge pro">PRO</span><span>${demo ? 'Mode contoh: semua fitur terbuka' : 'Semua fitur Pro aktif'}</span></div>` : `<button class="upsell-sm" type="button" data-upgrade aria-label="Lihat paket Cek Untung Pro" title="Laporan PDF, analisis semua produk, dan saran harga"><span class="badge pro">PRO</span><span class="us-t">Cek Untung Pro</span><span class="us-go" aria-hidden="true">Lihat →</span></button>`;
     if (!cloud.enabled) {
       $('#account-box').innerHTML = `<div class="acct-box"><div class="avatar" style="background:var(--surface-3);color:var(--ink-2)">${svg('data', 16)}</div><div class="who"><b>${planText}</b><span>Tersimpan di browser ini</span></div></div>`;
       $('#account-sm').innerHTML = pro ? '<span class="badge pro">PRO</span>' : '<button class="btn sm" type="button" data-upgrade>Pro</button>';
@@ -384,7 +394,7 @@
   /** Ringkasan akun untuk lembar "Lainnya" (di HP menu samping tidak tampil). */
   function accountSheet() {
     const p = account.profile, u = account.user, pro = isPro();
-    const plan = demo ? 'Mode contoh' : CekCloud.isPro(p) ? `Pro sampai ${tgl(p.pro_until)}` : license.ok ? 'Pro (kode akses)' : 'Paket gratis';
+    const plan = demo ? 'Mode contoh' : CekCloud.isPro(p) ? `Pro sampai ${tgl(p.pro_until)}` : license.ok ? 'Pro (kode akses)' : betaGratis() ? `Beta gratis sampai ${tgl(betaGratis())}` : 'Paket gratis';
     const up = pro ? '' : '<button class="btn sm" type="button" data-upgrade>Lihat paket Pro</button>';
     if (!cloud.enabled) return `<div class="sheet-acct"><span class="small">${plan}. Tersimpan di browser ini.</span>${up}</div>`;
     if (!u) return `<div class="sheet-acct"><a class="btn sm primary" href="akun.html?mode=daftar&next=dashboard.html">Daftar gratis</a><a class="btn sm" href="akun.html?next=dashboard.html">Masuk</a>${up}</div>`;
@@ -2296,7 +2306,14 @@
     const p = account.profile;
     let pending = null;
     if (account.user && !isPro()) { try { pending = (await cloud.db.myRequests()).find((x) => x.status === 'baru' || x.status === 'diproses'); } catch (e) { /* abaikan */ } }
-    if (isPro() && !demo) {
+    if (!demo && !proSendiri() && betaGratis()) {
+      // Masa beta gratis: semua fitur terbuka; pembelian belum dibuka. Harga khusus hanya untuk yang membuat akun.
+      const harga = esc(C.hargaPenggunaAwal || 'Rp99.000');
+      d.innerHTML = `${dHead('Masa beta gratis', `Semua fitur Pro gratis sampai ${tgl(betaGratis())}`)}
+        <div class="d-body"><ul class="benefits"><li>Laporan PDF dengan nama dan logo toko</li><li>Analisis semua produk dan saran harga</li><li>Semua temuan, ekspor Excel, riwayat tanpa batas</li></ul>
+        <p class="note-box">Yang membuat akun selama masa beta mendapat <b>harga khusus ${harga}</b> saat pembelian Pro dibuka. Setelah masa beta, fitur Pro kembali hanya untuk akun Pro; riwayat yang sudah tersimpan tidak dihapus.</p>
+        ${cloud.enabled && !account.user ? '<a class="btn primary" href="akun.html?mode=daftar&next=dashboard.html">Daftar gratis</a>' : ''}</div>`;
+    } else if (isPro() && !demo) {
       d.innerHTML = `${dHead('Pro aktif', CekCloud.isPro(p) ? `Sampai ${tgl(p.pro_until)}` : license.ok ? `Kode atas nama ${esc(license.name || '-')}${license.exp ? `, sampai ${tgl(license.exp)}` : ''}` : '')}
         <div class="d-body"><ul class="benefits"><li>Laporan PDF dengan nama dan logo toko</li><li>Analisis semua produk dan saran harga</li><li>Semua temuan, ekspor Excel, riwayat tanpa batas</li></ul>
         ${license.ok ? '<button class="btn quiet" type="button" id="code-remove">Hapus kode dari browser ini</button>' : ''}</div>`;

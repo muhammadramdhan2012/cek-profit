@@ -33,6 +33,13 @@ window.CEK_CONFIG = {
     jasaUnit: '/ toko / bulan',
   },
 
+  // Masa BETA GRATIS (keputusan pemilik 1 Nov 2026): sampai tanggal ini (inklusif, 'YYYY-MM-DD') semua fitur Pro terbuka
+  // untuk semua pengunjung; setelahnya kunci Pro kembali otomatis. Kosongkan ('') untuk menghentikan beta lebih awal.
+  // Pengguna yang membuat akun selama beta dijanjikan harga khusus Rp99.000 saat pembelian Pro dibuka.
+  // Tidak membuka pembayaran (pembayaran tetap mengikuti `whatsapp`).
+  betaGratisSampai: '2026-12-13',
+  hargaPenggunaAwal: 'Rp99.000',
+
   // Analytics ramah privasi (GoatCounter, gratis, tanpa cookie).
   // Daftar di https://www.goatcounter.com lalu isi kode situs, mis. 'cekprofit' → cekprofit.goatcounter.com
   // Kosong = analytics mati. Yang dicatat hanya kunjungan halaman dan klik tombol, BUKAN isi file/angka toko.

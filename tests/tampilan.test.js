@@ -845,5 +845,16 @@ test('Batch 4: Pajak Seller hanya staging/localhost, isian tidak disimpan/dikiri
 });
 
 // Ringkasan & kode keluar di AKHIR file, agar kegagalan tes mana pun (termasuk yang ditambahkan belakangan) menggagalkan CI.
+test('Masa beta gratis: config, isPro, label beta terpisah dari Pro sendiri, pembayaran tetap tertutup, pengumuman', () => {
+  const cfg = src('config.js'), appJs = src('app.js'), idx = fs.readFileSync(path.join(__dirname, '..', 'index.html'), 'utf8');
+  const priv = fs.readFileSync(path.join(__dirname, '..', 'privasi.html'), 'utf8');
+  truthy(/betaGratisSampai: '2026-12-13',/.test(cfg) && /hargaPenggunaAwal: 'Rp99\.000',/.test(cfg), 'tanggal beta & harga pengguna awal di config');
+  truthy(/whatsapp: '',/.test(cfg) && !/proPembayaranAktif: true/.test(cfg), 'beta tidak membuka pembayaran');
+  truthy(/const isPro = \(\) => demo \|\| proSendiri\(\) \|\| !!betaGratis\(\);/.test(appJs), 'isPro memakai masa beta');
+  truthy(/new Date\(\)\.toLocaleDateString\('sv-SE'\) <= s/.test(appJs), 'beta inklusif sampai tanggal config');
+  truthy(/dHead\('Masa beta gratis'/.test(appJs) && /harga khusus \$\{harga\}/.test(appJs), 'dialog beta + janji harga khusus');
+  truthy((idx.match(/data-beta hidden/g) || []).length >= 2, 'pengumuman beta di halaman depan, tersembunyi bawaan');
+  truthy(/Masa beta\.<\/b> Sampai 13 Desember 2026/.test(priv), 'ketentuan masa beta');
+});
 console.log(failed ? `\n${failed} uji GAGAL` : '\nSemua uji lulus');
 process.exitCode = failed ? 1 : 0;
