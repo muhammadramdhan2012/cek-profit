@@ -97,7 +97,7 @@ const CekDemo = (() => {
       const variant = VARIANTS[k] ? VARIANTS[k][i % VARIANTS[k].length] : 'Default';
       ttOrders.push([id, 'Selesai', TTSKU(k), SKU(k), PRODUCTS[k][0], variant, qty, PRODUCTS[k][1], paid, day(mth, d).replace(/-/g, '/') + ' 09:30:00']);
     }
-    const tiktok = { name: 'contoh-tiktok-penghasilan.xlsx', sheets: { 'Detail pesanan': tt, Laporan: [['', 'Jumlah penyelesaian pembayaran', '', '', '', ttSum]] } };
+    const tiktok = { name: 'contoh-tiktok-penghasilan.xlsx', sheets: { 'Detail pesanan': tt, Laporan: [['', 'Periode', '', '', '', '2026/01/01-2026/09/30'], ['', 'Zona waktu', '', '', '', 'UTC+7'], ['', 'Jumlah penyelesaian pembayaran', '', '', '', ttSum]] } };   // periode resmi seperti file asli (dipakai status bulan lengkap, A.17)
     const tiktokOrders = { name: 'contoh-tiktok-pesanan.csv', sheets: { Sheet1: ttOrders } };
 
     /* ---- Retur TikTok ---- */

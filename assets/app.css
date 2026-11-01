@@ -1856,3 +1856,8 @@ body.app .empty-arah > p:not(.tiny) { font-size: 15px; max-width: 46ch; }
 .pd-card .pd-act .btn.primary { min-height: 42px; padding-inline: 20px; }
 .pd-card .pd-help p { text-align: center; }
 @media (max-width: 560px) { .pd-card .pd-act { display: grid; justify-items: center; } }
+
+/* B3: kasus retur dari pesanan di luar laporan (tidak masuk laba periode ini). */
+.rt-luar { display: inline-block; margin-top: 4px; font-size: 12px; font-weight: 650; color: var(--info); }
+.rt-luar-note { margin: 0; }
+

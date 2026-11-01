@@ -42,7 +42,24 @@ Sumber awal: audit menyeluruh 14 Okt 2026 (read-only), ditambah analisis penghit
   - fixture **sintetis** diizinkan pada tahap pengujian, setelah rencana implementasi disetujui (belum dibuat).
 - Tidak ada diskon pemasok yang di-hardcode. Struktur modal dan diskon tiap seller bisa berbeda.
 
+## Pembaruan status (31 Okt 2026)
+
+Pemeriksaan ulang kode `main` (`349e596`) terhadap masalah akurasi High. Perintah: `node tests/engine.test.js`, hasil
+"Semua uji lulus" (31 Okt 2026). Angka di bawah dari data **sintetis**, bukan data toko.
+
+| Masalah | Status sebelumnya | Status sekarang | Bukti |
+|---|---|---|---|
+| H1 jumlah barang Shopee | Terbuka | **Ditangani, menunggu konfirmasi pemilik untuk ditutup** | Commit `6de740d`, `fbc1c27`, `f8fc951`. Tes P7e, T3, T10, T16. Tanpa export: estimasi minimum 1 unit berlabel (A.19.1), nota "Belum final", temuan "Laba sebenarnya bisa lebih kecil" (dicek di browser 31 Okt 2026). |
+| H3 variasi tergabung / unit ganda | Terbuka | **Ditangani, menunggu konfirmasi pemilik untuk ditutup** | Commit `fbc1c27`, `f8fc951`. Tes T3, T10, T16. Belum diverifikasi: isian modal per variasi tanpa SKU di tabel produk (AC-S3). |
+| M10 jumlah retur Shopee | Terbuka | **Selesai** | Commit `ae96ffc` (H2-A). Tes "H1 parser retur Shopee: 3, 1, kosong, tidak ada, teks, nol, kolom lama". |
+| P10 penghitungan ganda HPP | Perlu verifikasi | **Terbuka (terbukti dengan data sintetis)** | Tes "P10 KETERBATASAN". Aturan A.9 & baris refund A.10 ditetapkan 31 Okt 2026, tetapi penerapannya ditunda: jenis penyesuaian refund tidak ditemukan di data uji pemilik (yang ada: "Kompensasi atas pesanan hilang", "Logistik"). Butuh contoh file. |
+| H2 refund penuh tanpa kondisi barang | Dikerjakan | **Ditangani dengan rentang laba (Tahap B1), menunggu konfirmasi pemilik untuk ditutup** | `docs/KAMUS_ANGKA.md` A.20. Tes "B1 rentang laba ...". Batas bawah = laba bila barang ditandai tidak kembali (diuji). Kompensasi barang hilang (H2-B2) belum. |
+| M1 bulan pertama/terakhir tidak lengkap | Terbuka | **Selesai (Tahap B4)** | A.17 ditetapkan (14 hari). Tes "B4 bulan lengkap ...", "I6", "P0-4", "H10" (`node tests/engine.test.js`, lulus 31 Okt 2026). Label "belum lengkap" di grafik/tabel; perbandingan & temuan hanya bulan lengkap. Belum diuji dengan beberapa file asli bersambung. |
+| (baru) Kerugian retur dari pesanan di luar laporan | — | **Selesai (Tahap B3)** | Keputusan pemilik 31 Okt 2026: tidak mengurangi laba periode ini, ditampilkan terpisah. Tes "B3 kerugian/risiko retur ...". |
+
 ## Ringkasan (14 Okt 2026)
+
+Tabel ini angka audit awal; perubahan setelahnya ada di "Pembaruan status (31 Okt 2026)".
 
 | Prioritas | Terbuka | Perlu verifikasi | Selesai |
 |---|---|---|---|
@@ -55,12 +72,12 @@ Sumber awal: audit menyeluruh 14 Okt 2026 (read-only), ditambah analisis penghit
 
 | Pilar | Status | Catatan |
 |---|---|---|
-| Profit Reporting | Berjalan, dengan masalah akurasi terbuka | H1, H2, H3, M1, M10, M11, P3, P10 |
+| Profit Reporting | Berjalan, dengan masalah akurasi terbuka | Terbuka: M11, P3, P10. Ditangani, menunggu konfirmasi: H1, H2, H3. Selesai: M1, M10. |
 | Profit Optimization | Sebagian | Simulator harga, harga impas/target, batas harga aman. Belum ada skenario tingkat toko. |
 | Pajak Seller | Beta (flag `pajakSeller`) | Simulasi PPh final & PPh 22 marketplace + Surat Pernyataan PMK 37/2025. Bukan nasihat pajak; hanya 2026; omzet dari laporan = setelah diskon (perkiraan); bergantung penunjukan ulang marketplace pemungut oleh DJP; koperasi/badan lain belum didukung. |
 | Financial Analytics | Sebagian | Tren per bulan, temuan otomatis. **Arus kas belum ada** (`docs/KAMUS_ANGKA.md` A.15). |
 | Financial Control | Awal | Pencocokan total per file dan, sejak Money Trace A1, per komponen (penjualan, refund, potongan, dana dilepas, penyesuaian) dengan ringkasan resmi. Sejak Money Trace Shopee v1 (Beta): saldo penjual Shopee dicocokkan 1:1 dengan Laporan Penghasilan (nomor pesanan, nominal persis, tanggal dana dilepas). **Rekonsiliasi bank belum ada**; saldo/pencairan TikTok belum dibaca. |
-| Profit Confidence | Belum ada | Hanya sinyal terpisah (`coverage`, `qtyAssumed`, `unknownRisk`) |
+| Profit Confidence | Awal | Panel Kepastian Profit (sejak H2-B3a): porsi penjualan per status (terverifikasi, perkiraan, perkiraan minimum, perlu dicek, belum diketahui) dan alasan laba belum final. Sejak Tahap B (31 Okt 2026): laba dalam rentang, status bulan lengkap, kasus retur periode lain terpisah. Syarat "laba final" belum ditetapkan. |
 | Money Trace | A1 + Shopee v1 (Beta) | Kartu Jejak uang di halaman Laba: penjualan (dengan rincian refund yang sudah termasuk), potongan, dana pesanan dilepas, penyesuaian terpisah, status rekonsiliasi, sumber, dan basis tanggal (`docs/KAMUS_ANGKA.md` B.1b). Shopee v1: panel Saldo Penjual (saldo awal/masuk/keluar/akhir, cek saldo berantai, status Cocok / Di luar periode / Belum direkonsiliasi / Tidak cukup data; selisih ditampilkan, tidak dikoreksi). Keterbatasan: diuji dengan **satu** file saldo asli; penarikan hanya bukti dana keluar dari Shopee, **bukan** diterima bank; panel mencakup seluruh periode file (filter bulan tidak berlaku). |
 | Profit Decision Engine | Sebagian | Temuan otomatis berbasis aturan + simulator |
 
@@ -69,7 +86,7 @@ Sumber awal: audit menyeluruh 14 Okt 2026 (read-only), ditambah analisis penghit
 ## High
 
 ### H1 · Jumlah barang Shopee dianggap 1 tanpa export pesanan
-- **Status:** Terbuka · **Pilar:** Profit Reporting · **Kompleksitas:** S–M (1–2 hari)
+- **Status:** Ditangani (31 Okt 2026), menunggu konfirmasi pemilik untuk ditutup; lihat "Pembaruan status" · **Pilar:** Profit Reporting · **Kompleksitas:** S–M (1–2 hari)
 - **Lokasi:** `assets/engine.js:455-458`, `assets/engine.js:682` (peringatan hanya level `info`), `assets/app.js:684`
 - **Bukti kode:** `cost = entry.cost * (qty ?? 1) * share; if (qty === null) qtyAssumed++;`
 - **Bukti data:** ditemukan pada data uji pemilik. Laporan Shopee tanpa export pesanan membuat seluruh baris produk
@@ -181,7 +198,7 @@ Sumber awal: audit menyeluruh 14 Okt 2026 (read-only), ditambah analisis penghit
   - kompensasi atas barang hilang (H2-B2) belum dikerjakan.
 
 ### H3 · Variasi produk dengan modal berbeda tergabung salah
-- **Status:** Terbuka · **Pilar:** Profit Reporting, Profit Optimization · **Kompleksitas:** M–L (3–5 hari, perlu
+- **Status:** Ditangani (31 Okt 2026), menunggu konfirmasi pemilik untuk ditutup; lihat "Pembaruan status" · **Pilar:** Profit Reporting, Profit Optimization · **Kompleksitas:** M–L (3–5 hari, perlu
   file export Shopee asli)
 - **Lokasi:**
   - `assets/engine.js:451`: semua baris export bernama sama diambil item pertama;
@@ -227,7 +244,7 @@ Sumber awal: audit menyeluruh 14 Okt 2026 (read-only), ditambah analisis penghit
 ## Medium
 
 ### M1 · Dasar periode tercampur; bulan pertama dan terakhir tidak lengkap
-- **Status:** Terbuka · **Pilar:** Financial Analytics · **Kompleksitas:** S (1 hari)
+- **Status:** Selesai (Tahap B4, 31 Okt 2026; lihat "Pembaruan status") · **Pilar:** Financial Analytics · **Kompleksitas:** S (1 hari)
 - **Lokasi:**
   - `assets/engine.js:480`: rentang memakai tanggal dana dilepas;
   - `assets/engine.js:482`: grafik memakai tanggal pesanan;
@@ -312,7 +329,7 @@ Sumber awal: audit menyeluruh 14 Okt 2026 (read-only), ditambah analisis penghit
   jadi perlu persetujuan. Keputusan 14 Okt 2026: **belum diubah**.
 
 ### M10 · Parser retur Shopee membaca kolom jumlah yang salah
-- **Status:** Terbuka · **Pilar:** Profit Reporting · **Kompleksitas:** S · **Terkait:** H1, H2
+- **Status:** Selesai (H2-A, commit `ae96ffc`; tes "H1 parser retur Shopee: 3, 1, kosong, tidak ada, teks, nol, kolom lama", `node tests/engine.test.js`, lulus 31 Okt 2026) · **Pilar:** Profit Reporting · **Kompleksitas:** S · **Terkait:** H1, H2
 - **Lokasi:** `assets/engine.js:274` (`qty: num(g('Jumlah')) || 1`), dipakai di `assets/engine.js:601` (perkiraan modal retur)
 - **Bukti:** file retur Shopee asli memakai kolom "Jumlah Produk Dikembalikan". Kolom `Jumlah` tidak ada, sehingga jumlah
   retur Shopee selalu terbaca 1. Ditemukan pada data uji pemilik (nama kolom saja).
@@ -370,7 +387,7 @@ Sumber awal: audit menyeluruh 14 Okt 2026 (read-only), ditambah analisis penghit
 | P7 | Low | parser umum (`assets/engine.js`) | ID pesanan numerik di atas 2^53 bisa bertabrakan dan terbuang sebagai duplikat | ID TikTok terbaca sebagai teks, jadi aman saat ini | Belum diverifikasi | Belum diverifikasi |
 | P8 | Low | `assets/app.js` (`compute()`) | Hitungan dijalankan 2× per render; bisa lambat pada data sangat besar | — | Belum diverifikasi | Belum diverifikasi |
 | P9 | Medium | arsitektur (`assets/engine.js`, `supabase/schema.sql`) | Tidak ada konsep toko; file dua toko akan tergabung tanpa peringatan | — | Tabel `stores`, `store_id` di `user_data` dan `reports`, deteksi file dari toko berbeda (fase multi-toko di roadmap audit) | Belum diverifikasi |
-| P10 | **High bila terbukti** | `assets/engine.js:456`, `assets/engine.js:601-613`, `assets/engine.js:499` | **Penghitungan ganda HPP:** refund yang tidak tercatat di baris pesanan (misalnya penyesuaian setelah dana dilepas) + kasus "Tidak kembali" membuat modal pesanan tetap penuh dan kerugian ditambahkan. Juga: kerugian retur dari pesanan di luar periode laporan. Lihat `docs/KAMUS_ANGKA.md` §B.1. | Perlu dicek (`docs/KAMUS_ANGKA.md` C.6) | Cocokkan refund/penyesuaian ke pesanannya sebelum menghitung kerugian retur (A.9); batasi kerugian retur ke pesanan dalam periode | Belum diverifikasi (bukan bagian audit awal) |
+| P10 | **High (terbukti dengan data sintetis, 31 Okt 2026)** | `assets/engine.js:456`, `assets/engine.js:601-613`, `assets/engine.js:499` | **Penghitungan ganda HPP:** refund yang tidak tercatat di baris pesanan (misalnya penyesuaian setelah dana dilepas) + kasus "Tidak kembali" membuat modal pesanan tetap penuh dan kerugian ditambahkan. Juga: kerugian retur dari pesanan di luar periode laporan. Lihat `docs/KAMUS_ANGKA.md` §B.1. | Perlu dicek (`docs/KAMUS_ANGKA.md` C.6) | Cocokkan refund/penyesuaian ke pesanannya sebelum menghitung kerugian retur (A.9); batasi kerugian retur ke pesanan dalam periode | **Terbukti 31 Okt 2026 (data sintetis, tes "P10 KETERBATASAN").** 2 unit, modal 20.000/unit, refund 1 unit dicatat sebagai penyesuaian (bukan di baris pesanan), export mencatat 1 unit dikembalikan, file retur 1 unit "Tidak kembali": HPP 2 unit + kerugian 1 unit = 60.000, melebihi modal 2 unit (40.000). Refund di penyesuaian juga tidak mengurangi penjualan (P3), sehingga laba terlalu besar. Laba tetap ditandai belum final (`penyesuaian_belum_diklasifikasikan`). Temuan tambahan: kerugian retur dari pesanan **di luar periode** laporan ikut mengurangi laba periode ini (perlu keputusan). Perbaikan menunggu persetujuan rencana (Tahap B). |
 
 | P11 | Medium | `assets/engine.js` (`mergeIncome`) | **Sebagian ditangani (20 Okt 2026, lokal):** identitas baris berdasarkan isi; duplikat identik dihitung sekali; konflik versi ditahan dan ditandai "Perlu rekonsiliasi"; laporan tidak saling lengkap ditandai "Perlu dicek" (`docs/KAMUS_ANGKA.md` B.1d) | Audit 20 Okt 2026 (7 file): 3.278 ID di beberapa file, semuanya duplikat identik; tidak ada versi berbeda | Validasi aturan konflik dengan unduhan ulang asli setelah refund/perubahan; tinjau aturan cakupan | Aturan konflik baru diuji sintetis |
 | P12 | Low | Money Trace A1 | Rekonsiliasi per komponen hanya terhadap ringkasan di file yang sama. Sejak Shopee v1, saldo dan penarikan Shopee dicocokkan (Beta); pencairan ke bank, saldo TikTok, dan dana yang masih tertahan belum; refund setelah dana dilepas (P10) tidak terlihat di Jejak uang | — | Fase A2/A3 (saldo dan riwayat penarikan) setelah disetujui | Belum diverifikasi |
