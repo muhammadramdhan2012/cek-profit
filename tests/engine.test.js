@@ -1980,5 +1980,52 @@ test('B1 rentang laba: atas = laba tetap; bawah = atas − modal barang yang nas
   eq(RL(E.compute(filesB1toko(-100000, 2), ST([]))), null);
 });
 
+/* ---------- B2 (keputusan pemilik 1 Nov 2026): kompensasi barang hilang & penyesuaian lain (data SINTETIS) ---------- */
+/** Laporan: pesanan K2 terjual normal + sheet Adjustment. Pesanan HILANG tidak ada di laporan (seperti data asli). */
+const b2Laporan = (adjRows, orders = [{ id: 'SINT-K2', items: [{ name: 'Kaos', harga: 100000 }] }]) => {
+  const wb = Sint.penghasilan(orders);
+  wb.sheets.Adjustment = [['Ringkasan Biaya Penyesuaian'], ['Total Penyesuaian', null, null, null, adjRows.reduce((a, x) => a + x.amount, 0)], [],
+    ['No.', 'Tanggal Penyesuaian Dibuat', 'Tipe Penyesuaian | Deskripsi', 'Alasan Penyesuaian', 'Biaya Penyesuaian', 'No. Pesanan Terhubung'],
+    ...adjRows.map((x, i) => [i + 1, x.date || '2026-01-25', x.type, '', x.amount, x.order || ''])];
+  return E.parseWorkbook(wb);
+};
+const KOMP = 'Kompensasi atas pesanan hilang';
+const expHilang = (qty = 2) => E.parseWorkbook(Sint.exportPesanan([{ order: 'SINT-K2', name: 'Kaos', qty: 2, price: 50000 }, { order: 'HILANG-1', name: 'Kaos', qty, price: 50000, status: 'Dibatalkan' }]));
+test('B2 kompensasi: modal dari export → laba + (kompensasi − modal); tanpa modal → tidak masuk laba; Logistik → perlu dicek', () => {
+  const base = E.compute([b2Laporan([])], stUnit);
+  // Modal diketahui dari export: 2 kaos × 20.000 = 40.000; kompensasi 90.000 → bersih 50.000.
+  const ok = E.compute([b2Laporan([{ type: KOMP, amount: 90000, order: 'HILANG-1' }]), expHilang()], stUnit);
+  eq(ok.penyesuaian.kompensasi.masukLaba.length, 1); eq(ok.penyesuaian.kompensasi.masukLaba[0].modal, 40000); eq(ok.penyesuaian.kompensasi.masukLaba[0].sumberModal, 'export_pesanan');
+  eq(ok.totalMargin, E.compute([b2Laporan([]), expHilang()], stUnit).totalMargin + 50000, 'laba naik sebesar kompensasi bersih');
+  truthy(!ok.kepastian.laba.alasanTidakFinal.includes('penyesuaian_belum_diklasifikasikan'), 'kompensasi terklasifikasi');
+  eq(ok.adjustments, 90000, 'jejak uang (penyesuaian) tidak berubah');
+  // Dua baris kompensasi untuk pesanan sama → modal dikurangi sekali.
+  const dua = E.compute([b2Laporan([{ type: KOMP, amount: 40000, order: 'HILANG-1' }, { type: KOMP, amount: 50000, order: 'HILANG-1' }]), expHilang()], stUnit);
+  eq(dua.penyesuaian.kompensasi.bersih, 50000); eq(dua.penyesuaian.kompensasi.masukLaba.length, 1);
+  // Modal tidak diketahui (tanpa export & retur) → tidak masuk laba, bukan dianggap 0.
+  const tanpa = E.compute([b2Laporan([{ type: KOMP, amount: 90000, order: 'HILANG-1' }])], stUnit);
+  eq(tanpa.totalMargin, base.totalMargin, 'laba tidak berubah'); eq(tanpa.penyesuaian.kompensasi.tanpaModal[0].nilai, 90000);
+  truthy(tanpa.kepastian.laba.alasanTidakFinal.includes('penyesuaian_belum_diklasifikasikan'));
+  // Modal produk belum diisi untuk barang hilang → tidak masuk laba.
+  eq(E.compute([b2Laporan([{ type: KOMP, amount: 90000, order: 'HILANG-1' }]), E.parseWorkbook(Sint.exportPesanan([{ order: 'HILANG-1', name: 'Topi', qty: 1, price: 50000 }]))], stUnit).penyesuaian.kompensasi.tanpaModal.length, 1);
+  // Logistik, nilai ≤ 0, tanpa nomor pesanan → perlu dicek; laba tidak berubah.
+  const lain = E.compute([b2Laporan([{ type: 'Logistik', amount: 15000, order: 'HILANG-1' }, { type: KOMP, amount: -5000, order: 'HILANG-1' }, { type: KOMP, amount: 7000 }])], stUnit);
+  eq(lain.totalMargin, base.totalMargin); eq(lain.penyesuaian.kompensasi.masukLaba.length, 0);
+  eq(lain.penyesuaian.perluDicek.map((x) => `${x.jenis}:${x.jumlah}`).sort().join(), [`${KOMP}:2`, 'Logistik:1'].join());
+});
+test('B2 kompensasi: modal dari file retur bila export tidak ada; kasus retur tidak dihitung lagi di periode lain; pesanan di laporan → perlu dicek', () => {
+  const ret = returShopee([{ id: 'RT7', order: 'HILANG-1', product: 'Kaos', qty: 2, amount: 100000 }]);
+  const r = E.compute([b2Laporan([{ type: KOMP, amount: 90000, order: 'HILANG-1' }]), ret], stUnit, { 'S|RT7|Kaos|': 'hilang' });
+  eq(r.penyesuaian.kompensasi.masukLaba[0].sumberModal, 'file_retur'); eq(r.penyesuaian.kompensasi.masukLaba[0].modal, 40000);
+  eq(r.kepastian.risikoBarang.periodeLain.kasus, 0, 'barang hilang sudah dihitung di kompensasi bersih'); eq(r.kepastian.risikoBarang.periodeLain.kerugian, 0);
+  truthy(r.cases.find((c) => c.orderId === 'HILANG-1').dipasangkanKompensasi);
+  // Export ada DAN kasus retur ada → modal dari export, kasus tetap tidak dihitung dua kali.
+  const keduanya = E.compute([b2Laporan([{ type: KOMP, amount: 90000, order: 'HILANG-1' }]), expHilang(), ret], stUnit, { 'S|RT7|Kaos|': 'hilang' });
+  eq(keduanya.penyesuaian.kompensasi.masukLaba[0].sumberModal, 'export_pesanan'); eq(keduanya.kepastian.risikoBarang.periodeLain.kasus, 0);
+  // Kompensasi untuk pesanan yang ADA di laporan → perlu dicek, tidak masuk laba.
+  const dalam = E.compute([b2Laporan([{ type: KOMP, amount: 90000, order: 'SINT-K2' }])], stUnit);
+  eq(dalam.penyesuaian.kompensasi.dalamLaporan.length, 1); eq(dalam.penyesuaian.kompensasi.bersih, 0);
+  eq(dalam.totalMargin, E.compute([b2Laporan([])], stUnit).totalMargin);
+});
 console.log(failed ? `\n${failed} uji GAGAL` : '\nSemua uji lulus');
 process.exitCode = failed ? 1 : 0;
