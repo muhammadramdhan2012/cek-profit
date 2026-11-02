@@ -227,5 +227,5 @@ node tests/cloud.test.js          # memakai server tiruan tests/mock-supabase.js
   salah yang serius, 3–5 testimoni, atau paling lambat akhir masa beta.
 - ⏳ Supabase URL Configuration (Site URL dan Redirect URL ke domain GitHub Pages) belum dikonfirmasi.
 - ⏳ Parser export pesanan Shopee dan TikTok tetap berlabel Beta (keputusan pemilik 19 Okt 2026). Export Shopee baru dicocokkan dengan satu file asli; export TikTok asli belum diuji.
-- ⏳ Statistik GoatCounter belum aktif (`goatcounter: ''`).
+- ✅ Statistik GoatCounter aktif sejak 2 Nov 2026 (`goatcounter: 'cekuntung'`, cekuntung.goatcounter.com); hanya nama halaman yang dikirim, tanpa query/hash.
 - ⏳ Masalah akurasi, keamanan, dan teknis dari audit 14 Okt 2026: lihat `KNOWN_ISSUES.md`. Jangan klaim laba akurat pada kasus yang masih terbuka di sana.

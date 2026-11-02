@@ -863,5 +863,24 @@ test('Masa beta gratis: config, isPro, label beta terpisah dari Pro sendiri, pem
   truthy((idx.match(/data-beta hidden/g) || []).length >= 2, 'pengumuman beta di halaman depan, tersembunyi bawaan');
   truthy(/Masa beta\.<\/b> Sampai 13 Desember 2026/.test(priv), 'ketentuan masa beta');
 });
+test('GoatCounter: aktif dengan kode cekuntung; hanya nama halaman yang dikirim (tanpa ?query/#hash berisi token)', () => {
+  const vm = require('vm');
+  const jalankan = (cfg) => {
+    const head = []; const win = { CEK_CONFIG: cfg };
+    const doc = { createElement: () => ({ dataset: {} }), head: { appendChild: (el) => head.push(el) } };
+    const loc = { pathname: '/akun', search: '?code=RAHASIA123', hash: '#access_token=RAHASIA456' };
+    vm.runInNewContext(fs.readFileSync(path.join(__dirname, '..', 'assets', 'analytics.js'), 'utf8'), { window: win, document: doc, location: loc });
+    return { win, head };
+  };
+  const cfg = src('config.js');
+  truthy(/goatcounter: 'cekuntung',/.test(cfg), 'kode situs di config');
+  const { win, head } = jalankan({ goatcounter: 'cekuntung' });
+  truthy(head.length === 1 && head[0].src === 'https://gc.zgo.at/count.js' && head[0].dataset.goatcounter === 'https://cekuntung.goatcounter.com/count', 'skrip GoatCounter dimuat');
+  const p = win.goatcounter.path();
+  truthy(p === '/akun' && !/RAHASIA/.test(p), `path tanpa query/hash: ${p}`);
+  const mati = jalankan({ goatcounter: '' });
+  truthy(!mati.head.length && !mati.win.goatcounter, 'kosong → tidak memuat apa pun');
+  truthy(!jalankan({ goatcounter: 'x"><script>' }).head.length, 'kode tidak valid → tidak dimuat');
+});
 console.log(failed ? `\n${failed} uji GAGAL` : '\nSemua uji lulus');
 process.exitCode = failed ? 1 : 0;

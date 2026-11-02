@@ -45,7 +45,7 @@ window.CEK_CONFIG = {
   // Analytics ramah privasi (GoatCounter, gratis, tanpa cookie).
   // Daftar di https://www.goatcounter.com lalu isi kode situs, mis. 'cekprofit' → cekprofit.goatcounter.com
   // Kosong = analytics mati. Yang dicatat hanya kunjungan halaman dan klik tombol, BUKAN isi file/angka toko.
-  goatcounter: '',
+  goatcounter: 'cekuntung',   // diaktifkan pemilik 2 Nov 2026 → cekuntung.goatcounter.com
 
   // Kunci publik untuk memeriksa kode akses. Hanya bisa MEMERIKSA, tidak bisa membuat kode.
   // Jika Anda membuat pasangan kunci baru di alat pembuat kode, tempel kunci publiknya di sini.
