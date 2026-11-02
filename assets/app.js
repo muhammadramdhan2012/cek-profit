@@ -1731,6 +1731,16 @@
 
   /* ---------- data & modal ---------- */
   const typeIcon = (k, size = 20) => `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${TYPES[k].icon}</svg>`;
+  /** Jenis usaha yang sedang dipakai + cara modal dihitung, di atas isian modal. Di mode contoh: penjelasan bahwa
+   *  pilihan lain tersedia saat memakai laporan sendiri (pilihan tidak bisa diubah di data contoh). */
+  const CARA_MODAL = { reseller: 'modal dihitung dari diskon terhadap harga acuan', stok: 'modal dari harga beli per produk', produsen: 'modal dari HPP produksi', dropship: 'modal dari harga supplier per unit' };
+  // Label pendek untuk deretan tombol jenis usaha (desain B, pilihan pemilik 2 Nov 2026).
+  const TYPE_SINGKAT = { reseller: 'Reseller', stok: 'Stok sendiri', produsen: 'Produsen', dropship: 'Dropshipper' };
+  function typeLine(type) {
+    return `<div class="type-seg-wrap"><span class="ts-k" id="ts-k">Jenis usaha${qi('jenis_usaha')}</span>
+      <div class="type-seg" role="radiogroup" aria-labelledby="ts-k">${Object.keys(TYPES).map((k) => `<button type="button" role="radio" aria-checked="${k === type}" class="${k === type ? 'on' : ''}" data-type="${k}" title="${TYPES[k].label}" ${demo ? 'disabled' : ''}>${typeIcon(k, 16)}<span>${TYPE_SINGKAT[k]}</span></button>`).join('')}</div>
+      <p class="ts-d">${typeIcon(type, 14)}<span>${CARA_MODAL[type].replace(/^./, (c) => c.toUpperCase())}${demo ? '. Data contoh memakai jenis ini; dengan laporan Anda, jenis lain bisa dipilih.' : '.'}</span></p></div>`;
+  }
   function typePicker(cur) {
     return `<section class="panel type-pick" aria-labelledby="tp-h"><div class="panel-head" style="margin-bottom:12px"><h3 id="tp-h">Anda berjualan sebagai apa?${qi('jenis_usaha')}</h3><p>Mengatur cara modal dihitung. Bisa diubah kapan saja.</p></div>
       <div class="type-grid" role="radiogroup" aria-label="Jenis usaha">${Object.entries(TYPES).map(([k, t]) => `<button type="button" class="type-opt" role="radio" aria-checked="${cur === k}" data-type="${k}">
@@ -1923,7 +1933,7 @@
       ${!demo && (!type || view.typeOpen) ? typePicker(type) : ''}
       <section class="panel modal-panel" id="sec-modal" aria-label="Modal dan HPP">
           <div class="panel-head" style="margin:0"><h3><span class="grp-n" aria-hidden="true">2</span>${type === 'produsen' ? 'Modal produksi (HPP)' : 'Modal barang / HPP'}${qi('modal')} <span class="badge todo">Wajib untuk laba</span></h3>${r && r.totalSales ? `<span class="badge ${r.coverage >= 0.98 ? 'ok' : 'todo'}">${r.coverage >= 0.98 ? 'Lengkap' : `${pct(r.coverage, 0)} penjualan`}</span>` : ''}</div>
-          ${type ? `<div class="type-chip"><span class="ic">${typeIcon(type, 16)}</span><span>${TYPES[type].label}</span>${demo ? '' : '<button class="btn link" type="button" data-type-open>Ubah</button>'}</div>` : ''}
+          ${type && !view.typeOpen ? typeLine(type) : ''}
           <p class="small muted">Laporan marketplace tidak berisi harga beli Anda. Pesanan tanpa modal tidak dihitung dalam laba, bukan dianggap nol.</p>
           ${modalBody(s, r, dis, type)}
         </section>
@@ -2597,6 +2607,7 @@
     if (t.dataset.mode && !demo) { settings.modalMode = t.dataset.mode; save(); render(); return; }
     if (t.dataset.type && !demo) {
       const k = t.dataset.type;
+      if (k === typeOf(settings) && !view.typeOpen) return;   // jenis yang sama: jangan mengatur ulang mode modal
       settings.sellerType = k;
       settings.modalMode = k === 'reseller' ? 'acuan' : 'produk';
       view.typeOpen = false; save(); render(); track(`jenis-${k}`);

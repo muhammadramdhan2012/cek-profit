@@ -882,5 +882,14 @@ test('GoatCounter: aktif dengan kode cekuntung; hanya nama halaman yang dikirim 
   truthy(!mati.head.length && !mati.win.goatcounter, 'kosong → tidak memuat apa pun');
   truthy(!jalankan({ goatcounter: 'x"><script>' }).head.length, 'kode tidak valid → tidak dimuat');
 });
+test('Jenis usaha: baris jelas + tombol ganti; mode contoh menjelaskan pilihan lain; disebut di halaman depan', () => {
+  const appJs = src('app.js'), idx = fs.readFileSync(path.join(__dirname, '..', 'index.html'), 'utf8');
+  truthy(/\$\{type && !view\.typeOpen \? typeLine\(type\) : ''\}/.test(appJs) && /class="type-seg" role="radiogroup"/.test(appJs), 'deretan tombol jenis usaha (desain B)');
+  truthy(/data-type="\$\{k\}"/.test(appJs.slice(appJs.indexOf('function typeLine'))) && /aria-checked="\$\{k === type\}"/.test(appJs), 'keempat jenis selalu tampil, yang dipakai ditandai');
+  truthy(/dengan laporan Anda, jenis lain bisa dipilih/.test(appJs) && /\$\{demo \? 'disabled' : ''\}/.test(appJs), 'mode contoh: tombol nonaktif + penjelasan');
+  truthy(/if \(k === typeOf\(settings\) && !view\.typeOpen\) return;/.test(appJs), 'klik jenis yang sama tidak mengatur ulang mode modal');
+  for (const k of ['reseller', 'stok', 'produsen', 'dropship']) truthy(new RegExp(`${k}: '`).test(appJs.slice(appJs.indexOf('const CARA_MODAL'))), `cara modal: ${k}`);
+  truthy(/reseller, penjual stok sendiri, produsen, atau dropshipper/.test(idx), 'halaman depan menyebut jenis usaha');
+});
 console.log(failed ? `\n${failed} uji GAGAL` : '\nSemua uji lulus');
 process.exitCode = failed ? 1 : 0;
