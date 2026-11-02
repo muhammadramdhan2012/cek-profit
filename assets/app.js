@@ -1731,6 +1731,16 @@
 
   /* ---------- data & modal ---------- */
   const typeIcon = (k, size = 20) => `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${TYPES[k].icon}</svg>`;
+  /** Jenis usaha yang sedang dipakai + cara modal dihitung, di atas isian modal. Di mode contoh: penjelasan bahwa
+   *  pilihan lain tersedia saat memakai laporan sendiri (pilihan tidak bisa diubah di data contoh). */
+  const CARA_MODAL = { reseller: 'modal dihitung dari diskon terhadap harga acuan', stok: 'modal dari harga beli per produk', produsen: 'modal dari HPP produksi', dropship: 'modal dari harga supplier per unit' };
+  function typeLine(type) {
+    const lain = Object.keys(TYPES).filter((k) => k !== type).map((k) => TYPES[k].label);
+    return `<div class="type-line"><span class="ic">${typeIcon(type, 18)}</span>
+      <p><span class="tl-k">Jenis usaha${demo ? ' (data contoh)' : ''}</span><b>${TYPES[type].label}</b><span class="tl-d">${CARA_MODAL[type]}</span>
+      ${demo ? `<span class="tl-d">Saat memakai laporan Anda, Anda bisa memilih ${lain.slice(0, -1).join(', ')}, atau ${lain[lain.length - 1]}.</span>` : ''}</p>
+      ${demo ? '' : '<button class="btn sm" type="button" data-type-open>Ganti jenis usaha</button>'}</div>`;
+  }
   function typePicker(cur) {
     return `<section class="panel type-pick" aria-labelledby="tp-h"><div class="panel-head" style="margin-bottom:12px"><h3 id="tp-h">Anda berjualan sebagai apa?${qi('jenis_usaha')}</h3><p>Mengatur cara modal dihitung. Bisa diubah kapan saja.</p></div>
       <div class="type-grid" role="radiogroup" aria-label="Jenis usaha">${Object.entries(TYPES).map(([k, t]) => `<button type="button" class="type-opt" role="radio" aria-checked="${cur === k}" data-type="${k}">
@@ -1923,7 +1933,7 @@
       ${!demo && (!type || view.typeOpen) ? typePicker(type) : ''}
       <section class="panel modal-panel" id="sec-modal" aria-label="Modal dan HPP">
           <div class="panel-head" style="margin:0"><h3><span class="grp-n" aria-hidden="true">2</span>${type === 'produsen' ? 'Modal produksi (HPP)' : 'Modal barang / HPP'}${qi('modal')} <span class="badge todo">Wajib untuk laba</span></h3>${r && r.totalSales ? `<span class="badge ${r.coverage >= 0.98 ? 'ok' : 'todo'}">${r.coverage >= 0.98 ? 'Lengkap' : `${pct(r.coverage, 0)} penjualan`}</span>` : ''}</div>
-          ${type ? `<div class="type-chip"><span class="ic">${typeIcon(type, 16)}</span><span>${TYPES[type].label}</span>${demo ? '' : '<button class="btn link" type="button" data-type-open>Ubah</button>'}</div>` : ''}
+          ${type && !view.typeOpen ? typeLine(type) : ''}
           <p class="small muted">Laporan marketplace tidak berisi harga beli Anda. Pesanan tanpa modal tidak dihitung dalam laba, bukan dianggap nol.</p>
           ${modalBody(s, r, dis, type)}
         </section>
