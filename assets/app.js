@@ -1735,11 +1735,13 @@
    *  pilihan lain tersedia saat memakai laporan sendiri (pilihan tidak bisa diubah di data contoh). */
   const CARA_MODAL = { reseller: 'modal dihitung dari diskon terhadap harga acuan', stok: 'modal dari harga beli per produk', produsen: 'modal dari HPP produksi', dropship: 'modal dari harga supplier per unit' };
   function typeLine(type) {
-    const lain = Object.keys(TYPES).filter((k) => k !== type).map((k) => TYPES[k].label);
-    return `<div class="type-line"><span class="ic">${typeIcon(type, 18)}</span>
-      <p><span class="tl-k">Jenis usaha${demo ? ' (data contoh)' : ''}</span><b>${TYPES[type].label}</b><span class="tl-d">${CARA_MODAL[type]}</span>
-      ${demo ? `<span class="tl-d">Saat memakai laporan Anda, Anda bisa memilih ${lain.slice(0, -1).join(', ')}, atau ${lain[lain.length - 1]}.</span>` : ''}</p>
-      ${demo ? '' : '<button class="btn sm" type="button" data-type-open>Ganti jenis usaha</button>'}</div>`;
+    const lain = Object.keys(TYPES).filter((k) => k !== type);
+    return `<div class="type-card${demo ? ' is-demo' : ''}">
+      <span class="tc-ic">${typeIcon(type, 20)}</span>
+      <div class="tc-tx"><span class="tc-k">Jenis usaha${demo ? ' · data contoh' : ''}</span><b class="tc-n">${TYPES[type].label}</b><span class="tc-d">${CARA_MODAL[type]}</span></div>
+      ${demo ? '' : '<button class="btn sm tc-btn" type="button" data-type-open aria-label="Ganti jenis usaha">Ganti jenis usaha</button>'}
+      ${demo ? `<div class="tc-lain"><span>Dengan laporan Anda, bisa juga dipilih:</span>${lain.map((k) => `<span class="tc-chip"><span class="ic">${typeIcon(k, 14)}</span>${TYPES[k].label}</span>`).join('')}</div>` : ''}
+    </div>`;
   }
   function typePicker(cur) {
     return `<section class="panel type-pick" aria-labelledby="tp-h"><div class="panel-head" style="margin-bottom:12px"><h3 id="tp-h">Anda berjualan sebagai apa?${qi('jenis_usaha')}</h3><p>Mengatur cara modal dihitung. Bisa diubah kapan saja.</p></div>
