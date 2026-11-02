@@ -11,6 +11,9 @@
     if (window.goatcounter && window.goatcounter.count) send(); else queue.push(event);
   };
   if (!code || !/^[a-z0-9-]+$/i.test(code)) return;
+  // Hanya nama halaman yang dikirim (mis. "/akun"), tanpa ?query dan #hash: alamat halaman akun bisa sementara memuat
+  // kode/token login (masuk dengan Google, tautan email). Event tombol tetap memakai path "event/…" dari cekTrack.
+  window.goatcounter = Object.assign(window.goatcounter || {}, { path: () => location.pathname || '/' });
   const s = document.createElement('script');
   s.async = true;
   s.src = 'https://gc.zgo.at/count.js';
