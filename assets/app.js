@@ -1734,14 +1734,12 @@
   /** Jenis usaha yang sedang dipakai + cara modal dihitung, di atas isian modal. Di mode contoh: penjelasan bahwa
    *  pilihan lain tersedia saat memakai laporan sendiri (pilihan tidak bisa diubah di data contoh). */
   const CARA_MODAL = { reseller: 'modal dihitung dari diskon terhadap harga acuan', stok: 'modal dari harga beli per produk', produsen: 'modal dari HPP produksi', dropship: 'modal dari harga supplier per unit' };
+  // Label pendek untuk deretan tombol jenis usaha (desain B, pilihan pemilik 2 Nov 2026).
+  const TYPE_SINGKAT = { reseller: 'Reseller', stok: 'Stok sendiri', produsen: 'Produsen', dropship: 'Dropshipper' };
   function typeLine(type) {
-    const lain = Object.keys(TYPES).filter((k) => k !== type);
-    return `<div class="type-card${demo ? ' is-demo' : ''}">
-      <span class="tc-ic">${typeIcon(type, 20)}</span>
-      <div class="tc-tx"><span class="tc-k">Jenis usaha${demo ? ' · data contoh' : ''}</span><b class="tc-n">${TYPES[type].label}</b><span class="tc-d">${CARA_MODAL[type]}</span></div>
-      ${demo ? '' : '<button class="btn sm tc-btn" type="button" data-type-open aria-label="Ganti jenis usaha">Ganti jenis usaha</button>'}
-      ${demo ? `<div class="tc-lain"><span>Dengan laporan Anda, bisa juga dipilih:</span>${lain.map((k) => `<span class="tc-chip"><span class="ic">${typeIcon(k, 14)}</span>${TYPES[k].label}</span>`).join('')}</div>` : ''}
-    </div>`;
+    return `<div class="type-seg-wrap"><span class="ts-k" id="ts-k">Jenis usaha${qi('jenis_usaha')}</span>
+      <div class="type-seg" role="radiogroup" aria-labelledby="ts-k">${Object.keys(TYPES).map((k) => `<button type="button" role="radio" aria-checked="${k === type}" class="${k === type ? 'on' : ''}" data-type="${k}" title="${TYPES[k].label}" ${demo ? 'disabled' : ''}>${typeIcon(k, 16)}<span>${TYPE_SINGKAT[k]}</span></button>`).join('')}</div>
+      <p class="ts-d">${typeIcon(type, 14)}<span>${CARA_MODAL[type].replace(/^./, (c) => c.toUpperCase())}${demo ? '. Data contoh memakai jenis ini; dengan laporan Anda, jenis lain bisa dipilih.' : '.'}</span></p></div>`;
   }
   function typePicker(cur) {
     return `<section class="panel type-pick" aria-labelledby="tp-h"><div class="panel-head" style="margin-bottom:12px"><h3 id="tp-h">Anda berjualan sebagai apa?${qi('jenis_usaha')}</h3><p>Mengatur cara modal dihitung. Bisa diubah kapan saja.</p></div>
@@ -2609,6 +2607,7 @@
     if (t.dataset.mode && !demo) { settings.modalMode = t.dataset.mode; save(); render(); return; }
     if (t.dataset.type && !demo) {
       const k = t.dataset.type;
+      if (k === typeOf(settings) && !view.typeOpen) return;   // jenis yang sama: jangan mengatur ulang mode modal
       settings.sellerType = k;
       settings.modalMode = k === 'reseller' ? 'acuan' : 'produk';
       view.typeOpen = false; save(); render(); track(`jenis-${k}`);

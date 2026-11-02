@@ -884,9 +884,10 @@ test('GoatCounter: aktif dengan kode cekuntung; hanya nama halaman yang dikirim 
 });
 test('Jenis usaha: baris jelas + tombol ganti; mode contoh menjelaskan pilihan lain; disebut di halaman depan', () => {
   const appJs = src('app.js'), idx = fs.readFileSync(path.join(__dirname, '..', 'index.html'), 'utf8');
-  truthy(/\$\{type && !view\.typeOpen \? typeLine\(type\) : ''\}/.test(appJs) && !/type-chip"/.test(appJs) && /class="type-card/.test(appJs), 'kartu jenis usaha menggantikan label kecil');
-  truthy(/data-type-open aria-label="Ganti jenis usaha">Ganti jenis usaha</.test(appJs), 'tombol ganti jenis usaha');
-  truthy(/Dengan laporan Anda, bisa juga dipilih:/.test(appJs) && /tc-chip/.test(appJs), 'penjelasan di mode contoh');
+  truthy(/\$\{type && !view\.typeOpen \? typeLine\(type\) : ''\}/.test(appJs) && /class="type-seg" role="radiogroup"/.test(appJs), 'deretan tombol jenis usaha (desain B)');
+  truthy(/data-type="\$\{k\}"/.test(appJs.slice(appJs.indexOf('function typeLine'))) && /aria-checked="\$\{k === type\}"/.test(appJs), 'keempat jenis selalu tampil, yang dipakai ditandai');
+  truthy(/dengan laporan Anda, jenis lain bisa dipilih/.test(appJs) && /\$\{demo \? 'disabled' : ''\}/.test(appJs), 'mode contoh: tombol nonaktif + penjelasan');
+  truthy(/if \(k === typeOf\(settings\) && !view\.typeOpen\) return;/.test(appJs), 'klik jenis yang sama tidak mengatur ulang mode modal');
   for (const k of ['reseller', 'stok', 'produsen', 'dropship']) truthy(new RegExp(`${k}: '`).test(appJs.slice(appJs.indexOf('const CARA_MODAL'))), `cara modal: ${k}`);
   truthy(/reseller, penjual stok sendiri, produsen, atau dropshipper/.test(idx), 'halaman depan menyebut jenis usaha');
 });
