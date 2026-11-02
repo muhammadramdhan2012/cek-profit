@@ -21,7 +21,7 @@
   <main class="admin-grid" id="main" aria-live="polite"><p class="muted">Memuat…</p></main>
 </div>
 <div id="toast" class="toast" role="status" hidden></div>
-<script src="assets/cloud.js?v=b5b1b84fd8"></script>
+<script src="assets/cloud.js?v=32bbe99200"></script>
 <script>
 (() => {
   const C = window.CEK_CONFIG || {};
@@ -33,7 +33,11 @@
   const plus = (months, from) => { const d = from && from > today() ? new Date(`${from}T00:00:00`) : new Date(); d.setMonth(d.getMonth() + months); return d.toLocaleDateString('sv-SE'); };
   const tgl = (d) => (d ? new Date(d.length > 10 ? d : `${d}T00:00:00`).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' }) : '—');
   const PLAN = { pro_bulanan: 'Pro bulanan', pro_tahunan: 'Pro tahunan', jasa: 'Jasa laporan' };
-  let profiles = [], requests = [], q = '';
+  const rp = (n) => `Rp${Number(n || 0).toLocaleString('id-ID')}`;
+  const HARGA = { normal: 149000, awal: 99000 };   // harga Pro per tahun & harga pengguna awal (keputusan pemilik 1 Nov 2026)
+  // situs = status_situs() dari server; null bila SQL tahap 2 belum dijalankan. beli = id pengguna yang formnya terbuka.
+  let profiles = [], requests = [], purchases = [], situs = null, beli = null, q = '';
+  const sudahHargaAwal = (id) => purchases.some((b) => b.user_id === id && b.harga_pengguna_awal);
 
   async function load() {
     const main = $('#main');
@@ -43,6 +47,8 @@
       const me = await cloud.db.profile();
       if (!me || !me.is_admin) { main.innerHTML = '<div class="panel"><h2>Bukan admin</h2><p class="muted" style="margin-top:8px">Akun ini belum ditandai admin. Di Supabase: Table Editor → profiles → baris akun Anda → ubah <code>is_admin</code> menjadi <code>true</code>.</p></div>'; return; }
       [profiles, requests] = await Promise.all([cloud.db.adminProfiles(), cloud.db.adminRequests()]);
+      // Tahap 2: gagal = SQL tahap 2 belum dijalankan; halaman tetap bisa dipakai dengan fitur lama.
+      [situs, purchases] = await Promise.all([cloud.db.statusSitus().catch(() => null), cloud.db.adminPurchases().catch(() => [])]);
       render();
     } catch (e) { main.innerHTML = `<p class="panel bad">${esc(e.message)}</p>`; }
   }
@@ -59,25 +65,62 @@
         <div class="stat"><span class="small muted">Permintaan menunggu</span><b>${open.length}</b></div>
         <div class="stat"><span class="small muted">Daftar 7 hari terakhir</span><b>${profiles.filter((p) => p.created_at > week).length}</b></div>
       </section>
+      ${situs ? `<section class="panel"><h3 style="margin-bottom:6px">Masa beta &amp; pembelian</h3>
+        <p class="small muted" style="margin-bottom:12px">Tanggal server hari ini: <b>${tgl(situs.hari_ini)}</b>. Masa beta ${situs.beta_aktif ? '<span class="badge ok">aktif</span>' : '<span class="badge">tidak aktif</span>'}${situs.pembelian_dibuka_pada ? ` · batas klaim harga pengguna awal ${tgl(situs.klaim_harga_awal_sampai)}` : ''}</p>
+        <div class="row-gap" style="align-items:end;flex-wrap:wrap">
+          <label class="small">Beta gratis sampai (kosong = tanpa beta)<br><input class="plain" type="date" id="situs-beta" value="${esc(situs.beta_gratis_sampai || '')}"></label>
+          <label class="small">Pembelian Pro dibuka pada (kosong = belum)<br><input class="plain" type="date" id="situs-buka" value="${esc(situs.pembelian_dibuka_pada || '')}"></label>
+          <button class="btn sm primary" type="button" id="situs-simpan">Simpan</button></div>
+        <p class="tiny faint" style="margin-top:8px">Akun yang dibuat sampai akhir masa beta tercatat sebagai pengguna awal. Mengubah tanggal tidak mencabut status pengguna awal yang sudah ada. Teks pengumuman di halaman depan ikut tanggal ini.</p></section>`
+        : '<section class="panel"><p class="small muted">Fitur tahap 2 (masa beta, pengguna awal, catatan pembelian) belum aktif: jalankan ulang <code>supabase/schema.sql</code> di SQL Editor. Lihat <code>supabase/PANDUAN.md</code>.</p></section>'}
       <section class="panel"><h3 style="margin-bottom:12px">Permintaan upgrade</h3>
         ${requests.length ? `<div class="tablewrap"><table class="tbl"><thead><tr><th>Tanggal</th><th>Pengguna</th><th>Paket</th><th>Catatan</th><th>Status</th><th></th></tr></thead><tbody>
           ${requests.map((r) => { const p = byId.get(r.user_id) || {}; return `<tr><td>${tgl(r.created_at)}</td><td><b>${esc(p.email || r.user_id)}</b><br><span class="tiny faint">${esc(p.store_name || '')} ${esc(p.whatsapp || '')}</span></td>
             <td>${PLAN[r.plan] || esc(r.plan)}</td><td class="small">${esc(r.note)}</td><td><span class="badge ${r.status === 'selesai' ? 'ok' : r.status === 'ditolak' ? 'bad' : 'todo'}">${esc(r.status)}</span></td>
-            <td>${r.status === 'baru' || r.status === 'diproses' ? `<div class="row-gap"><button class="btn sm primary" data-pro="${esc(r.user_id)}" data-months="${r.plan === 'pro_tahunan' ? 12 : 1}">Aktifkan ${r.plan === 'pro_tahunan' ? '1 tahun' : '1 bulan'}</button><button class="btn sm quiet" data-reject="${r.id}">Tolak</button></div>` : ''}</td></tr>`; }).join('')}
+            <td>${r.status === 'baru' || r.status === 'diproses' ? `<div class="row-gap">${situs ? `<button class="btn sm primary" data-beli="${esc(r.user_id)}">Catat pembelian</button>` : `<button class="btn sm primary" data-pro="${esc(r.user_id)}" data-months="${r.plan === 'pro_tahunan' ? 12 : 1}">Aktifkan ${r.plan === 'pro_tahunan' ? '1 tahun' : '1 bulan'}</button>`}<button class="btn sm quiet" data-reject="${r.id}">Tolak</button></div>` : ''}</td></tr>`; }).join('')}
           </tbody></table></div>` : '<p class="muted small">Belum ada permintaan.</p>'}
       </section>
       <section class="panel"><div style="display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:12px"><h3>Pengguna</h3><input class="plain" id="q" type="search" placeholder="Cari email, nama, toko…" value="${esc(q)}" style="max-width:280px"></div>
         <div class="tablewrap"><table class="tbl"><thead><tr><th>Pengguna</th><th>Daftar</th><th>Pro sampai</th><th>Atur Pro</th></tr></thead><tbody>
-        ${list.map((p) => `<tr><td><b>${esc(p.email)}</b>${p.is_admin ? ' <span class="badge">admin</span>' : ''}<br><span class="tiny faint">${esc(p.full_name)} ${p.store_name ? `· ${esc(p.store_name)}` : ''} ${esc(p.whatsapp)}</span></td>
+        ${list.map((p) => `<tr><td><b>${esc(p.email)}</b>${p.is_admin ? ' <span class="badge">admin</span>' : ''}${p.pengguna_awal ? ` <span class="badge ${sudahHargaAwal(p.id) ? '' : 'ok'}">pengguna awal${sudahHargaAwal(p.id) ? ' · harga khusus terpakai' : ''}</span>` : ''}<br><span class="tiny faint">${esc(p.full_name)} ${p.store_name ? `· ${esc(p.store_name)}` : ''} ${esc(p.whatsapp)}</span></td>
           <td class="small">${tgl(p.created_at)}</td><td>${cloud.isPro(p) ? `<span class="badge pro">${tgl(p.pro_until)}</span>` : p.pro_until ? `<span class="small faint">berakhir ${tgl(p.pro_until)}</span>` : '<span class="faint">—</span>'}</td>
-          <td><div class="row-gap"><button class="btn sm" data-pro="${esc(p.id)}" data-months="1">+1 bln</button><button class="btn sm" data-pro="${esc(p.id)}" data-months="12">+1 thn</button>${p.pro_until ? `<button class="btn sm quiet danger" data-off="${esc(p.id)}">Matikan</button>` : ''}</div></td></tr>`).join('') || '<tr><td colspan="4" class="muted">Tidak ada pengguna yang cocok.</td></tr>'}
-        </tbody></table></div></section>`;
+          <td><div class="row-gap">${situs ? `<button class="btn sm primary" data-beli="${esc(p.id)}">Catat pembelian</button>` : ''}<button class="btn sm" data-pro="${esc(p.id)}" data-months="1">+1 bln</button><button class="btn sm" data-pro="${esc(p.id)}" data-months="12">+1 thn</button>${p.pro_until ? `<button class="btn sm quiet danger" data-off="${esc(p.id)}">Matikan</button>` : ''}</div></td></tr>${beli === p.id ? formBeli(p) : ''}`).join('') || '<tr><td colspan="4" class="muted">Tidak ada pengguna yang cocok.</td></tr>'}
+        </tbody></table></div><p class="tiny faint" style="margin-top:8px">"Catat pembelian" = Pro 1 tahun + tersimpan di catatan pembelian. Tombol +1 bln / +1 thn / Matikan hanya untuk koreksi manual (tidak tercatat sebagai pembelian).</p></section>
+      ${purchases.length ? `<section class="panel"><h3 style="margin-bottom:12px">Catatan pembelian Pro</h3><div class="tablewrap"><table class="tbl"><thead><tr><th>Dicatat</th><th>Pengguna</th><th>Harga</th><th>Berlaku</th><th>Catatan</th></tr></thead><tbody>
+        ${purchases.map((b) => `<tr><td class="small">${tgl(b.created_at)}</td><td>${esc((byId.get(b.user_id) || {}).email || b.user_id)}</td><td>${rp(b.harga)}${b.harga_pengguna_awal ? ' <span class="badge ok">pengguna awal</span>' : ''}</td><td class="small">${tgl(b.mulai)} – ${tgl(b.sampai)}</td><td class="small">${esc(b.catatan)}</td></tr>`).join('')}
+        </tbody></table></div></section>` : ''}`;
+  }
+  /** Form catat pembelian (satu baris di bawah pengguna). Server tetap memeriksa semua syarat harga pengguna awal. */
+  function formBeli(p) {
+    const awal = p.pengguna_awal && !sudahHargaAwal(p.id);
+    const bisaAwal = awal && situs && situs.pembelian_dibuka_pada && situs.hari_ini <= situs.klaim_harga_awal_sampai;
+    return `<tr><td colspan="4"><div class="row-gap" style="align-items:end;flex-wrap:wrap">
+      <label class="small">Harga dibayar (Rp)<br><input class="plain" type="number" min="0" step="1000" id="beli-harga" value="${bisaAwal ? HARGA.awal : HARGA.normal}" style="max-width:140px"></label>
+      ${awal ? `<label class="small"><input type="checkbox" id="beli-awal" ${bisaAwal ? 'checked' : 'disabled'}> Harga khusus pengguna awal (tahun pertama)${bisaAwal ? '' : ' · pembelian belum dibuka / lewat 30 hari'}</label>` : ''}
+      <label class="small">Catatan (mis. transfer BCA 1 Jan)<br><input class="plain" id="beli-catatan" maxlength="200" style="max-width:240px"></label>
+      <button class="btn sm primary" type="button" id="beli-simpan" data-target="${esc(p.id)}">Simpan &amp; aktifkan 1 tahun</button><button class="btn sm quiet" type="button" id="beli-batal">Batal</button></div></td></tr>`;
   }
   document.addEventListener('click', async (e) => {
     const t = e.target.closest('button');
     if (!t) return;
     try {
       if (t.id === 'reload') return load();
+      if (t.dataset.beli) { beli = beli === t.dataset.beli ? null : t.dataset.beli; return render(); }
+      if (t.id === 'beli-batal') { beli = null; return render(); }
+      if (t.id === 'beli-simpan') {
+        const p = profiles.find((x) => x.id === t.dataset.target) || {};
+        const harga = Math.round(Number($('#beli-harga').value));
+        const awal = !!($('#beli-awal') && $('#beli-awal').checked);
+        if (!Number.isFinite(harga) || harga < 0) { toast('Isi harga dengan angka rupiah.'); return; }
+        if (!confirm(`Catat pembelian ${rp(harga)}${awal ? ' (harga pengguna awal)' : ''} dan aktifkan Pro 1 tahun untuk ${p.email || 'pengguna'}?`)) return;
+        const r = await cloud.db.adminCatatPembelian(t.dataset.target, harga, awal, $('#beli-catatan').value.trim());
+        beli = null; toast(`Tercatat. Pro aktif ${tgl(r && r.mulai)} – ${tgl(r && r.sampai)}.`); return load();
+      }
+      if (t.id === 'situs-simpan') {
+        const b = $('#situs-beta').value, d = $('#situs-buka').value;
+        if (!confirm(`Simpan: beta gratis ${b ? `sampai ${tgl(b)}` : 'TIDAK ADA'}; pembelian ${d ? `dibuka ${tgl(d)}` : 'belum dibuka'}?`)) return;
+        await cloud.db.adminSetSitus(b, d); toast('Pengaturan situs tersimpan.'); return load();
+      }
       if (t.dataset.pro) {
         const p = profiles.find((x) => x.id === t.dataset.pro) || {};
         const until = plus(+t.dataset.months, p.pro_until);

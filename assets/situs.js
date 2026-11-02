@@ -1,6 +1,7 @@
 /* Elemen lintas halaman yang dikendalikan config.js:
  *  - Tautan bantuan WhatsApp (CEK_CONFIG.waSupport). TERPISAH dari nomor pembayaran Pro (CEK_CONFIG.whatsapp),
  *    agar mengisi nomor bantuan tidak ikut membuka alur pembayaran. Selama kosong/tidak valid, tautan disembunyikan.
+ *  - Pengumuman masa beta ([data-beta]): dari config, lalu diperbarui dari server bila tersedia (tahap 2).
  *  - Pemberitahuan pindah alamat (CEK_CONFIG.domainResmi). Hanya tampil di alamat lama GitHub Pages (*.github.io).
  * Pesan WhatsApp hanya memuat nama halaman: tanpa email, nomor, angka laporan, atau data pesanan.
  */
@@ -30,20 +31,45 @@ const CekSitus = (() => {
   const BULAN = ['Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni', 'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'];
   /** Masa beta gratis (CEK_CONFIG.betaGratisSampai 'YYYY-MM-DD', inklusif). hariIni 'YYYY-MM-DD' (tanggal perangkat).
    *  Format salah/kosong → tidak aktif. Aturan yang sama ada di assets/app.js (betaGratis). */
+  const TGL = /^\d{4}-\d{2}-\d{2}$/;
+  const labelTanggal = (s) => { const [y, m, d] = s.split('-').map(Number); return `${d} ${BULAN[m - 1]} ${y}`; };
   function betaGratis(cfg, hariIni) {
     const s = String((cfg && cfg.betaGratisSampai) || '').trim();
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(s)) return { aktif: false, sampai: '', label: '' };
-    const [y, m, d] = s.split('-').map(Number);
-    return { aktif: String(hariIni) <= s, sampai: s, label: `${d} ${BULAN[m - 1]} ${y}` };
+    if (!TGL.test(s)) return { aktif: false, sampai: '', label: '' };
+    return { aktif: String(hariIni) <= s, sampai: s, label: labelTanggal(s) };
+  }
+  /** Masa beta menurut server (RPC status_situs, tahap 2): tanggal & jam server, bisa diubah admin tanpa deploy.
+   *  Jawaban yang bentuknya tidak dikenal → null (tetap memakai config). */
+  function betaDariServer(st) {
+    if (!st || typeof st !== 'object' || !TGL.test(String(st.hari_ini || ''))) return null;
+    const s = st.beta_gratis_sampai;
+    if (s == null) return { aktif: false, sampai: '', label: '' };
+    if (!TGL.test(String(s))) return null;
+    return { aktif: st.beta_aktif === true, sampai: s, label: labelTanggal(s) };
+  }
+  function terapkanBeta(doc, beta, cfg) {
+    doc.querySelectorAll('[data-beta]').forEach((el) => { el.hidden = !beta.aktif; });
+    doc.querySelectorAll('[data-beta-sampai]').forEach((el) => { if (beta.label) el.textContent = beta.label; });
+    doc.querySelectorAll('[data-harga-awal]').forEach((el) => { if (cfg && cfg.hargaPenggunaAwal) el.textContent = cfg.hargaPenggunaAwal; });
+  }
+  /** Minta status masa beta ke server lalu perbarui [data-beta]. Gagal (offline, akun belum aktif, SQL tahap 2 belum
+   *  dijalankan) → diam, tampilan dari config tetap. Tanpa token login: hanya data umum situs. */
+  async function segarkanBeta(doc, cfg, fetchFn) {
+    const url = String((cfg && cfg.supabaseUrl) || '').replace(/\/+$/, '');
+    if (!url || !fetchFn || !doc.querySelectorAll('[data-beta]').length) return null;
+    try {
+      const res = await fetchFn(`${url}/rest/v1/rpc/status_situs`, { method: 'POST', headers: { apikey: cfg.supabaseAnonKey || '', 'Content-Type': 'application/json' }, body: '{}' });
+      if (!res.ok) return null;
+      const beta = betaDariServer(await res.json());
+      if (beta) terapkanBeta(doc, beta, cfg);
+      return beta;
+    } catch (e) { return null; }
   }
 
   const TUTUP_KEY = 'cekprofit.pindahTutup';
   function pasang(doc, cfg, loc, store, hariIni = new Date().toLocaleDateString('sv-SE')) {
     // Masa beta: elemen [data-beta] tampil hanya selama beta aktif; [data-beta-sampai] / [data-harga-awal] diisi dari config.
-    const beta = betaGratis(cfg, hariIni);
-    doc.querySelectorAll('[data-beta]').forEach((el) => { el.hidden = !beta.aktif; });
-    doc.querySelectorAll('[data-beta-sampai]').forEach((el) => { if (beta.label) el.textContent = beta.label; });
-    doc.querySelectorAll('[data-harga-awal]').forEach((el) => { if (cfg && cfg.hargaPenggunaAwal) el.textContent = cfg.hargaPenggunaAwal; });
+    terapkanBeta(doc, betaGratis(cfg, hariIni), cfg);
     doc.querySelectorAll('[data-wa-support]').forEach((el) => {
       const url = waSupportUrl(cfg, el.dataset.waSupport);
       if (url) { el.href = url; el.target = '_blank'; el.rel = 'noopener'; el.hidden = false; }
@@ -69,9 +95,9 @@ const CekSitus = (() => {
   }
 
   if (typeof document !== 'undefined') {
-    const run = () => { let st = null; try { st = sessionStorage; } catch (e) { /* abaikan */ } pasang(document, window.CEK_CONFIG || {}, location, st); };
+    const run = () => { let st = null; try { st = sessionStorage; } catch (e) { /* abaikan */ } const cfg = window.CEK_CONFIG || {}; pasang(document, cfg, location, st); if (typeof fetch === 'function') segarkanBeta(document, cfg, fetch.bind(window)); };
     if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', run); else run();
   }
-  return { waSupportUrl, alamatPindah, pasang, betaGratis };
+  return { waSupportUrl, alamatPindah, pasang, betaGratis, betaDariServer, segarkanBeta };
 })();
 if (typeof module !== 'undefined') module.exports = CekSitus;
