@@ -115,3 +115,28 @@ body.acct .acct-help { font-size: 13.5px; font-weight: 600; }
   body.acct .acct-card h1 { font-size: 24px; }
   body.acct .auth-tabs button { padding: 9px; }
 }
+
+/* ---------- Rapi (3 Nov 2026): ritme jarak, panel kiri terkelompok & menempel, kaki halaman satu baris ---------- */
+body.acct .acct-card { gap: 20px; }
+body.acct .acct-card form { gap: 16px; }
+body.acct .acct-card .field { display: grid; gap: 6px; }
+body.acct .acct-card .field > label { font-size: 14px; font-weight: 650; }
+body.acct .acct-card .hint { font-size: 12.5px; line-height: 1.45; color: var(--ink-3); }
+body.acct .req-note { font-size: 12.5px; color: var(--ink-3); }
+body.acct .pw-rules { padding: 10px 12px; border-radius: 12px; background: var(--surface-2); gap: 6px 12px; }
+body.acct .acct-card .tiny.faint:not(.req-note) { font-size: 12.5px; line-height: 1.5; }
+body.acct .switch { padding-top: 14px; border-top: 1px solid var(--line); }
+body.acct .acct-foot { display: flex; align-items: center; justify-content: space-between; gap: 12px; width: 100%; flex-wrap: wrap; }
+body.acct .acct-foot:has(.acct-help[hidden]) { justify-content: center; }
+body.acct .acct-help { display: inline-flex; align-items: center; gap: 6px; color: var(--accent); text-decoration: none; padding: 6px 10px; margin-left: -10px; border-radius: 999px; }
+body.acct .acct-help:hover { background: var(--accent-soft); }
+body.acct .acct-note { max-width: 46ch; line-height: 1.55; }
+@media (min-width: 960px) {
+  body.acct .acct-side { position: sticky; top: 0; height: 100dvh; grid-template-rows: auto 1fr auto; align-content: stretch; gap: 0; }
+  body.acct .side-mid { align-self: center; display: grid; gap: 28px; padding-block: 32px; }
+  body.acct .acct-wrap { align-self: start; padding: clamp(40px, 8vh, 88px) 24px 48px; width: min(440px, 100%); }
+}
+@media (max-width: 480px) {
+  body.acct .acct-foot { justify-content: center; }
+  body.acct .acct-help { margin-left: 0; }
+}
