@@ -14,7 +14,7 @@ window.CEK_CONFIG = {
   // Nomor WhatsApp BANTUAN (dukungan pengguna), format sama: '628…' tanpa "+" dan spasi.
   // TERPISAH dari `whatsapp` di atas: mengisi nomor ini TIDAK membuka alur pembayaran Pro.
   // Selama kosong, tautan "Bantuan WhatsApp" tidak tampil. Jangan isi nomor contoh/fiktif.
-  waSupport: '',
+  waSupport: '6287881878585',   // nomor bantuan dari pemilik (3 Nov 2026); TERPISAH dari `whatsapp` (pembayaran)
   waSupportMessage: 'Halo Cek Untung, saya butuh bantuan menggunakan website',
 
   // Alamat resmi situs. Bila diisi (mis. 'https://cekuntung.id'), pengunjung alamat lama *.github.io melihat

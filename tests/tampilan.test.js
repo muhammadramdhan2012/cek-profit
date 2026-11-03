@@ -740,9 +740,11 @@ test('AUTH-V3 privasi data: sandi tidak masuk draft/profil/log; nomor hanya ke m
   truthy(/if \(wa\.value\.trim\(\) !== wa\.dataset\.awal\) patch\.whatsapp/.test(ak), 'nomor lama tak berformat tidak diubah/diblokir bila tidak disunting');
   truthy(/id="wa-ajak"/.test(ak), 'ajakan melengkapi nomor (pengguna Google/lama)');
 });
-test('waSupport: kunci config terpisah & kosong; pembayaran tetap bergantung pada whatsapp; tautan tersembunyi bawaan', () => {
+test('waSupport: kunci config terpisah; nomor resmi pemilik; pembayaran tetap bergantung pada whatsapp (kosong); tautan tersembunyi bawaan', () => {
   const cfg = src('config.js'), appJs = src('app.js');
-  truthy(/waSupport: '',/.test(cfg) && /domainResmi: '',/.test(cfg), 'kosong (tanpa nomor fiktif)');
+  // Nomor bantuan diisi pemilik 3 Nov 2026; nomor pembayaran tetap kosong agar pembelian Pro tidak terbuka.
+  truthy(/waSupport: '6287881878585',/.test(cfg) && /whatsapp: '',/.test(cfg) && /domainResmi: '',/.test(cfg), 'nomor bantuan terisi, pembayaran & domain kosong');
+  truthy(require('../assets/situs.js').waSupportUrl({ waSupport: '6287881878585' }, 'Beranda').startsWith('https://wa.me/6287881878585?text='), 'format wa.me valid');
   truthy(/const PAY_READY = !!C\.whatsapp;/.test(appJs) && !/waSupport/.test(appJs), 'alur pembayaran tidak membaca waSupport');
   const pages = { 'index.html': 'Beranda', 'dashboard.html': 'Dashboard', 'akun.html': 'Akun' };
   for (const [f, nama] of Object.entries(pages)) {
@@ -890,6 +892,17 @@ test('Jenis usaha: baris jelas + tombol ganti; mode contoh menjelaskan pilihan l
   truthy(/if \(k === typeOf\(settings\) && !view\.typeOpen\) return;/.test(appJs), 'klik jenis yang sama tidak mengatur ulang mode modal');
   for (const k of ['reseller', 'stok', 'produsen', 'dropship']) truthy(new RegExp(`${k}: '`).test(appJs.slice(appJs.indexOf('const CARA_MODAL'))), `cara modal: ${k}`);
   truthy(/reseller, penjual stok sendiri, produsen, atau dropshipper/.test(idx), 'halaman depan menyebut jenis usaha');
+});
+test('Tombol bantuan WhatsApp melayang: halaman depan & privasi; tidak di akun/dashboard', () => {
+  // Halaman akun tidak memakai tombol melayang: sudah ada tautan "Butuh bantuan? Chat WhatsApp" tepat di bawah formulir,
+  // dan di HP tombol melayang menutupi pemilih tema.
+  truthy(!/wa-float/.test(fs.readFileSync(path.join(__dirname, '..', 'akun.html'), 'utf8')) && /class="acct-help" data-wa-support="Akun"/.test(fs.readFileSync(path.join(__dirname, '..', 'akun.html'), 'utf8')), 'akun: tautan bantuan biasa, tanpa tombol melayang');
+  for (const [f, hal] of [['index.html', 'Beranda'], ['privasi.html', 'Privasi']]) {
+    const h = fs.readFileSync(path.join(__dirname, '..', f), 'utf8');
+    truthy(new RegExp(`class="wa-float" data-wa-support="${hal}" hidden`).test(h) && /situs\.js/.test(h), `${f}: tombol melayang (tersembunyi sampai nomor valid)`);
+  }
+  truthy(!/wa-float/.test(fs.readFileSync(path.join(__dirname, '..', 'dashboard.html'), 'utf8')), 'dashboard tanpa tombol melayang');
+  truthy(/body\.home \.wa-float \{ bottom: calc\(86px/.test(src('../assets/base.css'.replace('../assets/', ''))) || /body\.home \.wa-float/.test(fs.readFileSync(path.join(__dirname, '..', 'assets', 'base.css'), 'utf8')), 'di HP berada di atas bilah ajakan');
 });
 console.log(failed ? `\n${failed} uji GAGAL` : '\nSemua uji lulus');
 process.exitCode = failed ? 1 : 0;
