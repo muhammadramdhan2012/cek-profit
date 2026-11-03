@@ -740,9 +740,11 @@ test('AUTH-V3 privasi data: sandi tidak masuk draft/profil/log; nomor hanya ke m
   truthy(/if \(wa\.value\.trim\(\) !== wa\.dataset\.awal\) patch\.whatsapp/.test(ak), 'nomor lama tak berformat tidak diubah/diblokir bila tidak disunting');
   truthy(/id="wa-ajak"/.test(ak), 'ajakan melengkapi nomor (pengguna Google/lama)');
 });
-test('waSupport: kunci config terpisah & kosong; pembayaran tetap bergantung pada whatsapp; tautan tersembunyi bawaan', () => {
+test('waSupport: kunci config terpisah; nomor resmi pemilik; pembayaran tetap bergantung pada whatsapp (kosong); tautan tersembunyi bawaan', () => {
   const cfg = src('config.js'), appJs = src('app.js');
-  truthy(/waSupport: '',/.test(cfg) && /domainResmi: '',/.test(cfg), 'kosong (tanpa nomor fiktif)');
+  // Nomor bantuan diisi pemilik 3 Nov 2026; nomor pembayaran tetap kosong agar pembelian Pro tidak terbuka.
+  truthy(/waSupport: '6287881878585',/.test(cfg) && /whatsapp: '',/.test(cfg) && /domainResmi: '',/.test(cfg), 'nomor bantuan terisi, pembayaran & domain kosong');
+  truthy(require('../assets/situs.js').waSupportUrl({ waSupport: '6287881878585' }, 'Beranda').startsWith('https://wa.me/6287881878585?text='), 'format wa.me valid');
   truthy(/const PAY_READY = !!C\.whatsapp;/.test(appJs) && !/waSupport/.test(appJs), 'alur pembayaran tidak membaca waSupport');
   const pages = { 'index.html': 'Beranda', 'dashboard.html': 'Dashboard', 'akun.html': 'Akun' };
   for (const [f, nama] of Object.entries(pages)) {

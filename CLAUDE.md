@@ -214,6 +214,7 @@ node tests/cloud.test.js          # memakai server tiruan tests/mock-supabase.js
 - ✅ Halaman depan, dashboard, laporan PDF, akun Supabase (schema dan RLS sudah dijalankan), admin, tema gelap/terang, versi aset otomatis.
 - ✅ Jenis usaha (reseller, stok sendiri, produsen, dropshipper) dengan fitur masing-masing; tombol "?" penjelasan angka (`assets/penjelasan.js`); tarif efektif dari laporan + tabel tarif umum (`assets/tarif.js`, diperbarui manual dengan tanggal dan sumber).
 - ⏳ Tarif umum di `assets/tarif.js` dicek 14 Okt 2026 dari sumber sekunder; perlu dicocokkan ulang saat marketplace mengumumkan perubahan tarif.
+- ✅ Bantuan WhatsApp aktif sejak 3 Nov 2026 (`waSupport`, nomor dari pemilik); nomor pembayaran `whatsapp` tetap kosong.
 - ⏳ Harga Pro ditetapkan pemilik (21 Okt 2026): Rp149.000; diubah pemilik 1 Nov 2026 menjadi **Rp149.000 per tahun**, berlaku 1 tahun, tanpa perpanjangan otomatis (harga peluncuran; reguler yang direncanakan Rp299.000), tampil di halaman depan sejak rilis UI. Harga reguler tidak ditampilkan dan Jasa laporan tidak ditawarkan di halaman publik (keputusan pemilik 22 Okt 2026; nilai `jasa` di config dipertahankan). Pembelian belum dibuka: `whatsapp` tetap kosong, dan alur pembayaran lama di dashboard (paket bulanan/tahunan) belum diganti.
 - ⏳ Masa beta gratis (keputusan pemilik 1 Nov 2026): semua fitur Pro terbuka sampai 13 Des 2026 (`betaGratisSampai` di
   `assets/config.js`), lalu kunci Pro kembali otomatis. Pengguna yang membuat akun selama beta dijanjikan harga khusus
