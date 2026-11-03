@@ -893,8 +893,11 @@ test('Jenis usaha: baris jelas + tombol ganti; mode contoh menjelaskan pilihan l
   for (const k of ['reseller', 'stok', 'produsen', 'dropship']) truthy(new RegExp(`${k}: '`).test(appJs.slice(appJs.indexOf('const CARA_MODAL'))), `cara modal: ${k}`);
   truthy(/reseller, penjual stok sendiri, produsen, atau dropshipper/.test(idx), 'halaman depan menyebut jenis usaha');
 });
-test('Tombol bantuan WhatsApp melayang: halaman depan, akun, privasi; tidak di dashboard', () => {
-  for (const [f, hal] of [['index.html', 'Beranda'], ['akun.html', 'Akun'], ['privasi.html', 'Privasi']]) {
+test('Tombol bantuan WhatsApp melayang: halaman depan & privasi; tidak di akun/dashboard', () => {
+  // Halaman akun tidak memakai tombol melayang: sudah ada tautan "Butuh bantuan? Chat WhatsApp" tepat di bawah formulir,
+  // dan di HP tombol melayang menutupi pemilih tema.
+  truthy(!/wa-float/.test(fs.readFileSync(path.join(__dirname, '..', 'akun.html'), 'utf8')) && /class="acct-help" data-wa-support="Akun"/.test(fs.readFileSync(path.join(__dirname, '..', 'akun.html'), 'utf8')), 'akun: tautan bantuan biasa, tanpa tombol melayang');
+  for (const [f, hal] of [['index.html', 'Beranda'], ['privasi.html', 'Privasi']]) {
     const h = fs.readFileSync(path.join(__dirname, '..', f), 'utf8');
     truthy(new RegExp(`class="wa-float" data-wa-support="${hal}" hidden`).test(h) && /situs\.js/.test(h), `${f}: tombol melayang (tersembunyi sampai nomor valid)`);
   }
