@@ -276,3 +276,19 @@ body.acct .acct-side { display: none; }
 .pindah { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px; padding: 12px 16px; background: var(--surface-2); border-bottom: 1px solid var(--line); color: var(--ink); font-size: 13.5px; line-height: 1.5; }
 .pindah p { margin: 0; flex: 1 1 320px; min-width: 0; }
 .pindah-act { display: flex; gap: 8px; flex: none; }
+
+/* ---------- tombol bantuan WhatsApp melayang (halaman depan, akun, privasi; tidak di dashboard agar tidak menutupi angka) ---------- */
+.wa-float { position: fixed; z-index: 30; right: max(18px, env(safe-area-inset-right)); bottom: calc(18px + env(safe-area-inset-bottom));
+  display: inline-flex; align-items: center; gap: 8px; min-height: 48px; padding: 0 18px 0 14px; border-radius: 999px;
+  background: var(--accent); color: var(--accent-ink); font-weight: 700; font-size: 15px; text-decoration: none;
+  box-shadow: 0 0 0 2px var(--surface), var(--shadow-lg, 0 10px 30px rgb(0 0 0 / 18%)); transition: transform var(--dur-fast, .15s) var(--ease, ease), box-shadow var(--dur-fast, .15s); }
+.wa-float:hover { transform: translateY(-2px); }
+.wa-float:focus-visible { outline: 3px solid var(--mark, #f4c542); outline-offset: 3px; }
+.wa-float[hidden] { display: none; }
+@media (max-width: 760px) {
+  .wa-float { min-height: 44px; padding: 0 14px 0 12px; font-size: 14px; }
+  .wa-float .wa-f-x { display: none; }
+  /* Halaman depan di HP: di atas bilah ajakan lengket (.m-cta) */
+  body.home .wa-float { bottom: calc(86px + env(safe-area-inset-bottom)); }
+}
+@media print { .wa-float { display: none !important; } }
