@@ -40,7 +40,7 @@
   // Wajib untuk daftar dengan email + kata sandi (keputusan pemilik 21 Okt 2026). Pengguna Google dan akun lama tidak
   // diwajibkan; mereka bisa melengkapinya di halaman Akun. Nomor tidak pernah ditandai terverifikasi.
   const phoneField = () => `<div class="field"><label for="hp">Nomor HP/WhatsApp${REQ}</label><input class="plain" id="hp" type="tel" autocomplete="tel" inputmode="tel" placeholder="Contoh: 081234567890" maxlength="20" required aria-describedby="hp-h hp-err">
-    <span class="hint" id="hp-h">Untuk menghubungi Anda soal bantuan dan pembayaran. Tidak dipakai untuk iklan dan tidak diverifikasi otomatis.</span>${errSpan('hp')}</div>`;
+    <span class="hint" id="hp-h">Hanya untuk bantuan dan pembayaran. Tidak dipakai untuk iklan dan tidak diverifikasi otomatis.</span>${errSpan('hp')}</div>`;
   const confirmField = (id, of, tanda = '') => pwField(id, 'Konfirmasi kata sandi' + tanda, 'new-password', 'Ulangi kata sandi', { eyeLabel: 'konfirmasi kata sandi' }).replace('<input ', `<input data-sama="${of}" `);
   const msgHtml = () => (message ? `<p class="msg ${message.ok ? 'ok' : 'err'}" role="${message.ok ? 'status' : 'alert'}">${esc(message.text)}</p>` : '');
   const heading = (title, sub) => `<div class="acct-head"><h1>${title}</h1>${sub ? `<p class="muted">${sub}</p>` : ''}</div>`;
