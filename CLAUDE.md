@@ -101,7 +101,10 @@ Bila dokumen rujukan bertentangan dengan file ini, file ini yang berlaku. Lapork
   - arsitektur
   - perilaku fitur utama
 - **Commit lokal** memerlukan izin pemilik.
-- **Push ke GitHub dan deployment** memerlukan izin eksplisit untuk setiap tindakan. Push ke `main` = deploy ke produksi (GitHub Pages).
+- **Push ke GitHub dan deployment** memerlukan izin eksplisit untuk setiap tindakan. Push/merge ke `main` = deploy ke produksi (Cloudflare Pages, cekuntung.id).
+- Alur rilis yang disepakati pemilik: kerjakan di branch → push branch → PR → pemilik mengecek preview
+  `https://<nama-branch, "/" diganti "-">.cekuntung.pages.dev` → merge ke `main` hanya setelah pemilik mengizinkan
+  (mis. "silahkan pindahkan ke cekuntung.id").
 - **Jangan mengubah data produksi** (Supabase, akun pengguna, migrasi) tanpa izin.
 - Sebelum implementasi: baca kode terkait, pahami dependensi, jelaskan perubahan, identifikasi risiko, lalu usulkan rencana.
 
@@ -122,7 +125,11 @@ Bila dokumen rujukan bertentangan dengan file ini, file ini yang berlaku. Lapork
 
 ## 6. Arsitektur
 
-- Situs statis di **GitHub Pages** (branch `main`, root). Tanpa build step dan tanpa framework: HTML, CSS, dan vanilla JS. Mengganti framework atau menambah build step hanya dengan alasan tertulis dan persetujuan pemilik.
+- Situs statis di **Cloudflare Pages** (produksi `https://cekuntung.id` dari branch `main`, root; setiap branch lain
+  mendapat preview di `*.cekuntung.pages.dev`). Tanpa build step dan tanpa framework: HTML, CSS, dan vanilla JS.
+  Mengganti framework atau menambah build step hanya dengan alasan tertulis dan persetujuan pemilik.
+- Cloudflare Pages mengalihkan `/halaman.html` ke `/halaman` (308); `sw.js` menormalkan kunci cache untuk itu.
+- GitHub Pages masih ikut membangun `main` di alamat lama. `domainResmi` di `assets/config.js` (kosong) mengatur pemberitahuan pindah alamat; jangan mematikan alamat lama tanpa keputusan pemilik.
 - `assets/engine.js` adalah mesin hitung **murni** (tanpa DOM) dan diuji di Node. Logika perhitungan baru masuk ke sini, bukan ke `assets/app.js`.
 - `assets/tarif.js` berisi tarif umum marketplace untuk simulasi. Laba **tidak** memakai tabel ini; laba memakai potongan nyata dari laporan. Tarif tidak diambil otomatis dari situs marketplace (halaman resmi dirender JS, tarif per subkategori), jadi setiap angka wajib bertanggal dan bersumber.
 - `assets/penjelasan.js` berisi teks tombol "?". Setiap angka baru yang tampil ke pengguna sebaiknya diberi penjelasan.
@@ -207,7 +214,7 @@ node tests/cloud.test.js          # memakai server tiruan tests/mock-supabase.js
 - Untuk perubahan kecil, cukup ringkasan hasil dan pengujian.
 - Bila menemukan masalah serius, misalnya angka salah atau data terpotong, **jelaskan dulu** sebelum memperbaiki, termasuk dampaknya ke pengguna yang sudah memakai.
 - Bila requirement ambigu, sebutkan ambiguitasnya sebelum implementasi.
-- Setelah push yang diizinkan: beri tahu bahwa GitHub Pages butuh 1–3 menit, lalu minta refresh (Cmd+Shift+R).
+- Setelah merge/push ke `main` yang diizinkan: pastikan cek deploy Cloudflare lulus, beri tahu bahwa perubahan butuh 1–3 menit, lalu minta refresh (Cmd+Shift+R).
 
 ## 10. Status saat ini dan yang masih menunggu
 
@@ -232,7 +239,7 @@ node tests/cloud.test.js          # memakai server tiruan tests/mock-supabase.js
   - tamu (tanpa akun) hanya sampai Ringkasan; Produk, Laba & Money Trace, Retur, Laporan & riwayat perlu akun gratis; mode contoh terbuka penuh. Kunci ini di browser (ajakan daftar, bukan perlindungan data);
   - sesi: "Ingat saya" (tanpa centang → sessionStorage), keluar otomatis bila 30 hari tidak dibuka, Keluar = perangkat ini saja, "Keluar dari semua perangkat" di halaman Akun;
   - Kirim masukan: form untuk akun, WhatsApp untuk tamu; tabel `feedback` (SQL dijalankan pemilik 4 Nov 2026), panel di admin.html.
-- ⏳ Bagian 6 (Arsitektur) masih menyebut GitHub Pages; produksi kini Cloudflare Pages (cekuntung.id) dari branch `main`, preview per branch di `*.cekuntung.pages.dev`. Perlu keputusan pemilik untuk memperbarui bagian itu.
+- ✅ Bagian 3, 6, dan 9 diperbarui ke Cloudflare Pages (persetujuan pemilik 4 Nov 2026).
 - ⏳ Parser export pesanan Shopee dan TikTok tetap berlabel Beta (keputusan pemilik 19 Okt 2026). Export Shopee baru dicocokkan dengan satu file asli; export TikTok asli belum diuji.
 - ✅ Statistik GoatCounter aktif sejak 2 Nov 2026 (`goatcounter: 'cekuntung'`, cekuntung.goatcounter.com); hanya nama halaman yang dikirim, tanpa query/hash.
 - ⏳ Masalah akurasi, keamanan, dan teknis dari audit 14 Okt 2026: lihat `KNOWN_ISSUES.md`. Jangan klaim laba akurat pada kasus yang masih terbuka di sana.
