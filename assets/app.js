@@ -1783,7 +1783,11 @@
   const TYPE_SINGKAT = { reseller: 'Reseller', stok: 'Stok sendiri', produsen: 'Produsen', dropship: 'Dropshipper' };
   /** Video tutorial cara isi modal per jenis usaha (file sendiri di video/, tidak masuk cache offline; keputusan pemilik 5 Nov 2026). */
   const VIDEO_MODAL = { reseller: '1:13', stok: '1:08', produsen: '1:05', dropship: '0:55' };
-  const tombolVideo = (type) => (VIDEO_MODAL[type] ? `<button type="button" class="ts-vid" data-video-modal="${type}"><span class="ts-vid-ic" aria-hidden="true"><svg viewBox="0 0 24 24" width="12" height="12"><path d="M8 5.5v13l10.5-6.5z" fill="currentColor"/></svg></span>Tonton cara isi modal ${TYPE_SINGKAT[type]}<small>${VIDEO_MODAL[type]}</small></button>` : '');
+  // Desain B (pilihan pemilik 5 Nov 2026): kartu dengan cuplikan video, judul berupa pertanyaan, dan durasi.
+  const tombolVideo = (type) => (VIDEO_MODAL[type] ? `<button type="button" class="ts-vid" data-video-modal="${type}" aria-label="Tonton video cara isi modal ${TYPE_SINGKAT[type]}, ${VIDEO_MODAL[type]}">
+      <span class="tv-th" aria-hidden="true"><img src="img/poster-modal-${type}.webp" alt="" loading="lazy" width="168" height="94"><i><svg viewBox="0 0 24 24" width="16" height="16"><path d="M8 5.5v13l10.5-6.5z" fill="currentColor"/></svg></i><em>${VIDEO_MODAL[type]}</em></span>
+      <span class="tv-tx"><b>Bingung cara isi modal ${TYPE_SINGKAT[type]}?</b><span>Tonton panduan singkat langkah demi langkah</span></span>
+      <span class="tv-go" aria-hidden="true">Tonton video →</span></button>` : '');
   function openVideoModal(type) {
     if (!VIDEO_MODAL[type]) return;
     track(`video-modal-${type}`);
