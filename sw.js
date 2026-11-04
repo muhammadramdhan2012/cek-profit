@@ -2,7 +2,7 @@
  * Strategi: jaringan dulu untuk HTML/JS/CSS (agar pembaruan langsung terlihat), cache sebagai cadangan offline.
  * Naikkan VERSION setiap rilis agar cache lama dibersihkan.
  */
-const VERSION = 'cekprofit-6b5d83d71e';
+const VERSION = 'cekprofit-e804ee1e93';
 const CORE = ['./', 'index.html', 'dashboard.html', 'akun.html', 'privasi.html', 'icon.svg', 'icon-cek-untung.svg', 'apple-touch-icon.png',
   'assets/base.css', 'assets/app.css', 'assets/site.css', 'assets/report.css', 'assets/account.css',
   'assets/config.js', 'assets/theme.js', 'assets/motion.js', 'assets/analytics.js', 'assets/engine.js', 'assets/saldo.js', 'assets/pajak.js', 'assets/surat.js', 'assets/demo.js', 'assets/license.js', 'assets/cloud.js', 'assets/report.js', 'assets/tarif.js', 'assets/penjelasan.js', 'assets/app.js', 'assets/akun.js', 'assets/aturan-akun.js', 'assets/situs.js',
@@ -40,6 +40,8 @@ self.addEventListener('activate', (e) => {
 self.addEventListener('fetch', (e) => {
   const url = new URL(e.request.url);
   if (e.request.method !== 'GET' || url.origin !== location.origin) return;   // akun (Supabase) & analytics tidak disentuh
+  // Video tutorial (7 MB, diminta per potongan/Range) tidak disimpan offline: tidak dibutuhkan untuk memproses laporan.
+  if (url.pathname.startsWith('/video/')) return;
   const nav = e.request.mode === 'navigate';
   e.respondWith(
     fetch(e.request)

@@ -24,7 +24,7 @@
 <script src="assets/theme.js?v=f5317dffb6"></script>
 <script src="assets/motion.js?v=9e6864196f"></script>
 <link rel="stylesheet" href="assets/base.css?v=b11f335bb1">
-<link rel="stylesheet" href="assets/site.css?v=6d8bbcaf78">
+<link rel="stylesheet" href="assets/site.css?v=c26cde297b">
 <script src="assets/config.js?v=623170c157"></script>
 <script src="assets/analytics.js?v=d923a1e0ea" defer></script>
 <script src="assets/situs.js?v=d54140161c" defer></script>
@@ -126,6 +126,26 @@
         <li data-reveal><span class="how-n">02</span><b>Isi modal</b><p>Pilih jenis usaha Anda: reseller, penjual stok sendiri, produsen, atau dropshipper. Lalu isi modal per produk lewat template, atau mulai dengan modal rata-rata sebagai perkiraan.</p></li>
         <li data-reveal><span class="how-n">03</span><b>Baca laba &amp; kepastiannya</b><p>Laba dari data tersedia, Kepastian Profit, produk yang merugi, dan tren bulanan.</p></li>
       </ol>
+      <!-- Video tutorial: file sendiri (tanpa pemutar pihak ketiga). preload="none" agar 7 MB baru diunduh saat diputar;
+           sw.js tidak menyimpan folder video/ ke cache offline. -->
+      <div class="how-vid" id="tutorial" data-reveal>
+        <div class="how-vid-txt">
+          <h3>Lihat caranya dalam 2 menit</h3>
+          <p>Dari unggah laporan, isi modal, sampai membaca laba dan Kepastian Profit. Angka di video adalah data contoh.</p>
+          <a class="how-vid-yt" href="https://youtu.be/x0JU0eG74_I" target="_blank" rel="noopener">Tonton di YouTube <span aria-hidden="true">↗</span></a>
+        </div>
+        <div class="how-vid-frame">
+          <video id="tutorial-video" controls preload="none" playsinline poster="img/tutorial-poster.webp" width="1280" height="720"
+            aria-label="Video tutorial Cek Untung, 2 menit, dengan teks di layar">
+            <source src="video/cekuntung-tutorial.mp4" type="video/mp4">
+            <a href="https://youtu.be/x0JU0eG74_I">Tonton video tutorial di YouTube</a>
+          </video>
+          <button type="button" class="how-vid-play" id="tutorial-play" hidden aria-label="Putar video tutorial">
+            <span class="how-vid-ic" aria-hidden="true"><svg viewBox="0 0 24 24" width="22" height="22"><path d="M8 5.5v13l10.5-6.5z" fill="currentColor"/></svg></span>
+            <span class="how-vid-lb">Putar tutorial <small>1:59</small></span>
+          </button>
+        </div>
+      </div>
       <div class="mkp" data-reveal>
         <h3 class="mkp-t">Marketplace yang dibaca</h3>
         <ul class="mkp-list">
@@ -389,6 +409,12 @@
   if (!C.supabaseUrl) { member = true; }
   document.querySelectorAll('[data-guest]').forEach((el) => { el.hidden = member; });
   document.querySelectorAll('[data-member]').forEach((el) => { el.hidden = !member; });
+  // Video tutorial: tombol putar besar menggantikan kontrol bawaan sampai video mulai. Tanpa JS, kontrol bawaan tetap ada.
+  const vid = document.getElementById('tutorial-video'), play = document.getElementById('tutorial-play');
+  if (vid && play) {
+    vid.controls = false; play.hidden = false;
+    play.addEventListener('click', () => { play.hidden = true; vid.controls = true; vid.play().catch(() => { /* browser menolak autoplay: kontrol sudah tampil */ }); });
+  }
   document.querySelectorAll('[data-wa]').forEach((el) => {
     if (C.whatsapp) { el.href = `https://wa.me/${C.whatsapp}?text=${encodeURIComponent(C.waMessageJasa || '')}`; el.target = '_blank'; el.rel = 'noopener'; }
     else { el.removeAttribute('href'); el.setAttribute('aria-disabled', 'true'); el.textContent = 'Kontak segera tersedia'; el.style.opacity = '.55'; el.style.cursor = 'default'; }
