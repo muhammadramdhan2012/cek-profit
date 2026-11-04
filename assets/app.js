@@ -135,6 +135,11 @@
   /** Pro yang benar-benar dimiliki (akun/kode), bukan karena masa beta. */
   const proSendiri = () => license.ok || proAkun();
   const isPro = () => demo || proSendiri() || !!betaGratis();
+  /** Tamu (keputusan pemilik 4 Nov 2026): tanpa akun, laporan sendiri hanya sampai Ringkasan. Hasil lengkap (produk, laba &
+   *  Money Trace, retur, laporan PDF/Excel & riwayat) perlu akun gratis. Mode contoh tetap terbuka penuh. Tanpa layanan
+   *  akun (supabaseUrl kosong) tidak ada yang dikunci. Kunci ini di browser: ajakan daftar, bukan perlindungan data. */
+  const KUNCI_TAMU = ['produk', 'biaya', 'retur', 'riwayat'];
+  const perluAkun = (v = viewName) => !demo && cloud.enabled && !account.user && KUNCI_TAMU.includes(v);
   const st = () => (demo ? CekDemo.settings() : settings);
   const prof = () => (demo ? CekDemo.profile() : profile);
   const cases = () => (demo ? {} : caseState);
@@ -269,8 +274,9 @@
         : k === 'data' && !demo && !files.length ? '<span class="count attn">mulai</span>' : '';
     // Bilah bawah HP memakai label pendek; nama lengkap tetap tersedia untuk pembaca layar.
     const shortLbl = cls === 'bn' && SHORT[k] ? SHORT[k] : label;
-    return `<button type="button" class="${cls}" data-go="${v}" ${section ? `data-section="${section}"` : ''} ${isActive(item) ? 'aria-current="page"' : ''} ${shortLbl !== label ? `aria-label="${label}"` : ''}>${svg(k)}<span class="lbl">${shortLbl}</span>${count}</button>`;
+    return `<button type="button" class="${cls}" data-go="${v}" ${section ? `data-section="${section}"` : ''} ${isActive(item) ? 'aria-current="page"' : ''} ${shortLbl !== label ? `aria-label="${label}"` : ''}>${svg(k)}<span class="lbl">${shortLbl}</span>${count}${perluAkun(v) ? KUNCI_IC : ''}</button>`;
   }
+  const KUNCI_IC = '<svg class="nav-lock" viewBox="0 0 24 24" width="12" height="12" aria-hidden="true"><rect x="5" y="11" width="14" height="10" rx="2" fill="none" stroke="currentColor" stroke-width="2.2"/><path d="M8 11V8a4 4 0 0 1 8 0v3" fill="none" stroke="currentColor" stroke-width="2.2"/></svg>';
   function renderNav() {
     // Menu hanya ditulis ulang bila isinya berubah, agar animasi penanda aktif tidak berulang di setiap ketikan.
     const side = NAV.map(([group, items]) => `<div class="nav-group" role="group" aria-label="${group}"><span class="nav-label" aria-hidden="true">${group}</span>${items.filter(navTampil).map((i) => navButton(i)).join('')}</div>`).join('');
@@ -288,7 +294,7 @@
     const pro = isPro();
     const planText = demo ? 'Mode contoh' : proAkun(p) ? `Pro sampai ${tgl(p.pro_until)}` : license.ok ? `Pro (kode)${license.exp ? ` sampai ${tgl(license.exp)}` : ''}` : betaGratis() ? `Beta gratis sampai ${tgl(betaGratis())}` : 'Paket gratis';
     const beta = !demo && !proSendiri() && betaGratis();
-    $('#plan-box').innerHTML = beta ? `<button class="plan-pro plan-beta" type="button" data-upgrade aria-label="Masa beta gratis sampai ${tgl(beta)}. Lihat keterangan"><span class="badge pro">BETA</span><span>Gratis semua fitur sampai ${tgl(beta)}</span></button>`
+    $('#plan-box').innerHTML = beta ? `<button class="plan-pro plan-beta" type="button" data-upgrade aria-label="Masa beta gratis sampai ${tgl(beta)}. Lihat keterangan"><span class="badge pro">BETA</span><span>${cloud.enabled && !account.user ? 'Dengan akun gratis: semua fitur' : 'Gratis semua fitur'} sampai ${tgl(beta)}</span></button>`
       : pro ? `<div class="plan-pro"><span class="badge pro">PRO</span><span>${demo ? 'Mode contoh: semua fitur terbuka' : 'Semua fitur Pro aktif'}</span></div>` : `<button class="upsell-sm" type="button" data-upgrade aria-label="Lihat paket Cek Untung Pro" title="Laporan PDF, analisis semua produk, dan saran harga"><span class="badge pro">PRO</span><span class="us-t">Cek Untung Pro</span><span class="us-go" aria-hidden="true">Lihat →</span></button>`;
     if (!cloud.enabled) {
       $('#account-box').innerHTML = `<div class="acct-box"><div class="avatar" style="background:var(--surface-3);color:var(--ink-2)">${svg('data', 16)}</div><div class="who"><b>${planText}</b><span>Tersimpan di browser ini</span></div></div>`;
@@ -427,7 +433,7 @@
     renderNav(); renderAccount(); renderTop(); renderSheet();
     const v = $('#view');
     const needData = ['ringkasan', 'produk', 'biaya', 'retur'].includes(viewName) && !last;
-    v.innerHTML = needData ? emptyView() : ({ ringkasan: viewRingkasan, produk: viewProduk, biaya: viewBiaya, retur: viewRetur, simulator: viewSimulator, riwayat: viewRiwayat, data: viewData, pajak: viewPajak }[viewName])();
+    v.innerHTML = perluAkun() ? viewTamu() : needData ? emptyView() : ({ ringkasan: viewRingkasan, produk: viewProduk, biaya: viewBiaya, retur: viewRetur, simulator: viewSimulator, riwayat: viewRiwayat, data: viewData, pajak: viewPajak }[viewName])();
     afterRender();
   }
   function afterRender() {
@@ -463,6 +469,27 @@
     produk: ['produk', 'Laba per produk tampil di sini', 'Produk yang paling menguntungkan dan produk yang perlu diperhatikan, setelah modal barang diisi.'],
     retur: ['retur', 'Retur dan refund tampil di sini', 'Uang yang dikembalikan ke pembeli dan barang yang belum jelas kembali. Unggah Laporan Penghasilan dulu, lalu file retur bila ada.'],
   };
+  /** Halaman yang perlu akun gratis (tamu). Tidak memuat angka dari laporan; file yang sudah dipilih tetap di browser ini
+   *  sampai halaman ditutup, tetapi tidak ikut ke halaman daftar, jadi perlu dipilih lagi setelah masuk. */
+  const TAMU = {
+    produk: ['produk', 'Lihat laba setiap produk', 'Produk mana yang paling menguntungkan, mana yang rugi atau tipis, dan harga yang disarankan.'],
+    biaya: ['laba', 'Lihat rincian laba & Money Trace', 'Ke mana uang penjualan pergi: potongan marketplace, modal, biaya lain, sampai uang yang dicairkan.'],
+    retur: ['retur', 'Lihat retur & refund', 'Uang yang dikembalikan ke pembeli dan barang yang belum jelas kembali.'],
+    riwayat: ['laporan', 'Unduh laporan & simpan riwayat', 'Laporan PDF dan Excel yang siap dikirim, serta riwayat untuk membandingkan periode.'],
+  };
+  const nextKe = (v) => encodeURIComponent(`dashboard.html#${v}`);
+  const betaTamu = () => (betaGratis() ? `<p class="small"><b>Selama beta (sampai ${tgl(betaGratis())})</b> semua fitur gratis, dan akun yang dibuat sekarang mendapat harga khusus Pro ${esc(C.hargaPenggunaAwal || 'Rp99.000')} untuk tahun pertama.</p>` : '');
+  const viewTamu = () => {
+    const [ic, judul, isi] = TAMU[viewName];
+    return `<div class="panel empty empty-arah tamu"><span class="ic">${svg(ic, 24)}</span><h2>${judul}</h2><p>${isi}</p>
+    <p class="small muted">Buat akun gratis untuk membukanya. Cukup email, tanpa kartu kredit.</p>${betaTamu()}
+    <div class="row-actions" style="justify-content:center"><a class="btn primary" href="akun.html?mode=daftar&next=${nextKe(viewName)}" data-track="tamu-daftar-${viewName}">Daftar gratis</a><a class="btn" href="akun.html?next=${nextKe(viewName)}">Masuk</a></div>
+    <p class="tiny faint">File laporan tidak disimpan di mana pun, jadi setelah masuk pilih file laporan Anda lagi. Modal yang sudah diisi tetap tersimpan.
+    ${files.length ? '' : '<button class="btn link" type="button" data-demo>Lihat dulu dengan data contoh</button>'}</p></div>`;
+  };
+  /** Ajakan daftar di Ringkasan untuk tamu yang sudah melihat labanya sendiri. */
+  const ajakDaftar = () => (demo || !cloud.enabled || account.user ? '' : `<div class="note-box tamu-ajak" data-reveal><b>Ingin tahu produk mana yang rugi?</b> Daftar gratis untuk membuka laba per produk, rincian laba, retur, dan laporan PDF.${betaGratis() ? ` Akun yang dibuat selama beta mendapat harga khusus Pro ${esc(C.hargaPenggunaAwal || 'Rp99.000')} untuk tahun pertama.` : ''}
+      <span class="row-actions"><a class="btn sm primary" href="akun.html?mode=daftar&next=${nextKe('produk')}">Daftar gratis</a><a class="btn sm" href="akun.html?next=${nextKe('ringkasan')}">Masuk</a></span></div>`);
   const emptyView = () => {
     const [ic, judul, isi] = KOSONG[viewName] || KOSONG.ringkasan;
     return `<div class="panel empty empty-arah"><span class="ic">${svg(ic, 24)}</span><h2>${judul}</h2><p>${isi}</p>
@@ -637,7 +664,7 @@
           hppMixed ? '<div class="m-status"><span class="status estimate">Sebagian perkiraan</span></div>' : r.ready && c.penjualan.terverifikasi > 0 ? '<div class="m-status"><span class="status verified">Terverifikasi</span></div>' : '', 'modal')}
         ${kpi(`Potongan marketplace${qi('potongan', 'Potongan marketplace')}`, -r.totalFees, 'dipotong dari penjualan oleh marketplace', '', '', 'fees')}
       </section>`;
-    return `<div class="dash d3">
+    return `${ajakDaftar()}<div class="dash d3">
       <div class="d3-top">
         <section class="dash-hero d3-profit" aria-label="Laba">
           ${kpi(`Laba dari data tersedia${qi('laba_bersih', 'Laba dari data tersedia')}`, r.ready ? laba : '<span class="faint">Belum dihitung</span>',
@@ -2382,6 +2409,7 @@
   /* ================= 7. ekspor & laporan ================= */
   function exportXlsx() {
     if (!last) return;
+    if (perluAkun('riwayat')) { go('riwayat'); return; }
     if (!isPro()) { openUpgrade(); return; }
     const { r } = last;
     const R = (v) => (ok(v) ? Math.round(v) : '');
@@ -2424,6 +2452,7 @@
   }
   function openReport() {
     if (!last) return;
+    if (perluAkun('riwayat')) { go('riwayat'); return; }
     if (!isPro()) { openUpgrade(); return; }
     buildReport();
     const old = document.title;

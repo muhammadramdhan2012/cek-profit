@@ -14,6 +14,7 @@ function createMock({ confirmEmail = false, tokenTtl = 3600, strongPasswords = f
   const weakMsg = (pw) => (!pw || pw.length < 8 ? 'Password should be at least 8 characters.' : 'Password should contain at least one character of each: abcdefghijklmnopqrstuvwxyz, ABCDEFGHIJKLMNOPQRSTUVWXYZ, 0123456789.');
   const signupBodies = [];
   const users = new Map();      // id → {id,email,password,meta}
+  const logouts = [];          // scope setiap panggilan /logout (untuk uji)
   const tokens = new Map();     // access → {uid, exp}
   const codes = new Map();      // kode PKCE → {id, challenge, method}
   const refresh = new Map();    // refresh → uid
@@ -89,7 +90,15 @@ function createMock({ confirmEmail = false, tokenTtl = 3600, strongPasswords = f
       }
       const u = users.get(uid); return send(200, { id: uid, email: u.email, user_metadata: u.meta });
     }
-    if (p === '/auth/v1/logout') { tokens.delete(bearer); return send(204); }
+    if (p === '/auth/v1/logout') {
+      // scope=global: semua sesi pengguna ini dicabut (meniru GoTrue); selain itu hanya sesi ini.
+      if (uid && q.get('scope') === 'global') {
+        for (const [k, v] of tokens) if (v.uid === uid) tokens.delete(k);
+        for (const [k, v] of refresh) if (v === uid) refresh.delete(k);
+      } else tokens.delete(bearer);
+      logouts.push(q.get('scope') || '');
+      return send(204);
+    }
     if (p === '/auth/v1/recover') return send(200, {});
     if (p === '/auth/v1/authorize') {
       // Tiruan penyedia Google. mock_error = pengguna membatalkan; mock_email = akun Google yang dipakai. Email yang sudah
@@ -192,7 +201,7 @@ function createMock({ confirmEmail = false, tokenTtl = 3600, strongPasswords = f
     }
     return send(404, { message: 'not found' });
   });
-  return { server, situs, purchases, users, signupBodies, profiles, userData, reports, requests, addUser, makeAdmin: (email) => { const u = [...users.values()].find((x) => x.email === email); profiles.get(u.id).is_admin = true; }, confirmAll: () => users.forEach((u) => { u.confirmed = true; }), today };
+  return { server, logouts, refreshCount: () => refresh.size, situs, purchases, users, signupBodies, profiles, userData, reports, requests, addUser, makeAdmin: (email) => { const u = [...users.values()].find((x) => x.email === email); profiles.get(u.id).is_admin = true; }, confirmAll: () => users.forEach((u) => { u.confirmed = true; }), today };
 }
 module.exports = createMock;
 if (require.main === module) {

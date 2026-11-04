@@ -1876,3 +1876,12 @@ body.app .empty-arah > p:not(.tiny) { font-size: 15px; max-width: 46ch; }
 .plan-beta { width: 100%; box-sizing: border-box; font: inherit; text-align: left; cursor: pointer; color: inherit; }
 .side .plan-beta { color: var(--side-ink); }
 
+
+/* Tamu: menu yang perlu akun gratis diberi gembok kecil; ajakan daftar di Ringkasan */
+.nav-lock { margin-left: auto; color: var(--side-muted); opacity: .8; flex: none; }
+.bn svg.nav-lock { position: absolute; top: 4px; right: calc(50% - 25px); width: 11px; height: 11px; margin: 0; color: var(--ink-3); }
+.nav svg.nav-lock { width: 12px; height: 12px; }
+.empty-arah.tamu .row-actions { margin-top: 4px; }
+.tamu-ajak { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; margin-bottom: 16px; }
+.tamu-ajak .row-actions { margin-left: auto; }
+.count + .nav-lock { margin-left: 6px; }
