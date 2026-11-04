@@ -283,3 +283,48 @@ begin
 end $$;
 revoke all on function public.admin_set_situs(date, date) from public, anon;
 grant execute on function public.admin_set_situs(date, date) to authenticated;
+
+-- =====================================================================
+-- MASUKAN PENGGUNA (keputusan pemilik 4 Nov 2026)
+-- Hanya akun yang sudah masuk bisa mengirim (tamu diarahkan ke WhatsApp). Pengguna hanya bisa MENGIRIM;
+-- yang bisa membaca & mengubah status hanya admin. Isi laporan/angka tidak pernah ikut dikirim oleh website.
+-- =====================================================================
+create table if not exists public.feedback (
+  id               bigint generated always as identity primary key,
+  user_id          uuid not null default auth.uid() references auth.users (id) on delete cascade,
+  jenis            text not null check (jenis in ('saran', 'masalah', 'lainnya')),
+  pesan            text not null check (char_length(btrim(pesan)) between 5 and 2000),
+  halaman          text not null default '' check (char_length(halaman) <= 40),
+  boleh_dihubungi  boolean not null default false,
+  status           text not null default 'baru' check (status in ('baru', 'dibaca', 'selesai')),
+  created_at       timestamptz not null default now()
+);
+create index if not exists feedback_user_created on public.feedback (user_id, created_at desc);
+create index if not exists feedback_created on public.feedback (created_at desc);
+alter table public.feedback enable row level security;
+drop policy if exists "masukan: kirim sendiri" on public.feedback;
+create policy "masukan: kirim sendiri" on public.feedback
+  for insert with check (user_id = auth.uid() and status = 'baru');
+drop policy if exists "masukan: admin baca" on public.feedback;
+create policy "masukan: admin baca" on public.feedback
+  for select using (public.is_admin());
+drop policy if exists "masukan: admin ubah status" on public.feedback;
+create policy "masukan: admin ubah status" on public.feedback
+  for update using (public.is_admin()) with check (public.is_admin());
+revoke all on public.feedback from anon, authenticated;
+grant insert (jenis, pesan, halaman, boleh_dihubungi) on public.feedback to authenticated;
+grant select on public.feedback to authenticated;           -- baris tetap dibatasi RLS (admin saja)
+grant update (status) on public.feedback to authenticated;  -- baris tetap dibatasi RLS (admin saja)
+
+-- Batas 5 masukan per akun per 24 jam (mencegah spam). Ditegakkan di database, bukan hanya di browser.
+create or replace function public.feedback_batas() returns trigger
+language plpgsql security definer set search_path = public as $$
+begin
+  if (select count(*) from public.feedback f where f.user_id = new.user_id and f.created_at > now() - interval '24 hours') >= 5 then
+    raise exception 'BATAS_MASUKAN: Anda sudah mengirim 5 masukan dalam 24 jam terakhir. Terima kasih! Silakan kirim lagi besok, atau hubungi kami lewat WhatsApp.'
+      using errcode = 'P0001';
+  end if;
+  return new;
+end $$;
+drop trigger if exists feedback_batas on public.feedback;
+create trigger feedback_batas before insert on public.feedback for each row execute function public.feedback_batas();

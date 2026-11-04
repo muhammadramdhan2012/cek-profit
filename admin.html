@@ -9,7 +9,7 @@
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <script src="assets/theme.js?v=f5317dffb6"></script>
 <link rel="stylesheet" href="assets/base.css?v=b11f335bb1">
-<link rel="stylesheet" href="assets/account.css?v=6e43704e14">
+<link rel="stylesheet" href="assets/account.css?v=cf43446c3f">
 <script src="assets/config.js?v=623170c157"></script>
 </head>
 <body class="admin">
@@ -21,7 +21,7 @@
   <main class="admin-grid" id="main" aria-live="polite"><p class="muted">Memuat…</p></main>
 </div>
 <div id="toast" class="toast" role="status" hidden></div>
-<script src="assets/cloud.js?v=9ae481cdfc"></script>
+<script src="assets/cloud.js?v=3298ff6c94"></script>
 <script>
 (() => {
   const C = window.CEK_CONFIG || {};
@@ -37,6 +37,9 @@
   const HARGA = { normal: 149000, awal: 99000 };   // harga Pro per tahun & harga pengguna awal (keputusan pemilik 1 Nov 2026)
   // situs = status_situs() dari server; null bila SQL tahap 2 belum dijalankan. beli = id pengguna yang formnya terbuka.
   let profiles = [], requests = [], purchases = [], situs = null, beli = null, q = '';
+  // masukan = null bila tabel feedback belum dibuat (SQL belum dijalankan ulang). fbFilter: 'aktif' (baru+dibaca) / 'semua'.
+  let masukan = null, fbFilter = 'aktif';
+  const JENIS = { saran: 'Saran fitur', masalah: 'Ada yang salah', lainnya: 'Lainnya' };
   const sudahHargaAwal = (id) => purchases.some((b) => b.user_id === id && b.harga_pengguna_awal);
 
   async function load() {
@@ -48,7 +51,7 @@
       if (!me || !me.is_admin) { main.innerHTML = '<div class="panel"><h2>Bukan admin</h2><p class="muted" style="margin-top:8px">Akun ini belum ditandai admin. Di Supabase: Table Editor → profiles → baris akun Anda → ubah <code>is_admin</code> menjadi <code>true</code>.</p></div>'; return; }
       [profiles, requests] = await Promise.all([cloud.db.adminProfiles(), cloud.db.adminRequests()]);
       // Tahap 2: gagal = SQL tahap 2 belum dijalankan; halaman tetap bisa dipakai dengan fitur lama.
-      [situs, purchases] = await Promise.all([cloud.db.statusSitus().catch(() => null), cloud.db.adminPurchases().catch(() => [])]);
+      [situs, purchases, masukan] = await Promise.all([cloud.db.statusSitus().catch(() => null), cloud.db.adminPurchases().catch(() => []), cloud.db.adminFeedback().catch(() => null)]);
       render();
     } catch (e) { main.innerHTML = `<p class="panel bad">${esc(e.message)}</p>`; }
   }
@@ -64,7 +67,9 @@
         <div class="stat"><span class="small muted">Pro aktif</span><b>${pros.length}</b></div>
         <div class="stat"><span class="small muted">Permintaan menunggu</span><b>${open.length}</b></div>
         <div class="stat"><span class="small muted">Daftar 7 hari terakhir</span><b>${profiles.filter((p) => p.created_at > week).length}</b></div>
+        <div class="stat"><span class="small muted">Masukan baru</span><b>${masukan ? masukan.filter((f) => f.status === 'baru').length : '—'}</b></div>
       </section>
+      ${panelMasukan(byId)}
       ${situs ? `<section class="panel"><h3 style="margin-bottom:6px">Masa beta &amp; pembelian</h3>
         <p class="small muted" style="margin-bottom:12px">Tanggal server hari ini: <b>${tgl(situs.hari_ini)}</b>. Masa beta ${situs.beta_aktif ? '<span class="badge ok">aktif</span>' : '<span class="badge">tidak aktif</span>'}${situs.pembelian_dibuka_pada ? ` · batas klaim harga pengguna awal ${tgl(situs.klaim_harga_awal_sampai)}` : ''}</p>
         <div class="row-gap" style="align-items:end;flex-wrap:wrap">
@@ -89,6 +94,23 @@
       ${purchases.length ? `<section class="panel"><h3 style="margin-bottom:12px">Catatan pembelian Pro</h3><div class="tablewrap"><table class="tbl"><thead><tr><th>Dicatat</th><th>Pengguna</th><th>Harga</th><th>Berlaku</th><th>Catatan</th></tr></thead><tbody>
         ${purchases.map((b) => `<tr><td class="small">${tgl(b.created_at)}</td><td>${esc((byId.get(b.user_id) || {}).email || b.user_id)}</td><td>${rp(b.harga)}${b.harga_pengguna_awal ? ' <span class="badge ok">pengguna awal</span>' : ''}</td><td class="small">${tgl(b.mulai)} – ${tgl(b.sampai)}</td><td class="small">${esc(b.catatan)}</td></tr>`).join('')}
         </tbody></table></div></section>` : ''}`;
+  }
+  /** Masukan pengguna: isi pesan dari pengguna (tidak tepercaya) selalu di-escape. */
+  function panelMasukan(byId) {
+    if (!masukan) return '<section class="panel"><h3 style="margin-bottom:6px">Masukan pengguna</h3><p class="small muted">Belum aktif: jalankan ulang <code>supabase/schema.sql</code> di SQL Editor (bagian MASUKAN PENGGUNA).</p></section>';
+    const list = masukan.filter((f) => fbFilter === 'semua' || f.status !== 'selesai');
+    const kontak = (p) => [p.email, p.whatsapp].filter(Boolean).map(esc).join(' · ');
+    return `<section class="panel"><div style="display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:12px"><h3>Masukan pengguna</h3>
+      <div class="row-gap"><button class="btn sm ${fbFilter === 'aktif' ? 'primary' : ''}" type="button" data-fb-filter="aktif">Belum selesai</button><button class="btn sm ${fbFilter === 'semua' ? 'primary' : ''}" type="button" data-fb-filter="semua">Semua (${masukan.length})</button></div></div>
+      ${list.length ? `<div class="fb-list">${list.map((f) => { const p = byId.get(f.user_id) || {}; return `<article class="fb-item">
+        <div class="fb-meta"><span class="badge ${f.jenis === 'masalah' ? 'bad' : f.jenis === 'saran' ? 'ok' : ''}">${JENIS[f.jenis] || esc(f.jenis)}</span>
+          <span class="badge ${f.status === 'baru' ? 'todo' : f.status === 'selesai' ? 'ok' : ''}">${esc(f.status)}</span>
+          <span class="tiny faint">${tgl(f.created_at)}${f.halaman ? ` · halaman ${esc(f.halaman)}` : ''}</span></div>
+        <p class="fb-pesan">${esc(f.pesan)}</p>
+        <div class="fb-meta"><span class="small"><b>${esc(p.full_name || p.email || 'Pengguna')}</b>${p.store_name ? ` · ${esc(p.store_name)}` : ''}</span>
+          ${f.boleh_dihubungi ? `<span class="small">Boleh dihubungi: ${kontak(p) || '—'}</span>` : '<span class="tiny faint">Tidak minta dihubungi</span>'}</div>
+        <div class="row-gap">${f.status === 'baru' ? `<button class="btn sm" type="button" data-fb="${f.id}" data-st="dibaca">Tandai dibaca</button>` : ''}${f.status !== 'selesai' ? `<button class="btn sm primary" type="button" data-fb="${f.id}" data-st="selesai">Selesai</button>` : `<button class="btn sm quiet" type="button" data-fb="${f.id}" data-st="dibaca">Buka lagi</button>`}</div>
+      </article>`; }).join('')}</div>` : `<p class="muted small">${masukan.length ? 'Semua masukan sudah selesai. 🎉' : 'Belum ada masukan.'}</p>`}</section>`;
   }
   /** Form catat pembelian (satu baris di bawah pengguna). Server tetap memeriksa semua syarat harga pengguna awal. */
   function formBeli(p) {
@@ -128,6 +150,8 @@
         await cloud.db.adminSetPro(t.dataset.pro, until); toast(`Pro aktif sampai ${tgl(until)}.`); return load();
       }
       if (t.dataset.off) { if (!confirm('Matikan Pro pengguna ini?')) return; await cloud.db.adminSetPro(t.dataset.off, null); toast('Pro dimatikan.'); return load(); }
+      if (t.dataset.fbFilter) { fbFilter = t.dataset.fbFilter; return render(); }
+      if (t.dataset.fb) { await cloud.db.adminSetFeedbackStatus(+t.dataset.fb, t.dataset.st); const f = masukan.find((x) => x.id === +t.dataset.fb); if (f) f.status = t.dataset.st; toast(t.dataset.st === 'selesai' ? 'Masukan ditandai selesai.' : 'Status masukan diperbarui.'); return render(); }
       if (t.dataset.reject) { await cloud.db.adminSetRequestStatus(+t.dataset.reject, 'ditolak'); toast('Permintaan ditolak.'); return load(); }
     } catch (err) { toast(err.message); }
   });

@@ -307,6 +307,29 @@ const memStore = () => { const m = new Map(); return { getItem: (k) => (m.has(k)
     truthy(await S.segarkanBeta(doc, cfg, async () => ({ ok: false })) === null && els[0].hidden === true, 'fungsi belum ada (404) → diam');
     truthy(await S.segarkanBeta(doc, {}, async () => { throw new Error('tidak boleh dipanggil'); }) === null, 'akun belum aktif → tidak memanggil server');
   });
+  /* ---- Masukan pengguna (keputusan pemilik 4 Nov 2026) ---- */
+  await t('Masukan: pengguna mengirim (tanpa membaca balik), admin membaca & ubah status', async () => {
+    const m = createMock(); await new Promise((r) => m.server.listen(0, r)); const u2 = `http://127.0.0.1:${m.server.address().port}`;
+    m.addUser('seller@toko.id', 'sandiku123', {}); m.addUser('adm@toko.id', 'adminadmin', {}); m.makeAdmin('adm@toko.id');
+    const S2 = fresh().init({ url: u2, key: 'anon', store: memStore() }); await S2.auth.signIn({ email: 'seller@toko.id', password: 'sandiku123' });
+    await S2.db.kirimMasukan({ jenis: 'saran', pesan: '  Tolong tambah Lazada  ', halaman: 'produk', bolehDihubungi: true });
+    truthy(m.feedback.length === 1 && m.feedback[0].pesan === 'Tolong tambah Lazada' && m.feedback[0].halaman === 'produk' && m.feedback[0].boleh_dihubungi, 'tersimpan & dirapikan');
+    truthy((await S2.db.adminFeedback()).length === 0, 'pengguna tidak bisa membaca');
+    for (let i = 2; i <= 5; i++) await S2.db.kirimMasukan({ jenis: 'lainnya', pesan: `masukan ke-${i}` });
+    try { await S2.db.kirimMasukan({ jenis: 'lainnya', pesan: 'masukan ke-6' }); throw new Error('harus gagal'); }
+    catch (e) { truthy(/sudah mengirim 5 masukan/.test(e.message) && !/BATAS_/.test(e.message), e.message); }
+    const A2 = fresh().init({ url: u2, key: 'anon', store: memStore() }); await A2.auth.signIn({ email: 'adm@toko.id', password: 'adminadmin' });
+    const semua = await A2.db.adminFeedback(); truthy(semua.length === 5, 'admin membaca semua');
+    await A2.db.adminSetFeedbackStatus(semua[4].id, 'dibaca'); truthy(m.feedback[0].status === 'dibaca', 'status diubah');
+    m.server.close();
+  });
+  await t('Masukan: tabel belum dibuat (SQL belum dijalankan) → error 404 yang bisa dikenali', async () => {
+    const m = createMock({ masukan: false }); await new Promise((r) => m.server.listen(0, r));
+    m.addUser('x@toko.id', 'sandiku123', {});
+    const X = fresh().init({ url: `http://127.0.0.1:${m.server.address().port}`, key: 'anon', store: memStore() }); await X.auth.signIn({ email: 'x@toko.id', password: 'sandiku123' });
+    try { await X.db.kirimMasukan({ jenis: 'saran', pesan: 'halo semua' }); throw new Error('harus gagal'); } catch (e) { truthy(e.status === 404, String(e.status)); }
+    m.server.close();
+  });
   /* ---- Sesi (keputusan pemilik 4 Nov 2026): ingat saya, keluar dari semua perangkat, keluar otomatis 30 hari ---- */
   mock.addUser('sesi@toko.id', 'sandiku123', {});
   const SK = 'cekprofit.session';

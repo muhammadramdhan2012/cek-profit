@@ -9,7 +9,8 @@ const crypto = require('crypto');
 // dan ganti sandi. Masuk dengan sandi lama yang lemah TETAP berhasil, dengan penanda weak_password (meniru Supabase
 // Auth; perilaku server sungguhan tetap harus diuji di Supabase).
 // tahap2: false = meniru database SEBELUM SQL tahap 2 dijalankan (RPC status_* tidak ada → 404).
-function createMock({ confirmEmail = false, tokenTtl = 3600, strongPasswords = false, tahap2 = true } = {}) {
+function createMock({ confirmEmail = false, tokenTtl = 3600, strongPasswords = false, tahap2 = true, masukan = true } = {}) {
+  const feedback = []; let fbSeq = 1;   // masukan: false = SQL tabel feedback belum dijalankan (404)
   const weak = (pw) => !pw || pw.length < 8 || (strongPasswords && !(/[a-z]/.test(pw) && /[A-Z]/.test(pw) && /[0-9]/.test(pw)));
   const weakMsg = (pw) => (!pw || pw.length < 8 ? 'Password should be at least 8 characters.' : 'Password should contain at least one character of each: abcdefghijklmnopqrstuvwxyz, ABCDEFGHIJKLMNOPQRSTUVWXYZ, 0123456789.');
   const signupBodies = [];
@@ -164,6 +165,21 @@ function createMock({ confirmEmail = false, tokenTtl = 3600, strongPasswords = f
       if (req.method === 'POST') { const r = { id: reqSeq++, user_id: uid, plan: body.plan, note: body.note || '', status: 'baru', created_at: new Date().toISOString() }; requests.push(r); return send(201, [r]); }
       if (req.method === 'PATCH') { if (!isAdmin(uid)) return send(200, []); const r = requests.find((x) => x.id === +eq('id')); if (r) r.status = body.status; return send(204); }
     }
+    if (table === 'feedback') {
+      if (!masukan) return send(404, { code: 'PGRST205', message: "Could not find the table 'public.feedback' in the schema cache" });
+      if (req.method === 'POST') {
+        // Meniru RLS + grant kolom + trigger feedback_batas: hanya kolom tertentu; tanpa baca (return=minimal).
+        if (Object.keys(body).some((k) => !['jenis', 'pesan', 'halaman', 'boleh_dihubungi'].includes(k))) return send(403, { message: 'permission denied for table feedback' });
+        if (!['saran', 'masalah', 'lainnya'].includes(body.jenis) || String(body.pesan || '').trim().length < 5 || String(body.pesan).length > 2000) return send(400, { code: '23514', message: 'new row violates check constraint' });
+        if ((req.headers.prefer || '').includes('return=representation')) return send(403, { message: 'permission denied (SELECT) — pakai return=minimal' });
+        const sehari = Date.now() - 86400000;
+        if (feedback.filter((f) => f.user_id === uid && Date.parse(f.created_at) > sehari).length >= 5) return send(400, { code: 'P0001', message: 'BATAS_MASUKAN: Anda sudah mengirim 5 masukan dalam 24 jam terakhir. Terima kasih! Silakan kirim lagi besok, atau hubungi kami lewat WhatsApp.' });
+        feedback.push({ id: fbSeq++, user_id: uid, jenis: body.jenis, pesan: body.pesan, halaman: body.halaman || '', boleh_dihubungi: !!body.boleh_dihubungi, status: 'baru', created_at: new Date().toISOString() });
+        return send(201);
+      }
+      if (req.method === 'GET') return send(200, isAdmin(uid) ? feedback.slice().reverse() : []);
+      if (req.method === 'PATCH') { if (!isAdmin(uid)) return send(200, []); if (Object.keys(body).some((k) => k !== 'status')) return send(403, { message: 'permission denied' }); const r = feedback.find((x) => x.id === +eq('id')); if (r) r.status = body.status; return send(204); }
+    }
     if (table === 'rpc/admin_set_pro') {
       if (!isAdmin(uid)) return send(400, { message: 'Hanya admin' });
       const r = profiles.get(body.target); if (r) r.pro_until = body.until;
@@ -201,7 +217,7 @@ function createMock({ confirmEmail = false, tokenTtl = 3600, strongPasswords = f
     }
     return send(404, { message: 'not found' });
   });
-  return { server, logouts, refreshCount: () => refresh.size, situs, purchases, users, signupBodies, profiles, userData, reports, requests, addUser, makeAdmin: (email) => { const u = [...users.values()].find((x) => x.email === email); profiles.get(u.id).is_admin = true; }, confirmAll: () => users.forEach((u) => { u.confirmed = true; }), today };
+  return { server, feedback, logouts, refreshCount: () => refresh.size, situs, purchases, users, signupBodies, profiles, userData, reports, requests, addUser, makeAdmin: (email) => { const u = [...users.values()].find((x) => x.email === email); profiles.get(u.id).is_admin = true; }, confirmAll: () => users.forEach((u) => { u.confirmed = true; }), today };
 }
 module.exports = createMock;
 if (require.main === module) {

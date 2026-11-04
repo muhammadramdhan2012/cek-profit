@@ -1909,3 +1909,22 @@ body.app .empty-arah > p:not(.tiny) { font-size: 15px; max-width: 46ch; }
 @media (max-width: 420px) { .ajak { gap: 14px; } .ajak-list { gap: 6px 10px; } .ajak-list li { font-size: 12.5px; gap: 6px; } .ajak-list svg { width: 17px; height: 17px; } .ajak-aksi { padding: 12px; gap: 6px; } .ajak-beta { padding-top: 8px; } }
 @media (prefers-reduced-motion: reduce) { .btn.ajak-daftar span { transition: none; } }
 .count + .nav-lock { margin-left: 6px; }
+
+/* Kirim masukan */
+.side-links { display: flex; flex-wrap: wrap; gap: 2px 10px; }
+button.side-help { background: none; border: 0; font: inherit; font-size: 13px; cursor: pointer; }
+.fb-form { display: grid; gap: 14px; }
+.fb-jenis { border: 0; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 8px; }
+.fb-jenis legend { margin-bottom: 8px; padding: 0; }
+.fb-jenis label { cursor: pointer; }
+.fb-jenis input { position: absolute; opacity: 0; pointer-events: none; }
+.fb-jenis span { display: inline-block; padding: 8px 14px; border-radius: var(--r-pill); border: 1px solid var(--border-strong); font-size: var(--text-sm); font-weight: var(--weight-semibold); color: var(--ink-2); }
+.fb-jenis input:checked + span { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); }
+.fb-jenis input:focus-visible + span { box-shadow: var(--ring); }
+#fb-pesan { min-height: 120px; resize: vertical; }
+.fb-kontak { display: flex; gap: 10px; align-items: flex-start; font-size: var(--text-sm); cursor: pointer; }
+.fb-kontak input { width: 18px; height: 18px; margin: 1px 0 0; accent-color: var(--accent); flex: none; }
+.fb-kontak span { display: grid; gap: 2px; } .fb-kontak small { color: var(--ink-3); font-size: var(--text-xs); }
+#fb-msg:empty { display: none; }
+#fb-msg .btn { margin-top: 8px; }
+#fb-msg.bad { color: var(--cost); }
