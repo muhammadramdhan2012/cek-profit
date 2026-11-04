@@ -24,6 +24,8 @@
 
   const eye = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg>';
   const gLogo = '<svg width="18" height="18" viewBox="0 0 48 48" aria-hidden="true"><path fill="#FFC107" d="M43.6 20.5H42V20H24v8h11.3C33.7 32.7 29.3 36 24 36c-6.6 0-12-5.4-12-12s5.4-12 12-12c3 0 5.8 1.1 7.9 3l5.7-5.7C34 6.1 29.3 4 24 4 12.9 4 4 12.9 4 24s8.9 20 20 20 20-8.9 20-20c0-1.3-.1-2.4-.4-3.5z"/><path fill="#FF3D00" d="M6.3 14.7l6.6 4.8C14.7 15.1 19 12 24 12c3 0 5.8 1.1 7.9 3l5.7-5.7C34 6.1 29.3 4 24 4 16.3 4 9.7 8.3 6.3 14.7z"/><path fill="#4CAF50" d="M24 44c5.2 0 9.9-2 13.4-5.2l-6.2-5.2C29.2 35.1 26.7 36 24 36c-5.3 0-9.7-3.3-11.3-8l-6.5 5C9.5 39.6 16.2 44 24 44z"/><path fill="#1976D2" d="M43.6 20.5H42V20H24v8h11.3c-.8 2.2-2.2 4.2-4.1 5.6l6.2 5.2C37 39.2 44 34 44 24c0-1.3-.1-2.4-.4-3.5z"/></svg>';
+  /** Pilihan "Ingat saya" hanya ada di tab Masuk; daftar & tab lain memakai bawaan (diingat). */
+  const ingatDipilih = () => { const c = document.getElementById('ingat'); return c ? c.checked : true; };
   // Tombol Google hanya tampil bila pemilik sudah mengaktifkan provider (config.googleLogin = true).
   const google = () => (C.googleLogin ? `<button class="btn g-btn" type="button" id="g-login">${gLogo}<span>Lanjutkan dengan Google</span></button><div class="or">atau gunakan email</div>` : '');
   // Tanda kolom wajib di form Daftar email (dibacakan pembaca layar lewat atribut required, bukan lewat bintang).
@@ -74,6 +76,7 @@
         ${daftar ? emailField('contoh@email.com', REQ) : emailField()}
         ${daftar ? phoneField() : ''}
         ${daftar ? pwField('pw', `Kata sandi${REQ}`, 'new-password', 'Buat kata sandi', { baru: true }) + confirmField('pw2', 'pw', REQ) : pwField('pw', 'Kata sandi', 'current-password', 'Masukkan kata sandi')}
+        ${daftar ? '' : `<label class="ingat"><input type="checkbox" id="ingat" checked><span>Ingat saya di perangkat ini<small>Lepas centang bila memakai komputer bersama. Anda akan keluar otomatis saat browser ditutup.</small></span></label>`}
         ${daftar ? '<p class="tiny faint">Dengan mendaftar, Anda menyetujui <a href="privasi.html">ketentuan &amp; privasi</a>.</p>' : '<button class="btn link forgot" type="button" data-view="lupa">Lupa kata sandi?</button>'}
         <button class="btn primary" type="submit">${daftar ? 'Daftar gratis' : 'Masuk'}</button>
       </form>
@@ -106,7 +109,9 @@
         <button class="btn" type="submit">Simpan profil</button>
       </form>
       <div class="row-gap"><a class="btn primary" href="${esc(next)}" style="flex:1">Buka dashboard</a><button class="btn quiet" type="button" id="logout">Keluar</button></div>
-      <button class="btn link" type="button" data-view="sandi-baru" style="justify-self:center">Ganti kata sandi</button>`;
+      <button class="btn link" type="button" data-view="sandi-baru" style="justify-self:center">Ganti kata sandi</button>
+      <div class="sesi-note"><p class="tiny faint">${cloud.auth.ingat() ? `Perangkat ini diingat. Anda tetap masuk sampai menekan Keluar, atau otomatis keluar bila website tidak dibuka ${cloud.auth.IDLE_HARI} hari.` : 'Perangkat ini tidak diingat: Anda keluar otomatis saat browser ditutup.'}</p>
+        <button class="btn link" type="button" id="logout-semua">Keluar dari semua perangkat</button></div>`;
     message = null;
   }
 
@@ -202,7 +207,7 @@
           if (r.session) return go('Akun dibuat. Membuka dashboard…');
           view = 'masuk'; message = { ok: true, text: `Hampir selesai. Buka email di ${email} dan klik tautan konfirmasi, lalu masuk. Periksa juga folder spam.` };
         } else {
-          await cloud.auth.signIn({ email, password }); track('masuk');
+          await cloud.auth.signIn({ email, password, ingat: ingatDipilih() }); track('masuk');
           return go('Berhasil masuk. Membuka dashboard…');
         }
       } else if (f.id === 'f-lupa') {
@@ -262,8 +267,15 @@
       busy(t, true, 'Membuka Google…'); track('google');
       try {
         if (next !== 'dashboard.html') ss.set(NEXT_KEY, next);
-        location.assign(await cloud.auth.oauthStart('google', here()));
+        location.assign(await cloud.auth.oauthStart('google', here(), { ingat: ingatDipilih() }));
       } catch (err) { busy(t, false); showErr('Masuk dengan Google gagal dimulai. Silakan coba lagi.'); }
+    } else if (t.id === 'logout-semua') {
+      busy(t, true, 'Memproses…');
+      const ok = await cloud.auth.signOut({ semua: true }); track('keluar-semua');
+      view = 'masuk';
+      message = ok ? { ok: true, text: 'Anda sudah keluar dari semua perangkat. Perangkat lain akan keluar paling lambat dalam 1 jam.' }
+        : { ok: false, text: 'Anda sudah keluar dari perangkat ini, tetapi server tidak terjangkau sehingga perangkat lain belum dikeluarkan. Masuk lagi saat online, lalu ulangi.' };
+      render();
     } else if (t.id === 'logout') { await cloud.auth.signOut(); view = 'masuk'; message = { ok: true, text: 'Anda sudah keluar.' }; render(); }
   });
   // Saat mengetik: daftar syarat sandi diperbarui; pesan salah dihapus begitu isian sudah benar (tidak menyalahkan lebih awal).

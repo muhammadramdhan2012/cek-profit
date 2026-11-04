@@ -14,13 +14,24 @@ const CekCloud = (() => {
   const PKCE_KEY = 'cekprofit.pkce';    // code_verifier login Google (sementara, dihapus setelah dipakai)
   let cfg = { url: '', key: '' };
   let session = null;               // {access_token, refresh_token, expires_at, user}
-  let storage = null;
+  let storage = null;              // localStorage: sesi "ingat saya" (bertahan setelah browser ditutup)
+  let tabStorage = null;           // sessionStorage: sesi tanpa "ingat saya" (hilang saat tab/browser ditutup)
+  let ingat = true;
+  const INGAT_KEY = 'cekprofit.ingat';   // pilihan "ingat saya" selama alur login Google (sementara)
+  /** Sesi otomatis berakhir bila website tidak dibuka selama ini (keputusan pemilik 4 Nov 2026). */
+  const IDLE_HARI = 30;
   const listeners = new Set();
   let refreshing = null;
 
   const nowSec = () => Math.floor(Date.now() / 1000);
-  const read = () => { try { return JSON.parse(storage.getItem(SESSION_KEY) || 'null'); } catch (e) { return null; } };
-  const write = (s) => { try { if (s) storage.setItem(SESSION_KEY, JSON.stringify(s)); else storage.removeItem(SESSION_KEY); } catch (e) { /* abaikan */ } };
+  const baca = (st) => { try { return JSON.parse(st.getItem(SESSION_KEY) || 'null'); } catch (e) { return null; } };
+  /** Kunci yang sama (cekprofit.session) di salah satu tempat; localStorage didahulukan agar sesi lama tetap terbaca. */
+  const read = () => { const s = baca(storage); if (s) { ingat = true; return s; } const t = baca(tabStorage); if (t) ingat = false; return t; };
+  const write = (s) => {
+    const [pakai, lain] = ingat ? [storage, tabStorage] : [tabStorage, storage];
+    try { lain.removeItem(SESSION_KEY); } catch (e) { /* abaikan */ }
+    try { if (s) pakai.setItem(SESSION_KEY, JSON.stringify(s)); else pakai.removeItem(SESSION_KEY); } catch (e) { /* abaikan */ }
+  };
   const emit = () => listeners.forEach((fn) => { try { fn(session); } catch (e) { /* abaikan */ } });
 
   /** Pesan error Supabase → kalimat yang dimengerti pengguna. */
@@ -73,7 +84,7 @@ const CekCloud = (() => {
   function setSession(s) {
     if (s && s.access_token) {
       session = { access_token: s.access_token, refresh_token: s.refresh_token,
-        expires_at: s.expires_at || nowSec() + (Number(s.expires_in) || 3600), user: s.user || (session && session.user) || null };
+        expires_at: s.expires_at || nowSec() + (Number(s.expires_in) || 3600), user: s.user || (session && session.user) || null, last_active: nowSec() };
     } else session = null;
     write(session);
     emit();
@@ -93,6 +104,18 @@ const CekCloud = (() => {
     await refreshing;
   }
 
+  /** Website tidak dibuka lebih dari IDLE_HARI: sesi dihapus dari perangkat sekarang juga, lalu (bila online) dicabut di
+   *  server. Token akses lama biasanya sudah kedaluwarsa, jadi diperbarui dulu sekali untuk bisa memanggil logout. */
+  function akhiriSesiLama(lama) {
+    session = null; write(null);
+    if (!lama || !lama.refresh_token) return Promise.resolve();
+    return (async () => {
+      try {
+        const s = await http('/auth/v1/token?grant_type=refresh_token', { method: 'POST', auth: false, body: { refresh_token: lama.refresh_token } });
+        if (s && s.access_token) await http('/auth/v1/logout?scope=local', { method: 'POST', auth: false, headers: { Authorization: `Bearer ${s.access_token}` } });
+      } catch (e) { /* offline: sesi di perangkat sudah dihapus */ }
+    })();
+  }
   const b64url = (bytes) => btoa(String.fromCharCode(...bytes)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
   const pkceStore = () => { try { if (typeof sessionStorage !== 'undefined') return sessionStorage; } catch (e) { /* abaikan */ } return storage; };
   /** Token baru dari URL dianggap sah hanya bila server mengenali penggunanya; bila tidak, sesi dihapus. */
@@ -116,7 +139,9 @@ const CekCloud = (() => {
       if (res && res.access_token) { setSession(res); return { session: true }; }
       return { session: false, confirm: true };      // perlu konfirmasi email
     },
-    async signIn({ email, password }) {
+    /** `ingat` false: sesi disimpan di sessionStorage dan hilang saat tab/browser ditutup (komputer bersama). */
+    async signIn({ email, password, ingat: ig = true }) {
+      ingat = ig !== false;
       setSession(await http('/auth/v1/token?grant_type=password', { method: 'POST', auth: false, body: { email, password } }));
       return session;
     },
@@ -128,7 +153,8 @@ const CekCloud = (() => {
      * mengembalikan ?code= yang hanya bisa ditukar dengan verifier itu. Tidak ada token di URL. Lingkup Google bawaan
      * Supabase (email, profil); tidak meminta akses Gmail/Drive.
      */
-    async oauthStart(provider, redirectTo) {
+    async oauthStart(provider, redirectTo, { ingat: ig = true } = {}) {
+      pkceStore().setItem(INGAT_KEY, ig === false ? '0' : '1');
       const verifier = b64url(crypto.getRandomValues(new Uint8Array(32)));
       const challenge = b64url(new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(verifier))));
       pkceStore().setItem(PKCE_KEY, verifier);
@@ -150,6 +176,7 @@ const CekCloud = (() => {
       }
       if (q.get('code')) {
         const verifier = pkceStore().getItem(PKCE_KEY); pkceStore().removeItem(PKCE_KEY);
+        ingat = pkceStore().getItem(INGAT_KEY) !== '0'; pkceStore().removeItem(INGAT_KEY);
         if (!verifier) throw new CloudError(400, { message: 'flow state: code verifier tidak ditemukan' });
         setSession(await http('/auth/v1/token?grant_type=pkce', { method: 'POST', auth: false, body: { auth_code: q.get('code'), code_verifier: verifier } }));
         await verifyUser();
@@ -167,9 +194,12 @@ const CekCloud = (() => {
       if (session && u && u.id) { session.user = u; write(session); emit(); }
       return u;
     },
-    async signOut() {
-      try { if (session) await http('/auth/v1/logout', { method: 'POST' }); } catch (e) { /* tetap keluar lokal */ }
+    /** Keluar dari perangkat ini saja; `semua: true` mencabut sesi di semua perangkat (laptop, HP, komputer lain). */
+    async signOut({ semua = false } = {}) {
+      let ok = true;
+      try { if (session) await http(`/auth/v1/logout?scope=${semua ? 'global' : 'local'}`, { method: 'POST' }); } catch (e) { ok = false; }
       setSession(null);
+      return ok;     // false: sudah keluar di perangkat ini, tetapi server tidak terjangkau
     },
     /** Membaca token dari hash URL setelah login Google / konfirmasi email / reset sandi. */
     async fromUrlHash(hash) {
@@ -182,6 +212,8 @@ const CekCloud = (() => {
     },
     user: () => (session && session.user) || null,
     session: () => session,
+    ingat: () => ingat,
+    IDLE_HARI,
     onChange(fn) { listeners.add(fn); return () => listeners.delete(fn); },
   };
 
@@ -229,13 +261,23 @@ const CekCloud = (() => {
   /** Pro aktif bila pro_until >= hari ini (zona waktu pengguna). */
   const isPro = (profile, today = new Date().toLocaleDateString('sv-SE')) => !!(profile && profile.pro_until && profile.pro_until >= today);
 
-  function init({ url, key, store } = {}) {
+  const memori = () => { const m = new Map(); return { getItem: (k) => (m.has(k) ? m.get(k) : null), setItem: (k, v) => m.set(k, String(v)), removeItem: (k) => m.delete(k) }; };
+  function init({ url, key, store, tabStore } = {}) {
     cfg = { url: String(url || '').replace(/\/+$/, ''), key: key || '' };
-    storage = store || (typeof localStorage !== 'undefined' ? localStorage : { getItem: () => null, setItem() {}, removeItem() {} });
+    storage = store || (typeof localStorage !== 'undefined' ? localStorage : memori());
+    let ss = null; try { if (typeof sessionStorage !== 'undefined') ss = sessionStorage; } catch (e) { /* diblokir */ }
+    tabStorage = tabStore || ss || memori();
+    ingat = true; idle = null;
     session = cfg.url ? read() : null;
+    if (session) {
+      // Sesi lama (sebelum fitur ini) belum punya last_active: mulai dihitung sekarang, tidak langsung dikeluarkan.
+      if (session.last_active && nowSec() - session.last_active > IDLE_HARI * 86400) idle = akhiriSesiLama(session);
+      else { session.last_active = nowSec(); write(session); }
+    }
     return api;
   }
-  const api = { init, auth, db, isPro, CloudError, get enabled() { return !!cfg.url; } };
+  let idle = null;
+  const api = { init, auth, db, isPro, CloudError, get enabled() { return !!cfg.url; }, /** untuk uji */ get idleSelesai() { return idle; } };
   return api;
 })();
 if (typeof module !== 'undefined') module.exports = CekCloud;

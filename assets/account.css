@@ -140,3 +140,10 @@ body.acct .acct-note { max-width: 46ch; line-height: 1.55; }
   body.acct .acct-foot { justify-content: center; }
   body.acct .acct-help { margin-left: 0; }
 }
+
+/* Pilihan "Ingat saya" (tab Masuk) dan catatan sesi di profil */
+.ingat { display: flex; gap: 10px; align-items: flex-start; font-size: var(--text-sm); color: var(--ink); cursor: pointer; }
+.ingat input { width: 18px; height: 18px; margin: 1px 0 0; accent-color: var(--accent); flex: none; }
+.ingat span { display: grid; gap: 2px; }
+.ingat small { color: var(--ink-3); font-size: var(--text-xs); line-height: 1.4; }
+.sesi-note { display: grid; gap: 4px; justify-items: center; text-align: center; border-top: 1px solid var(--border-subtle); padding-top: 14px; }

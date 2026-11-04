@@ -307,6 +307,72 @@ const memStore = () => { const m = new Map(); return { getItem: (k) => (m.has(k)
     truthy(await S.segarkanBeta(doc, cfg, async () => ({ ok: false })) === null && els[0].hidden === true, 'fungsi belum ada (404) → diam');
     truthy(await S.segarkanBeta(doc, {}, async () => { throw new Error('tidak boleh dipanggil'); }) === null, 'akun belum aktif → tidak memanggil server');
   });
+  /* ---- Sesi (keputusan pemilik 4 Nov 2026): ingat saya, keluar dari semua perangkat, keluar otomatis 30 hari ---- */
+  mock.addUser('sesi@toko.id', 'sandiku123', {});
+  const SK = 'cekprofit.session';
+  await t('Sesi: "ingat saya" (bawaan) → localStorage; tanpa ingat → sessionStorage saja', async () => {
+    const ls = memStore(), ss = memStore();
+    const A = fresh().init({ url, key: 'anon', store: ls, tabStore: ss });
+    await A.auth.signIn({ email: 'sesi@toko.id', password: 'sandiku123' });
+    truthy(ls.getItem(SK) && !ss.getItem(SK) && A.auth.ingat(), 'bawaan ingat');
+    const ls2 = memStore(), ss2 = memStore();
+    const B = fresh().init({ url, key: 'anon', store: ls2, tabStore: ss2 });
+    await B.auth.signIn({ email: 'sesi@toko.id', password: 'sandiku123', ingat: false });
+    truthy(!ls2.getItem(SK) && ss2.getItem(SK) && !B.auth.ingat(), 'tanpa ingat: hanya di tab');
+    // tab ditutup = sessionStorage baru/kosong → keluar; tab yang sama dimuat ulang → masih masuk, tetap tanpa ingat
+    truthy(!fresh().init({ url, key: 'anon', store: ls2, tabStore: memStore() }).auth.user(), 'tab baru: keluar');
+    const B2 = fresh().init({ url, key: 'anon', store: ls2, tabStore: ss2 });
+    truthy(B2.auth.user() && !B2.auth.ingat(), 'muat ulang tab: masih masuk');
+    await B2.db.profile();
+    truthy(!ls2.getItem(SK), 'perpanjangan token tidak pindah ke localStorage');
+    // pindah ke "ingat" saat masuk lagi: salinan di sessionStorage dihapus
+    await B2.auth.signIn({ email: 'sesi@toko.id', password: 'sandiku123' });
+    truthy(ls2.getItem(SK) && !ss2.getItem(SK), 'masuk lagi dengan ingat: pindah ke localStorage');
+  });
+  await t('Sesi: format lama (tanpa last_active) tetap masuk dan mulai dihitung', async () => {
+    const ls = memStore();
+    const A = fresh().init({ url, key: 'anon', store: ls }); await A.auth.signIn({ email: 'sesi@toko.id', password: 'sandiku123' });
+    const s = JSON.parse(ls.getItem(SK)); delete s.last_active; ls.setItem(SK, JSON.stringify(s));
+    const B = fresh().init({ url, key: 'anon', store: ls });
+    truthy(B.auth.user() && Math.abs(JSON.parse(ls.getItem(SK)).last_active - Date.now() / 1000) < 5, 'last_active diisi sekarang');
+  });
+  await t('Sesi: tidak dibuka 29 hari → masih masuk; 31 hari → keluar & dicabut di server', async () => {
+    const ls = memStore();
+    const A = fresh().init({ url, key: 'anon', store: ls }); await A.auth.signIn({ email: 'sesi@toko.id', password: 'sandiku123' });
+    const mundur = (hari) => { const s = JSON.parse(ls.getItem(SK)); s.last_active = Math.floor(Date.now() / 1000) - hari * 86400; ls.setItem(SK, JSON.stringify(s)); };
+    mundur(29); truthy(fresh().init({ url, key: 'anon', store: ls }).auth.user(), '29 hari: masih masuk');
+    const rt = JSON.parse(ls.getItem(SK)).refresh_token;
+    mundur(31); const n0 = mock.logouts.length;
+    const B = fresh().init({ url, key: 'anon', store: ls });
+    truthy(!B.auth.user() && !ls.getItem(SK), '31 hari: sesi dihapus dari perangkat');
+    await B.idleSelesai;
+    truthy(mock.logouts.length === n0 + 1 && mock.logouts[n0] === 'local', 'logout ke server (perangkat ini saja)');
+    const r = await fetch(`${url}/auth/v1/token?grant_type=refresh_token`, { method: 'POST', headers: { apikey: 'anon', 'Content-Type': 'application/json' }, body: JSON.stringify({ refresh_token: rt }) });
+    truthy(!r.ok, 'refresh token lama tidak bisa dipakai lagi');
+  });
+  await t('Sesi: tidak dibuka 31 hari saat offline → tetap keluar di perangkat', async () => {
+    const ls = memStore();
+    const A = fresh().init({ url, key: 'anon', store: ls }); await A.auth.signIn({ email: 'sesi@toko.id', password: 'sandiku123' });
+    const s = JSON.parse(ls.getItem(SK)); s.last_active -= 40 * 86400; ls.setItem(SK, JSON.stringify(s));
+    const B = fresh().init({ url: 'http://127.0.0.1:1', key: 'anon', store: ls });
+    truthy(!B.auth.user() && !ls.getItem(SK)); await B.idleSelesai;   // tidak melempar error
+  });
+  await t('Keluar: perangkat ini saja vs semua perangkat', async () => {
+    const L = fresh(), H = fresh();
+    const laptop = L.init({ url, key: 'anon', store: memStore() }); await laptop.auth.signIn({ email: 'sesi@toko.id', password: 'sandiku123' });
+    const hp = H.init({ url, key: 'anon', store: memStore() }); await hp.auth.signIn({ email: 'sesi@toko.id', password: 'sandiku123' });
+    truthy(await hp.auth.signOut() === true && !hp.auth.user() && mock.logouts[mock.logouts.length - 1] === 'local', 'keluar biasa: scope local');
+    truthy(await laptop.db.profile(), 'laptop tetap masuk setelah HP keluar');
+    await hp.auth.signIn({ email: 'sesi@toko.id', password: 'sandiku123' });
+    const rtLaptop = laptop.auth.session().refresh_token;
+    truthy(await hp.auth.signOut({ semua: true }) === true && mock.logouts[mock.logouts.length - 1] === 'global', 'semua perangkat: scope global');
+    const r = await fetch(`${url}/auth/v1/token?grant_type=refresh_token`, { method: 'POST', headers: { apikey: 'anon', 'Content-Type': 'application/json' }, body: JSON.stringify({ refresh_token: rtLaptop }) });
+    truthy(!r.ok, 'sesi laptop dicabut');
+    const off = fresh().init({ url, key: 'anon', store: memStore() }); await off.auth.signIn({ email: 'sesi@toko.id', password: 'sandiku123' });
+    const off2 = fresh(); const sesiOff = off.auth.session(); const st2 = memStore(); st2.setItem(SK, JSON.stringify(sesiOff));
+    const O = off2.init({ url: 'http://127.0.0.1:1', key: 'anon', store: st2 });
+    truthy(await O.auth.signOut({ semua: true }) === false && !O.auth.user(), 'server tak terjangkau: keluar lokal, hasil false');
+  });
   mock.server.close();
   console.log(failed ? `${failed} uji GAGAL` : 'Semua uji lulus');
   process.exitCode = failed ? 1 : 0;

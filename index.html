@@ -307,7 +307,7 @@
         Buat akun selama masa beta untuk mendapat <b>harga khusus <span data-harga-awal>Rp99.000</span> untuk tahun pertama</b>, berlaku bila Anda membeli dalam 30 hari sejak pembelian Pro dibuka. Setelah masa beta, fitur Pro kembali hanya untuk akun Pro.</p>
         <a class="btn primary sm" href="akun.html?mode=daftar&amp;next=dashboard.html" data-guest data-track="beta-daftar">Daftar gratis</a></div>
       <div class="prices" data-stagger="90">
-        <div class="price spot" data-spotlight data-reveal><h3>Gratis</h3><div><span class="amount">Rp0</span></div><p class="small muted">Untuk melihat kondisi toko dan mulai mengisi modal.</p>
+        <div class="price spot" data-spotlight data-reveal><h3>Gratis</h3><div><span class="amount">Rp0</span></div><p class="small muted">Untuk melihat kondisi toko dan mulai mengisi modal. Cukup akun gratis; tanpa akun Anda bisa mencoba Ringkasan laba.</p>
           <ul class="ticks"><li>Laba dari laporan Shopee dan TikTok Shop</li><li>Isi modal/HPP per produk, atau lewat template</li><li>Kepastian Profit</li><li>Simulator harga, retur &amp; refund, tren per bulan</li><li>Analisis 5 produk dan 2 temuan otomatis</li><li>3 riwayat tersimpan (dengan akun)</li><li class="no">Laporan PDF dan ekspor Excel</li></ul>
           <a class="btn" href="akun.html?mode=daftar&amp;next=dashboard.html" data-track="harga-gratis">Daftar gratis</a></div>
         <div class="price featured spot" data-spotlight data-reveal><span class="price-flag" data-price="proLabel">Harga Peluncuran</span><h3>Pro</h3>
@@ -367,7 +367,7 @@
     <div class="wrap fin" data-reveal>
       <p class="st-k center">06 · Mulai</p>
       <h2 id="h-akhir" class="st-big center">Lihat untung toko Anda hari ini.</h2>
-      <p class="st-lead center">Coba tanpa daftar, atau daftar gratis untuk menyimpan modal dan riwayat. File tetap di perangkat Anda.</p>
+      <p class="st-lead center">Lihat Ringkasan laba tanpa daftar, lalu daftar gratis untuk membuka laba per produk, retur, dan riwayat. File tetap di perangkat Anda.</p>
       <div class="ed-cta">
         <a class="btn primary big" href="dashboard.html" data-guest data-track="akhir-coba">Analisis toko gratis<svg class="arr" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg></a>
         <a class="btn primary big" href="dashboard.html" data-member hidden>Buka dashboard</a>
@@ -405,7 +405,8 @@
   document.querySelectorAll('[data-price]').forEach((el) => { const v = p[el.dataset.price]; if (v !== undefined) el.textContent = v; });
   // Tombol Masuk/Daftar untuk tamu; "Buka dashboard" untuk yang sudah masuk. Tanpa layanan akun: semua menuju dashboard.
   let member = false;
-  try { const sess = JSON.parse(localStorage.getItem('cekprofit.session') || 'null'); member = !!(sess && sess.refresh_token); } catch (e) { /* abaikan */ }
+  // Sesi "ingat saya" ada di localStorage; sesi tanpa "ingat saya" di sessionStorage (tab ini saja).
+  for (const st of ['localStorage', 'sessionStorage']) { try { const sess = JSON.parse(window[st].getItem('cekprofit.session') || 'null'); if (sess && sess.refresh_token) member = true; } catch (e) { /* abaikan */ } }
   if (!C.supabaseUrl) { member = true; }
   document.querySelectorAll('[data-guest]').forEach((el) => { el.hidden = member; });
   document.querySelectorAll('[data-member]').forEach((el) => { el.hidden = !member; });
