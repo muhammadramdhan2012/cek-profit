@@ -488,8 +488,25 @@
     ${files.length ? '' : '<button class="btn link" type="button" data-demo>Lihat dulu dengan data contoh</button>'}</p></div>`;
   };
   /** Ajakan daftar di Ringkasan untuk tamu yang sudah melihat labanya sendiri. */
-  const ajakDaftar = () => (demo || !cloud.enabled || account.user ? '' : `<div class="note-box tamu-ajak" data-reveal><b>Ingin tahu produk mana yang rugi?</b> Daftar gratis untuk membuka laba per produk, rincian laba, retur, dan laporan PDF.${betaGratis() ? ` Akun yang dibuat selama beta mendapat harga khusus Pro ${esc(C.hargaPenggunaAwal || 'Rp99.000')} untuk tahun pertama.` : ''}
-      <span class="row-actions"><a class="btn sm primary" href="akun.html?mode=daftar&next=${nextKe('produk')}">Daftar gratis</a><a class="btn sm" href="akun.html?next=${nextKe('ringkasan')}">Masuk</a></span></div>`);
+  const ajakDaftar = (r) => {
+    if (demo || !cloud.enabled || account.user) return '';
+    const n = r && r.products ? r.products.length : 0;
+    const cek = '<svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><path d="M5 12.5l4.2 4.2L19 7" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+    const buka = ['Laba setiap produk', 'Laba & Money Trace', 'Retur & refund', 'Laporan PDF & Excel'];
+    return `<section class="ajak" aria-labelledby="ajak-h" data-reveal>
+      <div class="ajak-isi">
+        ${n ? `<span class="ajak-tag">${svg('produk', 14)}${num(n)} produk Anda siap dianalisis</span>` : ''}
+        <h2 id="ajak-h">Ingin tahu produk mana yang rugi?</h2>
+        <p>Buat akun gratis untuk membuka hasil lengkapnya. Cukup email, tanpa kartu kredit.</p>
+        <ul class="ajak-list">${buka.map((b) => `<li>${cek}${b}</li>`).join('')}</ul>
+      </div>
+      <div class="ajak-aksi">
+        <a class="btn ajak-daftar" href="akun.html?mode=daftar&next=${nextKe('produk')}">Daftar gratis <span aria-hidden="true">→</span></a>
+        <a class="ajak-masuk" href="akun.html?next=${nextKe('produk')}">Sudah punya akun? <b>Masuk</b></a>
+        ${betaGratis() ? `<p class="ajak-beta"><span class="badge pro">BETA</span>Akun yang dibuat sekarang mendapat harga khusus Pro ${esc(C.hargaPenggunaAwal || 'Rp99.000')} untuk tahun pertama.</p>` : ''}
+      </div>
+    </section>`;
+  };
   const emptyView = () => {
     const [ic, judul, isi] = KOSONG[viewName] || KOSONG.ringkasan;
     return `<div class="panel empty empty-arah"><span class="ic">${svg(ic, 24)}</span><h2>${judul}</h2><p>${isi}</p>
@@ -664,7 +681,7 @@
           hppMixed ? '<div class="m-status"><span class="status estimate">Sebagian perkiraan</span></div>' : r.ready && c.penjualan.terverifikasi > 0 ? '<div class="m-status"><span class="status verified">Terverifikasi</span></div>' : '', 'modal')}
         ${kpi(`Potongan marketplace${qi('potongan', 'Potongan marketplace')}`, -r.totalFees, 'dipotong dari penjualan oleh marketplace', '', '', 'fees')}
       </section>`;
-    return `${ajakDaftar()}<div class="dash d3">
+    return `${ajakDaftar(r)}<div class="dash d3">
       <div class="d3-top">
         <section class="dash-hero d3-profit" aria-label="Laba">
           ${kpi(`Laba dari data tersedia${qi('laba_bersih', 'Laba dari data tersedia')}`, r.ready ? laba : '<span class="faint">Belum dihitung</span>',

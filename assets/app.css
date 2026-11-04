@@ -1882,6 +1882,30 @@ body.app .empty-arah > p:not(.tiny) { font-size: 15px; max-width: 46ch; }
 .bn svg.nav-lock { position: absolute; top: 4px; right: calc(50% - 25px); width: 11px; height: 11px; margin: 0; color: var(--ink-3); }
 .nav svg.nav-lock { width: 12px; height: 12px; }
 .empty-arah.tamu .row-actions { margin-top: 4px; }
-.tamu-ajak { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; margin-bottom: 16px; }
-.tamu-ajak .row-actions { margin-left: auto; }
+/* Ajakan daftar di Ringkasan (tamu): kartu hijau gelap seperti sidebar, sama di tema terang & gelap */
+.ajak { position: relative; overflow: hidden; display: grid; grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr); gap: 20px 32px; align-items: center;
+  margin-bottom: 18px; padding: 26px 28px; border-radius: var(--r-card); color: var(--side-ink);
+  background: radial-gradient(120% 140% at 100% 0%, rgb(95 224 179 / 22%), transparent 55%), var(--grad-brand); box-shadow: var(--shadow-md); }
+.ajak::after { content: ""; position: absolute; right: -60px; bottom: -80px; width: 240px; height: 240px; border-radius: 50%; border: 36px solid rgb(255 255 255 / 5%); pointer-events: none; }
+.ajak-isi { display: grid; gap: 10px; position: relative; z-index: 1; }
+.ajak-tag { display: inline-flex; align-items: center; gap: 7px; width: fit-content; padding: 5px 11px; border-radius: var(--r-pill); background: rgb(255 255 255 / 12%); color: #fff; font-size: 12.5px; font-weight: var(--weight-semibold); }
+.ajak h2 { margin: 0; color: #fff; font-size: clamp(21px, 2.2vw, 26px); letter-spacing: var(--track-display); line-height: 1.15; }
+.ajak p { margin: 0; color: var(--side-muted); font-size: var(--text-sm); }
+.ajak-list { list-style: none; margin: 4px 0 0; padding: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px 16px; }
+.ajak-list li { display: flex; align-items: center; gap: 8px; color: #fff; font-size: 14px; font-weight: var(--weight-medium); }
+.ajak-list svg { flex: none; width: 20px; height: 20px; padding: 3px; border-radius: 50%; background: var(--side-accent); color: var(--side-bg); }
+.ajak-aksi { display: grid; gap: 10px; justify-items: stretch; position: relative; z-index: 1; padding: 18px; border-radius: var(--r); background: rgb(0 0 0 / 18%); border: 1px solid rgb(255 255 255 / 10%); }
+.btn.ajak-daftar { min-height: 50px; justify-content: center; border: 0; border-radius: 12px; background: var(--side-accent); color: var(--side-bg); font-size: 16px; font-weight: var(--weight-bold); box-shadow: 0 8px 22px -8px rgb(95 224 179 / 70%); }
+.btn.ajak-daftar:hover { background: color-mix(in srgb, var(--side-accent) 78%, #fff); }
+.btn.ajak-daftar span { transition: transform var(--dur) var(--ease); }
+.btn.ajak-daftar:hover span { transform: translateX(3px); }
+.ajak-masuk { text-align: center; color: var(--side-ink); font-size: var(--text-sm); text-decoration: none; padding: 6px; border-radius: 8px; }
+.ajak-masuk b { color: var(--side-accent); }
+.ajak-masuk:hover b { text-decoration: underline; }
+.ajak-daftar:focus-visible, .ajak-masuk:focus-visible { outline: 3px solid #fff; outline-offset: 2px; }
+.ajak-beta { display: flex; gap: 8px; align-items: flex-start; margin: 2px 0 0 !important; font-size: 12.5px !important; line-height: 1.45; color: var(--side-ink) !important; border-top: 1px solid rgb(255 255 255 / 10%); padding-top: 10px; }
+.ajak-beta .badge { flex: none; }
+@media (max-width: 860px) { .ajak { grid-template-columns: 1fr; padding: 22px 18px; } }
+@media (max-width: 420px) { .ajak { gap: 14px; } .ajak-list { gap: 6px 10px; } .ajak-list li { font-size: 12.5px; gap: 6px; } .ajak-list svg { width: 17px; height: 17px; } .ajak-aksi { padding: 12px; gap: 6px; } .ajak-beta { padding-top: 8px; } }
+@media (prefers-reduced-motion: reduce) { .btn.ajak-daftar span { transition: none; } }
 .count + .nav-lock { margin-left: 6px; }
