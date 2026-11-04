@@ -381,10 +381,12 @@ section.st { position: relative; isolation: isolate; padding-block: clamp(80px, 
 .st-pains b { color: #fff; font-size: 17px; } .st-pains span { color: var(--forest-muted); font-size: 14.5px; }
 @media (max-width: 760px) {
   /* HP: angka ditumpuk, panah menunjuk ke bawah di antara keduanya. */
-  .omzet { grid-template-columns: minmax(0, 1fr); gap: 6px; }
+  /* Lebar blok mengikuti angka terpanjang, jadi panah tepat di tengah di bawah angka omzet. */
+  .omzet { grid-template-columns: minmax(0, 1fr); gap: 6px; width: fit-content; max-width: 100%; }
   .om-a > span { grid-row: 1; } .om-a > b { grid-row: 2; }
   .om-a > span, .om-a > b, .om-b > span, .om-b > b, .om-arrow, .om-cap { grid-column: 1; }
-  .om-arrow { grid-row: 3; justify-self: start; width: 40px; height: 44px; margin: 2px 0; }
+  .om-cap { justify-self: start; }
+  .om-arrow { grid-row: 3; justify-self: center; width: 40px; height: 44px; margin: 2px 0; }
   .om-arrow svg { width: 40px; transform: rotate(90deg); }
   .om-b > span { grid-row: 4; } .om-b > b { grid-row: 5; } .om-cap { grid-row: 6; } .st-pains { grid-template-columns: 1fr; gap: 18px; margin-top: 40px; } }
 /* 02 krem: satu batang 100% + legenda + nota (tanpa animasi gulir) */
