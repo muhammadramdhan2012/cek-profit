@@ -1781,10 +1781,34 @@
   const CARA_MODAL = { reseller: 'modal dihitung dari diskon terhadap harga acuan', stok: 'modal dari harga beli per produk', produsen: 'modal dari HPP produksi', dropship: 'modal dari harga supplier per unit' };
   // Label pendek untuk deretan tombol jenis usaha (desain B, pilihan pemilik 2 Nov 2026).
   const TYPE_SINGKAT = { reseller: 'Reseller', stok: 'Stok sendiri', produsen: 'Produsen', dropship: 'Dropshipper' };
+  /** Video tutorial cara isi modal per jenis usaha (file sendiri di video/, tidak masuk cache offline; keputusan pemilik 5 Nov 2026). */
+  const VIDEO_MODAL = { reseller: '1:13', stok: '1:08', produsen: '1:05', dropship: '0:55' };
+  // Desain B (pilihan pemilik 5 Nov 2026): kartu dengan cuplikan video, judul berupa pertanyaan, dan durasi.
+  const tombolVideo = (type) => (VIDEO_MODAL[type] ? `<button type="button" class="ts-vid" data-video-modal="${type}" aria-label="Tonton video cara isi modal ${TYPE_SINGKAT[type]}, ${VIDEO_MODAL[type]}">
+      <span class="tv-th" aria-hidden="true"><img src="img/poster-modal-${type}.webp" alt="" loading="lazy" width="168" height="94"><i><svg viewBox="0 0 24 24" width="16" height="16"><path d="M8 5.5v13l10.5-6.5z" fill="currentColor"/></svg></i><em>${VIDEO_MODAL[type]}</em></span>
+      <span class="tv-tx"><b>Bingung cara isi modal ${TYPE_SINGKAT[type]}?</b><span>Tonton panduan singkat langkah demi langkah</span></span>
+      <span class="tv-go" aria-hidden="true">Tonton video →</span></button>` : '');
+  function openVideoModal(type) {
+    if (!VIDEO_MODAL[type]) return;
+    track(`video-modal-${type}`);
+    const d = dlg(); d.classList.add('dlg-video');
+    const offline = typeof navigator !== 'undefined' && navigator.onLine === false;
+    d.innerHTML = `${dHead(`Cara isi modal: ${TYPES[type].label}`, 'Tampilan dashboard dengan data contoh.')}
+      <div class="d-body">${offline ? '<p class="note-box warn">Video butuh koneksi internet. Sambungkan internet, lalu coba lagi.</p>'
+        : `<div class="vid-wrap"><video id="vid-modal" controls autoplay playsinline preload="metadata" poster="img/poster-modal-${type}.webp" width="1280" height="720" aria-label="Video cara isi modal ${TYPES[type].label}"><source src="video/modal-${type}.mp4" type="video/mp4"></video></div>
+        <p class="small muted" id="vid-err" hidden>Video belum bisa diputar. Periksa koneksi internet, lalu coba lagi.</p>`}
+        <button class="btn" type="button" data-close>Tutup</button></div>`;
+    const v = $('#vid-modal');
+    if (v) {
+      v.addEventListener('error', () => { const e = $('#vid-err'); if (e) e.hidden = false; }, true);
+      const pl = v.play && v.play(); if (pl && pl.catch) pl.catch(() => { /* autoplay ditolak: kontrol tetap tampil */ });
+    }
+    if (!d.open) d.showModal();
+  }
   function typeLine(type) {
     return `<div class="type-seg-wrap"><span class="ts-k" id="ts-k">Jenis usaha${qi('jenis_usaha')}</span>
       <div class="type-seg" role="radiogroup" aria-labelledby="ts-k">${Object.keys(TYPES).map((k) => `<button type="button" role="radio" aria-checked="${k === type}" class="${k === type ? 'on' : ''}" data-type="${k}" title="${TYPES[k].label}" ${demo ? 'disabled' : ''}>${typeIcon(k, 16)}<span>${TYPE_SINGKAT[k]}</span></button>`).join('')}</div>
-      <p class="ts-d">${typeIcon(type, 14)}<span>${CARA_MODAL[type].replace(/^./, (c) => c.toUpperCase())}${demo ? '. Data contoh memakai jenis ini; dengan laporan Anda, jenis lain bisa dipilih.' : '.'}</span></p></div>`;
+      <p class="ts-d">${typeIcon(type, 14)}<span>${CARA_MODAL[type].replace(/^./, (c) => c.toUpperCase())}${demo ? '. Data contoh memakai jenis ini; dengan laporan Anda, jenis lain bisa dipilih.' : '.'}</span></p>${tombolVideo(type)}</div>`;
   }
   function typePicker(cur) {
     return `<section class="panel type-pick" aria-labelledby="tp-h"><div class="panel-head" style="margin-bottom:12px"><h3 id="tp-h">Anda berjualan sebagai apa?${qi('jenis_usaha')}</h3><p>Mengatur cara modal dihitung. Bisa diubah kapan saja.</p></div>
@@ -2664,6 +2688,7 @@
     if (t.dataset.act) { closeSheet(); ({ pdf: openReport, export: exportXlsx, 'save-hist': saveHistory })[t.dataset.act](); return; }
     if (t.hasAttribute('data-upgrade')) { closeSheet(); account.menu = false; renderAccount(); openUpgrade(); return; }
     if (t.dataset.close !== undefined) { dlg().close(); return; }
+    if (t.dataset.videoModal) { openVideoModal(t.dataset.videoModal); return; }
     if (t.id === 'acct-toggle') { account.menu = !account.menu; renderAccount(); return; }
     if (t.id === 'logout') { await cloud.auth.signOut(); account.user = null; account.profile = null; account.reports = null; account.menu = false; toast('Anda sudah keluar.'); render(); loadStatus(); return; }
     if (t.id === 'code-apply') {
@@ -2760,6 +2785,8 @@
   });
   // Ingat apakah "Rincian laba" sedang dibuka, agar tidak tertutup saat halaman dirender ulang (mis. ganti filter).
   // Baris produk terpilih hanya ditandai selama lacinya terbuka.
+  // Dialog video: berhenti memutar (dan berhenti mengunduh) begitu ditutup.
+  $('#dlg').addEventListener('close', () => { const v = $('#vid-modal'); if (v) { v.pause(); v.removeAttribute('src'); v.querySelectorAll('source').forEach((x) => x.remove()); v.load(); } dlg().classList.remove('dlg-video'); });
   $('#sheet').addEventListener('close', () => document.querySelectorAll('tr.is-selected').forEach((tr) => tr.classList.remove('is-selected')));
   // Bilah judul: garis bawah & bayangan tipis muncul setelah halaman digulir (penanda di atas halaman, bukan event scroll).
   if ('IntersectionObserver' in window && $('#top-sentinel')) new IntersectionObserver(([en]) => $('#main-top').classList.toggle('is-stuck', !en.isIntersecting)).observe($('#top-sentinel'));

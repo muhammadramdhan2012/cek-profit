@@ -907,5 +907,13 @@ test('Tombol bantuan WhatsApp melayang: halaman depan & privasi; tidak di akun/d
   truthy(!/wa-float/.test(fs.readFileSync(path.join(__dirname, '..', 'dashboard.html'), 'utf8')), 'dashboard tanpa tombol melayang');
   truthy(/body\.home \.wa-float \{ bottom: calc\(86px/.test(src('../assets/base.css'.replace('../assets/', ''))) || /body\.home \.wa-float/.test(fs.readFileSync(path.join(__dirname, '..', 'assets', 'base.css'), 'utf8')), 'di HP berada di atas bilah ajakan');
 });
+test('Video cara isi modal: satu video & poster untuk setiap jenis usaha; tidak masuk cache offline', () => {
+  const appJs = src('app.js'), sw = fs.readFileSync(path.join(__dirname, '..', 'sw.js'), 'utf8');
+  for (const k of ['reseller', 'stok', 'produsen', 'dropship']) {
+    truthy(fs.existsSync(path.join(__dirname, '..', 'video', `modal-${k}.mp4`)) && fs.existsSync(path.join(__dirname, '..', 'img', `poster-modal-${k}.webp`)), `berkas video ${k}`);
+    truthy(new RegExp(`${k}: '\\d:\\d\\d'`).test(appJs), `durasi ${k}`);
+  }
+  truthy(/url\.pathname\.startsWith\('\/video\/'\)\) return;/.test(sw) && !/video\//.test(sw.match(/const CORE = \[[\s\S]*?\];/)[0]), 'video/ dilewati service worker');
+});
 console.log(failed ? `\n${failed} uji GAGAL` : '\nSemua uji lulus');
 process.exitCode = failed ? 1 : 0;

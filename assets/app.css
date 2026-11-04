@@ -1928,3 +1928,26 @@ button.side-help { background: none; border: 0; font: inherit; font-size: 13px; 
 #fb-msg:empty { display: none; }
 #fb-msg .btn { margin-top: 8px; }
 #fb-msg.bad { color: var(--cost); }
+
+/* Video cara isi modal per jenis usaha — desain B: kartu dengan cuplikan */
+.ts-vid { display: grid; grid-template-columns: 168px minmax(0, 1fr) auto; gap: 16px; align-items: center; width: 100%; max-width: 640px; margin-top: 4px;
+  padding: 10px 16px 10px 10px; border-radius: var(--r-card); border: 1px solid var(--border); background: var(--surface); box-shadow: var(--shadow-sm);
+  font: inherit; text-align: left; color: var(--ink); cursor: pointer; transition: border-color var(--dur-fast) var(--ease), box-shadow var(--dur-fast) var(--ease); }
+.ts-vid:hover { border-color: var(--accent); box-shadow: var(--shadow-md); }
+.ts-vid:focus-visible { outline: none; box-shadow: var(--ring); border-color: var(--accent); }
+.tv-th { position: relative; aspect-ratio: 16 / 9; border-radius: 10px; overflow: hidden; background: var(--side-bg); }
+.tv-th img { display: block; width: 100%; height: 100%; object-fit: cover; }
+.tv-th i { position: absolute; left: 8px; bottom: 8px; width: 34px; height: 34px; border-radius: 50%; background: #fff; color: var(--brand-600); display: grid; place-items: center; box-shadow: 0 6px 16px rgb(0 0 0 / 30%); transition: transform var(--dur) var(--ease-spring); }
+.tv-th i svg { margin-left: 3px; }
+.ts-vid:hover .tv-th i { transform: scale(1.08); }
+.tv-th em { position: absolute; right: 6px; bottom: 6px; font-style: normal; font-size: 11px; font-weight: var(--weight-bold); color: #fff; background: rgb(0 0 0 / 65%); padding: 2px 6px; border-radius: 6px; }
+.tv-tx { display: grid; gap: 2px; min-width: 0; }
+.tv-tx b { font-size: 15px; letter-spacing: -0.01em; color: var(--ink); }
+.tv-tx span { font-size: 13px; color: var(--ink-3); }
+.tv-go { font-size: 13px; font-weight: var(--weight-bold); color: var(--accent); white-space: nowrap; }
+@media (max-width: 560px) { .ts-vid { grid-template-columns: 120px minmax(0, 1fr); gap: 12px; padding: 8px 12px 8px 8px; } .tv-go { display: none; } .tv-tx b { font-size: 14px; } }
+@media (prefers-reduced-motion: reduce) { .tv-th i { transition: none; } }
+.dialog.dlg-video { width: min(960px, calc(100vw - 24px)); max-width: none; }
+.dlg-video .d-body { display: grid; gap: 12px; }
+.vid-wrap { border-radius: var(--r); overflow: hidden; background: var(--side-bg); aspect-ratio: 16 / 9; }
+.vid-wrap video { display: block; width: 100%; height: 100%; }
