@@ -10,6 +10,11 @@ const CekSitus = (() => {
   const HALAMAN = ['Beranda', 'Dashboard', 'Akun', 'Privasi'];
 
   /** URL wa.me untuk bantuan, atau '' bila nomor bantuan belum diatur atau formatnya salah. */
+  /** Tautan WhatsApp bantuan dengan teks pembuka sendiri (mis. "Kirim masukan"). Kosong bila nomor bantuan belum valid. */
+  function bantuanWa(cfg, teks) {
+    const nomor = String((cfg && cfg.waSupport) || '').trim();
+    return NOMOR_WA.test(nomor) ? `https://wa.me/${nomor}?text=${encodeURIComponent(String(teks || ''))}` : '';
+  }
   function waSupportUrl(cfg, halaman) {
     const nomor = String((cfg && cfg.waSupport) || '').trim();
     if (!NOMOR_WA.test(nomor)) return '';
@@ -98,6 +103,6 @@ const CekSitus = (() => {
     const run = () => { let st = null; try { st = sessionStorage; } catch (e) { /* abaikan */ } const cfg = window.CEK_CONFIG || {}; pasang(document, cfg, location, st); if (typeof fetch === 'function') segarkanBeta(document, cfg, fetch.bind(window)); };
     if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', run); else run();
   }
-  return { waSupportUrl, alamatPindah, pasang, betaGratis, betaDariServer, segarkanBeta };
+  return { bantuanWa, waSupportUrl, alamatPindah, pasang, betaGratis, betaDariServer, segarkanBeta };
 })();
 if (typeof module !== 'undefined') module.exports = CekSitus;

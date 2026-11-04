@@ -219,14 +219,20 @@ node tests/cloud.test.js          # memakai server tiruan tests/mock-supabase.js
 - ⏳ Masa beta gratis (keputusan pemilik 1 Nov 2026): semua fitur Pro terbuka sampai 13 Des 2026 (`betaGratisSampai` di
   `assets/config.js`), lalu kunci Pro kembali otomatis. Pengguna yang membuat akun selama beta dijanjikan harga khusus
   Rp99.000 **untuk tahun pertama**, bila membeli dalam 30 hari sejak pembelian dibuka, perpanjangan harga normal (`hargaPenggunaAwal`).
-- ⏳ Tahap 2 (keputusan pemilik 1 Nov 2026), menunggu pemilik menjalankan `supabase/schema.sql`: tanggal server, masa beta
+- ✅ Tahap 2 (keputusan pemilik 1 Nov 2026), `supabase/schema.sql` sudah dijalankan pemilik: tanggal server, masa beta
   (`site_settings`, diubah dari admin.html), pengguna awal (`profiles.pengguna_awal`), catatan pembelian
   (`pro_purchases`, `admin_catat_pembelian`), batas 3 riwayat di database. `betaGratisSampai` di config hanya cadangan.
   Fitur yang dihitung dari file (PDF, Excel, analisis produk) tetap dikunci di browser (diterima pemilik). Kode akses
   tidak diterbitkan lagi; kode lama tetap berlaku sampai tanggalnya.
   Pembayaran tetap belum dibuka. Syarat membuka pembayaran: 20–30 seller mencoba dengan laporan asli, tanpa keluhan angka
   salah yang serius, 3–5 testimoni, atau paling lambat akhir masa beta.
-- ⏳ Supabase URL Configuration (Site URL dan Redirect URL ke domain GitHub Pages) belum dikonfirmasi.
+- ✅ Supabase URL Configuration dikonfirmasi pemilik: Site URL `https://cekuntung.id/akun.html`, Redirect URL mencakup `cekuntung.id/akun`.
+- ✅ Rilis 4 Nov 2026 (semua lewat preview Cloudflare lalu disetujui pemilik):
+  - video tutorial 2 menit di bagian "Tiga langkah" halaman depan (file sendiri `video/`, `preload="none"`, tidak masuk cache offline; tautan YouTube);
+  - tamu (tanpa akun) hanya sampai Ringkasan; Produk, Laba & Money Trace, Retur, Laporan & riwayat perlu akun gratis; mode contoh terbuka penuh. Kunci ini di browser (ajakan daftar, bukan perlindungan data);
+  - sesi: "Ingat saya" (tanpa centang → sessionStorage), keluar otomatis bila 30 hari tidak dibuka, Keluar = perangkat ini saja, "Keluar dari semua perangkat" di halaman Akun;
+  - Kirim masukan: form untuk akun, WhatsApp untuk tamu; tabel `feedback` (SQL dijalankan pemilik 4 Nov 2026), panel di admin.html.
+- ⏳ Bagian 6 (Arsitektur) masih menyebut GitHub Pages; produksi kini Cloudflare Pages (cekuntung.id) dari branch `main`, preview per branch di `*.cekuntung.pages.dev`. Perlu keputusan pemilik untuk memperbarui bagian itu.
 - ⏳ Parser export pesanan Shopee dan TikTok tetap berlabel Beta (keputusan pemilik 19 Okt 2026). Export Shopee baru dicocokkan dengan satu file asli; export TikTok asli belum diuji.
 - ✅ Statistik GoatCounter aktif sejak 2 Nov 2026 (`goatcounter: 'cekuntung'`, cekuntung.goatcounter.com); hanya nama halaman yang dikirim, tanpa query/hash.
 - ⏳ Masalah akurasi, keamanan, dan teknis dari audit 14 Okt 2026: lihat `KNOWN_ISSUES.md`. Jangan klaim laba akurat pada kasus yang masih terbuka di sana.

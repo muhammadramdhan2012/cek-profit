@@ -49,6 +49,18 @@ fungsi tahap 2 belum ada, dashboard memakai tanggal perangkat dan `betaGratisSam
 Yang tetap dikunci di browser (keputusan pemilik 1 Nov 2026): fitur yang dihitung dari file laporan (PDF, Excel,
 analisis semua produk), karena file tidak pernah dikirim ke server.
 
+### 2c. Masukan pengguna (4 Nov 2026)
+
+Bagian "MASUKAN PENGGUNA" di akhir `schema.sql` menambah tabel **feedback** untuk tombol **Kirim masukan** di dashboard:
+- hanya akun yang sudah masuk yang bisa mengirim; tamu diarahkan ke WhatsApp bantuan;
+- pengguna hanya bisa **mengirim** (tidak bisa membaca masukan siapa pun, termasuk miliknya); admin membaca dan
+  mengubah status (baru / dibaca / selesai) di **admin.html** → panel **Masukan pengguna**;
+- isi: jenis, pesan (5–2.000 huruf), nama halaman, dan pilihan boleh dihubungi. Angka laporan tidak ikut dikirim;
+- batas **5 masukan per akun per 24 jam**, ditegakkan database.
+
+Cara menjalankan sama dengan 2b (salin seluruh `schema.sql` terbaru → **Run**). Dijalankan pemilik 4 Nov 2026.
+Bila belum dijalankan, form menampilkan "belum aktif" dan tombol WhatsApp; fitur lain tidak terpengaruh.
+
 ## 3. Atur alamat situs
 
 **Authentication** → **URL Configuration**. Ini diperlukan agar tautan konfirmasi email dan reset sandi kembali ke
@@ -89,6 +101,21 @@ belum diuji di Supabase sungguhan.
 **Authentication → Emails → SMTP Settings**: isi host, port, username, dan kata sandi SMTP dari Resend. Kata sandi
 SMTP disimpan di Supabase saja, **jangan** di website, GitHub, atau chat. Di Resend, pastikan domain pengirim
 berstatus *Verified* (SPF dan DKIM). Uji dengan mendaftar akun penguji dan meminta reset sandi; periksa folder spam.
+
+**Template email** (Authentication → Emails → Templates) disimpan di `supabase/email/`. Logo digambar dengan tabel
+HTML (tanpa gambar), jadi tidak ikut diblokir aplikasi email. Cara memakai: buka file → salin semua → tempel di kolom
+*Message body* template yang sesuai → **Save**. Variabel `{{ .ConfirmationURL }}` dan lainnya jangan diubah.
+
+| File | Template Supabase | Status (4 Nov 2026) |
+|---|---|---|
+| `konfirmasi-pendaftaran.html` | Confirm sign up | terpasang |
+| `atur-ulang-kata-sandi.html` | Reset password | terpasang |
+| `ganti-email.html` | Change email address | terpasang |
+| `undangan.html` | Invite user | disiapkan, belum dipakai |
+| `tautan-masuk.html` | Magic link | disiapkan, belum dipakai |
+| `verifikasi-ulang.html` | Reauthentication | disiapkan, belum dipakai |
+
+Subjek email diisi langsung di Supabase (kolom *Subject*), tidak disimpan di file ini.
 
 ## 4. Sambungkan ke situs
 
@@ -187,4 +214,6 @@ psql -d uji -v ON_ERROR_STOP=1 -f supabase/schema.sql
 psql -d uji -tA -f supabase/tests/test.sql          # T1–T12 (dasar)
 createdb uji2 && psql -d uji2 -f supabase/tests/shim.sql && psql -d uji2 -v ON_ERROR_STOP=1 -f supabase/schema.sql
 psql -d uji2 -tA -f supabase/tests/test-tahap2.sql  # U1–U19 (tahap 2)
+createdb uji3 && psql -d uji3 -f supabase/tests/shim.sql && psql -d uji3 -v ON_ERROR_STOP=1 -f supabase/schema.sql
+psql -d uji3 -tA -f supabase/tests/test-masukan.sql # M1–M8 (masukan pengguna)
 ```

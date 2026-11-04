@@ -386,6 +386,7 @@
       d.innerHTML = `${head('Menu lainnya')}<div class="d-body">
         <div class="sheet-nav">${items.map((i) => navButton(i, 'sheet-item')).join('')}</div>
         <div class="sheet-sec"><span class="sheet-k">Akun</span>${accountSheet()}</div>
+        <div class="sheet-sec sheet-inline"><span class="sheet-k">Bantuan</span><button class="btn sm" type="button" data-masukan>Kirim masukan</button></div>
         <div class="sheet-sec sheet-inline"><span class="sheet-k">Tampilan</span><span data-theme-toggle></span></div></div>`;
       if (window.CekTheme) window.CekTheme.mount();
     }
@@ -2370,6 +2371,58 @@
   const PLANS = () => { const p = C.prices || {}; return [['pro_bulanan', 'Pro bulanan', `${p.pro || ''} ${p.proUnit || ''}`.trim()], ['pro_tahunan', 'Pro tahunan', (p.proNote || '').replace(/^atau\s+/i, '')]]; };
   const waLink = (msg) => (C.whatsapp ? `https://wa.me/${C.whatsapp}?text=${encodeURIComponent(msg)}` : '');
   const dHead = (t, s) => `<div class="d-head"><div><h2 style="font-size:22px">${t}</h2>${s ? `<p class="small muted" style="margin-top:4px">${s}</p>` : ''}</div><button class="x" type="button" data-close aria-label="Tutup">×</button></div>`;
+  /* ---------- Kirim masukan (keputusan pemilik 4 Nov 2026) ----------
+   * Form hanya untuk akun yang sudah masuk; tamu diarahkan ke WhatsApp. Yang dikirim hanya jenis, pesan, nama halaman,
+   * dan centang boleh dihubungi. Angka laporan dan isi file TIDAK ikut dikirim. */
+  const JENIS_MASUKAN = [['saran', 'Saran fitur'], ['masalah', 'Ada yang salah'], ['lainnya', 'Lainnya']];
+  // Nomor bantuan (bukan nomor pembayaran) dibaca oleh situs.js; app.js tidak menyentuh kunci config-nya.
+  const waMasukan = () => (typeof CekSitus !== 'undefined' ? CekSitus.bantuanWa(C, 'Halo Cek Untung, saya ingin memberi masukan: ') : '');
+  const tombolWa = (label = 'Kirim lewat WhatsApp') => (waMasukan() ? `<a class="btn" href="${esc(waMasukan())}" target="_blank" rel="noopener">${label}</a>` : '');
+  function openMasukan() {
+    track('buka-masukan');
+    const d = dlg();
+    if (!cloud.enabled || !account.user) {
+      const ke = encodeURIComponent(`dashboard.html#${viewName}`);
+      d.innerHTML = `${dHead('Kirim masukan', 'Saran dan laporan masalah sangat membantu kami memperbaiki Cek Untung.')}
+        <div class="d-body">${cloud.enabled ? `<p class="small">Masuk ke akun untuk mengirim masukan lewat form ini, atau kirim langsung lewat WhatsApp.</p>
+        <div class="row-actions"><a class="btn primary" href="akun.html?next=${ke}">Masuk</a><a class="btn" href="akun.html?mode=daftar&next=${ke}">Daftar gratis</a></div>` : ''}
+        ${tombolWa()}</div>`;
+    } else {
+      d.innerHTML = `${dHead('Kirim masukan', 'Ceritakan saran atau masalah yang Anda temui. Kami membaca setiap masukan.')}
+        <div class="d-body fb-form">
+          <fieldset class="fb-jenis"><legend class="small" style="font-weight:650">Jenis masukan</legend>
+            ${JENIS_MASUKAN.map(([k, l], i) => `<label><input type="radio" name="fb-jenis" value="${k}" ${i === 0 ? 'checked' : ''}><span>${l}</span></label>`).join('')}</fieldset>
+          <div class="field"><label for="fb-pesan">Pesan</label>
+            <textarea class="plain" id="fb-pesan" rows="5" maxlength="2000" placeholder="Contoh: Saya ingin bisa melihat laba per minggu." aria-describedby="fb-hint fb-msg"></textarea>
+            <span class="hint" id="fb-hint">Jangan menulis data pembeli, nomor rekening, atau kata sandi. <span id="fb-count">0</span>/2.000</span></div>
+          <label class="fb-kontak"><input type="checkbox" id="fb-kontak"><span>Boleh dihubungi untuk tindak lanjut<small>Kami memakai email${account.profile && account.profile.whatsapp ? ' atau WhatsApp' : ''} di akun Anda.</small></span></label>
+          <p class="small" id="fb-msg" role="alert"></p>
+          <button class="btn primary" type="button" id="fb-kirim">Kirim masukan</button>
+          <p class="tiny faint">Yang terkirim hanya isi form ini dan nama halaman yang sedang dibuka. Angka laporan Anda tidak ikut dikirim.</p></div>`;
+    }
+    if (!d.open) d.showModal();
+    const ta = $('#fb-pesan'); if (ta) ta.focus();
+  }
+  async function kirimMasukan(btn) {
+    const ta = $('#fb-pesan'), msg = $('#fb-msg');
+    const pesan = (ta.value || '').trim();
+    const jenis = (document.querySelector('input[name="fb-jenis"]:checked') || {}).value || 'lainnya';
+    if (pesan.length < 5) { msg.className = 'small bad'; msg.textContent = 'Tulis masukan Anda dulu, minimal 5 huruf.'; ta.focus(); return; }
+    btn.disabled = true; btn.textContent = 'Mengirim…'; msg.textContent = '';
+    try {
+      await cloud.db.kirimMasukan({ jenis, pesan, halaman: viewName, bolehDihubungi: $('#fb-kontak').checked });
+      track('kirim-masukan');
+      dlg().innerHTML = `${dHead('Terima kasih!', '')}<div class="d-body"><p>Masukan Anda sudah kami terima. ${$('#fb-kontak') && $('#fb-kontak').checked ? 'Kami akan menghubungi Anda bila perlu penjelasan lebih lanjut.' : ''}</p>
+        <button class="btn primary" type="button" data-close>Tutup</button></div>`;
+    } catch (e) {
+      btn.disabled = false; btn.textContent = 'Kirim masukan';
+      msg.className = 'small bad';
+      // Tabel belum dibuat (SQL belum dijalankan) atau offline: jangan diam-diam gagal; tawarkan WhatsApp. Isi pesan tetap ada.
+      msg.innerHTML = e.status === 404 ? `Form masukan belum aktif. Silakan kirim lewat WhatsApp. ${tombolWa('Buka WhatsApp')}`
+        : e.status === 0 ? `Tidak bisa terhubung ke server. Periksa internet Anda, lalu coba lagi. ${tombolWa('Atau kirim lewat WhatsApp')}`
+          : esc(e.message || 'Masukan belum terkirim. Silakan coba lagi.');
+    }
+  }
   async function openUpgrade() {
     track('buka-upgrade');
     const d = dlg();
@@ -2484,6 +2537,7 @@
 
   /* ================= 8. event & mulai ================= */
   document.addEventListener('input', (e) => {
+    if (e.target.id === 'fb-pesan') { const c = $('#fb-count'); if (c) c.textContent = num(e.target.value.length); const m = $('#fb-msg'); if (m && m.classList.contains('bad') && e.target.value.trim().length >= 5) { m.textContent = ''; m.className = 'small'; } return; }
     const t = e.target, id = t.id || '', v = t.value;
     if (id === 'q') { view.q = v; renderProducts(); return; }
     if (id === 'cost-q') { view.costQ = v; renderCostTable(); return; }
@@ -2574,6 +2628,8 @@
     if (!t) { if (account.menu && !e.target.closest('.menu')) { account.menu = false; renderAccount(); } return; }
     if (t.dataset.track) { track(t.dataset.track); return; }
     if (t.dataset.sheet) { openSheet(t.dataset.sheet); return; }
+    if (t.hasAttribute('data-masukan')) { if ($('#sheet').open) closeSheet(); openMasukan(); return; }
+    if (t.id === 'fb-kirim') { kirimMasukan(t); return; }
     if (t.dataset.prod) { openProduct(t.dataset.prod); return; }
     if (t.dataset.pfilter) { view.prodFilter = t.dataset.pfilter; view.showAll = false; renderProducts(true); return; }
     if (t.dataset.platCol) { view.platCol = t.dataset.platCol; const tb = $('.plat-table'); if (tb) { tb.className = `data plat-table show-${view.platCol}`; } document.querySelectorAll('[data-plat-col]').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.platCol === view.platCol))); return; }

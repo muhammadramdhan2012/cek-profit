@@ -22,7 +22,7 @@ body.acct { min-height: 100vh; display: grid; place-items: start center; padding
 body.admin { background: var(--bg); }
 .admin-top { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding-block: 18px; }
 .admin-grid { display: grid; gap: 22px; padding-bottom: 48px; }
-.stats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
+.stats { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 12px; }
 @media (max-width: 760px) { .stats { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 .stat { padding: 16px 18px; border: 1px solid var(--line); border-radius: var(--r); background: var(--surface); }
 .stat b { display: block; font-size: 26px; letter-spacing: -0.03em; font-variant-numeric: tabular-nums; }
@@ -147,3 +147,9 @@ body.acct .acct-note { max-width: 46ch; line-height: 1.55; }
 .ingat span { display: grid; gap: 2px; }
 .ingat small { color: var(--ink-3); font-size: var(--text-xs); line-height: 1.4; }
 .sesi-note { display: grid; gap: 4px; justify-items: center; text-align: center; border-top: 1px solid var(--border-subtle); padding-top: 14px; }
+
+/* Admin: masukan pengguna */
+.fb-list { display: grid; gap: 12px; }
+.fb-item { display: grid; gap: 10px; padding: 14px 16px; border: 1px solid var(--border); border-radius: var(--r); background: var(--surface); }
+.fb-meta { display: flex; flex-wrap: wrap; gap: 6px 12px; align-items: center; }
+.fb-pesan { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; font-size: var(--text-base); color: var(--ink); }

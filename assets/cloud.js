@@ -56,7 +56,7 @@ const CekCloud = (() => {
     if (m === 'oauth_gagal') return 'Masuk dengan Google gagal. Silakan coba lagi beberapa saat lagi.';
     if (m.includes('code verifier') || m.includes('flow state') || m.includes('auth code')) return 'Proses masuk dengan Google kedaluwarsa. Silakan ulangi dari awal.';
     // Penolakan dari database (tahap 2), mis. batas riwayat akun gratis: pesannya sudah berbahasa Indonesia.
-    const tolak = String(raw).match(/^BATAS_RIWAYAT:\s*(.+)$/);
+    const tolak = String(raw).match(/^BATAS_(?:RIWAYAT|MASUKAN):\s*(.+)$/);
     if (tolak) return tolak[1];
     if (status === 0) return 'Tidak bisa terhubung ke server. Periksa koneksi internet.';
     return raw || `Permintaan gagal (${status}).`;
@@ -255,6 +255,11 @@ const CekCloud = (() => {
     adminPurchases: () => http('/rest/v1/pro_purchases?select=*&order=created_at.desc&limit=500'),
     adminCatatPembelian: (target, harga, pakaiHargaAwal, catatan) => http('/rest/v1/rpc/admin_catat_pembelian', { method: 'POST', body: { target, harga, pakai_harga_awal: !!pakaiHargaAwal, catatan: catatan || '' } }),
     adminSetSitus: (betaSampai, dibukaPada) => http('/rest/v1/rpc/admin_set_situs', { method: 'POST', body: { beta_sampai: betaSampai || null, dibuka_pada: dibukaPada || null } }),
+    /* masukan pengguna: hanya kirim (tanpa membaca kembali, karena pengguna tidak punya izin baca) */
+    kirimMasukan: ({ jenis, pesan, halaman = '', bolehDihubungi = false }) => http('/rest/v1/feedback', { method: 'POST',
+      body: { jenis, pesan: String(pesan || '').trim(), halaman: String(halaman || '').slice(0, 40), boleh_dihubungi: !!bolehDihubungi }, headers: { Prefer: 'return=minimal' } }),
+    adminFeedback: () => http('/rest/v1/feedback?select=*&order=created_at.desc&limit=300'),
+    adminSetFeedbackStatus: (id, status) => http(`/rest/v1/feedback?id=eq.${enc(id)}`, { method: 'PATCH', body: { status } }),
     adminSetRequestStatus: (id, status) => http(`/rest/v1/upgrade_requests?id=eq.${enc(id)}`, { method: 'PATCH', body: { status } }),
   };
 

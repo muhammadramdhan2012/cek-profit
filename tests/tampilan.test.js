@@ -746,6 +746,9 @@ test('waSupport: kunci config terpisah; nomor resmi pemilik; pembayaran tetap be
   truthy(/waSupport: '6287881878585',/.test(cfg) && /whatsapp: '',/.test(cfg) && /domainResmi: '',/.test(cfg), 'nomor bantuan terisi, pembayaran & domain kosong');
   truthy(require('../assets/situs.js').waSupportUrl({ waSupport: '6287881878585' }, 'Beranda').startsWith('https://wa.me/6287881878585?text='), 'format wa.me valid');
   truthy(/const PAY_READY = !!C\.whatsapp;/.test(appJs) && !/waSupport/.test(appJs), 'alur pembayaran tidak membaca waSupport');
+  const S = require('../assets/situs.js');
+  truthy(S.bantuanWa({ waSupport: '6287881878585' }, 'Halo, masukan: ') === 'https://wa.me/6287881878585?text=Halo%2C%20masukan%3A%20', 'tautan masukan WhatsApp');
+  truthy(S.bantuanWa({ waSupport: '' }, 'x') === '' && S.bantuanWa({ waSupport: '08<script>' }, 'x') === '', 'nomor kosong/tidak valid → tanpa tautan');
   const pages = { 'index.html': 'Beranda', 'dashboard.html': 'Dashboard', 'akun.html': 'Akun' };
   for (const [f, nama] of Object.entries(pages)) {
     const h = fs.readFileSync(path.join(__dirname, '..', f), 'utf8');

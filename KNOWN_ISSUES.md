@@ -269,6 +269,8 @@ Tabel ini angka audit awal; perubahan setelahnya ada di "Pembaruan status (31 Ok
 
 ### M3 · Keluar akun tidak menghapus data toko di browser
 - **Status:** Terbuka · **Kompleksitas:** S (½ hari)
+- **Catatan 4 Nov 2026:** pilihan "Ingat saya" (tanpa centang) dan keluar otomatis 30 hari hanya mengakhiri **sesi**; modal,
+  nama toko, dan logo di localStorage tetap ada. Masalah ini belum tertangani.
 - **Lokasi:** `assets/app.js:1043`
 - **Dampak:** di perangkat bersama, pengguna berikutnya melihat modal, nama toko, dan logo.
 - **Rekomendasi (audit):** saat keluar, tawarkan "Hapus juga data toko di browser ini" (default ya bila data sudah
@@ -282,7 +284,8 @@ Tabel ini angka audit awal; perubahan setelahnya ada di "Pembaruan status (31 Ok
   pertahankan sesi dan coba lagi nanti.
 
 ### M5 · Batas 3 riwayat gratis hanya di browser
-- **Status:** Diperbaiki di kode (tahap 2, 1 Nov 2026), **menunggu pemilik menjalankan `schema.sql` di Supabase**.
+- **Status:** Diperbaiki di kode (tahap 2, 1 Nov 2026); `schema.sql` sudah dijalankan pemilik di Supabase (SQL *Success*).
+  Perilaku trigger di Supabase sungguhan belum diuji dengan akun gratis setelah masa beta.
   Trigger `reports_batas_gratis` menolak riwayat ke-4 akun gratis (kecuali selama masa beta); riwayat lama tidak dihapus.
   Bukti: `supabase/tests/test-tahap2.sql` U5–U10, U16 (PostgreSQL 16 lokal, semua `t`); `node tests/cloud.test.js`
   ("Tahap 2: …"). Belum diuji di Supabase sungguhan.
@@ -425,6 +428,10 @@ Tabel ini angka audit awal; perubahan setelahnya ada di "Pembaruan status (31 Ok
 7. Ketepatan tarif umum di `assets/tarif.js` (sumber sekunder, dicek 14 Okt 2026).
 
 ## Riwayat perubahan dokumen
+
+- 4 Nov 2026: status M5 (SQL tahap 2 sudah dijalankan pemilik) dan catatan M3 (sesi tanpa "ingat saya" tidak menghapus data
+  toko). Rilis hari ini tidak mengubah mesin hitung atau parser: video tutorial, kunci tamu di browser, sesi, Kirim masukan
+  (`supabase/tests/test-masukan.sql` M1–M8, `node tests/cloud.test.js`).
 
 - 28 Okt 2026: Pajak Seller (Batch 4, aktif lewat flag `pajakSeller`): kalkulator simulasi PPh final & PPh 22 marketplace
   (`assets/pajak.js`, T1–T20) dan generator Surat Pernyataan PMK 37/2025 (`assets/surat.js`, U1–U12; teks sama kata demi kata
