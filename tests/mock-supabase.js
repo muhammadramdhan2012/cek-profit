@@ -24,6 +24,8 @@ function createMock({ confirmEmail = false, tokenTtl = 3600, strongPasswords = f
   // Tahap 2: pengaturan situs. hari_ini bisa dibekukan untuk uji (situs.hari = 'YYYY-MM-DD').
   const situs = { beta: '2026-12-13', dibuka: null, hari: null };
   const purchases = [];
+  // Pembayaran online (tiruan sederhana; logika sungguhan diuji di supabase/tests/test-pembayaran.sql).
+  const bayar = { mode: 'mati', penguji: new Set() }, orders = [];
   const today = () => situs.hari || new Date().toISOString().slice(0, 10);
   const addDays = (d, n) => { const x = new Date(`${d}T00:00:00Z`); x.setUTCDate(x.getUTCDate() + n); return x.toISOString().slice(0, 10); };
   const statusSitus = () => ({ hari_ini: today(), beta_gratis_sampai: situs.beta, beta_aktif: !!situs.beta && today() <= situs.beta,
@@ -127,6 +129,14 @@ function createMock({ confirmEmail = false, tokenTtl = 3600, strongPasswords = f
       return send(200, issue(c.id));
     }
 
+    /* ---- Edge Function duitku-buat (tiruan) ---- */
+    if (p === '/functions/v1/duitku-buat') {
+      if (!uid) return send(401, { error: 'Silakan masuk dulu untuk membeli Pro.' });
+      if (!(bayar.mode === 'sandbox' && bayar.penguji.has(uid))) return send(400, { error: 'Pembelian Pro belum dibuka.' });
+      const o = { order_id: `CU-MOCK-${orders.length + 1}`, user_id: uid, harga: 149000, status: 'menunggu', dibuat: new Date().toISOString(), dibayar_pada: null };
+      orders.push(o);
+      return send(200, { payment_url: `https://app-sandbox.duitku.com/redirect_checkout?reference=DSMOCK${orders.length}`, order_id: o.order_id, lanjut: false });
+    }
     /* ---- REST ---- */
     if (!p.startsWith('/rest/v1/')) return send(404, { message: 'not found' });
     const table0 = p.slice('/rest/v1/'.length);
@@ -186,6 +196,11 @@ function createMock({ confirmEmail = false, tokenTtl = 3600, strongPasswords = f
       if (body.until) requests.filter((x) => x.user_id === body.target && ['baru', 'diproses'].includes(x.status)).forEach((x) => { x.status = 'selesai'; });
       return send(200, null);
     }
+    if (table === 'rpc/status_pembayaran') {
+      const boleh = bayar.mode === 'sandbox' && bayar.penguji.has(uid);
+      return send(200, { mode: bayar.mode, boleh_beli: boleh, penguji: bayar.penguji.has(uid), harga: 149000, harga_pengguna_awal: false });
+    }
+    if (table === 'pro_orders' && req.method === 'GET') return send(200, orders.filter((o) => o.user_id === uid && (!eq('order_id') || o.order_id === eq('order_id'))));
     if (tahap2 && table === 'rpc/status_akun') {
       const pr = profiles.get(uid) || {};
       const sudah = purchases.some((b) => b.user_id === uid && b.harga_pengguna_awal);
@@ -217,7 +232,7 @@ function createMock({ confirmEmail = false, tokenTtl = 3600, strongPasswords = f
     }
     return send(404, { message: 'not found' });
   });
-  return { server, feedback, logouts, refreshCount: () => refresh.size, situs, purchases, users, signupBodies, profiles, userData, reports, requests, addUser, makeAdmin: (email) => { const u = [...users.values()].find((x) => x.email === email); profiles.get(u.id).is_admin = true; }, confirmAll: () => users.forEach((u) => { u.confirmed = true; }), today };
+  return { server, bayar, orders, feedback, logouts, refreshCount: () => refresh.size, situs, purchases, users, signupBodies, profiles, userData, reports, requests, addUser, makeAdmin: (email) => { const u = [...users.values()].find((x) => x.email === email); profiles.get(u.id).is_admin = true; }, confirmAll: () => users.forEach((u) => { u.confirmed = true; }), today };
 }
 module.exports = createMock;
 if (require.main === module) {

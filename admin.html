@@ -21,7 +21,7 @@
   <main class="admin-grid" id="main" aria-live="polite"><p class="muted">Memuat…</p></main>
 </div>
 <div id="toast" class="toast" role="status" hidden></div>
-<script src="assets/cloud.js?v=3298ff6c94"></script>
+<script src="assets/cloud.js?v=98df9d05e3"></script>
 <script>
 (() => {
   const C = window.CEK_CONFIG || {};
@@ -39,6 +39,9 @@
   let profiles = [], requests = [], purchases = [], situs = null, beli = null, q = '';
   // masukan = null bila tabel feedback belum dibuat (SQL belum dijalankan ulang). fbFilter: 'aktif' (baru+dibaca) / 'semua'.
   let masukan = null, fbFilter = 'aktif';
+  // Pembayaran online (Duitku): pesanan = null bila SQL pembayaran belum dijalankan; modeBayar dari server.
+  let pesanan = null, modeBayar = null;
+  const ST_PESANAN = { menunggu: 'todo', lunas: 'ok', gagal: 'bad', kedaluwarsa: '' };
   const JENIS = { saran: 'Saran fitur', masalah: 'Ada yang salah', lainnya: 'Lainnya' };
   const sudahHargaAwal = (id) => purchases.some((b) => b.user_id === id && b.harga_pengguna_awal);
 
@@ -52,6 +55,7 @@
       [profiles, requests] = await Promise.all([cloud.db.adminProfiles(), cloud.db.adminRequests()]);
       // Tahap 2: gagal = SQL tahap 2 belum dijalankan; halaman tetap bisa dipakai dengan fitur lama.
       [situs, purchases, masukan] = await Promise.all([cloud.db.statusSitus().catch(() => null), cloud.db.adminPurchases().catch(() => []), cloud.db.adminFeedback().catch(() => null)]);
+      [pesanan, modeBayar] = await Promise.all([cloud.db.adminPesanan().catch(() => null), cloud.db.statusPembayaran().then((x) => x && x.mode).catch(() => null)]);
       render();
     } catch (e) { main.innerHTML = `<p class="panel bad">${esc(e.message)}</p>`; }
   }
@@ -70,6 +74,7 @@
         <div class="stat"><span class="small muted">Masukan baru</span><b>${masukan ? masukan.filter((f) => f.status === 'baru').length : '—'}</b></div>
       </section>
       ${panelMasukan(byId)}
+      ${panelPembayaran(byId)}
       ${situs ? `<section class="panel"><h3 style="margin-bottom:6px">Masa beta &amp; pembelian</h3>
         <p class="small muted" style="margin-bottom:12px">Tanggal server hari ini: <b>${tgl(situs.hari_ini)}</b>. Masa beta ${situs.beta_aktif ? '<span class="badge ok">aktif</span>' : '<span class="badge">tidak aktif</span>'}${situs.pembelian_dibuka_pada ? ` · batas klaim harga pengguna awal ${tgl(situs.klaim_harga_awal_sampai)}` : ''}</p>
         <div class="row-gap" style="align-items:end;flex-wrap:wrap">
@@ -87,9 +92,9 @@
       </section>
       <section class="panel"><div style="display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:12px"><h3>Pengguna</h3><input class="plain" id="q" type="search" placeholder="Cari email, nama, toko…" value="${esc(q)}" style="max-width:280px"></div>
         <div class="tablewrap"><table class="tbl"><thead><tr><th>Pengguna</th><th>Daftar</th><th>Pro sampai</th><th>Atur Pro</th></tr></thead><tbody>
-        ${list.map((p) => `<tr><td><b>${esc(p.email)}</b>${p.is_admin ? ' <span class="badge">admin</span>' : ''}${p.pengguna_awal ? ` <span class="badge ${sudahHargaAwal(p.id) ? '' : 'ok'}">pengguna awal${sudahHargaAwal(p.id) ? ' · harga khusus terpakai' : ''}</span>` : ''}<br><span class="tiny faint">${esc(p.full_name)} ${p.store_name ? `· ${esc(p.store_name)}` : ''} ${esc(p.whatsapp)}</span></td>
+        ${list.map((p) => `<tr><td><b>${esc(p.email)}</b>${p.is_admin ? ' <span class="badge">admin</span>' : ''}${p.penguji_pembayaran ? ' <span class="badge todo">penguji pembayaran</span>' : ''}${p.pengguna_awal ? ` <span class="badge ${sudahHargaAwal(p.id) ? '' : 'ok'}">pengguna awal${sudahHargaAwal(p.id) ? ' · harga khusus terpakai' : ''}</span>` : ''}<br><span class="tiny faint">${esc(p.full_name)} ${p.store_name ? `· ${esc(p.store_name)}` : ''} ${esc(p.whatsapp)}</span></td>
           <td class="small">${tgl(p.created_at)}</td><td>${cloud.isPro(p) ? `<span class="badge pro">${tgl(p.pro_until)}</span>` : p.pro_until ? `<span class="small faint">berakhir ${tgl(p.pro_until)}</span>` : '<span class="faint">—</span>'}</td>
-          <td><div class="row-gap">${situs ? `<button class="btn sm primary" data-beli="${esc(p.id)}">Catat pembelian</button>` : ''}<button class="btn sm" data-pro="${esc(p.id)}" data-months="1">+1 bln</button><button class="btn sm" data-pro="${esc(p.id)}" data-months="12">+1 thn</button>${p.pro_until ? `<button class="btn sm quiet danger" data-off="${esc(p.id)}">Matikan</button>` : ''}</div></td></tr>${beli === p.id ? formBeli(p) : ''}`).join('') || '<tr><td colspan="4" class="muted">Tidak ada pengguna yang cocok.</td></tr>'}
+          <td><div class="row-gap">${situs ? `<button class="btn sm primary" data-beli="${esc(p.id)}">Catat pembelian</button>` : ''}<button class="btn sm" data-pro="${esc(p.id)}" data-months="1">+1 bln</button><button class="btn sm" data-pro="${esc(p.id)}" data-months="12">+1 thn</button>${p.pro_until ? `<button class="btn sm quiet danger" data-off="${esc(p.id)}">Matikan</button>` : ''}${pesanan ? `<button class="btn sm quiet" data-penguji="${esc(p.id)}" data-nilai="${p.penguji_pembayaran ? '0' : '1'}">${p.penguji_pembayaran ? 'Hapus penguji' : 'Jadikan penguji'}</button>` : ''}</div></td></tr>${beli === p.id ? formBeli(p) : ''}`).join('') || '<tr><td colspan="4" class="muted">Tidak ada pengguna yang cocok.</td></tr>'}
         </tbody></table></div><p class="tiny faint" style="margin-top:8px">"Catat pembelian" = Pro 1 tahun + tersimpan di catatan pembelian. Tombol +1 bln / +1 thn / Matikan hanya untuk koreksi manual (tidak tercatat sebagai pembelian).</p></section>
       ${purchases.length ? `<section class="panel"><h3 style="margin-bottom:12px">Catatan pembelian Pro</h3><div class="tablewrap"><table class="tbl"><thead><tr><th>Dicatat</th><th>Pengguna</th><th>Harga</th><th>Berlaku</th><th>Catatan</th></tr></thead><tbody>
         ${purchases.map((b) => `<tr><td class="small">${tgl(b.created_at)}</td><td>${esc((byId.get(b.user_id) || {}).email || b.user_id)}</td><td>${rp(b.harga)}${b.harga_pengguna_awal ? ' <span class="badge ok">pengguna awal</span>' : ''}</td><td class="small">${tgl(b.mulai)} – ${tgl(b.sampai)}</td><td class="small">${esc(b.catatan)}</td></tr>`).join('')}
@@ -111,6 +116,22 @@
           ${f.boleh_dihubungi ? `<span class="small">Boleh dihubungi: ${kontak(p) || '—'}</span>` : '<span class="tiny faint">Tidak minta dihubungi</span>'}</div>
         <div class="row-gap">${f.status === 'baru' ? `<button class="btn sm" type="button" data-fb="${f.id}" data-st="dibaca">Tandai dibaca</button>` : ''}${f.status !== 'selesai' ? `<button class="btn sm primary" type="button" data-fb="${f.id}" data-st="selesai">Selesai</button>` : `<button class="btn sm quiet" type="button" data-fb="${f.id}" data-st="dibaca">Buka lagi</button>`}</div>
       </article>`; }).join('')}</div>` : `<p class="muted small">${masukan.length ? 'Semua masukan sudah selesai. 🎉' : 'Belum ada masukan.'}</p>`}</section>`;
+  }
+  /** Pembayaran online Duitku: mode (mati/sandbox) + daftar pesanan. Production dibuka lewat persetujuan terpisah. */
+  function panelPembayaran(byId) {
+    if (!pesanan) return '<section class="panel"><h3 style="margin-bottom:6px">Pembayaran online (Duitku)</h3><p class="small muted">Belum aktif: jalankan ulang <code>supabase/schema.sql</code> di SQL Editor (bagian PEMBAYARAN ONLINE). Lihat <code>supabase/PANDUAN.md</code>.</p></section>';
+    const mode = modeBayar || 'mati';
+    return `<section class="panel"><div style="display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:8px"><h3>Pembayaran online (Duitku)</h3>
+      <div class="row-gap"><span class="small">Mode: <span class="badge ${mode === 'sandbox' ? 'todo' : mode === 'production' ? 'ok' : ''}">${esc(mode)}</span></span>
+      ${mode !== 'mati' ? '<button class="btn sm quiet danger" type="button" data-mode-bayar="mati">Tutup pembayaran</button>' : ''}${mode !== 'sandbox' ? '<button class="btn sm" type="button" data-mode-bayar="sandbox">Buka Sandbox (penguji saja)</button>' : ''}</div></div>
+      <p class="tiny faint" style="margin-bottom:12px">Sandbox: hanya akun bertanda "penguji pembayaran" yang melihat tombol beli, dengan uang tiruan. Pro aktif otomatis hanya setelah notifikasi Duitku lolos pemeriksaan tanda tangan dan nominal.</p>
+      ${pesanan.length ? `<div class="tablewrap"><table class="tbl"><thead><tr><th>Dibuat</th><th>Pengguna</th><th>Harga</th><th>Status</th><th>Pesanan / referensi</th><th>Notifikasi terakhir</th></tr></thead><tbody>
+        ${pesanan.map((o) => { const cb = o.callback_terakhir || {}; return `<tr><td class="small">${tgl(o.dibuat)}</td><td>${esc((byId.get(o.user_id) || {}).email || o.email)}</td>
+          <td>${rp(o.harga)}${o.harga_pengguna_awal ? ' <span class="badge ok">pengguna awal</span>' : ''}${o.mode === 'sandbox' ? ' <span class="badge">sandbox</span>' : ''}</td>
+          <td><span class="badge ${ST_PESANAN[o.status] ?? ''}">${esc(o.status)}</span>${o.dibayar_pada ? `<br><span class="tiny faint">${tgl(o.dibayar_pada)}${o.kode_metode ? ` · ${esc(o.kode_metode)}` : ''}</span>` : ''}</td>
+          <td class="small">${esc(o.order_id)}<br><span class="tiny faint">${esc(o.referensi || '—')}</span></td>
+          <td class="small">${cb.hasil ? `${esc(cb.hasil)}<br><span class="tiny faint">${tgl(cb.waktu)}</span>` : '<span class="faint">—</span>'}</td></tr>`; }).join('')}
+        </tbody></table></div>` : '<p class="muted small">Belum ada pesanan.</p>'}</section>`;
   }
   /** Form catat pembelian (satu baris di bawah pengguna). Server tetap memeriksa semua syarat harga pengguna awal. */
   function formBeli(p) {
@@ -150,6 +171,16 @@
         await cloud.db.adminSetPro(t.dataset.pro, until); toast(`Pro aktif sampai ${tgl(until)}.`); return load();
       }
       if (t.dataset.off) { if (!confirm('Matikan Pro pengguna ini?')) return; await cloud.db.adminSetPro(t.dataset.off, null); toast('Pro dimatikan.'); return load(); }
+      if (t.dataset.modeBayar) {
+        const m = t.dataset.modeBayar;
+        if (!confirm(m === 'sandbox' ? 'Buka pembayaran Sandbox? Hanya akun penguji yang bisa membeli, dengan uang tiruan.' : 'Tutup pembayaran online? Pesanan yang sudah dibayar tetap diproses.')) return;
+        await cloud.db.adminSetPembayaran(m); toast(m === 'sandbox' ? 'Pembayaran Sandbox dibuka untuk penguji.' : 'Pembayaran online ditutup.'); return load();
+      }
+      if (t.dataset.penguji) {
+        const p = profiles.find((x) => x.id === t.dataset.penguji) || {}, on = t.dataset.nilai === '1';
+        if (!confirm(`${on ? 'Jadikan' : 'Hapus'} ${p.email || 'pengguna'} ${on ? 'sebagai' : 'dari'} penguji pembayaran?`)) return;
+        await cloud.db.adminSetPenguji(t.dataset.penguji, on); toast(on ? 'Akun ditandai penguji.' : 'Tanda penguji dihapus.'); return load();
+      }
       if (t.dataset.fbFilter) { fbFilter = t.dataset.fbFilter; return render(); }
       if (t.dataset.fb) { await cloud.db.adminSetFeedbackStatus(+t.dataset.fb, t.dataset.st); const f = masukan.find((x) => x.id === +t.dataset.fb); if (f) f.status = t.dataset.st; toast(t.dataset.st === 'selesai' ? 'Masukan ditandai selesai.' : 'Status masukan diperbarui.'); return render(); }
       if (t.dataset.reject) { await cloud.db.adminSetRequestStatus(+t.dataset.reject, 'ditolak'); toast('Permintaan ditolak.'); return load(); }

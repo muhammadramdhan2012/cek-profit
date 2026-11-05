@@ -277,6 +277,27 @@ const memStore = () => { const m = new Map(); return { getItem: (k) => (m.has(k)
     truthy((await A.db.adminPurchases()).length === 1, 'catatan pembelian tersimpan');
     m.server.close();
   });
+  await t('Pembayaran online: hanya penguji saat Sandbox, pesan penolakan berbahasa Indonesia, status pesanan bisa dibaca', async () => {
+    const m = createMock(); await new Promise((r) => m.server.listen(0, r));
+    const u = `http://127.0.0.1:${m.server.address().port}`;
+    const U = fresh().init({ url: u, key: 'anon', store: memStore() });
+    await U.auth.signUp({ email: 'uji@toko.id', password: 'sandiku123' });
+    let st = await U.db.statusPembayaran();
+    truthy(st.mode === 'mati' && st.boleh_beli === false, 'awalnya tertutup');
+    try { await U.db.buatPesananPro(); throw new Error('harus ditolak'); } catch (e) { truthy(e.status === 400 && e.message === 'Pembelian Pro belum dibuka.', e.message); }
+    truthy(U.auth.user(), 'penolakan tidak mengeluarkan pengguna');
+    m.bayar.mode = 'sandbox'; m.bayar.penguji.add(U.auth.user().id);
+    st = await U.db.statusPembayaran();
+    truthy(st.boleh_beli && st.harga === 149000, 'penguji boleh beli');
+    const r = await U.db.buatPesananPro();
+    truthy(/^https:\/\/app-sandbox\.duitku\.com\//.test(r.payment_url) && r.order_id === 'CU-MOCK-1', JSON.stringify(r));
+    const o = await U.db.pesananPro('CU-MOCK-1');
+    truthy(o && o.status === 'menunggu' && o.harga === 149000, 'status pesanan');
+    truthy((await U.db.pesananPro('CU-LAIN')) === null, 'pesanan tak dikenal → null');
+    const anon = fresh().init({ url: u, key: 'anon', store: memStore() });
+    try { await anon.db.buatPesananPro(); throw new Error('harus ditolak'); } catch (e) { truthy(e.status === 401, e.message); }
+    m.server.close();
+  });
   await t('Tahap 2: database lama (SQL tahap 2 belum dijalankan) → status gagal dengan sopan, fitur lama tetap jalan', async () => {
     const m = createMock({ tahap2: false }); await new Promise((r) => m.server.listen(0, r));
     const u = `http://127.0.0.1:${m.server.address().port}`;

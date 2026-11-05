@@ -56,7 +56,7 @@ const CekCloud = (() => {
     if (m === 'oauth_gagal') return 'Masuk dengan Google gagal. Silakan coba lagi beberapa saat lagi.';
     if (m.includes('code verifier') || m.includes('flow state') || m.includes('auth code')) return 'Proses masuk dengan Google kedaluwarsa. Silakan ulangi dari awal.';
     // Penolakan dari database (tahap 2), mis. batas riwayat akun gratis: pesannya sudah berbahasa Indonesia.
-    const tolak = String(raw).match(/^BATAS_(?:RIWAYAT|MASUKAN):\s*(.+)$/);
+    const tolak = String(raw).match(/^(?:BATAS_(?:RIWAYAT|MASUKAN|PESANAN)|PEMBAYARAN_TUTUP|PERLU_LOGIN):\s*(.+)$/);
     if (tolak) return tolak[1];
     if (status === 0) return 'Tidak bisa terhubung ke server. Periksa koneksi internet.';
     return raw || `Permintaan gagal (${status}).`;
@@ -248,12 +248,19 @@ const CekCloud = (() => {
     statusSitus: () => http('/rest/v1/rpc/status_situs', { method: 'POST', body: {}, auth: false }),
     statusAkun: () => http('/rest/v1/rpc/status_akun', { method: 'POST', body: {} }),
     myRequests: () => http('/rest/v1/upgrade_requests?select=*&order=created_at.desc&limit=5'),
+    /* pembayaran online Pro lewat Duitku: harga, mode, dan hak beli SELALU ditentukan server */
+    statusPembayaran: () => http('/rest/v1/rpc/status_pembayaran', { method: 'POST', body: {} }),
+    buatPesananPro: () => http('/functions/v1/duitku-buat', { method: 'POST', body: {} }),
+    pesananPro: (orderId) => http(`/rest/v1/pro_orders?select=order_id,harga,status,dibuat,dibayar_pada&order_id=eq.${enc(orderId)}`).then((r) => (r && r[0]) || null),
     /* admin */
     adminProfiles: () => http('/rest/v1/profiles?select=*&order=created_at.desc&limit=500'),
     adminRequests: () => http('/rest/v1/upgrade_requests?select=*&order=created_at.desc&limit=200'),
     adminSetPro: (target, until) => http('/rest/v1/rpc/admin_set_pro', { method: 'POST', body: { target, until } }),
     adminPurchases: () => http('/rest/v1/pro_purchases?select=*&order=created_at.desc&limit=500'),
     adminCatatPembelian: (target, harga, pakaiHargaAwal, catatan) => http('/rest/v1/rpc/admin_catat_pembelian', { method: 'POST', body: { target, harga, pakai_harga_awal: !!pakaiHargaAwal, catatan: catatan || '' } }),
+    adminPesanan: () => http('/rest/v1/pro_orders?select=order_id,user_id,email,harga,harga_pengguna_awal,mode,status,referensi,kode_metode,dibuat,dibayar_pada,callback_terakhir&order=dibuat.desc&limit=300'),
+    adminSetPembayaran: (mode) => http('/rest/v1/rpc/admin_set_pembayaran', { method: 'POST', body: { mode } }),
+    adminSetPenguji: (target, nilai) => http('/rest/v1/rpc/admin_set_penguji', { method: 'POST', body: { target, nilai: !!nilai } }),
     adminSetSitus: (betaSampai, dibukaPada) => http('/rest/v1/rpc/admin_set_situs', { method: 'POST', body: { beta_sampai: betaSampai || null, dibuka_pada: dibukaPada || null } }),
     /* masukan pengguna: hanya kirim (tanpa membaca kembali, karena pengguna tidak punya izin baca) */
     kirimMasukan: ({ jenis, pesan, halaman = '', bolehDihubungi = false }) => http('/rest/v1/feedback', { method: 'POST',
