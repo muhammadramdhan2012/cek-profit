@@ -164,13 +164,16 @@ section.blk.alt { background: var(--surface); border-block: 1px solid var(--line
 
 /* ---------- footer ---------- */
 .site-foot { border-top: 1px solid var(--line); background: var(--surface); padding-bottom: env(safe-area-inset-bottom); }
-.foot-grid { display: grid; grid-template-columns: minmax(0, 1.6fr) repeat(3, minmax(0, 1fr)); gap: 32px; padding-block: 48px 32px; }
+.foot-grid { display: grid; grid-template-columns: minmax(0, 1.4fr) repeat(3, minmax(0, .8fr)) minmax(0, 1.3fr); gap: 32px; padding-block: 48px 32px; }
+.foot-kontak { font-style: normal; } .foot-kontak span { color: var(--ink-2); line-height: 1.55; }
+.foot-kontak a { overflow-wrap: anywhere; }
+@media (max-width: 1080px) and (min-width: 761px) { .foot-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); } .foot-brand { grid-column: 1 / -1; } }
 .foot-brand { display: grid; gap: 12px; justify-items: start; align-content: start; max-width: 320px; }
 .foot-col { display: grid; gap: 10px; align-content: start; font-size: 14px; }
 .foot-col b { font-size: 13px; color: var(--ink); margin-bottom: 2px; }
 .foot-col a { color: var(--ink-2); text-decoration: none; padding: 2px 0; } .foot-col a:hover { color: var(--ink); text-decoration: underline; }
 .foot-bottom { border-top: 1px solid var(--line); padding-block: 20px 32px; font-size: 13px; color: var(--ink-3); }
-@media (max-width: 760px) { .foot-grid { grid-template-columns: 1fr 1fr; } .foot-brand { grid-column: 1 / -1; } .foot-col a { padding: 6px 0; } }
+@media (max-width: 760px) { .foot-grid { grid-template-columns: 1fr 1fr; } .foot-brand, .foot-kontak { grid-column: 1 / -1; } .foot-col a { padding: 6px 0; } }
 
 /* ---------- ajakan lengket di HP ---------- */
 .m-cta { display: none; }
