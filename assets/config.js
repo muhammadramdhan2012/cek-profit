@@ -51,7 +51,7 @@ window.CEK_CONFIG = {
   // Jika Anda membuat pasangan kunci baru di alat pembuat kode, tempel kunci publiknya di sini.
   publicKey: 'BCqCk7193jIfz9woFYfWb4IvZMUUkPF9VeYARLW8gpaFPqyFvIAXWr9j3orDgpUf3K6PSyfRtDnbfan7rpjJl5Q',
 
-  email: '',   // opsional, tampil di halaman privasi
+  email: 'support@cekuntung.id',   // email support (Cloudflare Email Routing → Gmail pemilik), tampil di halaman privasi
 
   // ---------- Akun (Supabase) ----------
   // Ikuti supabase/PANDUAN.md. Selama kosong, situs berjalan tanpa login (semua tersimpan di browser).
