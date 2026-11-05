@@ -6,3 +6,8 @@ create function auth.uid() returns uuid language sql stable as $$ select nullif(
 grant usage on schema public, auth to anon, authenticated;
 grant execute on function auth.uid() to anon, authenticated;
 alter default privileges in schema public grant all on tables to anon, authenticated; alter default privileges in schema public grant all on sequences to anon, authenticated;
+-- Tiruan pgcrypto di skema extensions dan Supabase Vault (uji pembayaran Duitku).
+-- (di Supabase, anon & authenticated memang punya usage pada skema extensions)
+create schema if not exists extensions; create extension if not exists pgcrypto with schema extensions;
+create schema if not exists vault; create table if not exists vault.decrypted_secrets (name text primary key, decrypted_secret text);
+grant usage on schema extensions to anon, authenticated;

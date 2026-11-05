@@ -134,6 +134,11 @@ Bila dokumen rujukan bertentangan dengan file ini, file ini yang berlaku. Lapork
 - `assets/tarif.js` berisi tarif umum marketplace untuk simulasi. Laba **tidak** memakai tabel ini; laba memakai potongan nyata dari laporan. Tarif tidak diambil otomatis dari situs marketplace (halaman resmi dirender JS, tarif per subkategori), jadi setiap angka wajib bertanggal dan bersumber.
 - `assets/penjelasan.js` berisi teks tombol "?". Setiap angka baru yang tampil ke pengguna sebaiknya diberi penjelasan.
 - `assets/cloud.js` adalah klien Supabase lewat `fetch` (tanpa supabase-js).
+- **Supabase Edge Function** (disetujui pemilik 5 Nov 2026) hanya untuk pembayaran Duitku: `supabase/functions/duitku-buat`
+  (membuat invoice) dan `duitku-callback` (menerima notifikasi). TypeScript tanpa dependensi, di-deploy pemilik lewat
+  dashboard Supabase, diuji di Node (`tests/duitku.test.mjs`). Tanpa `service_role`: anon key + token pengguna; keputusan
+  (harga, hak beli, keaslian notifikasi, aktivasi Pro) ada di fungsi database `security definer`. Kunci Duitku hanya di
+  Supabase Secrets dan Vault milik pemilik.
 - **Dependency:** pustaka pihak ketiga di-*vendor* ke `vendor/` dengan versi tetap. Pustaka baru harus dievaluasi dulu (perlu atau tidak, ukuran, lisensi, keamanan) dan disetujui pemilik.
 - **Offline:** website harus tetap bisa memproses file tanpa internet setelah halaman terbuka (`sw.js`). Fitur akun gagal dengan sopan, tanpa menghapus sesi atau data lokal.
 - **Kompatibilitas:**
@@ -152,7 +157,11 @@ Bila dokumen rujukan bertentangan dengan file ini, file ini yang berlaku. Lapork
   | `privasi.html` | privasi & ketentuan |
   | `app.html` | hanya redirect ke `dashboard.html` |
 
-- Pembayaran Pro manual: pengguna mengirim permintaan dan menghubungi lewat WhatsApp, lalu admin mengaktifkan di `admin.html` (RPC `admin_set_pro`).
+- Pembayaran Pro online lewat Duitku (rencana disetujui 5 Nov 2026): mode `mati`/`sandbox`/`production` di
+  `site_settings.pembayaran_mode` (diubah dari admin.html). Sandbox hanya untuk akun `penguji_pembayaran`. Pro aktif
+  hanya dari callback yang lolos pemeriksaan HMAC-SHA256, kode merchant, dan nominal (`duitku_terima`), bukan dari
+  parameter URL kembali. Biaya transaksi ditanggung Cek Untung. Production butuh persetujuan terpisah.
+- Pembayaran Pro manual tetap tersedia sebagai cadangan: admin mencatat di `admin.html` (`admin_catat_pembelian`).
 
 ## 7. Keamanan dan privasi
 
@@ -222,7 +231,7 @@ node tests/cloud.test.js          # memakai server tiruan tests/mock-supabase.js
 - ✅ Jenis usaha (reseller, stok sendiri, produsen, dropshipper) dengan fitur masing-masing; tombol "?" penjelasan angka (`assets/penjelasan.js`); tarif efektif dari laporan + tabel tarif umum (`assets/tarif.js`, diperbarui manual dengan tanggal dan sumber).
 - ⏳ Tarif umum di `assets/tarif.js` dicek 14 Okt 2026 dari sumber sekunder; perlu dicocokkan ulang saat marketplace mengumumkan perubahan tarif.
 - ✅ Bantuan WhatsApp aktif sejak 3 Nov 2026 (`waSupport`, nomor dari pemilik); nomor pembayaran `whatsapp` tetap kosong.
-- ⏳ Harga Pro ditetapkan pemilik (21 Okt 2026): Rp149.000; diubah pemilik 1 Nov 2026 menjadi **Rp149.000 per tahun**, berlaku 1 tahun, tanpa perpanjangan otomatis (harga peluncuran; reguler yang direncanakan Rp299.000), tampil di halaman depan sejak rilis UI. Harga reguler tidak ditampilkan dan Jasa laporan tidak ditawarkan di halaman publik (keputusan pemilik 22 Okt 2026; nilai `jasa` di config dipertahankan). Pembelian belum dibuka: `whatsapp` tetap kosong, dan alur pembayaran lama di dashboard (paket bulanan/tahunan) belum diganti.
+- ⏳ Harga Pro ditetapkan pemilik (21 Okt 2026): Rp149.000; diubah pemilik 1 Nov 2026 menjadi **Rp149.000 per tahun**, berlaku 1 tahun, tanpa perpanjangan otomatis (harga peluncuran; reguler yang direncanakan Rp299.000), tampil di halaman depan sejak rilis UI. Harga reguler tidak ditampilkan dan Jasa laporan tidak ditawarkan di halaman publik (keputusan pemilik 22 Okt 2026; nilai `jasa` di config dipertahankan). Pembelian untuk umum belum dibuka. Pembayaran online Duitku (Sandbox, khusus akun penguji) dibangun 5 Nov 2026 untuk syarat verifikasi Duitku; kebijakan refund dan ketentuan pembelian di `privasi.html#pembelian` (keputusan pemilik 5 Nov 2026).
 - ⏳ Masa beta gratis (keputusan pemilik 1 Nov 2026): semua fitur Pro terbuka sampai 13 Des 2026 (`betaGratisSampai` di
   `assets/config.js`), lalu kunci Pro kembali otomatis. Pengguna yang membuat akun selama beta dijanjikan harga khusus
   Rp99.000 **untuk tahun pertama**, bila membeli dalam 30 hari sejak pembelian dibuka, perpanjangan harga normal (`hargaPenggunaAwal`).

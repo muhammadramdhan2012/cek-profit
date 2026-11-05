@@ -139,6 +139,8 @@ Subjek email diisi langsung di Supabase (kolom *Subject*), tidak disimpan di fil
 
 ## Alur pembayaran manual
 
+Tetap berlaku sebagai cadangan bila pembayaran online bermasalah.
+
 1. Pengguna klik **Berlangganan Pro** → pilih paket → **Lanjut ke pembayaran**.
    Permintaannya tercatat, dan WhatsApp Anda terbuka dengan pesan yang sudah berisi email akun dan paket.
 2. Anda kirim nomor rekening atau QRIS, lalu pengguna membayar.
@@ -156,6 +158,66 @@ Tombol **+1 bln**, **+1 thn**, dan **Matikan** hanya untuk koreksi manual; tidak
 
 Kode akses (CP1…): sejak 1 Nov 2026 tidak diterbitkan lagi (keputusan pemilik); Pro hanya lewat akun. Kode yang
 sudah pernah diberikan tetap berlaku sampai tanggalnya.
+
+## Pembayaran online Pro lewat Duitku (Sandbox, 5 Nov 2026)
+
+Pro dibayar di halaman Duitku dan aktif otomatis setelah notifikasi Duitku lolos pemeriksaan tanda tangan dan nominal
+di database. Tahap ini **Sandbox** (uang tiruan) dan hanya untuk akun penguji. Kunci Duitku **hanya** Anda isi di
+Supabase; jangan dikirim ke chat, ditulis di repository, atau ditempel di `config.js`.
+
+**A. Ambil kunci Sandbox dari Duitku**
+1. Masuk ke dashboard Duitku **Sandbox** → menu **Project** → pilih/buat project "Cek Untung".
+2. Catat **Merchant Code** (mis. `DSxxxxx`) dan **API Key**. Simpan di tempat aman (mis. password manager).
+
+**B. Jalankan SQL**
+1. Supabase → **SQL Editor** → **New query** → tempel seluruh `supabase/schema.sql` → **Run**.
+   Aman dijalankan ulang. Bagian baru: *PEMBAYARAN ONLINE PRO LEWAT DUITKU* (tabel `pro_orders`, fungsi `duitku_terima`, dll.).
+
+**C. Simpan kunci di Vault (untuk pemeriksaan notifikasi di database)**
+1. Supabase → **Project Settings** → **Vault** (atau **Integrations → Vault**). Bila diminta, aktifkan Vault.
+2. **Add new secret** dua kali:
+   - Name `duitku_merchant_code_sandbox`, Secret = Merchant Code Sandbox.
+   - Name `duitku_api_key_sandbox`, Secret = API Key Sandbox.
+   Nama harus persis (huruf kecil, garis bawah).
+
+**D. Buat dua Edge Function**
+1. Supabase → **Edge Functions** → **Deploy a new function** → **Via Editor**.
+2. Nama `duitku-buat` → hapus isi contoh → tempel seluruh `supabase/functions/duitku-buat/index.ts` → **Deploy**.
+   Biarkan **Enforce JWT verification** (Verify JWT) **menyala**.
+3. Ulangi untuk nama `duitku-callback` dengan isi `supabase/functions/duitku-callback/index.ts`.
+   Setelah deploy: buka fungsi itu → **Details/Settings** → **matikan Enforce JWT verification** → **Save**
+   (Duitku tidak membawa token login Supabase).
+4. **Edge Functions** → **Secrets** (atau **Manage secrets**) → tambahkan:
+   - `DUITKU_MERCHANT_CODE_SANDBOX` = Merchant Code Sandbox
+   - `DUITKU_API_KEY_SANDBOX` = API Key Sandbox
+   `SUPABASE_URL` dan `SUPABASE_ANON_KEY` sudah tersedia otomatis. **Jangan** menambahkan atau memakai `service_role`.
+
+**E. Isi URL di dashboard Duitku Sandbox (project Cek Untung)**
+- **Callback URL:** `https://<project-ref>.supabase.co/functions/v1/duitku-callback`
+  (`<project-ref>` = bagian depan `supabaseUrl` di `assets/config.js`).
+- Return URL tidak perlu diisi di dashboard; website mengirimnya sendiri (`https://cekuntung.id/dashboard.html?bayar=…`).
+
+**F. Buka Sandbox untuk penguji**
+1. Daftar akun penguji di cekuntung.id: `cekuntung9+duitku@gmail.com` (email masuk ke kotak masuk cekuntung9@gmail.com).
+2. admin.html → baris akun itu → **Jadikan penguji**.
+3. admin.html → **Pembayaran online (Duitku)** → **Buka Sandbox (penguji saja)**.
+   Pengguna lain tidak melihat tombol beli dan database menolak pesanan mereka.
+
+**G. Uji (centang semua)**
+- [ ] Masuk sebagai penguji → klik kartu **BETA**/**Pro** di dashboard → **Bayar** → halaman Duitku Sandbox terbuka.
+- [ ] Bayar dengan metode tes Sandbox (mis. virtual account lewat halaman demo Duitku, atau QRIS tes) → kembali ke
+      dashboard → "Pembayaran sedang diproses" → dalam 1 menit "Pro aktif" dengan tanggal 1 tahun lagi.
+- [ ] Batalkan/biarkan kedaluwarsa satu pembayaran → Pro tidak berubah; pesanan tercatat gagal/kedaluwarsa di admin.
+- [ ] admin.html menampilkan pesanan, referensi Duitku, dan "Notifikasi terakhir".
+- [ ] Akun lain (bukan penguji) tidak melihat tombol beli.
+Bila Pro tidak aktif: lihat kolom **Notifikasi terakhir** di admin ("tanda tangan tidak sah" = kunci di Vault salah;
+"kunci Duitku belum dipasang di Vault" = langkah C belum), dan **Edge Functions → duitku-callback → Logs**.
+Bila tombol **Bayar** menjawab "Pembayaran belum disiapkan": cek Secrets langkah D.4. Bila proyek Anda tidak lagi
+menyediakan `SUPABASE_ANON_KEY` otomatis, tambahkan secret `CEK_ANON_KEY` berisi nilai `supabaseAnonKey` dari
+`assets/config.js` (kunci publik, bukan `service_role`).
+
+**Menutup lagi:** admin.html → **Tutup pembayaran**. Production (uang sungguhan) butuh kunci Production
+(`*_production`) dan persetujuan terpisah; belum ada tombolnya.
 
 ## Opsional
 

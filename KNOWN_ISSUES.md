@@ -306,6 +306,10 @@ Tabel ini angka audit awal; perubahan setelahnya ada di "Pembaruan status (31 Ok
   - Kode akses tidak diterbitkan lagi (keputusan pemilik); kode lama tetap berlaku sampai tanggalnya.
   - **Sisa yang diterima pemilik:** fitur yang dihitung dari file (PDF, Excel, analisis semua produk) tetap dikunci di
     browser dan bisa dibuka lewat DevTools, demi janji file tidak dikirim ke server. Status M6: sebagian.
+- **Pembayaran online (5 Nov 2026, Sandbox):** status Pro dari pembelian online ditetapkan di database
+  (`duitku_terima` → `catat_pembelian_pro`), bukan di browser; harga dihitung server. Tidak mengubah sisa M6 di atas.
+  Bukti: `supabase/tests/test-pembayaran.sql` P0–P24, `node tests/duitku.test.mjs`, `node tests/cloud.test.js`.
+  Belum diverifikasi: alur dengan Duitku Sandbox sungguhan (menunggu kunci & deploy oleh pemilik).
 - **Lokasi:** `assets/app.js:76`, `assets/license.js:34-35`
 - **Dampak (bisnis):** fitur Pro bisa dibuka lewat DevTools; satu kode akses bisa dibagikan ke banyak orang.
 - **Rekomendasi (audit):**
@@ -428,6 +432,10 @@ Tabel ini angka audit awal; perubahan setelahnya ada di "Pembaruan status (31 Ok
 7. Ketepatan tarif umum di `assets/tarif.js` (sumber sekunder, dicek 14 Okt 2026).
 
 ## Riwayat perubahan dokumen
+
+- 5 Nov 2026: pembayaran online Pro lewat Duitku (Sandbox, khusus akun penguji), catatan di M6. Tidak mengubah mesin hitung,
+  parser, atau perhitungan laba. `admin_catat_pembelian` kini memakai fungsi bersama `catat_pembelian_pro` (perilaku sama;
+  `supabase/tests/test-tahap2.sql` tetap lulus).
 
 - 4 Nov 2026: status M5 (SQL tahap 2 sudah dijalankan pemilik) dan catatan M3 (sesi tanpa "ingat saya" tidak menghapus data
   toko). Rilis hari ini tidak mengubah mesin hitung atau parser: video tutorial, kunci tamu di browser, sesi, Kirim masukan

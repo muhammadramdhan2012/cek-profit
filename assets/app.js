@@ -2447,10 +2447,71 @@
           : esc(e.message || 'Masukan belum terkirim. Silakan coba lagi.');
     }
   }
+  // ---------- pembayaran online Pro (Duitku) ----------
+  // Tombol beli hanya muncul bila server mengizinkan akun ini (status_pembayaran.boleh_beli): selama Sandbox
+  // hanya akun penguji. Harga yang ditampilkan dan ditagih berasal dari server, bukan dari config.js.
+  const LINK_DUITKU = /^https:\/\/app-(?:sandbox|prod)\.duitku\.com\//;
+  const ID_PESANAN = /^[A-Z0-9-]{1,50}$/;
+  function dialogBeli(d, bayar) {
+    const p = account.profile;
+    const harga = fmt(Number(bayar.harga));
+    d.innerHTML = `${dHead('Cek Untung Pro', proAkun(p) ? `Aktif sampai ${tgl(p.pro_until)}. Pembelian baru memperpanjang 1 tahun.` : 'Berlaku 1 tahun sejak aktif, tanpa perpanjangan otomatis.')}
+      <div class="d-body">${bayar.mode === 'sandbox' ? '<p class="note-box"><span class="badge">Mode uji</span> Pembayaran Sandbox Duitku memakai uang tiruan dan hanya untuk akun penguji.</p>' : ''}
+      <ul class="benefits"><li>Laporan PDF siap kirim, dengan nama dan logo toko</li><li>Semua produk dengan status rugi, tipis, atau sehat</li><li>Harga impas dan harga target per produk</li><li>Semua temuan, ekspor Excel, riwayat tanpa batas</li></ul>
+      <div class="plans"><div class="plan-opt"><span><b>Pro 1 tahun</b>${bayar.harga_pengguna_awal ? '<br><span class="tiny muted">Harga pengguna awal, tahun pertama</span>' : ''}</span><span class="p">${harga}</span></div></div>
+      <button class="btn primary" type="button" id="beli-pro">Bayar ${harga}</button>
+      <p class="tiny faint">Anda akan diarahkan ke halaman pembayaran Duitku (QRIS, virtual account, atau e-wallet). Dengan membayar, Anda menyetujui <a href="privasi.html#pembelian" target="_blank" rel="noopener">ketentuan pembelian</a>.</p>
+      <p class="small" id="beli-msg" aria-live="polite"></p></div>`;
+  }
+  async function beliPro(btn) {
+    busy(btn, true);
+    try {
+      const r = await cloud.db.buatPesananPro();
+      const u = String((r && r.payment_url) || '');
+      if (!LINK_DUITKU.test(u)) throw new Error('Halaman pembayaran belum bisa dibuka. Silakan coba lagi.');
+      track('beli-pro');
+      location.href = u;
+    } catch (e) {
+      busy(btn, false);
+      const m = $('#beli-msg');
+      if (m) m.innerHTML = `<span class="bad">${esc(e.status === 0 ? 'Tidak bisa terhubung ke server. Periksa internet Anda, lalu coba lagi.' : e.message || 'Pembayaran belum bisa dimulai. Silakan coba lagi.')}</span>`;
+    }
+  }
+  // Setelah kembali dari Duitku (dashboard.html?bayar=<nomor pesanan>). Status diambil dari server; parameter
+  // resultCode di URL TIDAK dipakai (anjuran Duitku): yang menentukan hanya notifikasi server ke server.
+  async function cekPembayaran(orderId, ulang = false) {
+    if (!ulang) { const u = new URL(location.href); u.searchParams.delete('bayar'); ['merchantOrderId', 'reference', 'resultCode'].forEach((k) => u.searchParams.delete(k)); history.replaceState(null, '', u.pathname + u.search + u.hash); }
+    if (!ID_PESANAN.test(orderId) || !cloud.auth.user()) return;
+    const d = dlg();
+    const kontak = `<a href="mailto:${esc(C.email || 'support@cekuntung.id')}">${esc(C.email || 'support@cekuntung.id')}</a>`;
+    const tampil = (judul, sub, isi) => { d.innerHTML = `${dHead(judul, sub)}<div class="d-body">${isi}</div>`; if (!d.open) d.showModal(); };
+    tampil('Pembayaran sedang diproses', `Nomor pesanan ${esc(orderId)}`, '<p class="small">Kami menunggu konfirmasi dari Duitku, biasanya kurang dari 1 menit. Halaman ini memperbarui sendiri.</p>');
+    for (let i = 0; i < 20 && d.open; i++) {
+      let o = null, gagalSambung = false;
+      try { o = await cloud.db.pesananPro(orderId); } catch (e) { gagalSambung = e.status === 0; }
+      if (o && o.status === 'lunas') {
+        await loadAccount();
+        const p = account.profile;
+        track('bayar-lunas');
+        tampil('Pro aktif', p && p.pro_until ? `Sampai ${tgl(p.pro_until)}` : '', '<p class="small">Terima kasih. Semua fitur Pro sudah terbuka di akun ini.</p><button class="btn primary" type="button" data-close>Mulai pakai</button>');
+        return;
+      }
+      if (o && (o.status === 'gagal' || o.status === 'kedaluwarsa')) {
+        tampil('Pembayaran belum berhasil', o.status === 'kedaluwarsa' ? 'Batas waktu pembayaran sudah lewat' : 'Pembayaran dibatalkan atau gagal', '<p class="small">Tidak ada biaya yang ditagihkan untuk pesanan ini. Anda bisa mencoba lagi.</p><button class="btn primary" type="button" data-upgrade>Coba bayar lagi</button>');
+        return;
+      }
+      if (!o && !gagalSambung && i >= 2) { tampil('Pesanan tidak ditemukan', '', `<p class="small">Pesanan ini tidak ada di akun yang sedang masuk. Bila Anda sudah membayar, hubungi ${kontak} dengan nomor pesanan <b>${esc(orderId)}</b>.</p>`); return; }
+      await new Promise((r) => setTimeout(r, 3000));
+    }
+    if (d.open) tampil('Konfirmasi belum diterima', `Nomor pesanan ${esc(orderId)}`, `<p class="small">Bila Anda sudah membayar, Pro aktif otomatis begitu konfirmasi dari Duitku kami terima. Bila dalam 1×24 jam Pro belum aktif, hubungi ${kontak} dengan nomor pesanan di atas.</p><button class="btn" type="button" data-cek-bayar="${esc(orderId)}">Cek lagi</button>`);
+  }
   async function openUpgrade() {
     track('buka-upgrade');
     const d = dlg();
     const p = account.profile;
+    let bayar = null;
+    if (cloud.enabled && account.user && !demo) { try { bayar = await cloud.db.statusPembayaran(); } catch (e) { /* belum dimigrasi / offline: alur lama */ } }
+    if (bayar && bayar.boleh_beli && Number(bayar.harga) > 0) { dialogBeli(d, bayar); if (!d.open) d.showModal(); return; }
     let pending = null;
     if (account.user && !isPro()) { try { pending = (await cloud.db.myRequests()).find((x) => x.status === 'baru' || x.status === 'diproses'); } catch (e) { /* abaikan */ } }
     if (!demo && !proSendiri() && betaGratis()) {
@@ -2700,6 +2761,8 @@
       return;
     }
     if (t.id === 'code-remove') { store.del(KEYS.license); license = { ok: false }; dlg().close(); render(); return; }
+    if (t.id === 'beli-pro') { beliPro(t); return; }
+    if (t.hasAttribute('data-cek-bayar')) { cekPembayaran(t.getAttribute('data-cek-bayar'), true); return; }
     if (t.id === 'req-upgrade') {
       const plan = (document.querySelector('input[name="plan"]:checked') || {}).value || 'pro_bulanan';
       busy(t, true);
@@ -2809,7 +2872,8 @@
   const savedCode = store.get(KEYS.license, '');
   if (savedCode) checkLicense(savedCode, true).then(render);
   if (account.user) loadAccount(); else loadStatus();
-  if (hash === 'upgrade' || params.has('pro')) openUpgrade();
+  if (params.has('bayar')) cekPembayaran(String(params.get('bayar')));
+  else if (hash === 'upgrade' || params.has('pro')) openUpgrade();
   if (params.has('demo') && params.has('print')) { buildReport(); document.documentElement.classList.add('print-preview'); }
   window.CekApp = { buildReport, state: () => ({ demo, files: files.length, view: viewName, license: license.ok, account: { user: !!account.user, pro: proAkun() }, server: !!serverStatus, last }) };
 })();
