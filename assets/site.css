@@ -173,8 +173,8 @@ section.blk.alt { background: var(--surface); border-block: 1px solid var(--line
   background-size: 48px 48px; -webkit-mask: radial-gradient(70% 60% at 50% 0%, #000, transparent 75%); mask: radial-gradient(70% 60% at 50% 0%, #000, transparent 75%); opacity: .7; }
 .site-foot .lg-bg { fill: var(--side-accent); } .site-foot .lg-b { fill: var(--side-bg); }
 .site-foot .brand .wm { color: #fff; font-size: 20px; }
-.foot-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.3fr) minmax(300px, 340px); gap: clamp(32px, 4vw, 56px); align-items: start; padding-block: 72px 40px; }
-.foot-brand { display: grid; gap: 18px; justify-items: start; align-content: start; }
+.foot-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.3fr) minmax(300px, 340px); gap: clamp(32px, 4vw, 56px); align-items: start; padding-block: 52px 8px; }
+.foot-brand { display: grid; gap: 16px; justify-items: start; align-content: start; }
 .foot-say { margin: 0; font-size: 22px; line-height: 1.3; font-weight: var(--weight-bold); letter-spacing: -0.02em; color: #fff; max-width: 22ch; }
 .foot-say span { display: block; margin-top: 10px; font-size: 14.5px; line-height: 1.6; font-weight: 400; letter-spacing: 0; color: var(--side-muted); max-width: 40ch; }
 .foot-mp { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
@@ -200,19 +200,21 @@ a.fn:hover b { color: var(--accent); }
 .fn b { font-size: 14px; font-weight: var(--weight-semibold); line-height: 1.45; overflow-wrap: anywhere; transition: color var(--dur-fast) var(--ease); }
 .fn-thanks { margin: 14px 0 0; text-align: center; font-size: 11.5px; color: var(--ink-3); letter-spacing: .02em; }
 /* wordmark raksasa: dekoratif, memudar ke bawah */
-.foot-mark { font-size: clamp(56px, 15.5vw, 228px); font-weight: 800; letter-spacing: -0.055em; line-height: 1; padding-bottom: .06em; white-space: nowrap; text-align: center; user-select: none; margin-top: 8px;
+.foot-mark { font-size: clamp(52px, 12.5vw, 184px); font-weight: 800; letter-spacing: -0.055em; line-height: .92; padding-bottom: .04em; white-space: nowrap; text-align: center; user-select: none; margin-top: 0;
   background: linear-gradient(180deg, color-mix(in srgb, var(--side-accent) 34%, transparent), transparent 92%); -webkit-background-clip: text; background-clip: text; color: transparent; }
-.foot-bottom { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 14px 28px; border-top: 1px solid var(--side-line); padding-block: 20px 28px; font-size: 12.5px; line-height: 1.55; color: var(--side-muted); }
+.foot-bottom { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 14px 28px; border-top: 1px solid var(--side-line); padding-block: 16px 22px; font-size: 12.5px; line-height: 1.55; color: var(--side-muted); }
 .foot-bottom > span { max-width: 78ch; }
 .foot-tools { display: flex; align-items: center; gap: 12px; }
 .foot-up { display: inline-flex; align-items: center; gap: 6px; padding: 8px 14px; border-radius: var(--r-pill); border: 1px solid var(--side-line); background: rgb(255 255 255 / 5%); color: var(--side-ink); text-decoration: none; font-weight: var(--weight-semibold); transition: background var(--dur-fast) var(--ease); }
 .foot-up:hover { background: rgb(255 255 255 / 10%); }
 @media (max-width: 1080px) { .foot-grid { grid-template-columns: minmax(0, 1fr) minmax(280px, 340px); } .foot-links { grid-column: 1 / -1; grid-row: 2; } }
 @media (max-width: 720px) {
-  .foot-grid { grid-template-columns: 1fr; padding-top: 56px; gap: 36px; }
+  .foot-grid { grid-template-columns: 1fr; padding-top: 40px; gap: 28px; }
+  .foot-mark { margin-top: 20px; }
   .foot-links { grid-column: auto; grid-row: auto; grid-template-columns: 1fr 1fr; justify-content: stretch; }
   .foot-links .foot-col:last-child { grid-column: 1 / -1; }
-  .foot-col a { padding: 6px 0; }
+  .foot-col { gap: 4px; } .foot-col a { padding: 5px 0; }
+  .foot-links { row-gap: 20px; }
   .foot-nota { transform: none; }
   .foot-say { font-size: 20px; }
   .foot-bottom { flex-direction: column; align-items: flex-start; }
