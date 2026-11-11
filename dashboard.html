@@ -11,7 +11,7 @@
 <script src="assets/theme.js?v=f5317dffb6"></script>
 <script src="assets/motion.js?v=9e6864196f"></script>
 <link rel="stylesheet" href="assets/base.css?v=b11f335bb1">
-<link rel="stylesheet" href="assets/app.css?v=e735d975a2">
+<link rel="stylesheet" href="assets/app.css?v=7d43496256">
 <link rel="stylesheet" href="assets/report.css?v=2e6417a513">
 <script src="assets/config.js?v=06b26d90cd"></script>
 <script src="assets/analytics.js?v=d923a1e0ea" defer></script>
@@ -44,6 +44,9 @@
 </div>
 
 <nav class="bnav screen-only" id="bnav" aria-label="Menu utama"></nav>
+<!-- Masukan (desain A): tombol mengambang + panel cepat non-modal. Isi panel dibuat assets/app.js (renderMasukan). -->
+<button class="fb-fab screen-only" type="button" data-masukan aria-haspopup="dialog" aria-controls="fb-panel"><span class="fb-fab-ic" aria-hidden="true"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg></span><span class="fb-fab-t">Masukan</span></button>
+<section class="fb-panel screen-only" id="fb-panel" role="dialog" aria-modal="false" aria-labelledby="fb-t" hidden></section>
 <dialog id="dlg" class="dialog"></dialog>
 <dialog id="sheet" class="dialog sheet" aria-labelledby="sheet-t"></dialog>
 <!-- Area pengumuman: selalu ada di halaman (tidak disembunyikan) agar pesan yang muncul dibacakan pembaca layar. -->
@@ -62,7 +65,7 @@
 <script src="assets/tarif.js?v=86e6a205ea"></script>
 <script src="assets/penjelasan.js?v=f448fa0ed5"></script>
 <script src="assets/report.js?v=55255f670a"></script>
-<script src="assets/app.js?v=cbae40d3aa"></script>
+<script src="assets/app.js?v=3c559cfc19"></script>
 <script>
   if ('serviceWorker' in navigator && location.protocol === 'https:') navigator.serviceWorker.register('sw.js').catch(() => {});
 </script>

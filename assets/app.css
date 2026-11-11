@@ -1913,21 +1913,66 @@ body.app .empty-arah > p:not(.tiny) { font-size: 15px; max-width: 46ch; }
 /* Kirim masukan */
 .side-links { display: flex; flex-wrap: wrap; gap: 2px 10px; }
 button.side-help { background: none; border: 0; font: inherit; font-size: 13px; cursor: pointer; }
-.fb-form { display: grid; gap: 14px; }
-.fb-jenis { border: 0; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 8px; }
-.fb-jenis legend { margin-bottom: 8px; padding: 0; }
-.fb-jenis label { cursor: pointer; }
-.fb-jenis input { position: absolute; opacity: 0; pointer-events: none; }
-.fb-jenis span { display: inline-block; padding: 8px 14px; border-radius: var(--r-pill); border: 1px solid var(--border-strong); font-size: var(--text-sm); font-weight: var(--weight-semibold); color: var(--ink-2); }
-.fb-jenis input:checked + span { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); }
-.fb-jenis input:focus-visible + span { box-shadow: var(--ring); }
-#fb-pesan { min-height: 120px; resize: vertical; }
+/* ---------- Kirim masukan (desain A+B, 11 Nov 2026) ----------
+ * A: tombol "Masukan" mengambang + panel cepat non-modal (lembar bawah di HP). B: baris "Angka ini sesuai?" di kartu angka. */
+.fb-fab { position: fixed; right: 24px; bottom: 24px; z-index: 45; display: inline-flex; align-items: center; gap: 10px; height: 48px; padding: 0 18px 0 10px;
+  border: 0; border-radius: var(--r-pill); background: var(--side-bg); color: var(--side-ink); font: inherit; font-size: var(--text-sm); font-weight: var(--weight-bold);
+  box-shadow: var(--shadow-lg); cursor: pointer; transition: transform var(--dur-fast) var(--ease), box-shadow var(--dur-fast) var(--ease); }
+.fb-fab:hover { transform: translateY(-1px); }
+.fb-fab:focus-visible { outline: none; box-shadow: var(--ring), var(--shadow-lg); }
+.fb-fab-ic { width: 30px; height: 30px; border-radius: var(--r-pill); display: grid; place-items: center; background: var(--side-accent); color: var(--side-bg); }
+body.fb-open .fb-fab { box-shadow: var(--ring), var(--shadow-lg); }
+.fb-panel { position: fixed; right: 24px; bottom: 86px; z-index: 46; width: min(384px, calc(100vw - 32px)); max-height: calc(100vh - 120px); overflow: auto;
+  background: var(--surface-raised); color: var(--ink); border: 1px solid var(--border); border-radius: 20px; box-shadow: var(--shadow-lg); padding: 20px; display: grid; gap: 14px; }
+.fb-panel[hidden] { display: none; }
+.fb-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; }
+.fb-head h2 { margin: 0; font-size: var(--text-lg); font-weight: var(--weight-bold); letter-spacing: -0.02em; }
+.fb-head p { margin: 3px 0 0; font-size: var(--text-sm); color: var(--ink-2); }
+.fb-x { flex: none; width: 36px; height: 36px; display: grid; place-items: center; border-radius: var(--r-sm); border: 1px solid var(--border); background: var(--surface-1); color: var(--ink-2); cursor: pointer; }
+.fb-x:focus-visible, .fb-j:focus-visible, .fb-b:focus-visible, .ca-btn:focus-visible { outline: none; box-shadow: var(--ring); }
+.fb-body { display: grid; gap: 14px; }
+.fb-jenis { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.fb-j { display: grid; justify-items: center; gap: 6px; padding: 12px 6px; border-radius: var(--r); border: 1.5px solid var(--border); background: var(--surface-1);
+  font: inherit; font-size: var(--text-xs); font-weight: var(--weight-semibold); color: var(--ink); cursor: pointer; text-align: center; }
+.fb-j-saran svg { color: var(--accent); } .fb-j-masalah svg { color: var(--cost); } .fb-j-lainnya svg { color: var(--info); }
+.fb-j[aria-checked="true"] { border: 2px solid var(--accent); background: var(--accent-soft); padding: 11.5px 5.5px; }
+.fb-label { margin: 0; font-size: var(--text-sm); font-weight: var(--weight-bold); }
+.fb-field { display: grid; gap: 6px; }
+#fb-pesan { font: inherit; font-size: var(--text-base); line-height: 1.5; padding: 12px; min-height: 104px; resize: vertical; border-radius: var(--r-sm);
+  border: 1.5px solid var(--border-strong); background: var(--surface-1); color: var(--ink); }
+#fb-pesan:focus { outline: none; border-color: var(--accent); box-shadow: var(--ring); }
+.fb-meta { display: flex; flex-wrap: wrap; gap: 6px 8px; align-items: center; font-size: var(--text-xs); color: var(--ink-3); line-height: 1.45; }
+.fb-chip { display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: var(--r-pill); background: var(--surface-2); font-size: var(--text-xs); font-weight: var(--weight-semibold); color: var(--ink-2); }
+.fb-chip.is-strong { background: var(--cost-soft); color: var(--cost); }
+.fb-bagian { display: grid; gap: 8px; }
+.fb-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.fb-b { min-height: 36px; padding: 0 12px; border-radius: var(--r-pill); border: 1.5px solid var(--border-strong); background: var(--surface-1); font: inherit; font-size: var(--text-xs); font-weight: var(--weight-semibold); color: var(--ink); cursor: pointer; }
+.fb-b[aria-pressed="true"] { border-color: var(--accent); background: var(--accent-soft); color: var(--accent); }
 .fb-kontak { display: flex; gap: 10px; align-items: flex-start; font-size: var(--text-sm); cursor: pointer; }
 .fb-kontak input { width: 18px; height: 18px; margin: 1px 0 0; accent-color: var(--accent); flex: none; }
 .fb-kontak span { display: grid; gap: 2px; } .fb-kontak small { color: var(--ink-3); font-size: var(--text-xs); }
 #fb-msg:empty { display: none; }
 #fb-msg .btn { margin-top: 8px; }
 #fb-msg.bad { color: var(--cost); }
+.fb-kirim { width: 100%; min-height: 48px; gap: 10px; }
+.fb-kbd { font: inherit; font-size: 11.5px; font-weight: var(--weight-semibold); padding: 2px 7px; border-radius: 6px; background: color-mix(in srgb, var(--accent-ink) 18%, transparent); }
+.fb-done { display: grid; justify-items: center; gap: 12px; text-align: center; padding: 8px 0 4px; }
+.fb-done p { margin: 0; color: var(--ink-2); }
+.fb-done-ic { width: 52px; height: 52px; border-radius: var(--r-pill); display: grid; place-items: center; background: var(--good-soft); color: var(--good); }
+.cek-angka { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; margin-top: 12px; padding-top: 10px; border-top: 1px dashed var(--border-strong); font-size: var(--text-xs); color: var(--ink-3); }
+.metric-card > .cek-angka { order: 99; margin-top: 8px; } /* selalu di dasar kartu, di bawah catatan */
+.cek-angka.is-ok { justify-content: flex-start; color: var(--good); font-weight: var(--weight-semibold); }
+.ca-btns { display: inline-flex; gap: 6px; }
+.ca-btn { min-height: 32px; padding: 0 12px; border-radius: var(--r-pill); border: 1.5px solid var(--border); background: var(--surface-1); font: inherit; font-size: var(--text-xs); font-weight: var(--weight-semibold); color: var(--ink-2); cursor: pointer; }
+.ca-btn:hover { border-color: var(--border-strong); color: var(--ink); }
+.ca-kurang:hover { border-color: var(--cost); color: var(--cost); background: var(--cost-soft); }
+@media (max-width: 900px) {
+  .fb-fab { right: 16px; bottom: calc(96px + env(safe-area-inset-bottom)); height: 48px; width: 48px; padding: 0; justify-content: center; }
+  .fb-fab-t { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+  .fb-panel { left: 8px; right: 8px; bottom: calc(8px + env(safe-area-inset-bottom)); width: auto; max-height: calc(100vh - 40px); border-radius: 22px; z-index: 50; }
+  .fb-kbd { display: none; }
+}
+@media print { .fb-fab, .fb-panel, .cek-angka { display: none !important; } }
 
 /* Video cara isi modal per jenis usaha — desain B: kartu dengan cuplikan */
 .ts-vid { display: grid; grid-template-columns: 168px minmax(0, 1fr) auto; gap: 16px; align-items: center; width: 100%; max-width: 640px; margin-top: 4px;
