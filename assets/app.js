@@ -677,17 +677,17 @@
         <figcaption>${opex ? 'Laba dari data tersedia' : 'Laba setelah modal'} per bulan, ${num(sv.length)} bulan</figcaption></figure>`;
     })();
     const kpiTiles = `<section class="d3-tiles" aria-label="Angka pendukung">
-        ${kpi(`Penjualan${qi('penjualan', 'Penjualan')}`, r.totalSales, `${num(r.orders)} pesanan terjual${heldShort(r)}`, '', '', 'sales')}
+        ${kpi(`Penjualan${qi('penjualan', 'Penjualan')}`, r.totalSales, `${num(r.orders)} pesanan terjual${heldShort(r)}`, '', cekAngka('sales'), 'sales')}
         ${kpi(`Modal / HPP${qi('modal', 'Modal')}`, r.ready ? r.totalModal : '<span class="faint">—</span>', r.ready ? 'dari penjualan yang modalnya diketahui' : 'modal belum diisi', '',
-          hppMixed ? '<div class="m-status"><span class="status estimate">Sebagian perkiraan</span></div>' : r.ready && c.penjualan.terverifikasi > 0 ? '<div class="m-status"><span class="status verified">Terverifikasi</span></div>' : '', 'modal')}
-        ${kpi(`Potongan marketplace${qi('potongan', 'Potongan marketplace')}`, -r.totalFees, 'dipotong dari penjualan oleh marketplace', '', '', 'fees')}
+          (hppMixed ? '<div class="m-status"><span class="status estimate">Sebagian perkiraan</span></div>' : r.ready && c.penjualan.terverifikasi > 0 ? '<div class="m-status"><span class="status verified">Terverifikasi</span></div>' : '') + (r.ready ? cekAngka('modal') : ''), 'modal')}
+        ${kpi(`Potongan marketplace${qi('potongan', 'Potongan marketplace')}`, -r.totalFees, 'dipotong dari penjualan oleh marketplace', '', cekAngka('fees'), 'fees')}
       </section>`;
     return `${ajakDaftar(r)}<div class="dash d3">
       <div class="d3-top">
         <section class="dash-hero d3-profit" aria-label="Laba">
           ${kpi(`Laba dari data tersedia${qi('laba_bersih', 'Laba dari data tersedia')}`, r.ready ? laba : '<span class="faint">Belum dihitung</span>',
             `${r.ready ? `${opex ? 'setelah biaya operasional yang tercatat. ' : ''}${pct(r.coverage, 0)} penjualan masuk dalam perhitungan` : 'isi modal produk agar laba bisa dihitung'}${heldShort(r)}${r.ready && rentangTeks(r) ? `. ${rentangTeks(r)}` : ''}`,
-            'is-hero', `<div class="m-status">${finalBadge}</div>${spark}<div class="ph-cta">${r.ready ? '<button type="button" class="btn sm ph-btn" data-go="biaya">Lihat rincian laba<svg class="arr" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg></button>' : '<button type="button" class="btn sm ph-btn" data-go="data" data-section="modal">Isi modal</button>'}</div>`)}
+            'is-hero', `<div class="m-status">${finalBadge}</div>${spark}<div class="ph-cta">${r.ready ? '<button type="button" class="btn sm ph-btn" data-go="biaya">Lihat rincian laba<svg class="arr" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg></button>' : '<button type="button" class="btn sm ph-btn" data-go="data" data-section="modal">Isi modal</button>'}</div>${r.ready ? cekAngka('laba') : ''}`)}
         </section>
 
         <section class="section-card kep d3-conf" aria-labelledby="kep-t" data-spotlight>
@@ -2395,51 +2395,100 @@
   const PLANS = () => { const p = C.prices || {}; return [['pro_bulanan', 'Pro bulanan', `${p.pro || ''} ${p.proUnit || ''}`.trim()], ['pro_tahunan', 'Pro tahunan', (p.proNote || '').replace(/^atau\s+/i, '')]]; };
   const waLink = (msg) => (C.whatsapp ? `https://wa.me/${C.whatsapp}?text=${encodeURIComponent(msg)}` : '');
   const dHead = (t, s) => `<div class="d-head"><div><h2 style="font-size:22px">${t}</h2>${s ? `<p class="small muted" style="margin-top:4px">${s}</p>` : ''}</div><button class="x" type="button" data-close aria-label="Tutup">×</button></div>`;
-  /* ---------- Kirim masukan (keputusan pemilik 4 Nov 2026) ----------
-   * Form hanya untuk akun yang sudah masuk; tamu diarahkan ke WhatsApp. Yang dikirim hanya jenis, pesan, nama halaman,
-   * dan centang boleh dihubungi. Angka laporan dan isi file TIDAK ikut dikirim. */
-  const JENIS_MASUKAN = [['saran', 'Saran fitur'], ['masalah', 'Ada yang salah'], ['lainnya', 'Lainnya']];
+  /* ---------- Kirim masukan (keputusan pemilik 4 Nov 2026; desain A+B, 11 Nov 2026) ----------
+   * A: tombol "Masukan" mengambang + panel cepat (tanpa menutup halaman). B: "Angka ini sesuai?" di kartu angka utama
+   * Ringkasan; "Kurang tepat" membuka panel yang sama dengan nama kartu dan bagian yang dipilih.
+   * Form hanya untuk akun yang sudah masuk; tamu diarahkan ke masuk/daftar atau WhatsApp. Yang dikirim hanya jenis,
+   * pesan (termasuk nama kartu & bagian bila dari kartu), nama halaman, dan centang boleh dihubungi.
+   * Angka laporan dan isi file TIDAK ikut dikirim. "Sesuai" tidak dikirim ke server (hanya ucapan terima kasih). */
+  const JENIS_MASUKAN = [['saran', 'Ide fitur', '<path d="M9 18h6M10 21h4M12 3a6 6 0 0 0-3.5 10.9c.6.5 1 1.2 1 2.1h5c0-.9.4-1.6 1-2.1A6 6 0 0 0 12 3z"/>'],
+    ['masalah', 'Ada yang salah', '<path d="M12 9v4M12 17h.01M10.3 3.9L1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/>'],
+    ['lainnya', 'Lainnya', '<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>']];
+  const KARTU_ANGKA = { laba: 'Laba dari data tersedia', sales: 'Penjualan', modal: 'Modal / HPP', fees: 'Potongan marketplace' };
+  const BAGIAN_ANGKA = ['Biaya marketplace', 'Modal / HPP', 'Retur', 'Pesanan hilang', 'Lainnya'];
+  const PETUNJUK_MASUKAN = { saran: 'Contoh: Saya ingin bisa melihat laba per minggu.', masalah: 'Contoh: Biaya iklan di halaman Laba berbeda dengan Seller Centre.', lainnya: 'Tulis apa saja yang ingin Anda sampaikan.' };
   // Nomor bantuan (bukan nomor pembayaran) dibaca oleh situs.js; app.js tidak menyentuh kunci config-nya.
   const waMasukan = () => (typeof CekSitus !== 'undefined' ? CekSitus.bantuanWa(C, 'Halo Cek Untung, saya ingin memberi masukan: ') : '');
   const tombolWa = (label = 'Kirim lewat WhatsApp') => (waMasukan() ? `<a class="btn" href="${esc(waMasukan())}" target="_blank" rel="noopener">${label}</a>` : '');
-  function openMasukan() {
-    track('buka-masukan');
-    const d = dlg();
+  const fb = { jenis: 'saran', kartu: null, bagian: null, pembuka: null, terkirim: false };
+  const angkaSesuai = new Set();   // kartu yang sudah dijawab "Sesuai" di sesi ini (tidak dikirim ke server)
+  const fbPanel = () => $('#fb-panel');
+  const fbIkon = (d, w = 20) => `<svg width="${w}" height="${w}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${d}</svg>`;
+  /** Baris "Angka ini sesuai?" di bawah kartu angka (B). Tidak tampil di mode contoh. */
+  const cekAngka = (id) => {
+    if (demo || !KARTU_ANGKA[id]) return '';
+    if (angkaSesuai.has(id)) return `<div class="cek-angka is-ok" role="status">${fbIkon('<path d="M5 12l5 5L20 7"/>', 15)}<span>Terima kasih atas konfirmasinya.</span></div>`;
+    return `<div class="cek-angka"><span class="ca-q">Angka ini sesuai?</span><span class="ca-btns"><button type="button" class="ca-btn" data-sesuai="${id}">Sesuai</button><button type="button" class="ca-btn ca-kurang" data-kurang="${id}" aria-haspopup="dialog" aria-controls="fb-panel">Kurang tepat</button></span></div>`;
+  };
+  function renderMasukan() {
+    const P = fbPanel(); if (!P) return;
+    const lama = $('#fb-pesan') ? $('#fb-pesan').value : '';
+    const kontakLama = $('#fb-kontak') ? $('#fb-kontak').checked : false;
+    const tutup = `<button class="fb-x" type="button" data-fb-tutup aria-label="Tutup">${fbIkon('<path d="M6 6l12 12M18 6L6 18"/>', 16)}</button>`;
+    const kepala = (judul, sub) => `<div class="fb-head"><div><h2 id="fb-t">${judul}</h2>${sub ? `<p>${sub}</p>` : ''}</div>${tutup}</div>`;
+    if (fb.terkirim) {
+      P.innerHTML = `${kepala('Terima kasih!', '')}<div class="fb-done"><span class="fb-done-ic" aria-hidden="true">${fbIkon('<path d="M5 12l5 5L20 7"/>', 26)}</span>
+        <p>Masukan Anda sudah kami terima.${fb.kontak ? ' Kami akan menghubungi Anda bila perlu penjelasan lebih lanjut.' : ''}</p>
+        <button class="btn primary" type="button" data-fb-tutup>Tutup</button></div>`;
+      return;
+    }
     if (!cloud.enabled || !account.user) {
       const ke = encodeURIComponent(`dashboard.html#${viewName}`);
-      d.innerHTML = `${dHead('Kirim masukan', 'Saran dan laporan masalah sangat membantu kami memperbaiki Cek Untung.')}
-        <div class="d-body">${cloud.enabled ? `<p class="small">Masuk ke akun untuk mengirim masukan lewat form ini, atau kirim langsung lewat WhatsApp.</p>
+      P.innerHTML = `${kepala('Kirim masukan', 'Saran dan laporan masalah sangat membantu kami memperbaiki Cek Untung.')}
+        <div class="fb-body">${cloud.enabled ? `<p class="small">Masuk ke akun untuk mengirim masukan lewat form ini, atau kirim langsung lewat WhatsApp.</p>
         <div class="row-actions"><a class="btn primary" href="akun.html?next=${ke}">Masuk</a><a class="btn" href="akun.html?mode=daftar&next=${ke}">Daftar gratis</a></div>` : ''}
         ${tombolWa()}</div>`;
-    } else {
-      d.innerHTML = `${dHead('Kirim masukan', 'Ceritakan saran atau masalah yang Anda temui. Kami membaca setiap masukan.')}
-        <div class="d-body fb-form">
-          <fieldset class="fb-jenis"><legend class="small" style="font-weight:650">Jenis masukan</legend>
-            ${JENIS_MASUKAN.map(([k, l], i) => `<label><input type="radio" name="fb-jenis" value="${k}" ${i === 0 ? 'checked' : ''}><span>${l}</span></label>`).join('')}</fieldset>
-          <div class="field"><label for="fb-pesan">Pesan</label>
-            <textarea class="plain" id="fb-pesan" rows="5" maxlength="2000" placeholder="Contoh: Saya ingin bisa melihat laba per minggu." aria-describedby="fb-hint fb-msg"></textarea>
-            <span class="hint" id="fb-hint">Jangan menulis data pembeli, nomor rekening, atau kata sandi. <span id="fb-count">0</span>/2.000</span></div>
-          <label class="fb-kontak"><input type="checkbox" id="fb-kontak"><span>Boleh dihubungi untuk tindak lanjut<small>Kami memakai email${account.profile && account.profile.whatsapp ? ' atau WhatsApp' : ''} di akun Anda.</small></span></label>
-          <p class="small" id="fb-msg" role="alert"></p>
-          <button class="btn primary" type="button" id="fb-kirim">Kirim masukan</button>
-          <p class="tiny faint">Yang terkirim hanya isi form ini dan nama halaman yang sedang dibuka. Angka laporan Anda tidak ikut dikirim.</p></div>`;
+      return;
     }
-    if (!d.open) d.showModal();
-    const ta = $('#fb-pesan'); if (ta) ta.focus();
+    const halaman = (VIEWS.find((v) => v[0] === viewName) || [])[1] || 'Dashboard';
+    P.innerHTML = `${kepala('Kirim masukan', 'Butuh 30 detik. Kami baca setiap masukan.')}
+      <div class="fb-body">
+        <div class="fb-jenis" role="radiogroup" aria-label="Jenis masukan">${JENIS_MASUKAN.map(([k, l, ic]) => `<button type="button" role="radio" aria-checked="${fb.jenis === k}" class="fb-j fb-j-${k}" data-fb-jenis="${k}">${fbIkon(ic, 22)}<span>${l}</span></button>`).join('')}</div>
+        ${fb.kartu ? `<div class="fb-kartu"><span class="fb-chip is-strong">Kartu: ${esc(KARTU_ANGKA[fb.kartu])}</span></div>
+          ${fb.jenis === 'masalah' ? `<div class="fb-bagian" role="group" aria-label="Bagian yang kurang tepat"><p class="fb-label">Bagian mana yang kurang tepat?</p><div class="fb-chips">${BAGIAN_ANGKA.map((b) => `<button type="button" class="fb-b" aria-pressed="${fb.bagian === b}" data-fb-bagian="${esc(b)}">${b}</button>`).join('')}</div></div>` : ''}` : ''}
+        <div class="fb-field"><label class="fb-label" for="fb-pesan">${fb.jenis === 'masalah' ? 'Apa yang terjadi?' : fb.jenis === 'saran' ? 'Ide apa yang ingin Anda usulkan?' : 'Pesan'}</label>
+          <textarea id="fb-pesan" rows="4" maxlength="2000" placeholder="${PETUNJUK_MASUKAN[fb.jenis]}" aria-describedby="fb-hint fb-msg">${esc(lama)}</textarea>
+          <div class="fb-meta" id="fb-hint"><span class="fb-chip">${fbIkon('<path d="M4 4h16v16H4zM4 9h16"/>', 13)}Halaman: ${esc(halaman)}</span><span>Angka laporan Anda tidak ikut terkirim. Jangan menulis data pembeli, nomor rekening, atau kata sandi.</span></div></div>
+        <label class="fb-kontak"><input type="checkbox" id="fb-kontak" ${kontakLama ? 'checked' : ''}><span>Boleh dihubungi untuk tindak lanjut<small>Kami memakai email${account.profile && account.profile.whatsapp ? ' atau WhatsApp' : ''} di akun Anda.</small></span></label>
+        <p class="small" id="fb-msg" role="alert"></p>
+        <button class="btn primary fb-kirim" type="button" id="fb-kirim">Kirim masukan<kbd class="fb-kbd" aria-hidden="true">⌘ Enter</kbd></button>
+      </div>`;
+  }
+  function openMasukan(kartu = null) {
+    const P = fbPanel(); if (!P) return;
+    if (!P.hidden && !kartu) { tutupMasukan(); return; }   // tombol Masukan ditekan lagi = tutup
+    track(kartu ? 'buka-masukan-kartu' : 'buka-masukan');
+    if (P.hidden) { P.innerHTML = ''; fb.terkirim = false; fb.jenis = 'saran'; fb.kartu = null; fb.pembuka = document.activeElement; }
+    if (kartu && KARTU_ANGKA[kartu]) { fb.kartu = kartu; fb.jenis = 'masalah'; fb.bagian = null; fb.terkirim = false; }
+    renderMasukan();
+    P.hidden = false;
+    document.body.classList.add('fb-open');
+    const ta = $('#fb-pesan'); (ta || P.querySelector('a, button')).focus();
+  }
+  function tutupMasukan() {
+    const P = fbPanel(); if (!P || P.hidden) return;
+    P.hidden = true;
+    document.body.classList.remove('fb-open');
+    if (fb.terkirim) { fb.terkirim = false; fb.kartu = null; fb.bagian = null; P.innerHTML = ''; }
+    if (fb.pembuka && document.contains(fb.pembuka)) fb.pembuka.focus();
   }
   async function kirimMasukan(btn) {
     const ta = $('#fb-pesan'), msg = $('#fb-msg');
-    const pesan = (ta.value || '').trim();
-    const jenis = (document.querySelector('input[name="fb-jenis"]:checked') || {}).value || 'lainnya';
-    if (pesan.length < 5) { msg.className = 'small bad'; msg.textContent = 'Tulis masukan Anda dulu, minimal 5 huruf.'; ta.focus(); return; }
-    btn.disabled = true; btn.textContent = 'Mengirim…'; msg.textContent = '';
+    const tulisan = (ta.value || '').trim();
+    const awalan = fb.kartu ? `[Kartu: ${KARTU_ANGKA[fb.kartu]}]${fb.bagian ? ` [Bagian: ${fb.bagian}]` : ''} ` : '';
+    const pesan = `${awalan}${tulisan}`.trim();
+    if (!fb.kartu && tulisan.length < 5) { msg.className = 'small bad'; msg.textContent = 'Tulis masukan Anda dulu, minimal 5 huruf.'; ta.focus(); return; }
+    if (fb.kartu && !fb.bagian && tulisan.length < 5) { msg.className = 'small bad'; msg.textContent = 'Pilih bagian yang kurang tepat, atau tulis sedikit penjelasan.'; ta.focus(); return; }
+    busy(btn, true); msg.textContent = '';
     try {
-      await cloud.db.kirimMasukan({ jenis, pesan, halaman: viewName, bolehDihubungi: $('#fb-kontak').checked });
-      track('kirim-masukan');
-      dlg().innerHTML = `${dHead('Terima kasih!', '')}<div class="d-body"><p>Masukan Anda sudah kami terima. ${$('#fb-kontak') && $('#fb-kontak').checked ? 'Kami akan menghubungi Anda bila perlu penjelasan lebih lanjut.' : ''}</p>
-        <button class="btn primary" type="button" data-close>Tutup</button></div>`;
+      const kontak = $('#fb-kontak').checked;
+      await cloud.db.kirimMasukan({ jenis: fb.jenis, pesan, halaman: `${viewName}${fb.kartu ? `:${fb.kartu}` : ''}`.slice(0, 40), bolehDihubungi: kontak });
+      track(fb.kartu ? 'kirim-masukan-kartu' : 'kirim-masukan');
+      fb.terkirim = true; fb.kontak = kontak;
+      renderMasukan();
+      const tb = fbPanel().querySelector('[data-fb-tutup].btn'); if (tb) tb.focus();
     } catch (e) {
-      btn.disabled = false; btn.textContent = 'Kirim masukan';
+      busy(btn, false);
       msg.className = 'small bad';
       // Tabel belum dibuat (SQL belum dijalankan) atau offline: jangan diam-diam gagal; tawarkan WhatsApp. Isi pesan tetap ada.
       msg.innerHTML = e.status === 404 ? `Form masukan belum aktif. Silakan kirim lewat WhatsApp. ${tombolWa('Buka WhatsApp')}`
@@ -2715,6 +2764,11 @@
     if (t.dataset.sheet) { openSheet(t.dataset.sheet); return; }
     if (t.hasAttribute('data-masukan')) { if ($('#sheet').open) closeSheet(); openMasukan(); return; }
     if (t.id === 'fb-kirim') { kirimMasukan(t); return; }
+    if (t.hasAttribute('data-fb-tutup')) { tutupMasukan(); return; }
+    if (t.dataset.fbJenis) { fb.jenis = t.dataset.fbJenis; if (fb.jenis !== 'masalah') fb.bagian = null; renderMasukan(); const j = fbPanel().querySelector(`[data-fb-jenis="${fb.jenis}"]`); if (j) j.focus(); return; }
+    if (t.dataset.fbBagian) { fb.bagian = fb.bagian === t.dataset.fbBagian ? null : t.dataset.fbBagian; fbPanel().querySelectorAll('[data-fb-bagian]').forEach((x) => x.setAttribute('aria-pressed', String(x.dataset.fbBagian === fb.bagian))); return; }
+    if (t.dataset.kurang) { openMasukan(t.dataset.kurang); return; }
+    if (t.dataset.sesuai) { angkaSesuai.add(t.dataset.sesuai); track('angka-sesuai'); const row = t.closest('.cek-angka'); if (row) { row.outerHTML = cekAngka(t.dataset.sesuai); } return; }
     if (t.dataset.prod) { openProduct(t.dataset.prod); return; }
     if (t.dataset.pfilter) { view.prodFilter = t.dataset.pfilter; view.showAll = false; renderProducts(true); return; }
     if (t.dataset.platCol) { view.platCol = t.dataset.platCol; const tb = $('.plat-table'); if (tb) { tb.className = `data plat-table show-${view.platCol}`; } document.querySelectorAll('[data-plat-col]').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.platCol === view.platCol))); return; }
@@ -2855,7 +2909,9 @@
   if ('IntersectionObserver' in window && $('#top-sentinel')) new IntersectionObserver(([en]) => $('#main-top').classList.toggle('is-stuck', !en.isIntersecting)).observe($('#top-sentinel'));
   document.addEventListener('toggle', (e) => { if (!e.target.classList) return; if (e.target.classList.contains('rincian')) view.rincian = e.target.open; if (e.target.id === 'month-table') view.monthOpen = e.target.open; if (e.target.dataset && e.target.dataset.sec) view.openSec[e.target.dataset.sec] = e.target.open; if (e.target.dataset && e.target.dataset.pjBuka) pajak.buka[e.target.dataset.pjBuka] = e.target.open; }, true);
   document.addEventListener('keydown', (e) => {
+    if ((e.metaKey || e.ctrlKey) && e.key === 'Enter' && e.target && e.target.id === 'fb-pesan') { const k = $('#fb-kirim'); if (k && !k.disabled) kirimMasukan(k); return; }
     if (e.key !== 'Escape') return;
+    if (fbPanel() && !fbPanel().hidden && fbPanel().contains(document.activeElement)) { tutupMasukan(); return; }
     hideInfo();
     document.querySelectorAll('details.dd[open]').forEach((d) => { d.open = false; d.querySelector('summary').focus(); });
   });
