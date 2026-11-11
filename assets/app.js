@@ -677,17 +677,17 @@
         <figcaption>${opex ? 'Laba dari data tersedia' : 'Laba setelah modal'} per bulan, ${num(sv.length)} bulan</figcaption></figure>`;
     })();
     const kpiTiles = `<section class="d3-tiles" aria-label="Angka pendukung">
-        ${kpi(`Penjualan${qi('penjualan', 'Penjualan')}`, r.totalSales, `${num(r.orders)} pesanan terjual${heldShort(r)}`, '', cekAngka('sales'), 'sales')}
+        ${kpi(`Penjualan${qi('penjualan', 'Penjualan')}`, r.totalSales, `${num(r.orders)} pesanan terjual${heldShort(r)}`, '', '', 'sales')}
         ${kpi(`Modal / HPP${qi('modal', 'Modal')}`, r.ready ? r.totalModal : '<span class="faint">—</span>', r.ready ? 'dari penjualan yang modalnya diketahui' : 'modal belum diisi', '',
-          (hppMixed ? '<div class="m-status"><span class="status estimate">Sebagian perkiraan</span></div>' : r.ready && c.penjualan.terverifikasi > 0 ? '<div class="m-status"><span class="status verified">Terverifikasi</span></div>' : '') + (r.ready ? cekAngka('modal') : ''), 'modal')}
-        ${kpi(`Potongan marketplace${qi('potongan', 'Potongan marketplace')}`, -r.totalFees, 'dipotong dari penjualan oleh marketplace', '', cekAngka('fees'), 'fees')}
+          hppMixed ? '<div class="m-status"><span class="status estimate">Sebagian perkiraan</span></div>' : r.ready && c.penjualan.terverifikasi > 0 ? '<div class="m-status"><span class="status verified">Terverifikasi</span></div>' : '', 'modal')}
+        ${kpi(`Potongan marketplace${qi('potongan', 'Potongan marketplace')}`, -r.totalFees, 'dipotong dari penjualan oleh marketplace', '', '', 'fees')}
       </section>`;
     return `${ajakDaftar(r)}<div class="dash d3">
       <div class="d3-top">
         <section class="dash-hero d3-profit" aria-label="Laba">
           ${kpi(`Laba dari data tersedia${qi('laba_bersih', 'Laba dari data tersedia')}`, r.ready ? laba : '<span class="faint">Belum dihitung</span>',
             `${r.ready ? `${opex ? 'setelah biaya operasional yang tercatat. ' : ''}${pct(r.coverage, 0)} penjualan masuk dalam perhitungan` : 'isi modal produk agar laba bisa dihitung'}${heldShort(r)}${r.ready && rentangTeks(r) ? `. ${rentangTeks(r)}` : ''}`,
-            'is-hero', `<div class="m-status">${finalBadge}</div>${spark}<div class="ph-cta">${r.ready ? '<button type="button" class="btn sm ph-btn" data-go="biaya">Lihat rincian laba<svg class="arr" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg></button>' : '<button type="button" class="btn sm ph-btn" data-go="data" data-section="modal">Isi modal</button>'}</div>${r.ready ? cekAngka('laba') : ''}`)}
+            'is-hero', `<div class="m-status">${finalBadge}</div>${spark}<div class="ph-cta">${r.ready ? '<button type="button" class="btn sm ph-btn" data-go="biaya">Lihat rincian laba<svg class="arr" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg></button>' : '<button type="button" class="btn sm ph-btn" data-go="data" data-section="modal">Isi modal</button>'}</div>`)}
         </section>
 
         <section class="section-card kep d3-conf" aria-labelledby="kep-t" data-spotlight>
@@ -2395,31 +2395,21 @@
   const PLANS = () => { const p = C.prices || {}; return [['pro_bulanan', 'Pro bulanan', `${p.pro || ''} ${p.proUnit || ''}`.trim()], ['pro_tahunan', 'Pro tahunan', (p.proNote || '').replace(/^atau\s+/i, '')]]; };
   const waLink = (msg) => (C.whatsapp ? `https://wa.me/${C.whatsapp}?text=${encodeURIComponent(msg)}` : '');
   const dHead = (t, s) => `<div class="d-head"><div><h2 style="font-size:22px">${t}</h2>${s ? `<p class="small muted" style="margin-top:4px">${s}</p>` : ''}</div><button class="x" type="button" data-close aria-label="Tutup">×</button></div>`;
-  /* ---------- Kirim masukan (keputusan pemilik 4 Nov 2026; desain A+B, 11 Nov 2026) ----------
-   * A: tombol "Masukan" mengambang + panel cepat (tanpa menutup halaman). B: "Angka ini sesuai?" di kartu angka utama
-   * Ringkasan; "Kurang tepat" membuka panel yang sama dengan nama kartu dan bagian yang dipilih.
+  /* ---------- Kirim masukan (keputusan pemilik 4 Nov 2026; desain baru 11 Nov 2026) ----------
+   * Tombol "Masukan" mengambang + panel cepat (tanpa menutup halaman). Baris "Angka ini sesuai?" di kartu angka
+   * sempat dicoba lalu dihapus atas keputusan pemilik (11 Nov 2026).
    * Form hanya untuk akun yang sudah masuk; tamu diarahkan ke masuk/daftar atau WhatsApp. Yang dikirim hanya jenis,
-   * pesan (termasuk nama kartu & bagian bila dari kartu), nama halaman, dan centang boleh dihubungi.
-   * Angka laporan dan isi file TIDAK ikut dikirim. "Sesuai" tidak dikirim ke server (hanya ucapan terima kasih). */
+   * pesan, nama halaman, dan centang boleh dihubungi. Angka laporan dan isi file TIDAK ikut dikirim. */
   const JENIS_MASUKAN = [['saran', 'Ide fitur', '<path d="M9 18h6M10 21h4M12 3a6 6 0 0 0-3.5 10.9c.6.5 1 1.2 1 2.1h5c0-.9.4-1.6 1-2.1A6 6 0 0 0 12 3z"/>'],
     ['masalah', 'Ada yang salah', '<path d="M12 9v4M12 17h.01M10.3 3.9L1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/>'],
     ['lainnya', 'Lainnya', '<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>']];
-  const KARTU_ANGKA = { laba: 'Laba dari data tersedia', sales: 'Penjualan', modal: 'Modal / HPP', fees: 'Potongan marketplace' };
-  const BAGIAN_ANGKA = ['Biaya marketplace', 'Modal / HPP', 'Retur', 'Pesanan hilang', 'Lainnya'];
   const PETUNJUK_MASUKAN = { saran: 'Contoh: Saya ingin bisa melihat laba per minggu.', masalah: 'Contoh: Biaya iklan di halaman Laba berbeda dengan Seller Centre.', lainnya: 'Tulis apa saja yang ingin Anda sampaikan.' };
   // Nomor bantuan (bukan nomor pembayaran) dibaca oleh situs.js; app.js tidak menyentuh kunci config-nya.
   const waMasukan = () => (typeof CekSitus !== 'undefined' ? CekSitus.bantuanWa(C, 'Halo Cek Untung, saya ingin memberi masukan: ') : '');
   const tombolWa = (label = 'Kirim lewat WhatsApp') => (waMasukan() ? `<a class="btn" href="${esc(waMasukan())}" target="_blank" rel="noopener">${label}</a>` : '');
-  const fb = { jenis: 'saran', kartu: null, bagian: null, pembuka: null, terkirim: false };
-  const angkaSesuai = new Set();   // kartu yang sudah dijawab "Sesuai" di sesi ini (tidak dikirim ke server)
+  const fb = { jenis: 'saran', pembuka: null, terkirim: false };
   const fbPanel = () => $('#fb-panel');
   const fbIkon = (d, w = 20) => `<svg width="${w}" height="${w}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${d}</svg>`;
-  /** Baris "Angka ini sesuai?" di bawah kartu angka (B). Tidak tampil di mode contoh. */
-  const cekAngka = (id) => {
-    if (demo || !KARTU_ANGKA[id]) return '';
-    if (angkaSesuai.has(id)) return `<div class="cek-angka is-ok" role="status">${fbIkon('<path d="M5 12l5 5L20 7"/>', 15)}<span>Terima kasih atas konfirmasinya.</span></div>`;
-    return `<div class="cek-angka"><span class="ca-q">Angka ini sesuai?</span><span class="ca-btns"><button type="button" class="ca-btn" data-sesuai="${id}">Sesuai</button><button type="button" class="ca-btn ca-kurang" data-kurang="${id}" aria-haspopup="dialog" aria-controls="fb-panel">Kurang tepat</button></span></div>`;
-  };
   function renderMasukan() {
     const P = fbPanel(); if (!P) return;
     const lama = $('#fb-pesan') ? $('#fb-pesan').value : '';
@@ -2444,8 +2434,6 @@
     P.innerHTML = `${kepala('Kirim masukan', 'Butuh 30 detik. Kami baca setiap masukan.')}
       <div class="fb-body">
         <div class="fb-jenis" role="radiogroup" aria-label="Jenis masukan">${JENIS_MASUKAN.map(([k, l, ic]) => `<button type="button" role="radio" aria-checked="${fb.jenis === k}" class="fb-j fb-j-${k}" data-fb-jenis="${k}">${fbIkon(ic, 22)}<span>${l}</span></button>`).join('')}</div>
-        ${fb.kartu ? `<div class="fb-kartu"><span class="fb-chip is-strong">Kartu: ${esc(KARTU_ANGKA[fb.kartu])}</span></div>
-          ${fb.jenis === 'masalah' ? `<div class="fb-bagian" role="group" aria-label="Bagian yang kurang tepat"><p class="fb-label">Bagian mana yang kurang tepat?</p><div class="fb-chips">${BAGIAN_ANGKA.map((b) => `<button type="button" class="fb-b" aria-pressed="${fb.bagian === b}" data-fb-bagian="${esc(b)}">${b}</button>`).join('')}</div></div>` : ''}` : ''}
         <div class="fb-field"><label class="fb-label" for="fb-pesan">${fb.jenis === 'masalah' ? 'Apa yang terjadi?' : fb.jenis === 'saran' ? 'Ide apa yang ingin Anda usulkan?' : 'Pesan'}</label>
           <textarea id="fb-pesan" rows="4" maxlength="2000" placeholder="${PETUNJUK_MASUKAN[fb.jenis]}" aria-describedby="fb-hint fb-msg">${esc(lama)}</textarea>
           <div class="fb-meta" id="fb-hint"><span class="fb-chip">${fbIkon('<path d="M4 4h16v16H4zM4 9h16"/>', 13)}Halaman: ${esc(halaman)}</span><span>Angka laporan Anda tidak ikut terkirim. Jangan menulis data pembeli, nomor rekening, atau kata sandi.</span></div></div>
@@ -2454,12 +2442,11 @@
         <button class="btn primary fb-kirim" type="button" id="fb-kirim">Kirim masukan<kbd class="fb-kbd" aria-hidden="true">⌘ Enter</kbd></button>
       </div>`;
   }
-  function openMasukan(kartu = null) {
+  function openMasukan() {
     const P = fbPanel(); if (!P) return;
-    if (!P.hidden && !kartu) { tutupMasukan(); return; }   // tombol Masukan ditekan lagi = tutup
-    track(kartu ? 'buka-masukan-kartu' : 'buka-masukan');
-    if (P.hidden) { P.innerHTML = ''; fb.terkirim = false; fb.jenis = 'saran'; fb.kartu = null; fb.pembuka = document.activeElement; }
-    if (kartu && KARTU_ANGKA[kartu]) { fb.kartu = kartu; fb.jenis = 'masalah'; fb.bagian = null; fb.terkirim = false; }
+    if (!P.hidden) { tutupMasukan(); return; }   // tombol Masukan ditekan lagi = tutup
+    track('buka-masukan');
+    P.innerHTML = ''; fb.terkirim = false; fb.jenis = 'saran'; fb.pembuka = document.activeElement;
     renderMasukan();
     P.hidden = false;
     document.body.classList.add('fb-open');
@@ -2469,21 +2456,18 @@
     const P = fbPanel(); if (!P || P.hidden) return;
     P.hidden = true;
     document.body.classList.remove('fb-open');
-    if (fb.terkirim) { fb.terkirim = false; fb.kartu = null; fb.bagian = null; P.innerHTML = ''; }
+    if (fb.terkirim) { fb.terkirim = false; P.innerHTML = ''; }
     if (fb.pembuka && document.contains(fb.pembuka)) fb.pembuka.focus();
   }
   async function kirimMasukan(btn) {
     const ta = $('#fb-pesan'), msg = $('#fb-msg');
-    const tulisan = (ta.value || '').trim();
-    const awalan = fb.kartu ? `[Kartu: ${KARTU_ANGKA[fb.kartu]}]${fb.bagian ? ` [Bagian: ${fb.bagian}]` : ''} ` : '';
-    const pesan = `${awalan}${tulisan}`.trim();
-    if (!fb.kartu && tulisan.length < 5) { msg.className = 'small bad'; msg.textContent = 'Tulis masukan Anda dulu, minimal 5 huruf.'; ta.focus(); return; }
-    if (fb.kartu && !fb.bagian && tulisan.length < 5) { msg.className = 'small bad'; msg.textContent = 'Pilih bagian yang kurang tepat, atau tulis sedikit penjelasan.'; ta.focus(); return; }
+    const pesan = (ta.value || '').trim();
+    if (pesan.length < 5) { msg.className = 'small bad'; msg.textContent = 'Tulis masukan Anda dulu, minimal 5 huruf.'; ta.focus(); return; }
     busy(btn, true); msg.textContent = '';
     try {
       const kontak = $('#fb-kontak').checked;
-      await cloud.db.kirimMasukan({ jenis: fb.jenis, pesan, halaman: `${viewName}${fb.kartu ? `:${fb.kartu}` : ''}`.slice(0, 40), bolehDihubungi: kontak });
-      track(fb.kartu ? 'kirim-masukan-kartu' : 'kirim-masukan');
+      await cloud.db.kirimMasukan({ jenis: fb.jenis, pesan, halaman: viewName, bolehDihubungi: kontak });
+      track('kirim-masukan');
       fb.terkirim = true; fb.kontak = kontak;
       renderMasukan();
       const tb = fbPanel().querySelector('[data-fb-tutup].btn'); if (tb) tb.focus();
@@ -2765,10 +2749,7 @@
     if (t.hasAttribute('data-masukan')) { if ($('#sheet').open) closeSheet(); openMasukan(); return; }
     if (t.id === 'fb-kirim') { kirimMasukan(t); return; }
     if (t.hasAttribute('data-fb-tutup')) { tutupMasukan(); return; }
-    if (t.dataset.fbJenis) { fb.jenis = t.dataset.fbJenis; if (fb.jenis !== 'masalah') fb.bagian = null; renderMasukan(); const j = fbPanel().querySelector(`[data-fb-jenis="${fb.jenis}"]`); if (j) j.focus(); return; }
-    if (t.dataset.fbBagian) { fb.bagian = fb.bagian === t.dataset.fbBagian ? null : t.dataset.fbBagian; fbPanel().querySelectorAll('[data-fb-bagian]').forEach((x) => x.setAttribute('aria-pressed', String(x.dataset.fbBagian === fb.bagian))); return; }
-    if (t.dataset.kurang) { openMasukan(t.dataset.kurang); return; }
-    if (t.dataset.sesuai) { angkaSesuai.add(t.dataset.sesuai); track('angka-sesuai'); const row = t.closest('.cek-angka'); if (row) { row.outerHTML = cekAngka(t.dataset.sesuai); } return; }
+    if (t.dataset.fbJenis) { fb.jenis = t.dataset.fbJenis; renderMasukan(); const j = fbPanel().querySelector(`[data-fb-jenis="${fb.jenis}"]`); if (j) j.focus(); return; }
     if (t.dataset.prod) { openProduct(t.dataset.prod); return; }
     if (t.dataset.pfilter) { view.prodFilter = t.dataset.pfilter; view.showAll = false; renderProducts(true); return; }
     if (t.dataset.platCol) { view.platCol = t.dataset.platCol; const tb = $('.plat-table'); if (tb) { tb.className = `data plat-table show-${view.platCol}`; } document.querySelectorAll('[data-plat-col]').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.platCol === view.platCol))); return; }
