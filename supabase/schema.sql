@@ -65,6 +65,12 @@ create policy "data: milik sendiri" on public.user_data
   for all using (user_id = auth.uid()) with check (user_id = auth.uid());
 revoke all on public.user_data from anon, authenticated;
 grant select, insert, update, delete on public.user_data to authenticated;
+-- Price list seller (Langkah 2a, 13 Nov 2026; sama dengan supabase/migrasi/2026-11-13-price-list.sql). Dipisah dari
+-- settings agar price list besar tidak ikut dikirim setiap kali modal disimpan. Ikut RLS baris di atas.
+alter table public.user_data add column if not exists price_list jsonb not null default '{}'::jsonb;
+alter table public.user_data drop constraint if exists user_data_price_list_size;
+alter table public.user_data add constraint user_data_price_list_size
+  check (jsonb_typeof(price_list) = 'object' and octet_length(price_list::text) < 3000000);
 
 -- ---------- riwayat ringkasan laporan ----------
 create table if not exists public.reports (

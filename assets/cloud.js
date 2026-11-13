@@ -240,6 +240,24 @@ const CekCloud = (() => {
       return http('/rest/v1/user_data?on_conflict=user_id', { method: 'POST', body: { user_id: u.id, settings, profile, updated_at: new Date().toISOString() },
         headers: { Prefer: 'resolution=merge-duplicates,return=minimal' } });
     },
+    /* Price list (Langkah 2a, 13 Nov 2026): kolom user_data.price_list, terpisah dari settings agar price list besar hanya
+     * dibaca/dikirim saat price list berubah. Upsert hanya kolom price_list: settings dan profile tidak tersentuh. */
+    async priceListWaktu() {
+      const u = auth.user(); if (!u) return null;
+      const rows = await http(`/rest/v1/user_data?select=diubah:price_list->diubah&user_id=eq.${enc(u.id)}`);
+      const v = rows && rows[0] ? rows[0].diubah : null;
+      return typeof v === 'number' && Number.isFinite(v) ? v : null;
+    },
+    async loadPriceList() {
+      const u = auth.user(); if (!u) return null;
+      const rows = await http(`/rest/v1/user_data?select=price_list&user_id=eq.${enc(u.id)}`);
+      return (rows && rows[0] && rows[0].price_list) || {};
+    },
+    savePriceList(priceList) {
+      const u = auth.user();
+      return http('/rest/v1/user_data?on_conflict=user_id', { method: 'POST', body: { user_id: u.id, price_list: priceList },
+        headers: { Prefer: 'resolution=merge-duplicates,return=minimal' } });
+    },
     listReports: () => http('/rest/v1/reports?select=id,created_at,title,period_from,period_to,summary&order=created_at.desc&limit=50'),
     addReport: (row) => http('/rest/v1/reports', { method: 'POST', body: row, headers: { Prefer: 'return=representation' } }).then((r) => r && r[0]),
     deleteReport: (id) => http(`/rest/v1/reports?id=eq.${enc(id)}`, { method: 'DELETE' }),
@@ -289,7 +307,10 @@ const CekCloud = (() => {
     return api;
   }
   let idle = null;
-  const api = { init, auth, db, isPro, CloudError, get enabled() { return !!cfg.url; }, /** untuk uji */ get idleSelesai() { return idle; } };
+  /** Kolom price_list belum ada di database (SQL Langkah 2a belum dijalankan): 42703 = kolom tidak ada (baca),
+   *  PGRST204 = kolom tidak dikenal PostgREST (tulis). */
+  const kolomBelumAda = (e) => !!(e && e.body && (e.body.code === '42703' || e.body.code === 'PGRST204'));
+  const api = { init, auth, db, isPro, CloudError, kolomBelumAda, get enabled() { return !!cfg.url; }, /** untuk uji */ get idleSelesai() { return idle; } };
   return api;
 })();
 if (typeof module !== 'undefined') module.exports = CekCloud;
