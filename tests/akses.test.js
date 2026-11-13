@@ -1,11 +1,17 @@
 /* Uji status Pro dan akses fitur (assets/akses.js).
  *
- * Langkah 0 adalah refactor TANPA perubahan perilaku. Buktinya:
+ * Langkah 0, bagian A: refactor TANPA perubahan perilaku. Bagian B: dua perubahan perilaku yang disengaja (keputusan
+ * pemilik 13 Nov 2026):
+ *  - D1: halaman Akun dan Admin menilai Pro dengan tanggal server (sama dengan dashboard); offline → tanggal perangkat.
+ *  - D2: jawaban beta dari server yang RUSAK → kembali ke config (dashboard dan halaman publik). Server yang tegas
+ *        (beta_aktif false, atau tanpa tanggal beta) tetap dipatuhi dan tidak kembali ke config.
+ * Buktinya:
  *  - `lamaDashboard()` dan `lamaSitus*()` di bawah adalah SALINAN logika sebelum refactor (commit 607e851,
  *    assets/app.js baris 117–142 dan assets/situs.js baris 37–53). Salinan ini dibekukan sebagai acuan (oracle).
  *  - Bagian B: tabel kasus bernama, dicek terhadap harapan DAN terhadap CekAkses.
- *  - Bagian C: semua kombinasi keadaan (± 9.600) dibandingkan antara oracle dan CekAkses; harus identik.
- *  - Bagian D: temuan perbedaan antarhalaman. Dikunci apa adanya; perubahan D1/D2 dilakukan di commit terpisah.
+ *  - Bagian C: semua kombinasi keadaan (± 9.600) dibandingkan dengan oracle. Kombinasi yang tidak terkena D2 harus
+ *    identik; kombinasi yang terkena D2 harus mengikuti aturan baru, dan tidak ada perbedaan lain.
+ *  - Bagian D: D1, D2 (berubah dengan sengaja) dan D3 (dibiarkan).
  *
  * Jalankan: node tests/akses.test.js
  */
@@ -61,11 +67,26 @@ function baruDashboard(x) {
   return { ...s, perluAkun: A.perluAkun({ demo: x.demo, cloudEnabled: x.cloudEnabled ?? true, login: x.login, halaman: x.halaman ?? 'ringkasan' }), batas: A.batas(s) };
 }
 const KUNCI = ['pro', 'proSendiri', 'proAkun', 'betaSampai', 'hariIni', 'sumber', 'perluAkun'];
+/** D2: jawaban server sah (hari_ini bertanggal), tetapi bagian beta-nya rusak: tanggal beta tidak sah, atau beta_aktif
+ *  bukan boolean padahal tanggal beta ada. Ditulis terpisah dari akses.js agar test tidak sekadar menyalin kode. */
+const betaServerRusak = (st) => !!(st && typeof st === 'object' && TGL_ISO.test(String(st.hari_ini || '')) && st.beta_gratis_sampai != null
+  && !(TGL_ISO.test(String(st.beta_gratis_sampai)) && typeof st.beta_aktif === 'boolean'));
+/** Harapan setelah D2: sama dengan oracle, kecuali beta (dan turunannya) dihitung dari config dengan tanggal server. */
+function harapDashboard(x) {
+  const a = lamaDashboard(x);
+  if (!betaServerRusak(x.serverStatus)) return { ...a, kenaD2: false };
+  const s = String(x.betaGratisSampai || '').trim();
+  const beta = TGL_ISO.test(s) && a.hariIni <= s ? s : '';
+  const pro = !!x.demo || a.proSendiri || !!beta;
+  const sumber = x.demo ? 'contoh' : a.proAkun ? 'akun' : x.licenseOk ? 'kode' : beta ? 'beta' : null;
+  return { ...a, betaSampai: beta, pro, sumber, kenaD2: true,
+    batas: { temuan: pro ? Infinity : 2, produk: pro ? Infinity : 5, riwayat: pro ? Infinity : 3 } };
+}
 const samaDashboard = (x) => {
-  const a = lamaDashboard(x), b = baruDashboard(x);
+  const a = harapDashboard(x), b = baruDashboard(x);
   for (const k of KUNCI) eq(b[k], a[k], k);
   for (const k of ['temuan', 'produk', 'riwayat']) eq(b.batas[k], a.batas[k], `batas.${k}`);
-  return b;
+  return { ...b, kenaD2: a.kenaD2 };
 };
 
 /* ===== A. Fungsi dasar ===== */
@@ -131,6 +152,12 @@ const KASUS = [
     login: true, profile: { pro_until: '2027-01-01' } }, { sumber: 'akun' }],
   ['B15 jawaban server rusak (hari_ini salah) → tanggal perangkat + config', { perangkat: '2026-12-13', betaGratisSampai: '2026-12-13', login: true,
     serverStatus: { hari_ini: 'x', beta_aktif: false } }, { pro: true, sumber: 'beta', hariIni: '2026-12-13' }],
+  ['B16 D2: tanggal beta dari server rusak → config, dengan tanggal server', { perangkat: '2027-01-01', betaGratisSampai: '2026-12-13', login: true,
+    serverStatus: { hari_ini: HARI, beta_aktif: true, beta_gratis_sampai: 'rusak' } }, { pro: true, sumber: 'beta', betaSampai: '2026-12-13', hariIni: HARI }],
+  ['B17 D2: beta_aktif bukan boolean → config', { perangkat: HARI, betaGratisSampai: '2026-12-13', login: true,
+    serverStatus: { hari_ini: HARI, beta_aktif: 'ya', beta_gratis_sampai: '2026-12-13' } }, { pro: true, sumber: 'beta' }],
+  ['B18 D2: server tegas tanpa masa beta (tanggal null) → mati, tidak kembali ke config', { perangkat: HARI, betaGratisSampai: '2026-12-31', login: true,
+    serverStatus: { hari_ini: HARI, beta_aktif: false, beta_gratis_sampai: null } }, { pro: false, sumber: null, betaSampai: '' }],
 ];
 for (const [nama, input, harap] of KASUS) {
   test(nama, () => {
@@ -147,18 +174,19 @@ test('C1 dashboard: semua kombinasi keadaan memberi hasil identik', () => {
     { hari_ini: '2026-12-10', beta_aktif: false, beta_gratis_sampai: '2026-12-13' }, { hari_ini: '2026-12-10', beta_aktif: true, beta_gratis_sampai: null },
     { hari_ini: '2026-12-10', beta_aktif: true, beta_gratis_sampai: 'rusak' }, { hari_ini: '2026-12-14', beta_aktif: true, beta_gratis_sampai: '2026-12-13' }];
   const config = ['', ' 2026-12-10 ', '2026-12-09', '2026-12-13', '13-12-2026'];
-  let n = 0;
+  let n = 0, d2 = 0;
   for (const demo of [false, true]) for (const licenseOk of [false, true]) for (const profile of profil) for (const serverStatus of server)
     for (const betaGratisSampai of config) for (const perangkat of ['2026-12-09', '2026-12-10', '2026-12-14'])
       for (const login of [false, true]) for (const halaman of ['ringkasan', 'produk']) {
-        samaDashboard({ demo, licenseOk, profile, serverStatus, betaGratisSampai, perangkat, login, halaman, cloudEnabled: true }); n++;
+        if (samaDashboard({ demo, licenseOk, profile, serverStatus, betaGratisSampai, perangkat, login, halaman, cloudEnabled: true }).kenaD2) d2++; n++;
       }
   for (const cloudEnabled of [false, true]) for (const h of ['ringkasan', 'produk', 'biaya', 'retur', 'riwayat', 'simulator']) {
     samaDashboard({ perangkat: HARI, cloudEnabled, halaman: h }); n++;
   }
   if (n < 9000) throw new Error(`kombinasi terlalu sedikit: ${n}`);
+  if (!(d2 > 0 && d2 < n / 2)) throw new Error(`kombinasi D2 tidak wajar: ${d2} dari ${n}`);
 });
-test('C2 halaman publik (situs.js): betaGratis dan betaDariServer identik dengan sebelum refactor', () => {
+test('C2 halaman publik (situs.js): sama dengan sebelum refactor, kecuali D2 (beta_aktif bukan boolean → config)', () => {
   const sama = (a, b, m) => eq(JSON.stringify(a), JSON.stringify(b), m);
   for (const s of ['', '2026-12-13', ' 2026-12-13 ', 'rusak', null]) for (const h of ['2026-12-12', '2026-12-13', '2026-12-14']) {
     sama(CekSitus.betaGratis({ betaGratisSampai: s }, h), lamaSitusBeta({ betaGratisSampai: s }, h), `config ${s} ${h}`);
@@ -167,8 +195,10 @@ test('C2 halaman publik (situs.js): betaGratis dan betaDariServer identik dengan
   for (const st of [null, 'x', { hari_ini: 'x' }, { hari_ini: '2026-12-01', beta_gratis_sampai: null }, { hari_ini: '2026-12-01', beta_gratis_sampai: 'rusak' },
     { hari_ini: '2026-12-01', beta_aktif: true, beta_gratis_sampai: '2026-12-13' }, { hari_ini: '2026-12-01', beta_aktif: false, beta_gratis_sampai: '2026-12-13' },
     { hari_ini: '2026-12-01', beta_aktif: 'true', beta_gratis_sampai: '2026-12-13' }]) {
-    sama(CekSitus.betaDariServer(st), lamaSitusServer(st), JSON.stringify(st));
+    const d2 = betaServerRusak(st) && typeof st.beta_aktif !== 'boolean';
+    sama(CekSitus.betaDariServer(st), d2 ? null : lamaSitusServer(st), JSON.stringify(st));
   }
+  eq(lamaSitusServer({ hari_ini: '2026-12-01', beta_aktif: 'true', beta_gratis_sampai: '2026-12-13' }).aktif, false, 'perilaku lama: dianggap mati');
 });
 test('C3 akses.js dimuat sebelum script yang memakainya di setiap halaman', () => {
   const urutan = { 'dashboard.html': ['akses.js', 'app.js'], 'akun.html': ['akses.js', 'akun.js'], 'admin.html': ['akses.js', 'CekAkses.proAkun'],
@@ -180,37 +210,44 @@ test('C3 akses.js dimuat sebelum script yang memakainya di setiap halaman', () =
   if (!baca('sw.js').includes("'assets/akses.js'")) throw new Error('akses.js belum masuk cache offline (sw.js CORE)');
 });
 
-test('C4 app.js: hariIni/betaGratis/proAkun yang masih ditulis di app.js sama dengan oracle (penjaga teks)', () => {
-  // Tiga fungsi ini belum dipindah ke CekAkses di commit ini (teksnya dikunci tests/tampilan.test.js). Bila app.js
-  // diubah, C1 tidak lagi membuktikan dashboard; test ini gagal agar perubahan itu disadari.
+test('C4 app.js memakai CekAkses, tidak punya aturan sendiri', () => {
   const app = baca('assets/app.js');
   for (const baris of [
-    "const hariIni = () => (serverStatus ? serverStatus.hari_ini : new Date().toLocaleDateString('sv-SE'));",
-    "if (serverStatus) return serverStatus.beta_aktif === true && TGL_ISO.test(String(serverStatus.beta_gratis_sampai || '')) ? serverStatus.beta_gratis_sampai : '';",
-    "return TGL_ISO.test(s) && hariIni() <= s ? s : '';",
-    'const proAkun = (p = account.profile) => CekCloud.isPro(p, hariIni());',
+    'const hariIni = () => CekAkses.hariIni(serverStatus);',
+    'const betaGratis = () => CekAkses.betaSampai({ serverStatus, betaGratisSampai: C.betaGratisSampai, hari: hariIni() });',
+    'const proAkun = (p = account.profile) => CekAkses.proAkun(p, hariIni());',
     'const proSendiri = () => license.ok || proAkun();',
     'const isPro = () => demo || proSendiri() || !!betaGratis();',
     'serverStatus = CekAkses.statusServerSah(st);',
     "const perluAkun = (v = viewName) => CekAkses.perluAkun({ demo, cloudEnabled: cloud.enabled, login: !!account.user, halaman: v });",
   ]) if (!app.includes(baris)) throw new Error(`app.js berubah: ${baris.slice(0, 70)}`);
+  for (const lama of ['TGL_ISO', 'CekCloud.isPro(', "KUNCI_TAMU = ["]) if (app.includes(lama)) throw new Error(`app.js masih punya aturan sendiri: ${lama}`);
 });
 
-/* ===== D. Temuan: perbedaan antarhalaman (dikunci apa adanya di commit ini) ===== */
+/* ===== D. Temuan antarhalaman: D1 dan D2 diubah (keputusan pemilik 13 Nov 2026), D3 dibiarkan ===== */
 
-test('D1 TEMUAN: dashboard memakai tanggal server, halaman Akun/Admin memakai tanggal perangkat', () => {
-  const profil = { pro_until: '2026-12-13' };
-  const dashboard = baruDashboard({ perangkat: '2026-12-13', login: true, profile: profil,
-    serverStatus: { hari_ini: '2026-12-14', beta_aktif: false, beta_gratis_sampai: null } });
-  eq(dashboard.pro, false, 'dashboard');
-  eq(A.proAkun(profil, '2026-12-13'), true, 'akun/admin (tanggal perangkat)');
-  if (!baca('assets/akun.js').includes('CekAkses.proAkun(p, CekAkses.tanggalPerangkat())')) throw new Error('akun.js berubah');
-  if (!baca('admin.html').includes('CekAkses.proAkun(p, CekAkses.tanggalPerangkat())')) throw new Error('admin.html berubah');
+test('D1 Akun dan Admin menilai Pro dengan tanggal server, sama dengan dashboard', () => {
+  // Server sudah 14 Des, perangkat masih 13 Des, pro_until 13 Des → semua halaman: bukan Pro.
+  const profil = { pro_until: '2026-12-13' }, st = { hari_ini: '2026-12-14', beta_aktif: false, beta_gratis_sampai: null };
+  const dashboard = baruDashboard({ perangkat: '2026-12-13', login: true, profile: profil, serverStatus: st });
+  const halamanLain = A.proAkun(profil, A.hariIni(A.statusServerSah(st), '2026-12-13'));
+  eq(dashboard.pro, false, 'dashboard'); eq(halamanLain, false, 'akun/admin');
+  // Server tidak menjawab (offline) → tanggal perangkat, seperti sebelumnya.
+  eq(A.proAkun(profil, A.hariIni(A.statusServerSah(null), '2026-12-13')), true, 'offline');
+  const akun = baca('assets/akun.js'), admin = baca('admin.html');
+  if (!akun.includes('cloud.db.statusAkun().catch(() => null)') || !akun.includes('CekAkses.proAkun(p, CekAkses.hariIni(CekAkses.statusServerSah(st)))')) throw new Error('akun.js belum memakai tanggal server');
+  if (!admin.includes('CekAkses.proAkun(p, CekAkses.hariIni(CekAkses.statusServerSah(situs)))')) throw new Error('admin.html belum memakai tanggal server');
+  // Admin memakai status_situs yang sudah dimuat (tanpa panggilan tambahan).
+  eq((admin.match(/statusSitus\(\)/g) || []).length, 1, 'jumlah panggilan status_situs di admin');
 });
-test('D2 TEMUAN: tanggal beta rusak dari server → dashboard mematikan beta, situs.js kembali ke config', () => {
+test('D2 tanggal beta rusak dari server → dashboard dan halaman publik sama-sama kembali ke config', () => {
   const st = { hari_ini: HARI, beta_aktif: true, beta_gratis_sampai: 'rusak' };
-  eq(baruDashboard({ perangkat: HARI, betaGratisSampai: '2026-12-31', serverStatus: st }).betaSampai, '', 'dashboard');
+  eq(baruDashboard({ perangkat: HARI, betaGratisSampai: '2026-12-31', serverStatus: st }).betaSampai, '2026-12-31', 'dashboard');
   eq(CekSitus.betaDariServer(st), null, 'situs (null = pakai config)');
+  // Server tegas mati → tetap mati, walau config masih beta.
+  const mati = { hari_ini: HARI, beta_aktif: false, beta_gratis_sampai: '2026-12-31' };
+  eq(baruDashboard({ perangkat: HARI, betaGratisSampai: '2026-12-31', serverStatus: mati }).betaSampai, '', 'dashboard, server tegas');
+  eq(CekSitus.betaDariServer(mati).aktif, false, 'situs, server tegas');
 });
 test('D3 TEMUAN (dibiarkan, keputusan pemilik): kode akses memakai tanggal UTC', () => {
   if (!baca('assets/license.js').includes("const today = () => new Date().toISOString().slice(0, 10);")) throw new Error('license.js berubah');

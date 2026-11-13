@@ -87,11 +87,13 @@
     card.innerHTML = '<p class="muted" role="status">Memuat akun…</p>';
     const salin = await salinHpDaftar();
     let p = null, reqs = [];
-    try { [p, reqs] = await Promise.all([cloud.db.profile(), cloud.db.myRequests().catch(() => [])]); } catch (e) { message = { text: e.message }; }
+    // status_akun hanya untuk tanggal server (D1, 13 Nov 2026); berjalan bersamaan, gagal → tanggal perangkat.
+    let st = null;
+    try { [p, reqs, st] = await Promise.all([cloud.db.profile(), cloud.db.myRequests().catch(() => []), cloud.db.statusAkun().catch(() => null)]); } catch (e) { message = { text: e.message }; }
     // Sesi ditolak server (mis. kedaluwarsa) → kembali ke halaman masuk, bukan tampil seolah masih masuk.
     if (!cloud.auth.user()) { view = 'masuk'; return render(); }
-    // Status Pro dari assets/akses.js (tanggal perangkat, sama dengan cloud.isPro sebelumnya).
-    const pro = CekAkses.proAkun(p, CekAkses.tanggalPerangkat());
+    // Status Pro dari assets/akses.js, dengan tanggal server (sama dengan dashboard); offline → tanggal perangkat.
+    const pro = CekAkses.proAkun(p, CekAkses.hariIni(CekAkses.statusServerSah(st)));
     const gagalSalin = salin.status === 'gagal' && !(p && p.whatsapp);
     // Nomor dari pendaftaran yang belum tersimpan diisikan ulang di kolom (belum tersimpan, jadi data-awal kosong).
     const wa = (p && p.whatsapp) || '', waIsi = gagalSalin ? salin.nomor : wa;

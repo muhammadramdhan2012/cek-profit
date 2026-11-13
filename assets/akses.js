@@ -33,24 +33,27 @@ const CekAkses = (() => {
   }
 
   /**
-   * Masa beta menurut server, aturan halaman publik (situs.js).
-   * null = jawaban tidak bisa dipakai → pemanggil kembali ke config.
+   * Masa beta menurut server. Dipakai dashboard DAN halaman publik (keputusan pemilik 13 Nov 2026, D2).
+   *  - Server tegas: tanggal sah + beta_aktif boolean → keputusan server dipakai (false = mati, TIDAK kembali ke config).
+   *  - Server menyatakan tidak ada masa beta (beta_gratis_sampai null) → mati.
+   *  - Jawaban rusak (hari_ini/tanggal beta tidak sah, atau beta_aktif bukan boolean) → null: pemanggil kembali ke config.
    */
   function betaDariServer(st) {
     if (!statusServerSah(st)) return null;
     const s = st.beta_gratis_sampai;
     if (s == null) return { aktif: false, sampai: '' };
-    if (!TGL.test(String(s))) return null;
-    return { aktif: st.beta_aktif === true, sampai: s };
+    if (!TGL.test(String(s)) || typeof st.beta_aktif !== 'boolean') return null;
+    return { aktif: st.beta_aktif, sampai: s };
   }
 
   /**
-   * Tanggal akhir beta yang berlaku di DASHBOARD ('' = tidak beta).
-   * Bila ada status server: server yang memutuskan (beta_aktif === true dan tanggalnya sah). Selain itu config + hari ini.
+   * Tanggal akhir beta yang berlaku di dashboard ('' = tidak beta).
+   * Ada jawaban server yang bisa dipakai → keputusan server. Jawaban rusak atau tidak ada → config, dibandingkan dengan
+   * hari ini (tanggal server bila ada, selain itu tanggal perangkat).
    */
   function betaSampai({ serverStatus = null, betaGratisSampai = '', hari }) {
-    if (serverStatus) return serverStatus.beta_aktif === true && TGL.test(String(serverStatus.beta_gratis_sampai || '')) ? serverStatus.beta_gratis_sampai : '';
-    const b = betaDariConfig(betaGratisSampai, hari);
+    const server = serverStatus ? betaDariServer(serverStatus) : null;
+    const b = server || betaDariConfig(betaGratisSampai, hari);
     return b.aktif ? b.sampai : '';
   }
 

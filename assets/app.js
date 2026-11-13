@@ -115,18 +115,13 @@
    *  null = belum/tidak tersedia (offline, akun belum aktif, atau SQL tahap 2 belum dijalankan) → aturan lokal di bawah
    *  (tanggal perangkat + config) tetap dipakai, agar website tetap jalan offline. */
   let serverStatus = null;
-  // Aturan kunci tamu, batas paket gratis, dan fitur Pro ada di assets/akses.js (satu tempat untuk semua halaman).
-  // hariIni/betaGratis/proAkun di bawah masih ditulis di sini (dikunci teksnya oleh tests/tampilan.test.js); isinya
-  // dibuktikan sama dengan CekAkses oleh tests/akses.test.js (C1). Dipindah ke CekAkses bersama perubahan D1/D2.
-  const TGL_ISO = /^\d{4}-\d{2}-\d{2}$/;
-  const hariIni = () => (serverStatus ? serverStatus.hari_ini : new Date().toLocaleDateString('sv-SE'));
-  /** Masa beta gratis (keputusan pemilik 1 Nov 2026): sampai tanggal akhir (inklusif) semua fitur Pro terbuka.
-   *  Sumber: server bila tersedia; selain itu C.betaGratisSampai dengan tanggal perangkat (sama dengan CekSitus.betaGratis). */
-  const betaGratis = () => {
-    if (serverStatus) return serverStatus.beta_aktif === true && TGL_ISO.test(String(serverStatus.beta_gratis_sampai || '')) ? serverStatus.beta_gratis_sampai : '';
-    const s = String(C.betaGratisSampai || '').trim();
-    return TGL_ISO.test(s) && hariIni() <= s ? s : '';
-  };
+  // Aturan status Pro, masa beta, kunci tamu, batas paket gratis, dan fitur Pro ada di assets/akses.js (satu tempat untuk
+  // semua halaman). Fungsi di bawah hanya membungkusnya dengan keadaan dashboard, agar pemanggil lama tidak perlu diubah.
+  /** Hari ini: tanggal server bila ada, selain itu tanggal perangkat (offline/belum dimigrasi). */
+  const hariIni = () => CekAkses.hariIni(serverStatus);
+  /** Masa beta gratis (keputusan pemilik 1 Nov 2026): tanggal akhir ('' = tidak beta). Server yang memutuskan; config
+   *  hanya cadangan bila jawaban server tidak ada atau rusak (D2, 13 Nov 2026). Aturannya: CekAkses.betaSampai. */
+  const betaGratis = () => CekAkses.betaSampai({ serverStatus, betaGratisSampai: C.betaGratisSampai, hari: hariIni() });
   async function loadStatus() {
     if (!cloud.enabled) return;
     let st = null;
@@ -134,7 +129,7 @@
     serverStatus = CekAkses.statusServerSah(st);
     render();
   }
-  const proAkun = (p = account.profile) => CekCloud.isPro(p, hariIni());
+  const proAkun = (p = account.profile) => CekAkses.proAkun(p, hariIni());
   /** Pro yang benar-benar dimiliki (akun/kode), bukan karena masa beta. */
   const proSendiri = () => license.ok || proAkun();
   const isPro = () => demo || proSendiri() || !!betaGratis();

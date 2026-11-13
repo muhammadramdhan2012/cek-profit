@@ -21,7 +21,7 @@
   <main class="admin-grid" id="main" aria-live="polite"><p class="muted">Memuat…</p></main>
 </div>
 <div id="toast" class="toast" role="status" hidden></div>
-<script src="assets/akses.js?v=974818e438"></script>
+<script src="assets/akses.js?v=fba67c79df"></script>
 <script src="assets/cloud.js?v=98df9d05e3"></script>
 <script>
 (() => {
@@ -31,8 +31,9 @@
   const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   const toast = (m) => { const t = $('#toast'); t.textContent = m; t.hidden = false; clearTimeout(toast.t); toast.t = setTimeout(() => { t.hidden = true; }, 3200); };
   const today = () => new Date().toLocaleDateString('sv-SE');
-  // Status Pro dari assets/akses.js (tanggal perangkat, sama dengan cloud.isPro sebelumnya).
-  const proAktif = (p) => CekAkses.proAkun(p, CekAkses.tanggalPerangkat());
+  // Status Pro dari assets/akses.js, dengan tanggal server dari status_situs yang sudah dimuat di load() (D1, 13 Nov 2026);
+  // belum dimuat/gagal → tanggal perangkat.
+  const proAktif = (p) => CekAkses.proAkun(p, CekAkses.hariIni(CekAkses.statusServerSah(situs)));
   const plus = (months, from) => { const d = from && from > today() ? new Date(`${from}T00:00:00`) : new Date(); d.setMonth(d.getMonth() + months); return d.toLocaleDateString('sv-SE'); };
   const tgl = (d) => (d ? new Date(d.length > 10 ? d : `${d}T00:00:00`).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' }) : '—');
   const PLAN = { pro_bulanan: 'Pro bulanan', pro_tahunan: 'Pro tahunan', jasa: 'Jasa laporan' };
