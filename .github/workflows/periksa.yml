@@ -18,5 +18,6 @@ jobs:
           node tests/surat.test.js
           node tests/tarif.test.js
           node tests/license.test.js
+          node tests/akses.test.js
           node tests/cloud.test.js
           node tests/duitku.test.mjs

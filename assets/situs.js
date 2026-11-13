@@ -34,24 +34,16 @@ const CekSitus = (() => {
   }
 
   const BULAN = ['Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni', 'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'];
-  /** Masa beta gratis (CEK_CONFIG.betaGratisSampai 'YYYY-MM-DD', inklusif). hariIni 'YYYY-MM-DD' (tanggal perangkat).
-   *  Format salah/kosong → tidak aktif. Aturan yang sama ada di assets/app.js (betaGratis). */
-  const TGL = /^\d{4}-\d{2}-\d{2}$/;
+  // Aturan masa beta ada di assets/akses.js (sama untuk dashboard dan halaman publik). Di sini hanya ditambah label tanggal.
+  const Akses = typeof CekAkses !== 'undefined' ? CekAkses : require('./akses.js');
   const labelTanggal = (s) => { const [y, m, d] = s.split('-').map(Number); return `${d} ${BULAN[m - 1]} ${y}`; };
-  function betaGratis(cfg, hariIni) {
-    const s = String((cfg && cfg.betaGratisSampai) || '').trim();
-    if (!TGL.test(s)) return { aktif: false, sampai: '', label: '' };
-    return { aktif: String(hariIni) <= s, sampai: s, label: labelTanggal(s) };
-  }
+  const denganLabel = (b) => (b ? { ...b, label: b.sampai ? labelTanggal(b.sampai) : '' } : null);
+  /** Masa beta gratis dari config (CEK_CONFIG.betaGratisSampai 'YYYY-MM-DD', inklusif). hariIni = tanggal perangkat.
+   *  Format salah/kosong → tidak aktif. */
+  const betaGratis = (cfg, hariIni) => denganLabel(Akses.betaDariConfig(cfg && cfg.betaGratisSampai, hariIni));
   /** Masa beta menurut server (RPC status_situs, tahap 2): tanggal & jam server, bisa diubah admin tanpa deploy.
    *  Jawaban yang bentuknya tidak dikenal → null (tetap memakai config). */
-  function betaDariServer(st) {
-    if (!st || typeof st !== 'object' || !TGL.test(String(st.hari_ini || ''))) return null;
-    const s = st.beta_gratis_sampai;
-    if (s == null) return { aktif: false, sampai: '', label: '' };
-    if (!TGL.test(String(s))) return null;
-    return { aktif: st.beta_aktif === true, sampai: s, label: labelTanggal(s) };
-  }
+  const betaDariServer = (st) => denganLabel(Akses.betaDariServer(st));
   function terapkanBeta(doc, beta, cfg) {
     doc.querySelectorAll('[data-beta]').forEach((el) => { el.hidden = !beta.aktif; });
     doc.querySelectorAll('[data-beta-sampai]').forEach((el) => { if (beta.label) el.textContent = beta.label; });

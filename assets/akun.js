@@ -90,7 +90,8 @@
     try { [p, reqs] = await Promise.all([cloud.db.profile(), cloud.db.myRequests().catch(() => [])]); } catch (e) { message = { text: e.message }; }
     // Sesi ditolak server (mis. kedaluwarsa) → kembali ke halaman masuk, bukan tampil seolah masih masuk.
     if (!cloud.auth.user()) { view = 'masuk'; return render(); }
-    const pro = cloud.isPro(p);
+    // Status Pro dari assets/akses.js (tanggal perangkat, sama dengan cloud.isPro sebelumnya).
+    const pro = CekAkses.proAkun(p, CekAkses.tanggalPerangkat());
     const gagalSalin = salin.status === 'gagal' && !(p && p.whatsapp);
     // Nomor dari pendaftaran yang belum tersimpan diisikan ulang di kolom (belum tersimpan, jadi data-awal kosong).
     const wa = (p && p.whatsapp) || '', waIsi = gagalSalin ? salin.nomor : wa;

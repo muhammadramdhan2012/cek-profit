@@ -21,6 +21,7 @@
   <main class="admin-grid" id="main" aria-live="polite"><p class="muted">Memuat…</p></main>
 </div>
 <div id="toast" class="toast" role="status" hidden></div>
+<script src="assets/akses.js?v=974818e438"></script>
 <script src="assets/cloud.js?v=98df9d05e3"></script>
 <script>
 (() => {
@@ -30,6 +31,8 @@
   const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   const toast = (m) => { const t = $('#toast'); t.textContent = m; t.hidden = false; clearTimeout(toast.t); toast.t = setTimeout(() => { t.hidden = true; }, 3200); };
   const today = () => new Date().toLocaleDateString('sv-SE');
+  // Status Pro dari assets/akses.js (tanggal perangkat, sama dengan cloud.isPro sebelumnya).
+  const proAktif = (p) => CekAkses.proAkun(p, CekAkses.tanggalPerangkat());
   const plus = (months, from) => { const d = from && from > today() ? new Date(`${from}T00:00:00`) : new Date(); d.setMonth(d.getMonth() + months); return d.toLocaleDateString('sv-SE'); };
   const tgl = (d) => (d ? new Date(d.length > 10 ? d : `${d}T00:00:00`).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' }) : '—');
   const PLAN = { pro_bulanan: 'Pro bulanan', pro_tahunan: 'Pro tahunan', jasa: 'Jasa laporan' };
@@ -63,7 +66,7 @@
     const byId = new Map(profiles.map((p) => [p.id, p]));
     const week = new Date(Date.now() - 7 * 864e5).toISOString();
     const open = requests.filter((r) => r.status === 'baru' || r.status === 'diproses');
-    const pros = profiles.filter((p) => cloud.isPro(p));
+    const pros = profiles.filter((p) => proAktif(p));
     const list = profiles.filter((p) => !q || `${p.email} ${p.full_name} ${p.store_name} ${p.whatsapp}`.toLowerCase().includes(q));
     $('#main').innerHTML = `
       <section class="stats">
@@ -93,7 +96,7 @@
       <section class="panel"><div style="display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:12px"><h3>Pengguna</h3><input class="plain" id="q" type="search" placeholder="Cari email, nama, toko…" value="${esc(q)}" style="max-width:280px"></div>
         <div class="tablewrap"><table class="tbl"><thead><tr><th>Pengguna</th><th>Daftar</th><th>Pro sampai</th><th>Atur Pro</th></tr></thead><tbody>
         ${list.map((p) => `<tr><td><b>${esc(p.email)}</b>${p.is_admin ? ' <span class="badge">admin</span>' : ''}${p.penguji_pembayaran ? ' <span class="badge todo">penguji pembayaran</span>' : ''}${p.pengguna_awal ? ` <span class="badge ${sudahHargaAwal(p.id) ? '' : 'ok'}">pengguna awal${sudahHargaAwal(p.id) ? ' · harga khusus terpakai' : ''}</span>` : ''}<br><span class="tiny faint">${esc(p.full_name)} ${p.store_name ? `· ${esc(p.store_name)}` : ''} ${esc(p.whatsapp)}</span></td>
-          <td class="small">${tgl(p.created_at)}</td><td>${cloud.isPro(p) ? `<span class="badge pro">${tgl(p.pro_until)}</span>` : p.pro_until ? `<span class="small faint">berakhir ${tgl(p.pro_until)}</span>` : '<span class="faint">—</span>'}</td>
+          <td class="small">${tgl(p.created_at)}</td><td>${proAktif(p) ? `<span class="badge pro">${tgl(p.pro_until)}</span>` : p.pro_until ? `<span class="small faint">berakhir ${tgl(p.pro_until)}</span>` : '<span class="faint">—</span>'}</td>
           <td><div class="row-gap">${situs ? `<button class="btn sm primary" data-beli="${esc(p.id)}">Catat pembelian</button>` : ''}<button class="btn sm" data-pro="${esc(p.id)}" data-months="1">+1 bln</button><button class="btn sm" data-pro="${esc(p.id)}" data-months="12">+1 thn</button>${p.pro_until ? `<button class="btn sm quiet danger" data-off="${esc(p.id)}">Matikan</button>` : ''}${pesanan ? `<button class="btn sm quiet" data-penguji="${esc(p.id)}" data-nilai="${p.penguji_pembayaran ? '0' : '1'}">${p.penguji_pembayaran ? 'Hapus penguji' : 'Jadikan penguji'}</button>` : ''}</div></td></tr>${beli === p.id ? formBeli(p) : ''}`).join('') || '<tr><td colspan="4" class="muted">Tidak ada pengguna yang cocok.</td></tr>'}
         </tbody></table></div><p class="tiny faint" style="margin-top:8px">"Catat pembelian" = Pro 1 tahun + tersimpan di catatan pembelian. Tombol +1 bln / +1 thn / Matikan hanya untuk koreksi manual (tidak tercatat sebagai pembelian).</p></section>
       ${purchases.length ? `<section class="panel"><h3 style="margin-bottom:12px">Catatan pembelian Pro</h3><div class="tablewrap"><table class="tbl"><thead><tr><th>Dicatat</th><th>Pengguna</th><th>Harga</th><th>Berlaku</th><th>Catatan</th></tr></thead><tbody>

@@ -115,6 +115,9 @@
    *  null = belum/tidak tersedia (offline, akun belum aktif, atau SQL tahap 2 belum dijalankan) → aturan lokal di bawah
    *  (tanggal perangkat + config) tetap dipakai, agar website tetap jalan offline. */
   let serverStatus = null;
+  // Aturan kunci tamu, batas paket gratis, dan fitur Pro ada di assets/akses.js (satu tempat untuk semua halaman).
+  // hariIni/betaGratis/proAkun di bawah masih ditulis di sini (dikunci teksnya oleh tests/tampilan.test.js); isinya
+  // dibuktikan sama dengan CekAkses oleh tests/akses.test.js (C1). Dipindah ke CekAkses bersama perubahan D1/D2.
   const TGL_ISO = /^\d{4}-\d{2}-\d{2}$/;
   const hariIni = () => (serverStatus ? serverStatus.hari_ini : new Date().toLocaleDateString('sv-SE'));
   /** Masa beta gratis (keputusan pemilik 1 Nov 2026): sampai tanggal akhir (inklusif) semua fitur Pro terbuka.
@@ -128,18 +131,18 @@
     if (!cloud.enabled) return;
     let st = null;
     try { st = account.user ? await cloud.db.statusAkun() : await cloud.db.statusSitus(); } catch (e) { /* offline / belum dimigrasi */ }
-    serverStatus = st && typeof st === 'object' && TGL_ISO.test(String(st.hari_ini || '')) ? st : null;
+    serverStatus = CekAkses.statusServerSah(st);
     render();
   }
   const proAkun = (p = account.profile) => CekCloud.isPro(p, hariIni());
   /** Pro yang benar-benar dimiliki (akun/kode), bukan karena masa beta. */
   const proSendiri = () => license.ok || proAkun();
   const isPro = () => demo || proSendiri() || !!betaGratis();
-  /** Tamu (keputusan pemilik 4 Nov 2026): tanpa akun, laporan sendiri hanya sampai Ringkasan. Hasil lengkap (produk, laba &
-   *  Money Trace, retur, laporan PDF/Excel & riwayat) perlu akun gratis. Mode contoh tetap terbuka penuh. Tanpa layanan
-   *  akun (supabaseUrl kosong) tidak ada yang dikunci. Kunci ini di browser: ajakan daftar, bukan perlindungan data. */
-  const KUNCI_TAMU = ['produk', 'biaya', 'retur', 'riwayat'];
-  const perluAkun = (v = viewName) => !demo && cloud.enabled && !account.user && KUNCI_TAMU.includes(v);
+  /** Kunci tamu: lihat CekAkses.KUNCI_TAMU. */
+  const perluAkun = (v = viewName) => CekAkses.perluAkun({ demo, cloudEnabled: cloud.enabled, login: !!account.user, halaman: v });
+  /** Fitur Pro (PDF, Excel): daftar fiturnya di CekAkses.FITUR. */
+  const boleh = (fitur) => CekAkses.boleh({ pro: isPro() }, fitur);
+  const BATAS_GRATIS = CekAkses.BATAS_GRATIS;
   const st = () => (demo ? CekDemo.settings() : settings);
   const prof = () => (demo ? CekDemo.profile() : profile);
   const cases = () => (demo ? {} : caseState);
@@ -652,7 +655,7 @@
   function viewRingkasan() {
     const { r } = last;
     const pro = isPro();
-    const FREE = 2;
+    const FREE = BATAS_GRATIS.temuan;
     const ins = pro ? r.insights : r.insights.slice(0, FREE);   // akun gratis: 2 temuan pertama (aturan lama tetap)
     const K = r.kepastian, c = K.cakupan;
     const opex = r.fixedMonthly > 0;
@@ -968,7 +971,7 @@
     let list = r.products.filter((p) => (!q || Engine.norm(`${p.name} ${p.sku} ${p.code}`).includes(q)) && (view.prodFilter === 'all' || (HEALTH[p.health] ? p.health : 'unknown') === view.prodFilter));
     if (view.sort === 'pct-asc') list = list.filter((p) => p.rows >= 3);
     list.sort(sorters[view.sort] || sorters.margin);
-    const pro = isPro(), FREE = 5;
+    const pro = isPro(), FREE = BATAS_GRATIS.produk;
     const shown = !pro ? list.slice(0, FREE) : view.showAll ? list : list.slice(0, 20);
     const nameCell = (p) => `<button type="button" class="prod-open" data-prod="${esc(p.key)}">${PLAT_DOT(p.platform)}<span class="pn">${esc(p.name)}</span></button>${p.variant && p.variant !== 'Default' ? `<span class="pv">${esc(p.variant)}</span>` : ''}<span class="sr-only">, ${PNAME[p.platform]}</span>`;
     const row = (p, i) => `<tr data-prod="${esc(p.key)}" style="--i:${Math.min(i, 12)}" class="h-${HEALTH[p.health] ? p.health : 'unknown'} ${p.key === view.prodKey && sheetKind === 'produk' ? 'is-selected' : ''}"><th scope="row">${nameCell(p)}</th><td>${sold(p)}</td><td>${fmt(p.sales)}</td><td>${p.modalKnown ? fmt(p.modal) : '<span class="unk">Belum diketahui</span>'}</td>
@@ -1744,7 +1747,7 @@
     try { account.reports = await cloud.db.listReports(); } catch (e) { account.reports = []; toast(e.message); }
     if (viewName === 'riwayat') $('#view').innerHTML = viewRiwayat();
   }
-  const FREE_HIST = 3;
+  const FREE_HIST = BATAS_GRATIS.riwayat;
   function viewRiwayat() {
     if (!cloud.enabled) return `<div class="panel empty"><span class="ic">${svg('riwayat', 24)}</span><h2>Riwayat butuh akun</h2><p>Fitur akun belum diaktifkan di situs ini. Sementara itu, gunakan Laporan PDF atau Excel untuk menyimpan hasil.</p></div>`;
     if (!account.user) return `<div class="panel empty"><span class="ic">${svg('riwayat', 24)}</span><h2>Simpan hasil tiap bulan, bandingkan kapan saja</h2><p>Dengan akun gratis, ringkasan angka toko Anda tersimpan dan bisa dibandingkan antarperiode dari perangkat mana pun. File laporan tetap tidak diunggah.</p>
@@ -2598,7 +2601,7 @@
   function exportXlsx() {
     if (!last) return;
     if (perluAkun('riwayat')) { go('riwayat'); return; }
-    if (!isPro()) { openUpgrade(); return; }
+    if (!boleh('excel')) { openUpgrade(); return; }
     const { r } = last;
     const R = (v) => (ok(v) ? Math.round(v) : '');
     const plats = ['shopee', 'tiktok'].filter((k) => r.has[k]);
@@ -2641,7 +2644,7 @@
   function openReport() {
     if (!last) return;
     if (perluAkun('riwayat')) { go('riwayat'); return; }
-    if (!isPro()) { openUpgrade(); return; }
+    if (!boleh('pdf')) { openUpgrade(); return; }
     buildReport();
     const old = document.title;
     document.title = `Laporan Profit ${prof().store || 'Toko'} ${last.r.first} sd ${last.r.last}`;
