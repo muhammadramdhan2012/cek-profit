@@ -1,9 +1,10 @@
 /* Uji price list (Langkah 2a): pembacaan file (assets/pricelist.js) dan modal dari price list di mesin hitung
  * (assets/engine.js, buildCatalog). Semua data SINTETIS.
  *
- * Definisi (usulan KAMUS A.21, disetujui pemilik 13 Nov 2026; teks final menunggu persetujuan):
+ * Definisi (KAMUS A.21, disetujui pemilik 13 Nov 2026):
  *  - modal per unit = harga modal di baris price list yang cocok, atau harga sampul × (1 − diskon pemasok); tanpa pembulatan;
- *  - statusnya isian seller (sama dengan modal per produk); modal manual seller didahulukan di setiap langkah pencocokan;
+ *  - statusnya isian seller (sama dengan modal per produk); modal yang diisi manual oleh seller SELALU menang atas price
+ *    list (keputusan pemilik 13 Nov 2026); bila berbeda, dicatat di `priceList.bedaManual` agar seller memilih sendiri;
  *  - hanya jalur Shopee; produk yang tidak cocok = modal belum diisi (tidak dihitung), kecuali "Modal rata-rata" diisi.
  *
  * Jalankan: node tests/pricelist.test.js
@@ -153,11 +154,28 @@ test('C5 varian tanpa SKU dan price list hanya punya nama produk → TIDAK diang
   const st = r.shopeeQty.hpp;
   truthy((st.belum || 0) + (st.estimasi || 0) + (st.tidak_diketahui || 0) >= 1, `status HPP harus belum/estimasi/tidak diketahui: ${JSON.stringify(st)}`);
 });
-test('C6 modal manual seller didahulukan atas price list (kunci sama)', () => {
+test('C6 modal manual menang atas price list; bila berbeda, masuk daftar "modal manual berbeda dari price list"', () => {
   const r = hitung([{ id: 'O1', items: [{ name: 'Kamus Saku', harga: 50000 }] }],
     [{ order: 'O1', name: 'Kamus Saku', qty: 1, price: 50000, skuVariant: 'K-1' }],
     { mitra: 30, catalog: [{ kode: 'K-1', nama: 'Kamus Saku', variasi: '', cost: 33000 }], priceList: PL_SAMPUL([['K-1', 'Kamus Saku', '', 45000]]) });
   eq(r.totalModal, 33000); eq(prod(r, 'Kamus Saku').modalSumber, 'manual'); eq(r.priceList.terpakai, 0);
+  eq(r.priceList.bedaManual, [{ nama: 'Kamus Saku', variasi: '', kode: 'K-1', namaModal: 'Kamus Saku', variasiModal: '', manual: 33000, priceList: 31500, kodePriceList: 'K-1', hargaSampul: 45000 }]);
+  const sama = hitung([{ id: 'O1', items: [{ name: 'Kamus Saku', harga: 50000 }] }],
+    [{ order: 'O1', name: 'Kamus Saku', qty: 1, price: 50000, skuVariant: 'K-1' }],
+    { mitra: 30, catalog: [{ kode: 'K-1', nama: 'Kamus Saku', variasi: '', cost: 31500 }], priceList: PL_SAMPUL([['K-1', 'Kamus Saku', '', 45000]]) });
+  eq(sama.priceList.bedaManual, [], 'angka sama → tidak didaftar');
+});
+test('C6b manual SELALU menang: modal manual lewat nama produk mengalahkan SKU variasi di price list (tetap didaftar)', () => {
+  const r = hitung([{ id: 'O1', items: [{ name: 'Belajar Python', harga: 130000 }] }],
+    [{ order: 'O1', name: 'Belajar Python', variant: 'Hard Cover', qty: 1, price: 130000, skuVariant: 'BP-HC' }],
+    { mitra: 30, catalog: [{ kode: '', nama: 'Belajar Python', variasi: '', cost: 60000 }], priceList: PL_SAMPUL([['BP-HC', 'Belajar Python', 'Hard Cover', 150000]]) });
+  eq(r.totalModal, 60000, 'modal manual dipakai'); eq(r.priceList.bedaManual.length, 1); eq(r.priceList.bedaManual[0].priceList, 105000);
+});
+test('C6c modal manual hanya untuk variasi LAIN → bukan modal variasi ini; price list variasi ini dipakai', () => {
+  const r = hitung([{ id: 'O1', items: [{ name: 'Belajar Python', harga: 130000 }] }],
+    [{ order: 'O1', name: 'Belajar Python', variant: 'Hard Cover', qty: 1, price: 130000, skuVariant: 'BP-HC' }],
+    { mitra: 30, catalog: [{ kode: '', nama: 'Belajar Python', variasi: 'Soft Cover', cost: 70000 }], priceList: PL_SAMPUL([['BP-HC', 'Belajar Python', 'Hard Cover', 150000]]) });
+  eq(r.totalModal, 105000); eq(r.priceList.bedaManual, []);
 });
 test('C7 pencocokan lewat nama persis (tanpa SKU di toko); nama mirip TIDAK dicocokkan', () => {
   const r = hitung([{ id: 'O1', items: [{ name: 'Atlas Dunia', harga: 90000 }] }, { id: 'O2', items: [{ name: 'Atlas Dunia Edisi Baru', harga: 95000 }] }],
@@ -214,8 +232,8 @@ test('C14 mode harga acuan (perkiraan lama) tidak memakai price list', () => {
 });
 test('C15 TikTok tidak memakai price list (Shopee dulu, keputusan pemilik)', () => {
   const cat = E.buildCatalog([], 0, PL_MODAL([['K-1', 'Kamus', '', 1000]]), null);
-  eq(cat.find(['K-1'], 'Kamus', ''), null, 'tanpa opsi priceList (jalur TikTok)');
-  eq(cat.find(['K-1'], 'Kamus', '', { priceList: true }).cost, 1000);
+  eq(cat.find(['K-1'], 'Kamus', ''), null, 'bawaan = modal manual saja (jalur TikTok memakai bawaan)');
+  eq(cat.find(['K-1'], 'Kamus', '', { sumber: 'pricelist' }).cost, 1000);
 });
 test('C16 tanpa price list: hasil data contoh IDENTIK dengan sebelumnya (regresi)', () => {
   const parsed = D.make().map((wb) => E.parseWorkbook(wb));
@@ -229,8 +247,86 @@ test('C16 tanpa price list: hasil data contoh IDENTIK dengan sebelumnya (regresi
 });
 test('C17 tanpa pembulatan: sampul Rp99.999, diskon 33% → 66.999,33', () => {
   const cat = E.buildCatalog([], 0, PL_SAMPUL([['K', 'B', '', 99999]]), 33);
-  truthy(Math.abs(cat.find(['K'], '', '', { priceList: true }).cost - 66999.33) < 1e-6);
+  truthy(Math.abs(cat.find(['K'], '', '', { sumber: 'pricelist' }).cost - 66999.33) < 1e-6);
 });
 
-console.log(failed ? `${failed} uji GAGAL` : 'Semua uji lulus');
-process.exit(failed ? 1 : 0);
+/* ================= D. sinkron price list ke akun ================= */
+const CekCloud = require('../assets/cloud.js');
+const createMock = require('./mock-supabase.js');
+const S = require('../assets/sinkron.js');
+const antri = [];
+const testAsync = (name, fn) => antri.push([name, fn]);
+const PLX = (t, n = 2) => ({ v: 1, diubah: t, jenis: 'modal', format: 'titik', kolom: {}, namaFile: 'a.xlsx', baris: Array.from({ length: n }, (_, i) => [`K${i}`, `Buku ${i}`, '', 1000 + i]) });
+testAsync('D1 baca waktu akun gagal (offline) → tidak ada yang diunggah', async () => {
+  let up = 0;
+  const r = await P.sinkronkan({ lokal: PLX(10), info: null, bacaWaktu: async () => { throw new Error('offline'); }, unduh: async () => ({}), unggah: async () => { up++; } });
+  eq([r.status, up], ['gagal', 0]);
+});
+testAsync('D2 akun lebih baru walau ringkasan belum sampai → unduh, bukan menimpa', async () => {
+  let up = 0;
+  const r = await P.sinkronkan({ lokal: PLX(10), info: { diubah: 5 }, bacaWaktu: async () => 20, unduh: async () => PLX(20, 3), unggah: async () => { up++; } });
+  eq([r.status, r.priceList.baris.length, up], ['diunduh', 3, 0]);
+});
+testAsync('D3 isi akun kosong padahal ringkasan menyebut ada → price list perangkat TIDAK dihapus, diunggah ulang', async () => {
+  let sent = null;
+  const r = await P.sinkronkan({ lokal: PLX(10), info: { diubah: 20, jumlah: 2 }, bacaWaktu: async () => null, unduh: async () => ({}), unggah: async (x) => { sent = x; } });
+  eq(r.status, 'diunggah'); eq(sent.baris.length, 2);
+});
+testAsync('D4 penghapusan menyebar: akun berisi penanda hapus → perangkat lain ikut menghapus', async () => {
+  const r = await P.sinkronkan({ lokal: PLX(10), info: { diubah: 30, jumlah: 0, dihapus: true }, bacaWaktu: async () => 30, unduh: async () => ({ dihapus: true, diubah: 30 }), unggah: async () => {} });
+  eq([r.status, r.priceList, r.info], ['diunduh', { dihapus: true, diubah: 30 }, { diubah: 30, jumlah: 0, dihapus: true }]);
+});
+testAsync('D5 dua perangkat lewat server tiruan: unggah, unduh di perangkat lain, settings tidak tersentuh, ukuran settings tetap kecil', async () => {
+  const mock = createMock();
+  await new Promise((res) => mock.server.listen(0, res));
+  const url = `http://127.0.0.1:${mock.server.address().port}`;
+  const mem = () => { const m = new Map(); return { getItem: (k) => (m.has(k) ? m.get(k) : null), setItem: (k, v) => m.set(k, String(v)), removeItem: (k) => m.delete(k) }; };
+  try {
+    mock.addUser('s@toko.id', 'sandiku123', {});
+    const masuk = async () => { const c = CekCloud.init({ url, key: 'anon', store: mem() }); await c.auth.signIn({ email: 's@toko.id', password: 'sandiku123' }); return c; };
+    const A = await masuk(), B = await masuk();
+    await A.db.saveData({ settings: { packing: 1000, catalog: [{ kode: 'X', nama: 'X', variasi: '', cost: 5 }] }, profile: {} });
+    const besar = PLX(100, 3000);
+    const net = (c) => ({ bacaWaktu: () => c.db.priceListWaktu(), unduh: () => c.db.loadPriceList(), unggah: (x) => c.db.savePriceList(x) });
+    const ra = await P.sinkronkan({ lokal: besar, info: null, ...net(A) });
+    eq(ra.status, 'diunggah');
+    const d = await A.db.loadData();
+    eq([d.settings.packing, d.settings.catalog.length], [1000, 1], 'settings tidak tersentuh oleh unggah price list');
+    truthy(!('price_list' in d), 'loadData (setiap sinkron modal) tidak ikut membawa price list');
+    await A.db.saveData({ settings: { ...d.settings, priceListInfo: ra.info }, profile: {} });
+    eq((await A.db.loadPriceList()).baris.length, 3000, 'simpan settings tidak menghapus price list');
+    const infoB = (await B.db.loadData()).settings.priceListInfo;
+    const rb = await P.sinkronkan({ lokal: null, info: infoB, ...net(B) });
+    eq([rb.status, rb.priceList.baris.length], ['diunduh', 3000]);
+    eq(await B.db.priceListWaktu(), 100);
+  } finally { mock.server.close(); }
+});
+testAsync('D6 SQL belum dijalankan (kolom tidak ada) → gagal dengan penanda kolomBelumAda; settings tetap bisa disimpan', async () => {
+  const mock = createMock({ priceList: false });
+  await new Promise((res) => mock.server.listen(0, res));
+  const url = `http://127.0.0.1:${mock.server.address().port}`;
+  const mem = () => { const m = new Map(); return { getItem: (k) => (m.has(k) ? m.get(k) : null), setItem: (k, v) => m.set(k, String(v)), removeItem: (k) => m.delete(k) }; };
+  try {
+    mock.addUser('t@toko.id', 'sandiku123', {});
+    const c = CekCloud.init({ url, key: 'anon', store: mem() }); await c.auth.signIn({ email: 't@toko.id', password: 'sandiku123' });
+    await c.db.saveData({ settings: { packing: 1 }, profile: {} });
+    const r = await P.sinkronkan({ lokal: PLX(5), info: null, bacaWaktu: () => c.db.priceListWaktu(), unduh: () => c.db.loadPriceList(), unggah: (x) => c.db.savePriceList(x) });
+    eq(r.status, 'gagal'); truthy(CekCloud.kolomBelumAda(r.galat), 'penanda kolom belum ada');
+    let e2 = null; try { await c.db.savePriceList(PLX(5)); } catch (e) { e2 = e; }
+    truthy(CekCloud.kolomBelumAda(e2), 'tulis juga dikenali');
+    eq((await c.db.loadData()).settings.packing, 1);
+  } finally { mock.server.close(); }
+});
+testAsync('D7 priceListInfo ikut sinkron M2 sebagai satu kunci: mengganti/menghapus price list tidak membuat catatan hapus', async () => {
+  const K = S.kunciModal(E.norm);
+  const awal = { catalog: [{ kode: 'A', nama: 'A', variasi: '', cost: 1 }], priceListInfo: P.info(PLX(1, 3000)) };
+  const s1 = S.tandai(awal, { ...awal, priceListInfo: P.info({ dihapus: true, diubah: 9 }) }, 9, K);
+  eq([s1.catalogHapus.length, s1.diubahKunci.priceListInfo], [0, 9]);
+  truthy(JSON.stringify(s1.priceListInfo).length < 100, 'ringkasan kecil');
+});
+
+(async () => {
+  for (const [name, fn] of antri) { try { await fn(); console.log('ok  ', name); } catch (e) { failed++; console.log('GAGAL', name, '\n     ', e.message); } }
+  console.log(failed ? `${failed} uji GAGAL` : 'Semua uji lulus');
+  process.exit(failed ? 1 : 0);
+})();

@@ -61,6 +61,18 @@ Bagian "MASUKAN PENGGUNA" di akhir `schema.sql` menambah tabel **feedback** untu
 Cara menjalankan sama dengan 2b (salin seluruh `schema.sql` terbaru → **Run**). Dijalankan pemilik 4 Nov 2026.
 Bila belum dijalankan, form menampilkan "belum aktif" dan tombol WhatsApp; fitur lain tidak terpengaruh.
 
+### 2d. Price list di akun (Langkah 2a, November 2026)
+
+Kolom `user_data.price_list` menyimpan price list seller (kode, nama, variasi, harga), terpisah dari `settings` agar
+price list besar tidak ikut dikirim setiap kali modal disimpan. Batas < 3 MB per akun. Ikut RLS baris yang sudah ada
+(hanya pemilik akun). File mentah tidak disimpan.
+
+Jalankan `supabase/migrasi/2026-11-13-price-list.sql` (SQL Editor → New query → tempel → **Run**; hasil: satu baris
+`price_list | jsonb`). Isi yang sama ada di `schema.sql`. Dijalankan pemilik 13 Nov 2026. Membatalkan:
+`supabase/migrasi/2026-11-13-price-list-batal.sql` (price list di akun ikut terhapus; modal dan pengaturan tidak).
+Bila kolom belum ada, price list tetap dipakai di perangkat dengan status "Belum tersimpan di akun (database belum
+diperbarui)".
+
 ## 3. Atur alamat situs
 
 **Authentication** → **URL Configuration**. Ini diperlukan agar tautan konfirmasi email dan reset sandi kembali ke
@@ -278,4 +290,8 @@ createdb uji2 && psql -d uji2 -f supabase/tests/shim.sql && psql -d uji2 -v ON_E
 psql -d uji2 -tA -f supabase/tests/test-tahap2.sql  # U1–U19 (tahap 2)
 createdb uji3 && psql -d uji3 -f supabase/tests/shim.sql && psql -d uji3 -v ON_ERROR_STOP=1 -f supabase/schema.sql
 psql -d uji3 -tA -f supabase/tests/test-masukan.sql # M1–M8 (masukan pengguna)
+createdb uji4 && psql -d uji4 -f supabase/tests/shim.sql && psql -d uji4 -v ON_ERROR_STOP=1 -f supabase/schema.sql
+psql -d uji4 -tA -f supabase/tests/test-price-list.sql   # PL1–PL10 (price list); jalankan dari folder repo
+# Migrasi pada database lama: schema.sql sebelum 13 Nov 2026 (git show 6577231:supabase/schema.sql), lalu:
+psql -d uji5 -tA -f supabase/tests/test-price-list-migrasi.sql   # MG1–MG4 (migrasi + pembatalan)
 ```

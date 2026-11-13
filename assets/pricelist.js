@@ -183,7 +183,35 @@ const CekPriceList = (() => {
     ? { diubah: simpanan.diubah, jumlah: simpanan.baris.length, jenis: simpanan.jenis }
     : { diubah: simpanan ? simpanan.diubah : 0, jumlah: 0, dihapus: true });
 
-  return { VERSI, BATAS_BYTE, FORMAT, JENIS, bacaAngka, tebakFormat, cariHeader, tebakKolom, bangun, contoh, buatSimpanan,
+  const adaBaris = (x) => !!(x && Array.isArray(x.baris) && x.baris.length);
+  /**
+   * Satu putaran sinkron price list dengan akun. Fungsi jaringan diberikan pemanggil:
+   *  bacaWaktu() → waktu ubah price list di akun (null bila belum ada); unduh() → isi kolom; unggah(obj).
+   * Sebelum mengunggah, waktu di akun dibaca dulu: bila akun lebih baru (perangkat lain mengunggah tetapi ringkasannya
+   * belum sampai), price list akun diunduh, bukan ditimpa. Isi akun kosong padahal ringkasan menyebut ada price list
+   * (mis. kolom dibuat ulang) → price list perangkat TIDAK dihapus; diunggah ulang bila ada.
+   * @returns {Promise<{status:'sama'|'diunduh'|'diunggah'|'gagal', priceList?, info?, galat?}>}
+   */
+  async function sinkronkan({ lokal, info: infoAkun, bacaWaktu, unduh, unggah }) {
+    let rencana = rencanaSinkron(lokal, infoAkun);
+    if (rencana === 'sama') return { status: 'sama' };
+    try {
+      if (rencana === 'unggah') {
+        const tAkun = await bacaWaktu();
+        if (tAkun !== null && tAkun > (lokal.diubah || 0)) rencana = 'unduh';
+      }
+      if (rencana === 'unduh') {
+        const data = await unduh();
+        if (adaBaris(data)) return { status: 'diunduh', priceList: data, info: info(data) };
+        if (data && data.dihapus) { const hapus = { dihapus: true, diubah: Math.max(data.diubah || 0, (infoAkun && infoAkun.diubah) || 0) }; return { status: 'diunduh', priceList: hapus, info: info(hapus) }; }
+        if (!lokal || !adaBaris(lokal)) return { status: 'sama' };
+      }
+      await unggah(lokal.dihapus ? { dihapus: true, diubah: lokal.diubah } : lokal);
+      return { status: 'diunggah', info: info(lokal) };
+    } catch (e) { return { status: 'gagal', galat: e }; }
+  }
+
+  return { VERSI, BATAS_BYTE, sinkronkan, FORMAT, JENIS, bacaAngka, tebakFormat, cariHeader, tebakKolom, bangun, contoh, buatSimpanan,
     ukuran, terlaluBesar, rencanaSinkron, info };
 })();
 if (typeof module !== 'undefined') module.exports = CekPriceList;

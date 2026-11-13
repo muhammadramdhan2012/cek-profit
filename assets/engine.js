@@ -913,8 +913,8 @@ const Engine = (() => {
    *   Modal per unit = harga modal, atau harga sampul × (1 − diskon pemasok `mitra`%). Tanpa pembulatan.
    *   Harga sampul tanpa diskon pemasok yang sah → price list tidak dipakai (tidak dianggap diskon 0).
    *   Kode atau nama yang muncul dengan modal berbeda = konflik → tidak dipakai lewat kunci itu.
-   * find(codes, name, variant, {priceList}): di setiap langkah (kode → nama + variasi → nama), modal manual dicari dulu,
-   * lalu price list (hanya bila opsi priceList true; dipakai jalur Shopee saja, TikTok menyusul).
+   * find(codes, name, variant, {sumber}): kode → nama + variasi → nama, dari SATU sumber: 'manual' (bawaan, semua jalur
+   * lama termasuk TikTok) atau 'pricelist'. Aturan "modal manual selalu menang" ada di shopeeCostOf (KAMUS A.21).
    */
   function buildCatalog(entries = [], extraPct = 0, priceList = null, mitra = null) {
     const byCode = new Map(), byName = new Map();
@@ -938,14 +938,18 @@ const Engine = (() => {
     return {
       size: byCode.size + byName.size,
       priceList: pl ? { dipakai: pl.siap, baris: pl.baris, konflikKode: pl.konflikKode.size, konflikNama: pl.konflikNama.size } : null,
-      /** Jumlah baris price list (unik) yang dipakai sedikitnya satu kali oleh find(). */
+      /** Price list siap dipakai (ada baris, dan harga sampul punya diskon pemasok). */
+      priceListSiap: !!(pl && pl.siap),
+      /** Baris price list yang benar-benar dipakai sebagai modal (tidak termasuk yang kalah oleh modal manual). */
+      tandaiTerpakai: (e) => { if (pl && e && e.sumber === 'pricelist') pl.terpakai.add(e); },
       priceListTerpakai: () => (pl ? pl.terpakai.size : 0),
+      /** opt.sumber: 'manual' (bawaan) = hanya modal isian seller; 'pricelist' = hanya price list. */
       find(codes, name, variant, opt = {}) {
-        const sumber = opt.priceList && pl && pl.siap ? [manual, pl] : [manual];
-        const pakai = (e) => { if (e && e.sumber === 'pricelist') pl.terpakai.add(e); return e; };
-        for (const m of sumber) { const e = cariIn(m, codes); if (e) return pakai(e); }
-        if (name && variant) for (const m of sumber) { const e = cariNama(m, norm(`${name} ${variant}`)); if (e) return pakai(e); }
-        if (name) for (const m of sumber) { const e = cariNama(m, norm(name)); if (e) return pakai(e); }
+        const m = opt.sumber === 'pricelist' ? (pl && pl.siap ? pl : null) : manual;
+        if (!m) return null;
+        { const e = cariIn(m, codes); if (e) return e; }
+        if (name && variant) { const e = cariNama(m, norm(`${name} ${variant}`)); if (e) return e; }
+        if (name) { const e = cariNama(m, norm(name)); if (e) return e; }
         return null;
       },
     };
@@ -955,8 +959,8 @@ const Engine = (() => {
   function buildPriceList(priceList, mitra, mult) {
     if (!priceList || !Array.isArray(priceList.baris) || !priceList.baris.length) return null;
     const sampul = priceList.jenis === 'sampul';
-    const diskon = isOk(mitra) && mitra >= 0 && mitra < 100 ? mitra / 100 : NaN;
-    const out = { siap: priceList.jenis === 'modal' || (sampul && isOk(diskon)), baris: priceList.baris.length,
+    const diskonPct = isOk(mitra) && mitra >= 0 && mitra < 100 ? mitra : NaN;
+    const out = { siap: priceList.jenis === 'modal' || (sampul && isOk(diskonPct)), baris: priceList.baris.length,
       code: new Map(), name: new Map(), konflikKode: new Set(), konflikNama: new Set(), terpakai: new Set() };
     if (!out.siap) return out;
     const daftar = (map, konflik, key, e) => {
@@ -968,7 +972,8 @@ const Engine = (() => {
     for (const row of priceList.baris) {
       const [kode, nama, variasi, harga] = Array.isArray(row) ? row : [];
       if (!isOk(harga) || !(harga > 0)) continue;
-      const base = sampul ? harga * (1 - diskon) : harga;
+      // harga × (100 − diskon) / 100: hasil sama dengan harga × (1 − diskon%), tetapi tanpa sisa pecahan biner (45.000 × 70% = 31.500 tepat).
+      const base = sampul ? harga * (100 - diskonPct) / 100 : harga;
       const e = { kode: kode || '', nama: nama || '', variasi: variasi || '', baseCost: base, cost: base * mult, sumber: 'pricelist',
         ...(sampul ? { hargaSampul: harga } : {}) };
       daftar(out.code, out.konflikKode, kode ? norm(kode) : '', e);
@@ -1415,18 +1420,42 @@ const Engine = (() => {
      * @param line  baris export yang terbukti milik item ini, atau null bila belum diketahui
      * @returns {{entry: object|null, key: 'sku_variasi'|'nama_variasi'|'produk'|'produk_legacy'|null}}
      */
-    const PL = { priceList: true };   // price list hanya untuk jalur Shopee (keputusan pemilik 13 Nov 2026)
+    const MANUAL = { sumber: 'manual' }, HANYA_PL = { sumber: 'pricelist' };
+    /**
+     * KAMUS A.21 (13 Nov 2026): modal yang diisi manual oleh seller SELALU menang atas price list. Price list hanya
+     * dipakai bila pencarian manual (langkah 1–3 di bawah) tidak menemukan modal. Bila keduanya ada dan berbeda, dicatat
+     * di `bedaManual` agar seller bisa memilih sendiri. Price list hanya untuk jalur Shopee (TikTok menyusul).
+     */
     function shopeeCostOf(it, line) {
+      const m = shopeeCostDari(it, line, MANUAL);
+      if (!catalog.priceListSiap) return m;
+      const p = shopeeCostDari(it, line, HANYA_PL);
+      if (m.entry) {
+        if (p.entry && Math.abs(p.entry.baseCost - m.entry.baseCost) >= 0.01) catatBedaManual(it, line, m.entry, p.entry);   // beda < 1 sen = sama
+        return m;
+      }
+      if (p.entry) catalog.tandaiTerpakai(p.entry);
+      return p;
+    }
+    const bedaManual = new Map();
+    function catatBedaManual(it, line, man, pl) {
+      const k = `${norm(man.kode || '')}|${norm(man.nama || '')}|${norm(man.variasi || '')}`;
+      if (bedaManual.has(k)) return;
+      bedaManual.set(k, { nama: it.name, variasi: line ? str(line.variant) : '', kode: man.kode || '', namaModal: man.nama || '', variasiModal: man.variasi || '',
+        manual: man.baseCost, priceList: pl.baseCost, kodePriceList: pl.kode || '', ...(pl.hargaSampul ? { hargaSampul: pl.hargaSampul } : {}) });
+    }
+    /** Satu sumber modal saja (manual atau price list). Urutan langkah sama dengan aturan E1/E2. */
+    function shopeeCostDari(it, line, opt) {
       const variant = line ? str(line.variant) : '';
       if (line && line.skuVariant) {
-        const e = catalog.find([line.skuVariant], '', '', PL);
+        const e = catalog.find([line.skuVariant], '', '', opt);
         if (e) return { entry: e, key: 'sku_variasi' };
       }
       if (variant) {
-        const e = catalog.find([], it.name, variant, PL);
+        const e = catalog.find([], it.name, variant, opt);
         if (e && e.variasi && norm(`${e.nama} ${e.variasi}`) === norm(`${it.name} ${variant}`)) return { entry: e, key: 'nama_variasi' };
       }
-      const e = catalog.find([line ? line.sku : undefined, it.productId], it.name, variant, PL);   // cara lama
+      const e = catalog.find([line ? line.sku : undefined, it.productId], it.name, variant, opt);   // cara lama
       if (!e) return { entry: null, key: null };
       // Pencarian lama lewat nama saja bisa mengembalikan modal VARIASI LAIN (daftar modal memetakan nama produk ke
       // variasi pertama yang diisi). Untuk baris yang variasinya diketahui, modal milik variasi lain tidak dipakai.
@@ -2375,7 +2404,7 @@ const Engine = (() => {
       fixedMonthly, opex, netProfit: ready ? totalMargin - opex : NaN,
       months: monthList, allMonths: [...allMonths].sort(), buckets: buckets.filter((b) => b.orders > 0),
       products, cases, catSummary: Object.values(catSummary), dupes: m.dupes, target,
-      priceList: catalog.priceList ? { ...catalog.priceList, terpakai: catalog.priceListTerpakai(), knownSalesShopee: S.knownSalesPriceList } : null,
+      priceList: catalog.priceList ? { ...catalog.priceList, terpakai: catalog.priceListTerpakai(), knownSalesShopee: S.knownSalesPriceList, bedaManual: [...bedaManual.values()] } : null,
       qtyAssumed, shopeeQty, linesWithoutCost, ttNoDetail, ttNoDetailSales, ttKuantitas: { ...ttKuantitas, indikasiRetur: { ...ttKuantitas.indikasiRetur } }, hasOrderExport: { shopee: m.shopeeLines.size > 0, tiktok: m.tiktokLines.size > 0 },
       productsWithoutCost: products.filter((p) => !p.modalKnown).length,
     };
