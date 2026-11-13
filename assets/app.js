@@ -99,6 +99,10 @@
   /* ================= 2. status & akun ================= */
   let settings = loadSettings();
   let profile = { store: '', owner: '', logo: '', ...store.get(KEYS.profile, {}) };
+  // Salinan saat terakhir disimpan/digabung: dasar untuk menandai apa yang berubah (CekSinkron.tandai, perbaikan M2).
+  const salin = (x) => JSON.parse(JSON.stringify(x));
+  const catKeyOf = CekSinkron.kunciModal(Engine.norm);
+  let dasarSettings = salin(settings), dasarProfil = salin(profile);
   let caseState = store.get(KEYS.cases, {});
   let done = store.get(KEYS.done, {});              // {pdf: true, saved: true}
   let files = [];
@@ -157,28 +161,66 @@
 
   const parsedAll = () => (demo ? CekDemo.make().map((wb) => Engine.parseWorkbook(wb)) : files.filter((f) => f.parsed && f.parsed.kind !== 'modal_template').map((f) => f.parsed));
 
-  const save = () => { store.set(KEYS.settings, settings); queueSync(); };
-  const saveProfile = () => { if (!store.set(KEYS.profile, profile)) toast('Logo terlalu besar untuk disimpan di browser ini.'); queueSync(); };
+  const save = () => {
+    settings = CekSinkron.tandai(dasarSettings, settings, Date.now(), catKeyOf); dasarSettings = salin(settings);
+    store.set(KEYS.settings, settings); queueSync();
+  };
+  const saveProfile = () => {
+    profile = CekSinkron.tandaiProfil(dasarProfil, profile, Date.now()); dasarProfil = salin(profile);
+    if (!store.set(KEYS.profile, profile)) toast('Logo terlalu besar untuk disimpan di browser ini.');
+    queueSync();
+  };
   const markDone = (k) => { done[k] = true; store.set(KEYS.done, done); };
 
-  /* sinkron ke akun (debounce) */
-  let syncTimer = null;
-  function queueSync() {
+  /* sinkron ke akun (debounce). Setiap putaran MEMBACA akun dulu, menggabungkan per modal/kunci ("yang terbaru menang",
+   * assets/sinkron.js), lalu mengirim hasil gabungan. Bila membaca gagal, tidak ada yang dikirim dan dicoba lagi nanti,
+   * agar isian lebih baru dari perangkat lain tidak tertimpa (perbaikan M2, 13 Nov 2026). */
+  const ULANG_MS = 30000;
+  let syncTimer = null, sedangSinkron = false, sinkronLagi = false;
+  function queueSync(tunda = 1200) {
     if (!account.user || demo) return;
     clearTimeout(syncTimer);
     account.sync = 'Menyimpan…'; renderAccount();
-    syncTimer = setTimeout(async () => {
-      try {
-        await cloud.db.saveData({ settings, profile });
-        if (account.profile && profile.store && account.profile.store_name !== profile.store) account.profile = await cloud.db.updateProfile({ store_name: profile.store }) || account.profile;
-        account.sync = 'Tersimpan di akun';
-      }
-      catch (e) { account.sync = 'Gagal menyimpan ke akun'; }
-      renderAccount();
-    }, 1200);
+    syncTimer = setTimeout(sinkronAkun, tunda);
   }
-  const catKeyOf = (e) => (e.kode ? `k:${Engine.norm(e.kode)}` : `n:${Engine.norm(`${e.nama} ${e.variasi || ''}`)}`);
-  const unionCatalog = (base, extra) => { const m = new Map(base.map((e) => [catKeyOf(e), e])); for (const e of extra) if (!m.has(catKeyOf(e))) m.set(catKeyOf(e), e); return [...m.values()]; };
+  /** Terapkan hasil gabungan ke perangkat. Isian yang dibuat selama menunggu server ikut dipertahankan (waktunya lebih baru). */
+  function terapkanGabungan(r) {
+    const kini = Date.now();
+    settings = { ...structuredClone(DEFAULTS), ...CekSinkron.gabung(settings, r.settings, kini, catKeyOf).settings };
+    profile = { store: '', owner: '', logo: '', ...CekSinkron.gabungProfil(profile, r.profile) };
+    dasarSettings = salin(settings); dasarProfil = salin(profile);
+    store.set(KEYS.settings, settings); store.set(KEYS.profile, profile);
+    if (r.kalah) toast(`Modal ${num(r.kalah)} produk diperbarui dengan isian terbaru dari perangkat lain.`);
+  }
+  function ulangiNanti(pesan) { account.sync = pesan; clearTimeout(syncTimer); syncTimer = setTimeout(sinkronAkun, ULANG_MS); }
+  async function sinkronAkun(dataAwal) {
+    if (!account.user || demo) return;
+    if (sedangSinkron) { sinkronLagi = true; return; }
+    sedangSinkron = true;
+    try {
+      const r = await CekSinkron.sinkronkan({
+        baca: dataAwal !== undefined ? async () => dataAwal : () => cloud.db.loadData(),
+        kirim: (d) => cloud.db.saveData(d),
+        settings, profile, kini: Date.now(), kunci: catKeyOf });
+      if (r.settings) {
+        const sebelum = JSON.stringify([settings, profile]);
+        terapkanGabungan(r);
+        if (JSON.stringify([settings, profile]) !== sebelum) render();
+      }
+      if (r.status === 'terkirim' || r.status === 'sama') {
+        account.sync = 'Tersimpan di akun';
+        try {
+          if (account.profile && profile.store && account.profile.store_name !== profile.store) account.profile = await cloud.db.updateProfile({ store_name: profile.store }) || account.profile;
+        } catch (e) { /* nama toko di profil akun menyusul pada penyimpanan berikutnya */ }
+      } else ulangiNanti(r.status === 'tunda' ? 'Belum tersimpan ke akun, dicoba lagi otomatis' : 'Gagal menyimpan ke akun, dicoba lagi otomatis');
+    } catch (e) {
+      console.error('Sinkron akun gagal', e);
+      ulangiNanti('Gagal menyimpan ke akun, dicoba lagi otomatis');
+    } finally { sedangSinkron = false; }
+    renderAccount();
+    if (sinkronLagi) { sinkronLagi = false; queueSync(); }
+  }
+  window.addEventListener('online', () => { if (account.user && /dicoba lagi/.test(account.sync)) queueSync(0); });
   async function loadAccount() {
     account.user = cloud.auth.user();
     if (!account.user) { account.profile = null; renderAccount(); return; }
@@ -186,18 +228,9 @@
     try {
       const [p, data] = await Promise.all([cloud.db.profile(), cloud.db.loadData()]);
       account.profile = p;
-      if (data && data.settings && Object.keys(data.settings).length) {
-        // Pengaturan di akun dipakai; modal lokal yang belum ada di akun tetap dipertahankan.
-        const localCat = settings.catalog || [];
-        settings = { ...structuredClone(DEFAULTS), ...data.settings, catalog: unionCatalog(data.settings.catalog || [], localCat) };
-        store.set(KEYS.settings, settings);
-        if (data.profile) { profile = { ...profile, ...data.profile }; store.set(KEYS.profile, profile); }
-        account.sync = 'Tersimpan di akun';
-        if (settings.catalog.length > (data.settings.catalog || []).length) queueSync();
-      } else if (settings.catalog.length || settings.fixedCosts.length || ok(settings.mitra) || ok(settings.fallbackPct)) {
-        queueSync();   // pertama kali: unggah pengaturan lokal ke akun
-      } else account.sync = 'Tersimpan di akun';
-      if (p && !profile.store && p.store_name) { profile.store = p.store_name; store.set(KEYS.profile, profile); }
+      if (p && !profile.store && p.store_name) { profile.store = p.store_name; dasarProfil = salin(profile); store.set(KEYS.profile, profile); }
+      // Gabungkan isi akun dengan isi perangkat (data yang baru saja dibaca dipakai, tanpa membaca ulang).
+      await sinkronAkun(data || null);
     } catch (e) { account.sync = e.message; }
     account.loading = false;
     render();
@@ -2685,7 +2718,7 @@
       if (!h) return;
       if (f === 'nama' || f === 'prod') h[f] = v; else h[f] = v === '' ? null : Math.max(0, +v);
       const out = $(`#h-out-${i}`); if (out) out.textContent = fmt(Engine.hpp(h));
-      store.set(KEYS.settings, settings); queueSync();
+      save();
       return;
     }
     else if (id.startsWith('p-')) { const [, f, i] = id.split('-'); const p = settings.periods[+i]; if (f === 'start') p.start = v; else p[f] = +v || 0; }
@@ -2876,6 +2909,7 @@
       if (!confirm('Hapus modal produk, pengaturan, profil laporan, status retur, dan kode akses yang tersimpan di browser ini? Data di akun tidak ikut terhapus.')) return;
       Object.values(KEYS).forEach((k) => store.del(k)); store.del('cekprofit.v2');
       settings = structuredClone(DEFAULTS); profile = { store: '', owner: '', logo: '' }; caseState = {}; license = { ok: false }; done = {};
+      dasarSettings = salin(settings); dasarProfil = salin(profile);   // bukan penghapusan modal: data di akun tidak ikut terhapus
       render(); toast('Data di browser ini sudah dihapus.');
     }
   });
