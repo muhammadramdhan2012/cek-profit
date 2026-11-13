@@ -261,11 +261,32 @@ Tabel ini angka audit awal; perubahan setelahnya ada di "Pembaruan status (31 Ok
   - Ambang hari menunggu keputusan (`docs/KAMUS_ANGKA.md` A.17).
 
 ### M2 · Sinkron akun menimpa perubahan lokal
-- **Status:** Terbuka · **Kompleksitas:** M (2–3 hari)
+- **Status:** Selesai (13 Nov 2026) · **Kompleksitas:** M (2–3 hari)
 - **Lokasi:** `assets/app.js:126`, `unionCatalog` (basis = cloud)
 - **Dampak:** modal yang diubah offline atau di perangkat lain bisa kembali ke nilai lama tanpa pemberitahuan.
 - **Rekomendasi (audit):** simpan `updated_at` per entri modal dan per bagian pengaturan, gabungkan dengan prinsip
   "yang terbaru menang", dan beri tahu pengguna bila ada konflik.
+- **Perbaikan:** PR #27 (`5f63e2d`, merge `6e36b84`), rencana disetujui pemilik 13 Nov 2026.
+  - `assets/sinkron.js` (baru, murni): waktu ubah per modal (`diubah`), per kunci pengaturan dan profil (`diubahKunci`),
+    catatan hapus (`catalogHapus`, dibuang setelah 365 hari).
+  - Aturan: yang terbaru menang. Waktu ubah sama persis → isian di akun dipertahankan. Data lama tanpa waktu ubah = waktu 0.
+  - Setiap sinkron membaca akun dulu. Bila baca gagal, tidak ada yang dikirim; dicoba lagi 30 detik kemudian atau saat
+    kembali online.
+  - Toast bila modal di perangkat ini diganti isian terbaru dari perangkat lain (hanya untuk modal).
+  - Mesin hitung dan definisi keuangan tidak berubah.
+- **Bukti:**
+  - `node tests/sinkron.test.js`: 24 uji lulus (K1–K3, waktu sama, Rp0 vs kosong, catatan hapus 365 hari, data lama di
+    akun utuh termasuk 3.000 modal, `Engine.compute` identik, baca gagal = tidak kirim, dua perangkat lewat server tiruan).
+  - Semua tes lama lulus; uji mutasi 4/4 tertangkap; CI `uji` dan Cloudflare Pages lulus.
+  - Playwright dua perangkat dengan server tiruan Supabase: 19 cek lulus.
+  - Cek pemilik di preview dengan Supabase sungguhan (13 Nov 2026): modal muncul di perangkat kedua; dua perangkat
+    mengubah modal berbeda, keduanya bertahan; modal diubah offline tersimpan setelah online; modal dikosongkan tidak
+    muncul lagi.
+- **Risiko yang diterima:**
+  - Waktu ubah memakai jam perangkat; jam yang salah jauh bisa membuat isian kalah.
+  - Tab versi lama yang masih terbuka bisa menyimpan tanpa waktu ubah sampai dimuat ulang.
+  - Perangkat yang tidak dibuka lebih dari 365 hari bisa memunculkan lagi modal yang sudah dihapus.
+  - Penggantian pengaturan selain modal (packing, target, profil) tidak memunculkan pemberitahuan.
 
 ### M3 · Keluar akun tidak menghapus data toko di browser
 - **Status:** Terbuka · **Kompleksitas:** S (½ hari)
@@ -392,6 +413,10 @@ Tabel ini angka audit awal; perubahan setelahnya ada di "Pembaruan status (31 Ok
 | L6 | Terbuka | `supabase/schema.sql:93`, `supabase/schema.sql:99-100` | `upgrade_requests.note` tanpa batas panjang dan tanpa batas jumlah permintaan | `check (length(note) < 500)` dan batas permintaan per hari | S |
 | L7 | Terbuka | `assets/engine.js:573` | Tarif efektif: biaya logistik TikTok ikut masuk bagian persen | Pisahkan biaya logistik sebagai biaya tetap | S |
 | L8 | Terbuka | `assets/engine.js:472` vs `assets/engine.js:492` | Penjualan per produk dihitung sebelum voucher, total sesudah voucher; jumlah per produk ≠ total | Samakan definisinya, atau beri label kolomnya | S |
+| L9 | Terbuka (13 Nov 2026) | `admin.html` (`plus()`) | Tombol +1 bln / +1 thn menghitung dari tanggal perangkat admin, sedangkan status Pro sejak D1 memakai tanggal server. Di sekitar pergantian hari, tanggal berakhir bisa selisih satu hari. Pembelian lewat `admin_catat_pembelian` tidak terdampak (dihitung di database) | Hitung perpanjangan dari tanggal server (`status_situs`) | S |
+| L10 | Terbuka (13 Nov 2026) | `tests/akses.test.js` (C3) | Tes baru mengecek urutan tag `akses.js` di HTML, belum mengecek bahwa `akses.js` sudah tersedia saat `situs.js` dijalankan di `dashboard.html`. Sekarang aman karena `situs.js` ber-`defer`, tetapi tes tidak menjaga syarat itu bila `defer` dihapus | Tambahkan pengecekan atribut `defer` / urutan eksekusi | S |
+| L11 | Terbuka (13 Nov 2026) | `assets/akun.js` (halaman Akun) | Selama masa beta, halaman Akun menulis "Gratis … Pro segera hadir", tidak menyebut masa beta (perilaku lama). Teks publik: perlu persetujuan pemilik (Langkah 4 onboarding) | Sebut masa beta dan tanggal berakhirnya | S |
+| L12 | Terbuka (13 Nov 2026) | `assets/app.js` (`toast`) | Di layar 375px toast menutupi isi halaman, misalnya "Laporan terbaca. Tekan 'Lihat hasil analisis'…". Toast M2 memakai komponen yang sama | Atur posisi/ukuran toast di HP (Langkah 4 onboarding) | S |
 
 ---
 
@@ -416,6 +441,8 @@ Tabel ini angka audit awal; perubahan setelahnya ada di "Pembaruan status (31 Ok
 | P15 | Medium | localStorage per alamat situs | Pindah dari `*.github.io` ke `cekuntung.id`: data di browser tidak ikut pindah. Yang tersimpan di akun (modal, pengaturan, profil laporan) termuat lagi setelah masuk; **tanda retur (`cekprofit.cases`), kode akses, dan data pengguna tanpa akun tidak pindah**. Tanda retur memengaruhi kerugian retur di laba | — | Pemberitahuan pindah alamat sudah disiapkan (nonaktif, `CEK_CONFIG.domainResmi`). Alat ekspor/impor data lokal belum ada; perlu keputusan | Belum diverifikasi |
 | P16 | Medium | Supabase Auth (konfigurasi dashboard) | Aturan sandi baru (min. 8, huruf kapital, huruf kecil, angka) ditegakkan di browser sejak Auth V3 (`assets/aturan-akun.js`). Selama pengaturan Supabase belum disamakan, aturan bisa dilewati lewat API. Perilaku Supabase untuk pengguna lama bersandi lemah saat masuk belum diuji (server tiruan: tetap bisa masuk) | — | Atur *Password requirements* di Supabase (`supabase/PANDUAN.md` §3b), lalu uji daftar, ganti sandi, dan masuk dengan akun lama | Belum diuji di Supabase sungguhan |
 | P17 | Low | `supabase/schema.sql` (`profiles.whatsapp`) | Kolom tanpa batas panjang/format (uji lokal: 100.000 karakter diterima). Website kini menormalkan nomor ke `+62…`, tetapi API tetap menerima isian bebas. Hanya pemilik akun dan admin yang dapat membaca | Ditemukan pada uji RLS lokal (PostgreSQL 16) | Batasi panjang (mis. ≤ 20 karakter) dan format (`''` atau `+62…`) dengan `check` setelah data lama dicek; migrasi butuh izin | S |
+| P18 | Medium | `supabase/schema.sql` (`user_data_size`), `assets/sinkron.js` | Batas data akun < 2 MB per pengguna (settings + profil, termasuk logo ≤ 400 KB). Price list utuh (rencana Langkah 2) bisa ribuan baris, dan seluruh settings dibaca dan dikirim ulang setiap kali disimpan (M2). Menghapus ribuan modal sekaligus menambah `catalogHapus` (± 46 byte per baris, 3.000 baris ± 140 KB) | Diukur dan diputuskan di rencana Langkah 2 sebelum Mode B dibangun | Perhitungan sintetis 13 Nov 2026; belum diuji dengan price list asli | Belum diverifikasi |
+| P19 | Medium | `assets/app.js` (`setProductCost`, tabel modal) | Ditemukan saat uji M2 (data contoh, 13 Nov 2026): baris Shopee per variasi menyimpan modal dengan kunci SKU variasi (mis. `KODE-HITAM`), bukan kunci produk. Relevan untuk modal "semua variasi" (sisa Langkah 1, keputusan A.19.5/A.19.6) | — | Tentukan saat merancang sisa Langkah 1 | Belum diverifikasi |
 | P13 | Medium | `assets/engine.js` (`parsePeriode`, `mergeIncome`) | **Sebagian ditangani (20 Okt 2026, lokal):** periode resmi sheet Laporan dibaca dan dipakai untuk status (kelengkapan, identitas belum pasti, anomali periode); "terekonsiliasi" tidak lagi muncul untuk kasus contoh P13. **Masih terbuka:** angka kasus itu tetap menjumlahkan kedua baris (tanpa bukti identitas), dan aturan P11 menahan penyesuaian bernomor sama bila cakupan teramati bersinggungan — perlakuan finansial penyesuaian bernomor sama perlu keputusan pemilik. Sejak 20 Okt 2026 total yang memuat transaksi ambigu diberi peringatan "Total perlu diverifikasi" di dashboard, PDF, dan Excel | File asli: 4 periode resmi valid, 0 transaksi di luar periode, tidak ada konflik | Putuskan identitas penyesuaian (lihat KAMUS B.1e) | Status terbukti sintetis; angka file asli identik |
 
 ## Belum dapat diverifikasi
@@ -432,6 +459,9 @@ Tabel ini angka audit awal; perubahan setelahnya ada di "Pembaruan status (31 Ok
 7. Ketepatan tarif umum di `assets/tarif.js` (sumber sekunder, dicek 14 Okt 2026).
 
 ## Riwayat perubahan dokumen
+
+- 13 Nov 2026: M2 selesai (PR #27, bukti di M2). Catatan dari dokumen rencana modal/HPP/kebocoran dipindahkan ke L9–L12,
+  P18, P19 (izin pemilik 13 Nov 2026). Mesin hitung dan definisi keuangan tidak berubah. Tanpa angka bisnis asli.
 
 - 5 Nov 2026: pembayaran online Pro lewat Duitku (Sandbox, khusus akun penguji), catatan di M6. Tidak mengubah mesin hitung,
   parser, atau perhitungan laba. `admin_catat_pembelian` kini memakai fungsi bersama `catat_pembelian_pro` (perilaku sama;
