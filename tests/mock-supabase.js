@@ -9,7 +9,7 @@ const crypto = require('crypto');
 // dan ganti sandi. Masuk dengan sandi lama yang lemah TETAP berhasil, dengan penanda weak_password (meniru Supabase
 // Auth; perilaku server sungguhan tetap harus diuji di Supabase).
 // tahap2: false = meniru database SEBELUM SQL tahap 2 dijalankan (RPC status_* tidak ada → 404).
-function createMock({ confirmEmail = false, tokenTtl = 3600, strongPasswords = false, tahap2 = true, masukan = true } = {}) {
+function createMock({ confirmEmail = false, tokenTtl = 3600, strongPasswords = false, tahap2 = true, masukan = true, priceList = true } = {}) {
   const feedback = []; let fbSeq = 1;   // masukan: false = SQL tabel feedback belum dijalankan (404)
   const weak = (pw) => !pw || pw.length < 8 || (strongPasswords && !(/[a-z]/.test(pw) && /[A-Z]/.test(pw) && /[0-9]/.test(pw)));
   const weakMsg = (pw) => (!pw || pw.length < 8 ? 'Password should be at least 8 characters.' : 'Password should contain at least one character of each: abcdefghijklmnopqrstuvwxyz, ABCDEFGHIJKLMNOPQRSTUVWXYZ, 0123456789.');
@@ -154,10 +154,29 @@ function createMock({ confirmEmail = false, tokenTtl = 3600, strongPasswords = f
       }
     }
     if (table === 'user_data') {
-      if (req.method === 'GET') { const r = userData.get(uid); return send(200, r ? [r] : []); }
+      // Meniru PostgREST: select kolom (termasuk alias JSON "diubah:price_list->diubah"), upsert merge-duplicates hanya
+      // mengubah kolom yang dikirim. priceList: false = SQL Langkah 2a belum dijalankan (kolom price_list tidak ada).
+      const adaKolom = (k) => k !== 'price_list' || priceList;
+      if (req.method === 'GET') {
+        const r = userData.get(uid); if (!r) return send(200, []);
+        const sel = (q.get('select') || '*').split(',');
+        const out = {};
+        for (const f of sel) {
+          const [alias, expr] = f.includes(':') ? f.split(':') : [f, f];
+          const [col, jalur] = expr.split('->');
+          if (!adaKolom(col)) return send(400, { code: '42703', message: `column user_data.${col} does not exist` });
+          if (col === '*') Object.assign(out, r); else out[alias] = jalur ? ((r[col] || {})[jalur] ?? null) : (r[col] ?? (col === 'price_list' ? {} : undefined));
+        }
+        return send(200, [out]);
+      }
       if (req.method === 'POST') {
         if (body.user_id && body.user_id !== uid) return send(403, { message: 'new row violates row-level security policy' });
-        userData.set(uid, { user_id: uid, settings: body.settings || {}, profile: body.profile || {}, updated_at: body.updated_at });
+        if ('price_list' in body && !priceList) return send(400, { code: 'PGRST204', message: "Could not find the 'price_list' column of 'user_data' in the schema cache" });
+        if ('price_list' in body && (typeof body.price_list !== 'object' || Array.isArray(body.price_list) || JSON.stringify(body.price_list).length >= 3000000)) return send(400, { code: '23514', message: 'violates check constraint "user_data_price_list_size"' });
+        const lama = userData.get(uid) || { user_id: uid, settings: {}, profile: {}, ...(priceList ? { price_list: {} } : {}) };
+        const baru = { ...lama };
+        for (const k of ['settings', 'profile', 'price_list', 'updated_at']) if (k in body) baru[k] = body[k];
+        userData.set(uid, baru);
         return send(201);
       }
     }

@@ -84,7 +84,7 @@
     set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); return true; } catch (e) { return false; } },
     del(k) { try { localStorage.removeItem(k); } catch (e) { /* abaikan */ } },
   };
-  const KEYS = { settings: 'cekprofit.v3', profile: 'cekprofit.profile', license: 'cekprofit.license', cases: 'cekprofit.cases', done: 'cekprofit.done' };
+  const KEYS = { settings: 'cekprofit.v3', profile: 'cekprofit.profile', license: 'cekprofit.license', cases: 'cekprofit.cases', done: 'cekprofit.done', pricelist: 'cekprofit.pricelist' };
   const DEFAULTS = { modalMode: 'produk', catalog: [], fallbackPct: null, mitra: null, coret: 100, periods: [{ start: '', markup: 0, disc: 0 }],
     packing: null, targetMargin: 15, targetProfit: null, fixedCosts: [],
     sellerType: null, extraCostPct: null, hppList: [], acuanContoh: 100000 };
@@ -103,6 +103,12 @@
   const salin = (x) => JSON.parse(JSON.stringify(x));
   const catKeyOf = CekSinkron.kunciModal(Engine.norm);
   let dasarSettings = salin(settings), dasarProfil = salin(profile);
+  /* Price list (Langkah 2a): disimpan di kunci sendiri (bisa besar), bukan di settings. Bentuknya lihat CekPriceList.buatSimpanan;
+   * {dihapus:true, diubah} = penanda price list dihapus (agar perangkat lain ikut menghapus). Ringkasannya di settings.priceListInfo. */
+  let priceList = store.get(KEYS.pricelist, null);
+  let plDraft = null;                                    // file price list yang sedang dipetakan (belum disimpan)
+  const plSync = { status: '', sedang: false, timer: null };
+  const plAktif = () => (priceList && !priceList.dihapus && Array.isArray(priceList.baris) ? priceList : null);
   let caseState = store.get(KEYS.cases, {});
   let done = store.get(KEYS.done, {});              // {pdf: true, saved: true}
   let files = [];
@@ -154,7 +160,7 @@
   };
   const typeOf = (s) => (TYPES[s.sellerType] ? s.sellerType : s.modalMode === 'acuan' ? 'reseller' : null);
   /** Pengaturan yang dipakai menghitung: biaya kulakan hanya berlaku untuk penjual stok sendiri. */
-  const effective = (s) => ({ ...s, extraCostPct: typeOf(s) === 'stok' ? s.extraCostPct : null });
+  const effective = (s) => ({ ...s, extraCostPct: typeOf(s) === 'stok' ? s.extraCostPct : null, priceList: demo ? null : plAktif() });
   /** Label kategori retur. "Tidak dikirim" berasal dari alasan di marketplace: indikasi, bukan fakta. */
   const catLabel = (cat) => (cat === 'tidak_dikirim' ? 'Terindikasi tidak dikirim (menurut alasan di marketplace)' : Engine.CAT_LABEL[cat]);
   const qi = (key, label = '') => `<button type="button" class="qi" data-info="${key}" aria-label="Penjelasan${label ? ` ${esc(label)}` : ''}" aria-haspopup="dialog">?</button>`;
@@ -209,6 +215,7 @@
       }
       if (r.status === 'terkirim' || r.status === 'sama') {
         account.sync = 'Tersimpan di akun';
+        sinkronPriceList();
         try {
           if (account.profile && profile.store && account.profile.store_name !== profile.store) account.profile = await cloud.db.updateProfile({ store_name: profile.store }) || account.profile;
         } catch (e) { /* nama toko di profil akun menyusul pada penyimpanan berikutnya */ }
@@ -221,6 +228,33 @@
     if (sinkronLagi) { sinkronLagi = false; queueSync(); }
   }
   window.addEventListener('online', () => { if (account.user && /dicoba lagi/.test(account.sync)) queueSync(0); });
+  /** Simpan price list di browser ini. Gagal (kuota penuh) diberitahukan, bukan diam-diam. */
+  function simpanPLLokal() {
+    if (priceList === null) { store.del(KEYS.pricelist); return true; }
+    if (store.set(KEYS.pricelist, priceList)) return true;
+    toast('Price list terlalu besar untuk disimpan di browser ini. Price list tetap dipakai sampai halaman ditutup.');
+    return false;
+  }
+  /** Sinkron price list dengan akun (kolom terpisah). Dipanggil setelah sinkron pengaturan berhasil. */
+  async function sinkronPriceList() {
+    if (!account.user || demo || plSync.sedang) return;
+    plSync.sedang = true; clearTimeout(plSync.timer);
+    const r = await CekPriceList.sinkronkan({ lokal: priceList, info: settings.priceListInfo,
+      bacaWaktu: () => cloud.db.priceListWaktu(), unduh: () => cloud.db.loadPriceList(), unggah: (x) => cloud.db.savePriceList(x) });
+    plSync.sedang = false;
+    if (r.status === 'gagal') {
+      plSync.status = CekCloud.kolomBelumAda(r.galat) ? 'belum-kolom' : 'belum';
+      if (plSync.status === 'belum') plSync.timer = setTimeout(sinkronPriceList, ULANG_MS);
+      renderPL(); return;
+    }
+    plSync.status = plAktif() || r.priceList ? 'akun' : '';
+    if (r.status === 'diunduh') {
+      priceList = r.priceList; simpanPLLokal();
+      toast(r.priceList.dihapus ? 'Price list dihapus dari perangkat lain.' : 'Price list diperbarui dari perangkat lain.');
+    }
+    if (r.info && JSON.stringify(r.info) !== JSON.stringify(settings.priceListInfo || null)) { settings.priceListInfo = r.info; save(); }
+    if (r.status === 'diunduh') render(); else renderPL();
+  }
   async function loadAccount() {
     account.user = cloud.auth.user();
     if (!account.user) { account.profile = null; renderAccount(); return; }
@@ -2101,10 +2135,11 @@
       <p class="tiny faint" style="margin-top:-8px">${hasData ? `Template berisi ${num(r.products.length)} produk dari laporan Anda. Isi kolom Modal per unit (${lower(word)}), simpan, lalu unggah.` : 'Unggah laporan penghasilan dulu agar template berisi produk Anda.'}${s.catalog.length ? ` Tersimpan: ${num(s.catalog.length)} modal produk.` : ''}</p>
       ${type === 'stok' ? `<div class="field"><label for="s-extra">Biaya kulakan${qi('biaya_kulakan')}</label><div class="input"><input id="s-extra" type="number" min="0" max="100" step="0.5" inputmode="decimal" placeholder="Misalnya 3" value="${ok(s.extraCostPct) && s.extraCostPct > 0 ? s.extraCostPct : ''}" ${dis}><span>% dari harga beli</span></div><span class="hint">Ongkir dari supplier dan biaya angkut, ditambahkan ke modal setiap produk.</span></div>` : ''}
       ${type === 'produsen' ? hppPanel(s, r, dis) : ''}
+      ${type !== 'produsen' && !demo ? `<div id="pl-box">${plPanel(s, r)}</div>` : ''}
       <div class="field"><label for="s-fallback">Modal rata-rata untuk produk yang belum diisi${qi('modal_rata')}</label>
         <div class="input"><input id="s-fallback" type="number" min="0" max="99" step="1" inputmode="decimal" placeholder="Misalnya 60" value="${ok(s.fallbackPct) ? s.fallbackPct : ''}" ${dis}><span>% dari harga jual</span></div>
         <span class="hint">Perkiraan cepat. Kosongkan bila hanya ingin memakai modal per produk yang Anda isi.</span></div>
-      ${r && r.totalSales ? `<div class="cover-meter"><div class="small"><b>${pct(r.coverage, 0)}</b> penjualan sudah punya modal${missing ? `, ${num(missing)} produk belum diisi` : ''}.</div>
+      ${r && r.totalSales ? `<div class="cover-meter"><div class="small"><b>${pct(r.coverage, 0)}</b> penjualan sudah punya modal${missing ? `, ${num(missing)} produk belum diisi` : ''}.${r.priceList && r.priceList.knownSalesShopee > 0 ? ` ${pct(r.priceList.knownSalesShopee / r.totalSales, 0)} penjualan memakai modal dari price list.` : ''}</div>
         <div class="progress" aria-hidden="true"><i style="width:${Math.round(r.coverage * 100)}%"></i></div>
         ${r.ttNoDetail && !r.hasOrderExport.tiktok ? `<p class="tiny faint">${num(r.ttNoDetail)} pesanan TikTok tidak mencantumkan produk. Unggah export pesanan TikTok, atau isi modal rata-rata.</p>` : ''}
         ${r.qtyAssumed && !r.hasOrderExport.shopee ? '<p class="tiny faint">Jumlah barang Shopee dianggap 1 per produk per pesanan. Unggah export pesanan Shopee agar tepat.</p>' : ''}</div>` : ''}
@@ -2112,6 +2147,170 @@
         <div class="searchrow" style="margin-top:10px"><input class="plain" id="cost-q" type="search" placeholder="Cari produk" value="${esc(view.costQ)}" aria-label="Cari produk"></div><div id="cost-table"></div></details>` : ''}`;
   }
   const lower = (w) => (w === 'HPP' ? w : w.toLowerCase());
+
+  /* ---------- price list (Langkah 2a, Beta; hanya Shopee) ---------- */
+  const PL_KOSONG = -1;
+  const tglPendek = (ms) => (ms ? new Date(ms).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' }) : '');
+  const plStatusTeks = () => (!account.user ? 'Tersimpan di browser ini. Masuk akun agar tersedia di perangkat lain.'
+    : plSync.status === 'akun' ? 'Tersimpan di akun.'
+      : plSync.status === 'belum-kolom' ? 'Belum tersimpan di akun (database belum diperbarui). Price list tetap dipakai di perangkat ini.'
+        : plSync.status === 'belum' ? 'Belum tersimpan di akun, dicoba lagi otomatis.' : 'Menyimpan ke akun…');
+  /** Render ulang kotak price list saja (tanpa menghitung ulang seluruh halaman). */
+  function renderPL() { const box = $('#pl-box'); if (box) box.innerHTML = plPanel(st(), last && last.all); }
+  function plPanel(s, r) {
+    const head = `<div class="subsec-head"><b>Price list dari supplier${qi('price_list')} <span class="badge">Beta</span></b><span class="tiny faint">Isi modal sekaligus dari daftar harga supplier</span></div>`;
+    if (plDraft) return `<div class="subsec" id="pl-map">${head}${plPeta(s)}</div>`;
+    const pl = plAktif();
+    const tombol = `<label class="btn sm" for="pl-input">${pl ? 'Ganti price list' : 'Unggah price list'}</label><input id="pl-input" type="file" accept=".xlsx,.xls,.csv" hidden>
+      <button class="btn sm quiet" type="button" id="pl-template">Unduh template price list</button>`;
+    if (!pl) {
+      return `<div class="subsec">${head}
+        <p class="small">Punya daftar harga dari supplier atau penerbit? Unggah filenya, pilih kolom kode, nama, dan harga. Modal produk yang cocok terisi otomatis, termasuk produk baru bulan berikutnya.</p>
+        <div class="row-actions">${tombol}</div>
+        <p class="tiny faint">Excel atau CSV dalam format apa pun. File tidak dikirim ke server; yang disimpan hanya kode, nama, variasi, dan harga. Saat ini dipakai untuk Shopee; TikTok menyusul.</p></div>`;
+    }
+    const sampul = pl.jenis === 'sampul';
+    const P = r && r.priceList;
+    const prodPL = r ? r.products.filter((p) => p.platform === 'shopee' && (p.modalSumber === 'pricelist' || p.modalSumber === 'campuran')).length : 0;
+    const tanpa = r ? r.products.filter((p) => !p.modalKnown).sort((a, b) => b.sales - a.sales) : [];
+    const tanpaRp = tanpa.reduce((a, p) => a + p.sales, 0);
+    const beda = P ? P.bedaManual || [] : [];
+    return `<div class="subsec">${head}
+      <p class="small"><b>${esc(pl.namaFile || 'Price list')}</b> · ${num(pl.baris.length)} baris · ${sampul ? 'harga sampul' : 'harga modal'} · diunggah ${tglPendek(pl.diubah)}<br><span class="tiny faint">${plStatusTeks()}</span></p>
+      ${sampul ? `<div class="field"><label for="pl-diskon">Diskon dari pemasok${qi('diskon_pemasok')}</label><div class="input ${ok(s.mitra) ? '' : 'need'}"><input id="pl-diskon" type="number" min="0" max="99" step="0.5" inputmode="decimal" placeholder="Misalnya 30" value="${ok(s.mitra) ? s.mitra : ''}"><span>%</span></div><span class="hint">Modal = harga sampul − diskon ini. Contoh: sampul Rp100.000, diskon 30% → modal Rp70.000.</span></div>` : ''}
+      ${sampul && !ok(s.mitra) ? '<p class="note-box warn">Isi diskon dari pemasok agar price list dipakai. Tanpa diskon, modal tidak dihitung (tidak dianggap diskon 0%).</p>' : ''}
+      ${s.modalMode === 'acuan' ? '<p class="note-box warn">Price list tidak dipakai selama cara modal "Diskon dari harga acuan" dipilih. Pilih "Harga beli per produk".</p>' : ''}
+      ${P && r.totalSales ? `<ul class="pl-hasil small">
+        <li><b>${pct(r.coverage, 0)}</b> penjualan sudah punya modal; <b>${pct(P.knownSalesShopee / r.totalSales, 0)}</b> memakai modal dari price list.</li>
+        <li>${num(prodPL)} produk Shopee memakai modal dari price list.</li>
+        <li>${tanpa.length ? `<b>${num(tanpa.length)} produk tanpa modal</b> (penjualan ${fmt(tanpaRp)}). Tidak dihitung dalam laba sampai modalnya diisi.` : 'Semua produk sudah punya modal.'}</li>
+        <li>${num(Math.max(0, P.baris - P.terpakai))} baris price list belum terpakai. Baris ini tetap disimpan untuk produk yang terjual nanti.</li>
+        ${pl.konflik || P.konflikKode || P.konflikNama ? `<li>${num(pl.konflik || P.konflikKode)} kode dengan harga berbeda di price list tidak dipakai. Periksa file supplier.</li>` : ''}
+        ${pl.masalah ? `<li>${num(pl.masalah)} baris harganya kosong atau tidak terbaca, tidak dipakai.</li>` : ''}
+        ${r.has && r.has.tiktok ? '<li>Produk TikTok belum memakai price list (menyusul).</li>' : ''}
+      </ul>` : '<p class="tiny faint">Unggah laporan penghasilan Shopee untuk melihat produk yang cocok.</p>'}
+      ${tanpa.length ? `<details><summary class="small" style="cursor:pointer;font-weight:700">Lihat produk tanpa modal (${num(Math.min(tanpa.length, 20))} teratas)</summary>
+        <ul class="pl-list small">${tanpa.slice(0, 20).map((p) => `<li><span>${esc(p.name)} <span class="tiny faint">${esc(PNAME[p.platform])}${catKey(p) ? ` · ${esc(catKey(p))}` : ''}</span></span><b>${fmt(p.sales)}</b></li>`).join('')}</ul>
+        <p class="tiny faint">Isi modalnya di tabel "Isi modal per unit" di bawah, atau tambahkan ke price list lalu unggah ulang.</p></details>` : ''}
+      ${beda.length ? `<div class="pl-beda"><p class="small"><b>Modal manual berbeda dari price list (${num(beda.length)})</b>${qi('modal_beda_pl')}<br><span class="tiny faint">Modal yang Anda isi sendiri selalu dipakai. Pilih "Pakai price list" bila angka price list yang benar.</span></p>
+        <div class="tablewrap"><table class="data"><thead><tr><th>Produk</th><th>Modal Anda</th><th>Price list</th><th><span class="sr-only">Pilihan</span></th></tr></thead><tbody>
+        ${beda.slice(0, 50).map((b, i) => `<tr><td>${esc(b.nama)}${b.variasi ? ` <span class="tiny faint">${esc(b.variasi)}</span>` : ''}</td><td>${fmt(b.manual)}</td><td>${fmt(b.priceList)}${b.hargaSampul ? `<br><span class="tiny faint">sampul ${fmt(b.hargaSampul)}</span>` : ''}</td>
+          <td><button class="btn sm quiet" type="button" data-pl-pakai="${i}">Pakai price list</button></td></tr>`).join('')}</tbody></table></div></div>` : ''}
+      <div class="row-actions">${tombol}<button class="btn sm quiet" type="button" id="pl-hapus">Hapus price list</button></div></div>`;
+  }
+  /** Formulir pemetaan kolom + contoh hasil bacaan (sebelum disimpan). */
+  function plPeta(s) {
+    const d = plDraft, aoa = d.sheets[d.sheet] || [], m = d.peta;
+    const header = aoa[m.header] || [];
+    const namaKol = (i) => { const h = String(header[i] ?? '').trim(); return `${String.fromCharCode(65 + (i % 26))}${i >= 26 ? Math.floor(i / 26) : ''}${h ? ` · ${h.slice(0, 40)}` : ''}`; };
+    const lebar = Math.max(0, ...aoa.slice(m.header, m.header + 50).map((row) => (row || []).length));
+    const pilihKol = (id, label, nilai, wajib) => `<div class="field"><label for="${id}">${label}</label><select class="compact" id="${id}">
+      <option value="${PL_KOSONG}">${wajib ? 'Pilih kolom…' : 'Tidak dipakai'}</option>${Array.from({ length: lebar }, (_, i) => `<option value="${i}" ${nilai === i ? 'selected' : ''}>${esc(namaKol(i))}</option>`).join('')}</select></div>`;
+    const pil = (name, cur, list) => `<div class="pj-pil" role="radiogroup">${list.map(([v, l]) => `<label><input type="radio" name="${name}" id="${name}-${v}" value="${v}" ${cur === v ? 'checked' : ''}><span>${l}</span></label>`).join('')}</div>`;
+    let hasil = null, galat = '';
+    try { if (m.harga >= 0 && (m.kode >= 0 || m.nama >= 0) && m.jenis && m.format) hasil = CekPriceList.bangun(aoa, m); } catch (e) { galat = e.message; }
+    const contoh = m.harga >= 0 && m.format ? CekPriceList.contoh(aoa, m, 6) : [];
+    const ALASAN = { harga_kosong: 'harga kosong', harga_tidak_terbaca: 'harga tidak terbaca', harga_nol_atau_negatif: 'harga 0 atau minus', tanpa_kode_nama: 'tanpa kode dan nama' };
+    const siap = hasil && hasil.baris.length > 0;
+    return `<p class="small">File <b>${esc(d.namaFile)}</b>. Pilih kolom yang sesuai, lalu periksa contoh hasil bacaan sebelum menyimpan.</p>
+      <div class="fields">
+        ${Object.keys(d.sheets).length > 1 ? `<div class="field"><label for="pl-sheet">Sheet</label><select class="compact" id="pl-sheet">${Object.keys(d.sheets).map((n) => `<option ${n === d.sheet ? 'selected' : ''}>${esc(n)}</option>`).join('')}</select></div>` : ''}
+        <div class="field"><label for="pl-header">Baris judul kolom</label><select class="compact" id="pl-header">${aoa.slice(0, 30).map((row, i) => `<option value="${i}" ${i === m.header ? 'selected' : ''}>Baris ${i + 1}: ${esc((row || []).filter((c) => String(c).trim() !== '').slice(0, 4).join(' | ').slice(0, 60) || '(kosong)')}</option>`).join('')}</select></div>
+        ${pilihKol('pl-kode', 'Kode / SKU / ISBN', m.kode)}
+        ${pilihKol('pl-nama', 'Nama produk / judul', m.nama)}
+        ${pilihKol('pl-variasi', 'Variasi (mis. jenis cover)', m.variasi)}
+        ${pilihKol('pl-harga', 'Harga', m.harga, true)}
+      </div>
+      <div class="field"><span class="label">Harga di kolom ini adalah</span>${pil('pl-jenis', m.jenis, [['modal', 'Harga modal (harga beli saya)'], ['sampul', 'Harga sampul / katalog']])}</div>
+      ${m.jenis === 'sampul' ? `<div class="field"><label for="pl-diskon">Diskon dari pemasok${qi('diskon_pemasok')}</label><div class="input ${ok(s.mitra) ? '' : 'need'}"><input id="pl-diskon" type="number" min="0" max="99" step="0.5" inputmode="decimal" placeholder="Misalnya 30" value="${ok(s.mitra) ? s.mitra : ''}"><span>%</span></div><span class="hint">Modal = harga sampul − diskon ini.</span></div>` : ''}
+      <div class="field"><span class="label">Format angka di file</span>${pil('pl-format', m.format, [['titik', '45.000 atau 45000,00'], ['koma', '45,000 atau 45000.00']])}<span class="hint">Pilih yang sama dengan penulisan harga di file. Sel angka biasa di Excel terbaca apa adanya.</span></div>
+      ${contoh.length ? `<div class="tablewrap"><table class="data pl-contoh"><caption class="tiny faint" style="text-align:left">Contoh hasil bacaan</caption><thead><tr><th>Baris</th><th>Tertulis</th><th>Terbaca</th>${m.jenis === 'sampul' && ok(s.mitra) ? '<th>Modal</th>' : ''}<th>Kode</th><th>Nama</th></tr></thead><tbody>
+        ${contoh.map((c) => `<tr class="${c.periksa ? 'periksa' : ''}"><td>${c.baris}</td><td>${esc(c.asli)}</td>
+          <td>${ok(c.harga) ? fmt(c.harga) : '<span class="cost">tidak terbaca</span>'}${c.periksa && ok(c.harga) ? ' <span class="badge todo">periksa</span>' : ''}</td>${m.jenis === 'sampul' && ok(s.mitra) ? `<td>${ok(c.harga) ? fmt(c.harga * (100 - s.mitra) / 100) : '—'}</td>` : ''}
+          <td>${esc(c.kode)}</td><td>${esc(c.nama)}${c.variasi ? ` <span class="tiny faint">${esc(c.variasi)}</span>` : ''}</td></tr>`).join('')}</tbody></table></div>` : ''}
+      ${galat ? `<p class="note-box warn">${esc(galat)}</p>` : ''}
+      ${hasil ? `<p class="small"><b>${num(hasil.baris.length)}</b> baris siap dipakai${hasil.masalah.length ? ` · ${num(hasil.masalah.length)} baris tidak dipakai` : ''}${hasil.konflik.length ? ` · ${num(hasil.konflik.length)} kode dengan harga berbeda` : ''}.</p>
+        ${hasil.masalah.length || hasil.konflik.length ? `<details><summary class="small" style="cursor:pointer">Lihat baris yang tidak dipakai</summary><ul class="tiny">
+          ${hasil.masalah.slice(0, 15).map((x) => `<li>Baris ${x.baris}: ${ALASAN[x.alasan] || x.alasan}${x.nilai ? ` ("${esc(x.nilai.slice(0, 30))}")` : ''}</li>`).join('')}
+          ${hasil.konflik.slice(0, 15).map((k) => `<li>Kode ${esc(k.kode)} muncul dengan harga berbeda (${k.harga.map(fmt).join(', ')}) di baris ${k.baris.join(', ')}</li>`).join('')}
+          ${hasil.masalah.length + hasil.konflik.length > 30 ? '<li>…</li>' : ''}</ul></details>` : ''}` : ''}
+      ${m.jenis === 'sampul' && !ok(s.mitra) ? '<p class="note-box warn">Isi diskon dari pemasok. Tanpa diskon, price list harga sampul tidak dipakai.</p>' : ''}
+      <div class="row-actions"><button class="btn sm" type="button" id="pl-simpan" ${siap ? '' : 'disabled'}>Simpan price list</button><button class="btn sm quiet" type="button" id="pl-batal">Batal</button></div>`;
+  }
+  /** Baca file price list menjadi tabel per sheet, lalu siapkan saran pemetaan. */
+  function bukaPriceList(file) {
+    const reader = new FileReader();
+    const isCsv = /\.csv$/i.test(file.name);
+    reader.onload = () => {
+      try {
+        if (!window.XLSX) throw new Error('Pembaca Excel gagal dimuat. Muat ulang halaman.');
+        const wbx = isCsv ? XLSX.read(reader.result, { type: 'string', raw: true }) : XLSX.read(new Uint8Array(reader.result), { type: 'array' });
+        const sheets = Engine.sheetsFromSheetJS(XLSX, wbx);
+        const nama = Object.keys(sheets).sort((a, b) => sheets[b].length - sheets[a].length)[0];
+        if (!nama || !sheets[nama].length) throw new Error('File kosong.');
+        plDraft = { namaFile: file.name, sheets, sheet: nama, peta: petaAwal(sheets[nama]) };
+      } catch (e) { plDraft = null; toast(`Price list tidak bisa dibaca: ${e.message}`); }
+      renderPL();
+      const box = $('#pl-map'); if (box) box.scrollIntoView({ block: 'start', behavior: 'smooth' });
+    };
+    if (isCsv) reader.readAsText(file); else reader.readAsArrayBuffer(file);
+  }
+  /** Saran awal pemetaan dari isi sheet (hanya saran; seller memilih). */
+  function petaAwal(aoa) {
+    const header = Math.max(0, CekPriceList.cariHeader(aoa));
+    const t = CekPriceList.tebakKolom(aoa[header] || []);
+    const nilaiHarga = t.harga >= 0 ? aoa.slice(header + 1, header + 200).map((row) => (row || [])[t.harga]).filter((v) => v !== '' && v !== null && v !== undefined) : [];
+    return { header, kode: t.kode, nama: t.nama, variasi: t.variasi, harga: t.harga, jenis: t.jenis || (typeOf(settings) === 'reseller' ? 'sampul' : 'modal'), format: CekPriceList.tebakFormat(nilaiHarga) || 'titik' };
+  }
+  function simpanPriceList() {
+    if (!plDraft) return;
+    const aoa = plDraft.sheets[plDraft.sheet], m = plDraft.peta;
+    let hasil;
+    try { hasil = CekPriceList.bangun(aoa, m); } catch (e) { toast(e.message); return; }
+    const header = aoa[m.header] || [];
+    const namaKolom = Object.fromEntries(['kode', 'nama', 'variasi', 'harga'].filter((k) => m[k] >= 0).map((k) => [k, String(header[m[k]] ?? '').slice(0, 60)]));
+    const baru = CekPriceList.buatSimpanan({ hasil, peta: m, namaKolom, namaFile: plDraft.namaFile, kini: Date.now() });
+    if (CekPriceList.terlaluBesar(baru)) { toast(`Price list terlalu besar (${num(baru.baris.length)} baris). Pisahkan menjadi beberapa file atau buang kolom yang tidak perlu.`); return; }
+    priceList = baru; simpanPLLokal();
+    plDraft = null;
+    settings.modalMode = 'produk';
+    plSync.status = '';
+    save();
+    track('price-list-simpan');
+    render();
+    toast(`Price list tersimpan: ${num(baru.baris.length)} baris.`);
+  }
+  function hapusPriceList() {
+    if (!confirm('Hapus price list? Modal yang berasal dari price list tidak dihitung lagi. Modal yang Anda isi sendiri tidak terhapus.')) return;
+    priceList = { dihapus: true, diubah: Date.now() }; simpanPLLokal();
+    plSync.status = '';
+    save(); render();
+    toast('Price list dihapus.');
+  }
+  /** "Pakai price list": hapus modal manual produk itu, sehingga angka price list yang dipakai. */
+  function pakaiPriceList(i) {
+    const b = last && last.all.priceList && (last.all.priceList.bedaManual || [])[+i];
+    if (!b) return;
+    const sama = (e) => Engine.norm(e.kode || '') === Engine.norm(b.kode) && Engine.norm(e.nama || '') === Engine.norm(b.namaModal) && Engine.norm(e.variasi || '') === Engine.norm(b.variasiModal);
+    settings.catalog = settings.catalog.filter((e) => !sama(e));
+    save(); render();
+    toast(`Modal ${b.nama} kini memakai price list (${fmt(b.priceList)}).`);
+  }
+  function downloadTemplatePL() {
+    const wb = XLSX.utils.book_new();
+    const prods = last ? last.all.products.filter((p) => p.platform === 'shopee').sort((a, b) => b.sales - a.sales) : [];
+    const rows = [['Kode', 'Nama produk', 'Variasi', 'Harga (Rp)'], ...prods.map((p) => [catKey(p), p.name, '', ''])];
+    const ws = XLSX.utils.aoa_to_sheet(rows);
+    ws['!cols'] = [{ wch: 18 }, { wch: 52 }, { wch: 16 }, { wch: 14 }];
+    XLSX.utils.book_append_sheet(wb, ws, 'Price list');
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([['Petunjuk'],
+      ['1. Satu baris per produk atau per variasi. Isi Kode (SKU/ISBN) bila ada; bila tidak, Nama produk harus sama persis dengan nama di Shopee.'],
+      ['2. Harga: harga modal (harga beli Anda) ATAU harga sampul/katalog. Pilih jenisnya saat mengunggah.'],
+      ['3. Variasi (mis. Soft Cover / Hard Cover) diisi bila modal tiap variasi berbeda.'],
+      ['4. Simpan, lalu unggah di Cek Untung, halaman Modal & HPP, bagian Price list.']]), 'Petunjuk');
+    XLSX.writeFile(wb, 'template-price-list-cekuntung.xlsx');
+    track('unduh-template-price-list');
+  }
   const HPP_FIELDS = [['bahan', 'Bahan baku', 'Rp', 'per produksi'], ['tenaga', 'Tenaga kerja', 'Rp', 'per produksi'], ['overhead', 'Overhead', 'Rp', 'listrik, gas, alat'], ['hasil', 'Hasil jadi', 'unit', 'per produksi'], ['kemasan', 'Kemasan', 'Rp', 'per unit']];
   function hppPanel(s, r, dis) {
     const list = s.hppList || [];
@@ -2159,6 +2358,7 @@
     const resellerCustom = (s.coret || 100) !== 100 || s.periods.length > 1 || s.periods.some((q) => q.markup || q.disc || q.start);
     const sell = 100 * (1 + (p.markup || 0) / 100) * (1 - (p.disc || 0) / 100), cost = 100 - (s.mitra || 0);
     return `<p class="small muted">Untuk reseller yang membeli dengan potongan dari harga acuan pemasok, misalnya harga sampul buku atau harga katalog distributor.</p>
+      ${demo ? '' : `<p class="note-box">${plAktif() ? 'Price list Anda tersimpan, tetapi tidak dipakai di cara ini. Pilih "Harga beli per produk" agar modal diambil dari price list.' : 'Punya price list (daftar harga sampul) dari supplier? Pilih "Harga beli per produk" untuk mengunggahnya. Modal dihitung per judul, bukan ditaksir dari harga jual.'}</p>`}
       <div class="fields two align">
         <div class="field"><label for="s-mitra">Diskon dari pemasok${qi('diskon_pemasok')}</label><div class="input ${!ready && files.length ? 'need' : ''}"><input id="s-mitra" type="number" min="0" max="99" step="0.5" inputmode="decimal" placeholder="Misalnya 30" value="${ready ? s.mitra : ''}" ${dis}><span>%</span></div><span class="hint">Harga beli = harga acuan − diskon ini. Contoh: mitra penerbit dapat diskon 30% dari harga sampul.</span></div>
       </div>
@@ -2186,7 +2386,7 @@
     const shown = view.costAll ? list : list.slice(0, 25);
     const word = (TYPES[demo ? 'stok' : typeOf(st())] || { cost: 'Modal' }).cost;
     box.innerHTML = `<div class="tablewrap"><table class="data cost-table"><thead><tr><th>Produk</th><th>Terjual</th><th>Harga rata-rata</th><th>${word} per unit</th></tr></thead><tbody>
-      ${shown.map((p) => `<tr><td><i class="sw" style="background:var(--${p.platform})"></i> ${esc(p.name)}<br><span class="tiny faint">${esc(catKey(p) || '-')}</span></td>
+      ${shown.map((p) => `<tr><td><i class="sw" style="background:var(--${p.platform})"></i> ${esc(p.name)}<br><span class="tiny faint">${esc(catKey(p) || '-')}${p.modalSumber === 'pricelist' ? ' · dari price list' : p.modalSumber === 'campuran' ? ' · sebagian dari price list' : ''}</span></td>
         <td>${p.qtyKnown ? num(p.qty) : `${p.rows}×`}</td><td>${fmt(p.avgPrice)}</td>
         <td><input type="number" min="0" step="100" inputmode="numeric" class="${ok(p.baseCost) ? '' : 'missing'}" data-cost="${esc(p.key)}" value="${ok(p.baseCost) ? p.baseCost : ''}" placeholder="Rp" aria-label="${word} per unit ${esc(p.name)}" ${demo ? 'disabled' : ''}></td></tr>`).join('') || '<tr><td colspan="4" class="muted">Tidak ada produk yang cocok.</td></tr>'}</tbody></table></div>
       ${list.length > 25 ? `<button class="btn sm quiet" type="button" id="cost-all">${view.costAll ? 'Tampilkan lebih sedikit' : `Tampilkan semua ${num(list.length)} produk`}</button>` : ''}`;
@@ -2705,7 +2905,7 @@
     }
     if (demo) return;
     const n = (x, lo, hi) => (x === '' ? null : Math.min(hi, Math.max(lo, +x)));
-    if (id === 's-mitra') settings.mitra = n(v, 0, 99);
+    if (id === 's-mitra' || id === 'pl-diskon') settings.mitra = n(v, 0, 99);
     else if (id === 's-packing') settings.packing = n(v, 0, 1e9);
     else if (id === 's-coret') settings.coret = Math.max(1, +v || 100);
     else if (id === 's-fallback') settings.fallbackPct = n(v, 0, 99);
@@ -2753,6 +2953,17 @@
     else if (t.id === 'simx-aff') { sim.afiliasi = Math.min(50, Math.max(0, +t.value || 0)); resetSimFee(); render(); }
     else if (t.dataset.simOpsi) { const k = t.dataset.simOpsi; sim.opsi = t.checked ? [...new Set([...sim.opsi, k])] : sim.opsi.filter((x) => x !== k); resetSimFee(); render(); }
     else if (t.id === 'file-input' || t.id === 'tpl-input') { addFiles(t.files); t.value = ''; }
+    else if (t.id === 'pl-input' && t.files[0]) { bukaPriceList(t.files[0]); t.value = ''; }
+    else if (plDraft && ['pl-sheet', 'pl-header', 'pl-kode', 'pl-nama', 'pl-variasi', 'pl-harga'].includes(t.id)) {
+      if (t.id === 'pl-sheet') { plDraft.sheet = t.value; plDraft.peta = petaAwal(plDraft.sheets[t.value]); }
+      else if (t.id === 'pl-header') {   // baris judul berubah → saran kolom dihitung ulang dari baris itu; jenis & format tetap
+        const tk = CekPriceList.tebakKolom(plDraft.sheets[plDraft.sheet][+t.value] || []);
+        plDraft.peta = { ...plDraft.peta, header: +t.value, kode: tk.kode, nama: tk.nama, variasi: tk.variasi, harga: tk.harga };
+      }
+      else plDraft.peta[t.id.slice(3)] = +t.value;
+      renderPL(); $(`#${t.id}`)?.focus();
+    }
+    else if (plDraft && (t.name === 'pl-jenis' || t.name === 'pl-format')) { plDraft.peta[t.name.slice(3)] = t.value; renderPL(); $(`#${t.name}-${t.value}`)?.focus(); }
     else if (t.dataset.expect) { addFiles(t.files, t.dataset.expect); t.value = ''; }
     else if (t.id === 'pf-logo' && t.files[0]) {
       const f = t.files[0];
@@ -2893,6 +3104,11 @@
     else if (t.id === 'fc-add') { settings.fixedCosts.push({ label: '', amount: null }); save(); render(); const i = settings.fixedCosts.length - 1; $(`#fc-label-${i}`).focus(); }
     else if (t.id === 'pf-logo-del') { profile.logo = ''; saveProfile(); render(); }
     else if (t.id === 'tpl-download') downloadTemplate();
+    else if (t.id === 'pl-template') downloadTemplatePL();
+    else if (t.id === 'pl-simpan') simpanPriceList();
+    else if (t.id === 'pl-batal') { plDraft = null; renderPL(); }
+    else if (t.id === 'pl-hapus') hapusPriceList();
+    else if (t.dataset.plPakai !== undefined) pakaiPriceList(t.dataset.plPakai);
     else if (t.id === 'cost-all') { view.costAll = !view.costAll; renderCostTable(); }
     else if (t.hasAttribute('data-demo')) { demo = true; files = []; resetView(); track('klik-demo'); go('ringkasan'); }
     else if (t.id === 'exit-demo') { demo = false; resetView(); render(); }
@@ -2908,7 +3124,7 @@
     else if (t.id === 'wipe-btn') {
       if (!confirm('Hapus modal produk, pengaturan, profil laporan, status retur, dan kode akses yang tersimpan di browser ini? Data di akun tidak ikut terhapus.')) return;
       Object.values(KEYS).forEach((k) => store.del(k)); store.del('cekprofit.v2');
-      settings = structuredClone(DEFAULTS); profile = { store: '', owner: '', logo: '' }; caseState = {}; license = { ok: false }; done = {};
+      settings = structuredClone(DEFAULTS); profile = { store: '', owner: '', logo: '' }; caseState = {}; license = { ok: false }; done = {}; priceList = null; plDraft = null;
       dasarSettings = salin(settings); dasarProfil = salin(profile);   // bukan penghapusan modal: data di akun tidak ikut terhapus
       render(); toast('Data di browser ini sudah dihapus.');
     }

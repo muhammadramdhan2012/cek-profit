@@ -339,7 +339,7 @@ table.data th .qi { margin-left: 4px; }
 .type-seg-wrap .ts-d svg { flex: none; margin-top: 2px; }
 @media (max-width: 520px) { .type-seg { grid-template-columns: repeat(2, 1fr); } }
 
-.modal-panel { display: grid; gap: 16px; }
+.modal-panel { display: grid; gap: 16px; grid-template-columns: minmax(0, 1fr); }   /* tabel modal yang lebar menggulir di dalam, tidak melebarkan panel (375px) */
 
 /* ---------- sub-bagian di dalam panel ---------- */
 .subsec { display: grid; gap: 12px; padding-top: 16px; border-top: 1px solid var(--line); }
@@ -1984,3 +1984,15 @@ body.fb-open .fb-fab { box-shadow: var(--ring), var(--shadow-lg); }
 .dlg-video .d-body { display: grid; gap: 12px; }
 .vid-wrap { border-radius: var(--r); overflow: hidden; background: var(--side-bg); aspect-ratio: 16 / 9; }
 .vid-wrap video { display: block; width: 100%; height: 100%; }
+
+/* Price list (Langkah 2a) */
+.pl-hasil { margin: 0; padding-left: 18px; display: grid; gap: 4px; }
+.pl-list { list-style: none; margin: 8px 0 0; padding: 0; display: grid; gap: 4px; }
+.pl-list li { display: flex; justify-content: space-between; gap: 12px; border-bottom: 1px solid var(--line); padding: 4px 0; }
+.pl-list li span { min-width: 0; overflow-wrap: anywhere; }
+.pl-beda { display: grid; gap: 8px; }
+.pl-contoh td, .pl-beda td { overflow-wrap: anywhere; }
+.pl-contoh tr.periksa td { background: var(--warn-soft); }
+#pl-map select.compact { max-width: 100%; width: 100%; min-width: 0; }
+#pl-map .field { min-width: 0; }
+#pl-box .subsec { grid-template-columns: minmax(0, 1fr); }

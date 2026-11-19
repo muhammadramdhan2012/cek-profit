@@ -20,5 +20,6 @@ jobs:
           node tests/license.test.js
           node tests/akses.test.js
           node tests/sinkron.test.js
+          node tests/pricelist.test.js
           node tests/cloud.test.js
           node tests/duitku.test.mjs

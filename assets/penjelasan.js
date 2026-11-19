@@ -230,6 +230,18 @@ const CekInfo = (() => {
       h: 'Memakai diskon pemasok, packing, dan potongan marketplace (dari laporan Anda, atau tarif umum bila belum ada laporan).',
       b: 'Gunakan sebagai pagar saat ikut kampanye atau flash sale: jangan pasang harga di bawah batas impas.',
     },
+    price_list: {
+      t: 'Price list dari supplier',
+      a: 'Daftar harga dari supplier atau penerbit yang Anda unggah. Modal produk Shopee yang cocok terisi otomatis, termasuk produk baru bulan berikutnya.',
+      h: 'Dicocokkan lewat SKU/ISBN, lalu nama produk (dan variasi) yang sama persis. Harga sampul dihitung: harga sampul × (100% − diskon dari pemasok). Modal yang Anda isi sendiri selalu dipakai lebih dulu.',
+      b: 'Produk yang tidak cocok tidak dihitung dalam laba sampai modalnya diisi. Masih Beta: periksa contoh hasil bacaan sebelum menyimpan.',
+    },
+    modal_beda_pl: {
+      t: 'Modal manual berbeda dari price list',
+      a: 'Produk yang modalnya Anda isi sendiri, tetapi price list memberi angka lain.',
+      h: 'Modal yang Anda isi sendiri selalu dipakai. "Pakai price list" menghapus isian Anda untuk produk itu, sehingga angka price list yang dipakai.',
+      b: 'Periksa mana yang benar, misalnya bila harga dari supplier sudah berubah.',
+    },
     modal_rata: {
       t: 'Modal rata-rata',
       a: 'Perkiraan modal sebagai persen dari harga jual, untuk produk yang modalnya belum diisi.',

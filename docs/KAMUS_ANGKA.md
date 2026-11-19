@@ -29,6 +29,7 @@ Status persetujuan per 14 Okt 2026 (diperbarui 19 Okt 2026):
   - aturan resmi 19 Okt 2026: **nominal refund tidak boleh digunakan untuk menentukan jumlah unit HPP**; bila jumlah unit
     pada refund parsial tidak dapat diverifikasi, HPP dan laba terkait tidak dihitung dengan proporsi nominal refund
     (A.19.1, beserta penerapannya yang diterima pemilik).
+  - modal dari price list dan harga sampul (A.21, 13 Nov 2026).
 - **Belum disetujui:** semua rumus, bobot, ambang batas, aturan pencocokan, dan definisi keuangan rinci lain di bagian A,
   termasuk tabel klasifikasi A.10, rumus A.16, dan detail A.19.2–A.19.4. Statusnya **DIUSULKAN — BELUM DISETUJUI**.
 
@@ -389,6 +390,34 @@ Status: **DITETAPKAN pemilik (31 Okt 2026)**.
 
 Penerapan: `assets/engine.js` (`kepastian.rentangLaba`, `kepastian.risikoBarang.periodeLain`), tampilan di Ringkasan,
 halaman Laba, nota, halaman Retur, dan PDF. Tes: "B1 rentang laba ...", "B3 kerugian/risiko retur ...".
+
+### A.21 Modal dari price list dan harga sampul
+Status: **DITETAPKAN pemilik (13 Nov 2026)**.
+
+- **Modal per unit dari price list** = harga modal pada baris price list yang cocok; atau, bila price list berisi harga
+  sampul/katalog, **harga sampul × (1 − diskon dari pemasok)**. Diskon adalah satu angka dari isian seller "Diskon dari
+  pemasok"; tidak ada nilai bawaan.
+- Price list berisi harga sampul tetapi diskon pemasok belum diisi → price list **tidak dipakai** (tidak dianggap diskon 0).
+- **Tanpa pembulatan** dalam perhitungan; pembulatan hanya untuk tampilan.
+- **Status** = isian seller, sama dengan modal per produk yang diisi manual. Status kuantitas dan variasi tetap dinilai
+  menurut A.19.5.
+- **Modal yang diisi manual oleh seller SELALU menang** atas price list, dalam keadaan apa pun. Price list hanya dipakai
+  bila tidak ada modal manual yang berlaku untuk baris itu. Bila keduanya ada dan angkanya berbeda, produk itu tampil di
+  daftar **"modal manual berbeda dari price list"** agar seller memilih sendiri.
+- **Urutan pencocokan price list** (hanya Shopee; TikTok menyusul): (1) SKU variasi; (2) SKU/ID produk; (3) nama produk +
+  variasi persis; (4) nama produk persis. Tidak ada pencocokan mirip otomatis.
+- Baris price list dengan variasi hanya berlaku untuk variasi itu. Baris tanpa variasi yang cocok lewat nama dengan produk
+  bervariasi tetap berstatus "variasi belum terverifikasi" (tidak dianggap berlaku untuk semua variasi).
+- **Konflik**: kode atau nama yang sama dengan harga berbeda tidak dipakai lewat kunci itu dan ditampilkan ke seller.
+- **Harga yang tidak dipakai** (didaftar, tidak dianggap 0): harga kosong, 0, negatif, atau tidak terbaca menurut format
+  angka pilihan seller (titik ribuan / koma ribuan).
+- Produk yang tidak cocok dengan price list = **modal belum diisi** (tidak dihitung dalam laba), kecuali seller mengisi
+  "Modal rata-rata" (berstatus perkiraan).
+- Porsi penjualan yang modalnya dari price list ditampilkan terpisah di cakupan modal.
+- Harga sampul per produk yang diisi seller di tabel modal (Langkah 2b) memakai rumus yang sama.
+
+Penerapan: `assets/pricelist.js` (membaca file, format angka, konflik), `assets/engine.js` (`buildCatalog`,
+`shopeeCostOf`, `priceList.bedaManual`, `shopee.knownSalesPriceList`). Tes: `node tests/pricelist.test.js`.
 
 ## B. Implementasi kode saat ini (`assets/engine.js`, per 14 Okt 2026, commit `a31eddb`)
 

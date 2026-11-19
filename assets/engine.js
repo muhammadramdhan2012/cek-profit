@@ -906,7 +906,17 @@ const Engine = (() => {
   }
 
   /** Indeks katalog modal: cari berdasarkan kode (SKU/ID) atau nama (+variasi). */
-  function buildCatalog(entries = [], extraPct = 0) {
+  /**
+   * Daftar modal untuk pencarian per baris.
+   * - `entries`: modal yang diisi seller (manual/template).
+   * - `priceList`: price list seller (Langkah 2a, KAMUS A.21) {jenis:'modal'|'sampul', baris:[[kode,nama,variasi,harga]]}.
+   *   Modal per unit = harga modal, atau harga sampul × (1 − diskon pemasok `mitra`%). Tanpa pembulatan.
+   *   Harga sampul tanpa diskon pemasok yang sah → price list tidak dipakai (tidak dianggap diskon 0).
+   *   Kode atau nama yang muncul dengan modal berbeda = konflik → tidak dipakai lewat kunci itu.
+   * find(codes, name, variant, {sumber}): kode → nama + variasi → nama, dari SATU sumber: 'manual' (bawaan, semua jalur
+   * lama termasuk TikTok) atau 'pricelist'. Aturan "modal manual selalu menang" ada di shopeeCostOf (KAMUS A.21).
+   */
+  function buildCatalog(entries = [], extraPct = 0, priceList = null, mitra = null) {
     const byCode = new Map(), byName = new Map();
     const mult = 1 + (isOk(extraPct) && extraPct > 0 ? extraPct / 100 : 0);
     for (const raw of entries) {
@@ -918,15 +928,59 @@ const Engine = (() => {
         if (!byName.has(norm(e.nama)) || !e.variasi) byName.set(norm(e.nama), e);
       }
     }
+    const pl = buildPriceList(priceList, mitra, mult);
+    const cariIn = (m, codes, name, variant) => {
+      for (const c of codes) if (c && m.code.has(norm(c))) return m.code.get(norm(c));
+      return null;
+    };
+    const cariNama = (m, key) => (key && m.name.has(key) ? m.name.get(key) : null);
+    const manual = { code: byCode, name: byName };
     return {
       size: byCode.size + byName.size,
-      find(codes, name, variant) {
-        for (const c of codes) if (c && byCode.has(norm(c))) return byCode.get(norm(c));
-        if (name && variant && byName.has(norm(`${name} ${variant}`))) return byName.get(norm(`${name} ${variant}`));
-        if (name && byName.has(norm(name))) return byName.get(norm(name));
+      priceList: pl ? { dipakai: pl.siap, baris: pl.baris, konflikKode: pl.konflikKode.size, konflikNama: pl.konflikNama.size } : null,
+      /** Price list siap dipakai (ada baris, dan harga sampul punya diskon pemasok). */
+      priceListSiap: !!(pl && pl.siap),
+      /** Baris price list yang benar-benar dipakai sebagai modal (tidak termasuk yang kalah oleh modal manual). */
+      tandaiTerpakai: (e) => { if (pl && e && e.sumber === 'pricelist') pl.terpakai.add(e); },
+      priceListTerpakai: () => (pl ? pl.terpakai.size : 0),
+      /** opt.sumber: 'manual' (bawaan) = hanya modal isian seller; 'pricelist' = hanya price list. */
+      find(codes, name, variant, opt = {}) {
+        const m = opt.sumber === 'pricelist' ? (pl && pl.siap ? pl : null) : manual;
+        if (!m) return null;
+        { const e = cariIn(m, codes); if (e) return e; }
+        if (name && variant) { const e = cariNama(m, norm(`${name} ${variant}`)); if (e) return e; }
+        if (name) { const e = cariNama(m, norm(name)); if (e) return e; }
         return null;
       },
     };
+  }
+
+  /** Price list → peta kode/nama (lihat buildCatalog). Mengembalikan null bila tidak ada price list. */
+  function buildPriceList(priceList, mitra, mult) {
+    if (!priceList || !Array.isArray(priceList.baris) || !priceList.baris.length) return null;
+    const sampul = priceList.jenis === 'sampul';
+    const diskonPct = isOk(mitra) && mitra >= 0 && mitra < 100 ? mitra : NaN;
+    const out = { siap: priceList.jenis === 'modal' || (sampul && isOk(diskonPct)), baris: priceList.baris.length,
+      code: new Map(), name: new Map(), konflikKode: new Set(), konflikNama: new Set(), terpakai: new Set() };
+    if (!out.siap) return out;
+    const daftar = (map, konflik, key, e) => {
+      if (!key || konflik.has(key)) return;
+      const ada = map.get(key);
+      if (ada && ada.baseCost !== e.baseCost) { map.delete(key); konflik.add(key); return; }
+      if (!ada) map.set(key, e);
+    };
+    for (const row of priceList.baris) {
+      const [kode, nama, variasi, harga] = Array.isArray(row) ? row : [];
+      if (!isOk(harga) || !(harga > 0)) continue;
+      // harga × (100 − diskon) / 100: hasil sama dengan harga × (1 − diskon%), tetapi tanpa sisa pecahan biner (45.000 × 70% = 31.500 tepat).
+      const base = sampul ? harga * (100 - diskonPct) / 100 : harga;
+      const e = { kode: kode || '', nama: nama || '', variasi: variasi || '', baseCost: base, cost: base * mult, sumber: 'pricelist',
+        ...(sampul ? { hargaSampul: harga } : {}) };
+      daftar(out.code, out.konflikKode, kode ? norm(kode) : '', e);
+      // Baris bervariasi hanya didaftarkan dengan nama + variasi (tidak dianggap berlaku untuk semua variasi).
+      daftar(out.name, out.konflikNama, nama ? norm(variasi ? `${nama} ${variasi}` : nama) : '', e);
+    }
+    return out;
   }
 
   /*
@@ -955,7 +1009,7 @@ const Engine = (() => {
   function compute(parsed, settings, caseState = {}, filter = {}) {
     const m = merge(parsed);
     const mode = modeOf(settings);
-    const catalog = buildCatalog(settings.catalog, settings.extraCostPct);
+    const catalog = buildCatalog(settings.catalog, settings.extraCostPct, settings.priceList, settings.mitra);
     const fallback = isOk(settings.fallbackPct) && settings.fallbackPct >= 0 && settings.fallbackPct < 100 ? settings.fallbackPct / 100 : NaN;
     const packing = isOk(settings.packing) ? settings.packing : 0;
     const target = isOk(settings.targetMargin) ? settings.targetMargin / 100 : 0.15;
@@ -1066,7 +1120,7 @@ const Engine = (() => {
 
     /* ===== Shopee ===== */
     const S = { orders: 0, sales: 0, fees: { admin: 0, proses: 0, xtra: 0, ams: 0, ship: 0, lain: 0 }, received: 0, modal: 0, packing: 0,
-      adj: 0, first: '', last: '', knownSales: 0, knownReceived: 0, knownPacking: 0, margin: 0, voucher: 0 };
+      adj: 0, first: '', last: '', knownSales: 0, knownReceived: 0, knownPacking: 0, margin: 0, voucher: 0, knownSalesPriceList: 0 };
     const shopeeIn = new Set();
     // Money Trace A1: agregat refund (metadata). Refund SUDAH termasuk di penjualan kedua marketplace, jadi angka ini
     // hanya rincian dan tidak pernah dikurangkan lagi. nilai NaN = kolom refund tidak ada (belum tersedia, bukan 0).
@@ -1366,17 +1420,42 @@ const Engine = (() => {
      * @param line  baris export yang terbukti milik item ini, atau null bila belum diketahui
      * @returns {{entry: object|null, key: 'sku_variasi'|'nama_variasi'|'produk'|'produk_legacy'|null}}
      */
+    const MANUAL = { sumber: 'manual' }, HANYA_PL = { sumber: 'pricelist' };
+    /**
+     * KAMUS A.21 (13 Nov 2026): modal yang diisi manual oleh seller SELALU menang atas price list. Price list hanya
+     * dipakai bila pencarian manual (langkah 1–3 di bawah) tidak menemukan modal. Bila keduanya ada dan berbeda, dicatat
+     * di `bedaManual` agar seller bisa memilih sendiri. Price list hanya untuk jalur Shopee (TikTok menyusul).
+     */
     function shopeeCostOf(it, line) {
+      const m = shopeeCostDari(it, line, MANUAL);
+      if (!catalog.priceListSiap) return m;
+      const p = shopeeCostDari(it, line, HANYA_PL);
+      if (m.entry) {
+        if (p.entry && Math.abs(p.entry.baseCost - m.entry.baseCost) >= 0.01) catatBedaManual(it, line, m.entry, p.entry);   // beda < 1 sen = sama
+        return m;
+      }
+      if (p.entry) catalog.tandaiTerpakai(p.entry);
+      return p;
+    }
+    const bedaManual = new Map();
+    function catatBedaManual(it, line, man, pl) {
+      const k = `${norm(man.kode || '')}|${norm(man.nama || '')}|${norm(man.variasi || '')}`;
+      if (bedaManual.has(k)) return;
+      bedaManual.set(k, { nama: it.name, variasi: line ? str(line.variant) : '', kode: man.kode || '', namaModal: man.nama || '', variasiModal: man.variasi || '',
+        manual: man.baseCost, priceList: pl.baseCost, kodePriceList: pl.kode || '', ...(pl.hargaSampul ? { hargaSampul: pl.hargaSampul } : {}) });
+    }
+    /** Satu sumber modal saja (manual atau price list). Urutan langkah sama dengan aturan E1/E2. */
+    function shopeeCostDari(it, line, opt) {
       const variant = line ? str(line.variant) : '';
       if (line && line.skuVariant) {
-        const e = catalog.find([line.skuVariant], '', '');
+        const e = catalog.find([line.skuVariant], '', '', opt);
         if (e) return { entry: e, key: 'sku_variasi' };
       }
       if (variant) {
-        const e = catalog.find([], it.name, variant);
+        const e = catalog.find([], it.name, variant, opt);
         if (e && e.variasi && norm(`${e.nama} ${e.variasi}`) === norm(`${it.name} ${variant}`)) return { entry: e, key: 'nama_variasi' };
       }
-      const e = catalog.find([line ? line.sku : undefined, it.productId], it.name, variant);   // cara lama
+      const e = catalog.find([line ? line.sku : undefined, it.productId], it.name, variant, opt);   // cara lama
       if (!e) return { entry: null, key: null };
       // Pencarian lama lewat nama saja bisa mengembalikan modal VARIASI LAIN (daftar modal memetakan nama produk ke
       // variasi pertama yang diisi). Untuk baris yang variasinya diketahui, modal milik variasi lain tidak dipakai.
@@ -1498,6 +1577,8 @@ const Engine = (() => {
       S.orders += counted ? 1 : 0; S.sales += net; S.received += o.total; S.packing += pack; S.voucher += o.voucher;
       refundAdd(RF.shopee, o.refund, !counted, NaN, NaN);
       if (isOk(modal)) { S.modal += modal; S.margin += margin; S.knownSales += net; S.knownReceived += o.total; S.knownPacking += pack; }
+      // Cakupan dari price list: pesanan bermodal yang (seluruh atau sebagian) modalnya dari price list.
+      if (isOk(modal) && items.some((n) => n.entry && n.entry.sumber === 'pricelist')) S.knownSalesPriceList += net;
       for (const k of Object.keys(S.fees)) S.fees[k] += o[k];
       if (o.payDate && (!S.first || o.payDate < S.first)) S.first = o.payDate;
       if (o.payDate && o.payDate > S.last) S.last = o.payDate;
@@ -1518,6 +1599,7 @@ const Engine = (() => {
         else p.qty += n.qty * clamp01(n.it.harga > 0 ? (n.it.harga + n.it.refund) / n.it.harga : 0);
         if (isOk(n.cost)) p.modal += n.cost; else p.modalKnown = false;
         if (isOk(n.unit)) { p.unitCost = n.unit; p.baseCost = n.base; }
+        if (n.entry) { const sb = n.entry.sumber === 'pricelist' ? 'pricelist' : 'manual'; p.modalSumber = !p.modalSumber || p.modalSumber === sb ? sb : 'campuran'; }   // asal modal (penelusuran)
         p.packing = (p.packing || 0) + pack * share;
         if (n.qtyStatus) {   // ringkasan status per produk (mode modal per produk saja); informasi tambahan
           const st = p.statusShopee || (p.statusShopee = { baris: 0, kuantitasBelum: 0, variasiAmbigu: 0, hppTerverifikasi: 0, hppBelum: 0 });
@@ -2322,6 +2404,7 @@ const Engine = (() => {
       fixedMonthly, opex, netProfit: ready ? totalMargin - opex : NaN,
       months: monthList, allMonths: [...allMonths].sort(), buckets: buckets.filter((b) => b.orders > 0),
       products, cases, catSummary: Object.values(catSummary), dupes: m.dupes, target,
+      priceList: catalog.priceList ? { ...catalog.priceList, terpakai: catalog.priceListTerpakai(), knownSalesShopee: S.knownSalesPriceList, bedaManual: [...bedaManual.values()] } : null,
       qtyAssumed, shopeeQty, linesWithoutCost, ttNoDetail, ttNoDetailSales, ttKuantitas: { ...ttKuantitas, indikasiRetur: { ...ttKuantitas.indikasiRetur } }, hasOrderExport: { shopee: m.shopeeLines.size > 0, tiktok: m.tiktokLines.size > 0 },
       productsWithoutCost: products.filter((p) => !p.modalKnown).length,
     };
