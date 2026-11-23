@@ -786,6 +786,8 @@
         ${!pro && r.insights.length > FREE ? `<p class="tiny faint">${num(r.insights.length - FREE)} temuan lain tersedia di Pro. <button class="btn link" type="button" data-upgrade>Lihat paket</button></p>` : ''}
       </section>
 
+      ${bocorCard(r, false)}
+
       <div class="d3-pair">
         <section class="section-card money" aria-labelledby="money-t">${moneyCard(r)}</section>
         <section class="section-card prod-prev" aria-labelledby="prod-t">${productPreview(r)}</section>
@@ -889,6 +891,53 @@
   }
 
   /** Cuplikan produk: urutan dari angka engine (laba produk, status), tanpa status kepastian baru. */
+  /* ---------- kebocoran untung (Langkah 3, KAMUS A.22) ----------
+   * Gratis & tamu: total, 3 produk terburuk, 3 tindakan. Pro: semua. Semua dampak = perkiraan dengan asumsi tertulis. */
+  const ASUMSI = {
+    jumlah_dan_potongan_sama: 'Perkiraan, bila jumlah terjual dan persen potongan marketplace tetap sama.',
+    berhenti_menjual_rugi: 'Perkiraan kerugian yang tidak terjadi bila produk ini berhenti dijual rugi. Harga impas belum bisa dihitung.',
+  };
+  const tindakanTeks = (t) => (t.jenis === 'naikkan_ke_impas' ? `Naikkan harga ke ${fmt(t.ke)} (harga impas, sekarang rata-rata ${fmt(t.dari)})`
+    : t.jenis === 'naikkan_ke_target' ? `Naikkan harga ke ${fmt(t.ke)} (harga target, sekarang rata-rata ${fmt(t.dari)})`
+      : 'Tinjau harga dan modalnya, atau hentikan penjualan yang rugi');
+  function bocorCard(r, lengkap) {
+    if (!r || !r.ready || !r.kebocoran) return '';
+    const k = r.kebocoran, pro = isPro(), N = CekAkses.BATAS_KEBOCORAN_GRATIS;
+    const bisaBuka = !perluAkun('produk');
+    const nama = (x) => `${bisaBuka ? `<button type="button" class="lk-name" data-prod="${esc(x.key)}">` : '<span class="lk-name">'}<i class="sw" style="background:var(--${x.platform})" aria-hidden="true"></i>${esc(x.name)}<span class="lk-plat">${PNAME[x.platform]}</span>${bisaBuka ? '</button>' : '</span>'}`;
+    const batas = (arr) => (pro ? (lengkap ? arr : arr.slice(0, N)) : arr.slice(0, N));
+    const rugi = batas(k.kerugian.produk), tindakan = batas(k.tindakan);
+    const sisaRugi = k.kerugian.produk.length - rugi.length;
+    const bersih = k.kerugian.total <= 0 && k.potensi.total <= 0;
+    const v = k.voucher;
+    const head = `<div class="card-header"><h3 id="bocor-t">Kebocoran untung${qi('kebocoran')}</h3><p>Dari ${num(k.dinilai)} produk yang modalnya diketahui</p></div>`;
+    if (bersih) return `<section class="section-card bocor" aria-labelledby="bocor-t">${head}
+      <div class="mini-empty"><span class="status verified">Tidak ada produk yang rugi atau di bawah target margin</span>
+      ${k.belumDinilai.produk ? `<p class="small muted">${num(k.belumDinilai.produk)} produk (penjualan ${fmt(k.belumDinilai.sales)}) belum bisa dinilai karena modalnya belum diisi.</p>` : ''}</div></section>`;
+    return `<section class="section-card bocor" aria-labelledby="bocor-t">${head}
+      <div class="bocor-hero">
+        <div class="bh-main"><span class="bh-k">Hilang dari produk rugi</span>
+          <b class="bh-v ${k.kerugian.total > 0 ? 'neg' : ''}">${k.kerugian.total > 0 ? `−${fmt(k.kerugian.total)}` : fmt(0)}</b>
+          <span class="bh-s">${k.kerugian.produk.length ? `${num(k.kerugian.produk.length)} produk laku tetapi rugi` : 'Tidak ada produk yang rugi'}</span></div>
+        <div class="bh-side">
+          <div class="bh-stat"><span>Potensi tambahan${qi('potensi_target')}</span><b class="pos">+${fmt(k.potensi.total)}</b><small>bila ${num(k.potensi.produk.length)} produk tipis mencapai target margin ${pct(k.target, 0)} · perkiraan</small></div>
+          ${v && v.penjual > 0 ? `<div class="bh-stat"><span>Voucher dari kantong Anda${qi('voucher_penjual')}</span><b>${fmt(v.penjual)}</b><small>${ok(v.pctPenjualan) ? `${pct(v.pctPenjualan, 1)} penjualan Shopee · ` : ''}sudah termasuk dalam laba</small></div>` : ''}
+        </div>
+      </div>
+      <div class="bocor-cols">
+        ${rugi.length ? `<div><h4 class="bc-t">Produk paling merugi</h4><ol class="bc-list">${rugi.map((x) => `<li>${nama(x)}<span class="bc-v neg">−${fmt(x.nilai)}</span></li>`).join('')}</ol>
+          ${sisaRugi > 0 && !(pro && lengkap) ? `<p class="tiny faint">${pro ? `${num(sisaRugi)} produk rugi lainnya.` : `${num(sisaRugi)} produk rugi lainnya tersedia di Pro.`}</p>` : ''}</div>` : ''}
+        ${tindakan.length ? `<div><h4 class="bc-t">Yang bisa dilakukan</h4><ol class="bc-act">${tindakan.map((t) => `<li><div class="ba-top">${nama(t)}<span class="bc-v pos">+${fmt(t.dampak)}</span></div>
+          <p class="ba-do">${tindakanTeks(t)}</p><p class="tiny faint">${ASUMSI[t.asumsi] || 'Perkiraan.'}</p></li>`).join('')}</ol>
+          ${k.tindakan.length > tindakan.length && !(pro && lengkap) ? `<p class="tiny faint">${pro ? `${num(k.tindakan.length - tindakan.length)} tindakan lainnya di halaman Produk.` : `${num(k.tindakan.length - tindakan.length)} tindakan lainnya tersedia di Pro.`}</p>` : ''}</div>` : ''}
+      </div>
+      <div class="bocor-foot">
+        ${v && v.diskonShopee ? `<p class="tiny faint">"Diskon Produk dari Shopee" ${fmt(Math.abs(v.diskonShopee))} tidak disebut sebagai voucher Anda: artinya masih menunggu kepastian.</p>` : ''}
+        ${k.belumDinilai.produk ? `<p class="tiny faint">${num(k.belumDinilai.produk)} produk (penjualan ${fmt(k.belumDinilai.sales)}) belum dinilai karena modalnya belum diisi.</p>` : ''}
+        ${!pro && (k.kerugian.produk.length > N || k.tindakan.length > N) ? '<button class="btn sm" type="button" data-upgrade>Lihat semua dengan Pro</button>' : !lengkap && bisaBuka && (k.kerugian.produk.length > N || k.tindakan.length > N) ? '<button class="card-action" type="button" data-go="produk">Lihat semua di Produk</button>' : ''}
+      </div>
+    </section>`;
+  }
   function productPreview(r) {
     const head = (n) => `<div class="card-header"><h3 id="prod-t">Produk</h3>${n ? `<button class="card-action" type="button" data-go="produk">Lihat semua produk (${num(n)})</button>` : ''}</div>`;
     if (!r.products.length) return `${head(0)}<div class="mini-empty"><p class="small muted">Belum ada rincian produk. Laporan penghasilan TikTok sering tidak mencantumkan produk.</p>${ctaBtn({ label: 'Unggah export pesanan', go: 'data', section: 'unggah' })}</div>`;
@@ -1002,7 +1051,7 @@
   function viewProduk() {
     const { r } = last;
     if (!r.products.length) return `<div class="panel empty"><span class="ic">${svg('produk', 24)}</span><h2>Belum ada rincian produk</h2><p>Laporan penghasilan TikTok sering tidak mencantumkan produk. Unggah export pesanan TikTok atau laporan Shopee untuk melihat analisis per produk.</p><button class="btn primary" type="button" data-go="data">Unggah file</button></div>`;
-    return `<section class="section-card prod-card" aria-label="Daftar produk">
+    return `${bocorCard(r, true)}<section class="section-card prod-card" aria-label="Daftar produk">
       <div class="prod-toolbar">
         <div class="prod-search"><label class="sr-only" for="q">Cari produk atau SKU</label>
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>

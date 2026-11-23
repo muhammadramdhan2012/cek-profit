@@ -145,12 +145,15 @@ const Engine = (() => {
       }
       const ship = SH_SHIP.reduce((a, c) => a + num(g(c)), 0);
       const voucher = SH_VOUCHER.reduce((a, c) => a + num(g(c)), 0);
+      // Rincian voucher (Langkah 3, hanya informasi; `voucher` dan angka laba tidak berubah). "Diskon Produk dari Shopee"
+      // dipisah karena artinya belum pasti (KAMUS C.2): bisa biaya seller, bisa subsidi Shopee.
+      const diskonShopee = num(g('Diskon Produk dari Shopee')), voucherPenjual = voucher - diskonShopee;
       const admin = num(g('Biaya Administrasi')), proses = num(g('Biaya Proses Pesanan'));
       const xtra = SH_XTRA.reduce((a, c) => a + num(g(c)), 0);
       const ams = SH_AMS.reduce((a, c) => a + num(g(c)), 0);
       // Kolom biaya lain/baru apa pun tertangkap sebagai selisih terhadap Total Penghasilan.
       const lain = total - (harga + refund + ship + voucher + admin + proses + xtra + ams);
-      orders.push({ id, orderDate, payDate, harga, refund, voucher, ship, admin, proses, xtra, ams, lain, total });
+      orders.push({ id, orderDate, payDate, harga, refund, voucher, voucherPenjual, diskonShopee, ship, admin, proses, xtra, ams, lain, total });
     }
     let summaryTotal = null, from = '', to = '';
     for (const row of wb.sheets['Summary'] || []) {
@@ -1131,7 +1134,7 @@ const Engine = (() => {
 
     /* ===== Shopee ===== */
     const S = { orders: 0, sales: 0, fees: { admin: 0, proses: 0, xtra: 0, ams: 0, ship: 0, lain: 0 }, received: 0, modal: 0, packing: 0,
-      adj: 0, first: '', last: '', knownSales: 0, knownReceived: 0, knownPacking: 0, margin: 0, voucher: 0, knownSalesPriceList: 0 };
+      adj: 0, first: '', last: '', knownSales: 0, knownReceived: 0, knownPacking: 0, margin: 0, voucher: 0, knownSalesPriceList: 0, voucherPenjual: 0, diskonShopee: 0 };
     const shopeeIn = new Set();
     // Money Trace A1: agregat refund (metadata). Refund SUDAH termasuk di penjualan kedua marketplace, jadi angka ini
     // hanya rincian dan tidak pernah dikurangkan lagi. nilai NaN = kolom refund tidak ada (belum tersedia, bukan 0).
@@ -1585,7 +1588,7 @@ const Engine = (() => {
       const pack = counted ? packing : 0;
       const fee = o.admin + o.proses + o.xtra + o.ams + o.ship + o.lain;
       const margin = isOk(modal) ? o.total - modal - pack : NaN;
-      S.orders += counted ? 1 : 0; S.sales += net; S.received += o.total; S.packing += pack; S.voucher += o.voucher;
+      S.orders += counted ? 1 : 0; S.sales += net; S.received += o.total; S.packing += pack; S.voucher += o.voucher; S.voucherPenjual += o.voucherPenjual || 0; S.diskonShopee += o.diskonShopee || 0;
       refundAdd(RF.shopee, o.refund, !counted, NaN, NaN);
       if (isOk(modal)) { S.modal += modal; S.margin += margin; S.knownSales += net; S.knownReceived += o.total; S.knownPacking += pack; }
       // Cakupan dari price list: pesanan bermodal yang (seluruh atau sebagian) modalnya dari price list.
@@ -2424,7 +2427,53 @@ const Engine = (() => {
     result.kepastian = buildKepastian(result);
     result.jejakUang = buildJejakUang(result);
     result.insights = insights(result);
+    result.kebocoran = kebocoran(result);
     return result;
+  }
+
+  /* ---------- kebocoran untung (Langkah 3, KAMUS A.22) ----------
+   * Murni dari hasil compute; tidak mengubah angka laba. Hanya produk yang labanya diketahui (modal diketahui).
+   *  - kerugian: produk dengan laba < 0; nilai = −laba (uang yang benar-benar hilang).
+   *  - potensi:  produk dengan laba ≥ 0 tetapi margin < target; nilai = target × penjualan − laba (peluang, BUKAN kebocoran).
+   *  - voucher:  voucher/cashback dari kantong seller Shopee, sebagai informasi. Sudah termasuk di laba, jadi TIDAK
+   *              ditambahkan ke total (anti hitung ganda). "Diskon Produk dari Shopee" dipisah: menunggu kepastian (C.2).
+   *  - tindakan: maks. 5; tindakan untuk produk rugi lebih dulu, lalu produk tipis; masing-masing dari dampak terbesar. Dampak = perkiraan dengan asumsi jumlah terjual dan persen
+   *              potongan marketplace sama. Naik ke harga impas → laba 0 → dampak = kerugian; ke harga target → dampak = potensi.
+   */
+  function kebocoran(r) {
+    const target = isOk(r.target) ? r.target : 0.15;
+    const dinilai = r.products.filter((p) => isOk(p.margin));
+    const belum = r.products.filter((p) => !isOk(p.margin));
+    const rugi = dinilai.filter((p) => p.margin < 0).map((p) => ({ key: p.key, name: p.name, platform: p.platform, sales: p.sales, margin: p.margin, pct: p.pct,
+      nilai: -p.margin, avgPrice: p.avgPrice, breakEven: p.breakEven, targetPrice: p.targetPrice, qty: p.qtyKnown ? p.qty : NaN }))
+      .sort((a, b) => b.nilai - a.nilai);
+    const tipis = dinilai.filter((p) => p.margin >= 0 && p.sales > 0 && p.margin / p.sales < target).map((p) => ({ key: p.key, name: p.name, platform: p.platform,
+      sales: p.sales, margin: p.margin, pct: p.pct, nilai: target * p.sales - p.margin, avgPrice: p.avgPrice, targetPrice: p.targetPrice, qty: p.qtyKnown ? p.qty : NaN }))
+      .filter((p) => p.nilai > 0).sort((a, b) => b.nilai - a.nilai);
+    const jumlah = (arr) => arr.reduce((a, x) => a + x.nilai, 0);
+    const harga = (p, ke) => isOk(p.avgPrice) && isOk(ke) && ke > p.avgPrice;
+    // Menghentikan kerugian nyata didahulukan atas mengejar target (peluang), lalu dampak terbesar.
+    const urut = (t) => (t.jenis === 'naikkan_ke_target' ? 1 : 0);
+    const tindakan = [
+      ...rugi.map((p) => (harga(p, p.breakEven)
+        ? { jenis: 'naikkan_ke_impas', key: p.key, name: p.name, platform: p.platform, dari: p.avgPrice, ke: p.breakEven, dampak: p.nilai, asumsi: 'jumlah_dan_potongan_sama' }
+        : { jenis: 'tinjau_produk_rugi', key: p.key, name: p.name, platform: p.platform, dampak: p.nilai, asumsi: 'berhenti_menjual_rugi' })),
+      ...tipis.map((p) => (harga(p, p.targetPrice)
+        ? { jenis: 'naikkan_ke_target', key: p.key, name: p.name, platform: p.platform, dari: p.avgPrice, ke: p.targetPrice, dampak: p.nilai, asumsi: 'jumlah_dan_potongan_sama' }
+        : null)),
+    ].filter(Boolean).sort((a, b) => urut(a) - urut(b) || b.dampak - a.dampak).slice(0, 5);
+    const S = r.shopee || {};
+    const adaShopee = !!(r.has && r.has.shopee);
+    return {
+      target,
+      kerugian: { total: jumlah(rugi), produk: rugi },
+      potensi: { total: jumlah(tipis), produk: tipis },
+      voucher: adaShopee ? { penjual: -(S.voucherPenjual || 0), pctPenjualan: S.sales > 0 ? -(S.voucherPenjual || 0) / S.sales : NaN,
+        diskonShopee: S.diskonShopee || 0, diskonShopeeStatus: 'menunggu_kepastian' } : null,
+      tindakan,
+      belumDinilai: { produk: belum.length, sales: belum.reduce((a, p) => a + p.sales, 0) },
+      dinilai: dinilai.length,
+    };
   }
 
   /* ---------- temuan otomatis ---------- */
@@ -2591,7 +2640,7 @@ const Engine = (() => {
     return sheets;
   }
 
-  return { num, date, norm, detect, sheetsFromSheetJS, monthName, parseWorkbook, compute, simulate, hpp, shopeeRatio, insights, templateRows, buildCatalog, modeOf,
+  return { kebocoran, num, date, norm, detect, sheetsFromSheetJS, monthName, parseWorkbook, compute, simulate, hpp, shopeeRatio, insights, templateRows, buildCatalog, modeOf,
     matchShopeeOrder, shopeeLineValue,
     CAT_LABEL, TEMPLATE_HEADER };
 })();

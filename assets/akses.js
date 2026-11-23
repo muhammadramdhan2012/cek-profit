@@ -96,13 +96,16 @@ const CekAkses = (() => {
   const perluAkun = ({ demo = false, cloudEnabled = false, login = false, halaman }) => !demo && !!cloudEnabled && !login && KUNCI_TAMU.includes(halaman);
 
   /** Fitur yang dikunci untuk paket gratis. Fitur baru didaftarkan di sini, tidak di pemanggil. */
-  const FITUR = Object.freeze({ pdf: 'pro', excel: 'pro' });
+  // kebocoran (Langkah 3, keputusan pemilik 13 Nov 2026): gratis & tamu melihat total, 3 produk terburuk, 3 tindakan;
+  // Pro melihat semua + bagian di PDF.
+  const FITUR = Object.freeze({ pdf: 'pro', excel: 'pro', kebocoran: 'pro' });
+  const BATAS_KEBOCORAN_GRATIS = 3;
   const boleh = (st, fitur) => {
     if (!(fitur in FITUR)) throw new Error(`Fitur tidak dikenal: ${fitur}`);
     return FITUR[fitur] === 'semua' || st.pro;
   };
 
   return { tanggalPerangkat, statusServerSah, hariIni, betaDariConfig, betaDariServer, betaSampai, proAkun, status,
-    BATAS_GRATIS, batas, KUNCI_TAMU, perluAkun, FITUR, boleh };
+    BATAS_GRATIS, batas, KUNCI_TAMU, perluAkun, FITUR, boleh, BATAS_KEBOCORAN_GRATIS };
 })();
 if (typeof module !== 'undefined') module.exports = CekAkses;

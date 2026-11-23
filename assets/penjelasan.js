@@ -230,6 +230,24 @@ const CekInfo = (() => {
       h: 'Memakai diskon pemasok, packing, dan potongan marketplace (dari laporan Anda, atau tarif umum bila belum ada laporan).',
       b: 'Gunakan sebagai pagar saat ikut kampanye atau flash sale: jangan pasang harga di bawah batas impas.',
     },
+    kebocoran: {
+      t: 'Kebocoran untung',
+      a: 'Di mana untung Anda hilang: produk yang laku tetapi rugi, dan produk yang untungnya di bawah target margin.',
+      h: 'Hilang dari produk rugi = jumlah laba minus produk yang rugi. Hanya dari produk yang modalnya diketahui; produk tanpa modal disebut terpisah, tidak dianggap nol.',
+      b: 'Setiap saran tindakan memakai perkiraan: jumlah terjual dan persen potongan marketplace dianggap sama. Bila harga naik, penjualan bisa turun.',
+    },
+    potensi_target: {
+      t: 'Potensi tambahan',
+      a: 'Tambahan laba bila produk yang untungnya tipis mencapai target margin Anda.',
+      h: 'Per produk: target margin × penjualan − laba sekarang. Target margin bisa diubah di Pengaturan (bawaan 15%).',
+      b: 'Ini peluang, bukan uang yang hilang, jadi tidak dijumlahkan ke angka "hilang dari produk rugi".',
+    },
+    voucher_penjual: {
+      t: 'Voucher dari kantong Anda',
+      a: 'Voucher dan cashback koin Shopee yang dibiayai toko Anda, dari laporan penghasilan.',
+      h: 'Sudah dikurangkan dari laba, jadi tidak dihitung lagi sebagai kebocoran. Ditampilkan agar Anda bisa menilai apakah voucher sepadan dengan penjualannya.',
+      b: '"Diskon Produk dari Shopee" tidak dimasukkan di sini karena artinya masih dipastikan.',
+    },
     harga_sampul: {
       t: 'Isi dengan harga sampul',
       a: 'Untuk reseller yang membeli dengan diskon dari harga sampul atau harga katalog. Cukup ketik harga sampul setiap produk; modal dihitung otomatis.',
