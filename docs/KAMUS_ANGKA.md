@@ -30,6 +30,7 @@ Status persetujuan per 14 Okt 2026 (diperbarui 19 Okt 2026):
     pada refund parsial tidak dapat diverifikasi, HPP dan laba terkait tidak dihitung dengan proporsi nominal refund
     (A.19.1, beserta penerapannya yang diterima pemilik).
   - modal dari price list dan harga sampul (A.21, 13 Nov 2026).
+  - kebocoran untung (A.22, 24 Nov 2026).
 - **Belum disetujui:** semua rumus, bobot, ambang batas, aturan pencocokan, dan definisi keuangan rinci lain di bagian A,
   termasuk tabel klasifikasi A.10, rumus A.16, dan detail A.19.2–A.19.4. Statusnya **DIUSULKAN — BELUM DISETUJUI**.
 
@@ -418,6 +419,31 @@ Status: **DITETAPKAN pemilik (13 Nov 2026)**.
 
 Penerapan: `assets/pricelist.js` (membaca file, format angka, konflik), `assets/engine.js` (`buildCatalog`,
 `shopeeCostOf`, `priceList.bedaManual`, `shopee.knownSalesPriceList`). Tes: `node tests/pricelist.test.js`.
+
+### A.22 Kebocoran untung
+Status: **DITETAPKAN pemilik (24 Nov 2026**, pemilik menyetujui seluruh usulan Claude: "ikuti saran kamu").
+
+Hanya membaca hasil perhitungan yang ada; **tidak mengubah angka laba**. Hanya produk yang labanya diketahui (modal
+diketahui) yang dinilai; produk tanpa modal disebut terpisah ("belum dinilai"), tidak dianggap nol.
+
+- **Hilang dari produk rugi** (angka utama) = Σ (−laba produk) untuk produk dengan laba < 0.
+- **Potensi tambahan** = Σ (target margin × penjualan produk − laba produk) untuk produk dengan laba ≥ 0 tetapi
+  margin < target (bawaan 15%). Ini **peluang**, bukan kebocoran, dan tidak dijumlahkan ke angka utama.
+- **Voucher dari kantong seller** (Shopee) = voucher + cashback koin yang disponsori penjual (termasuk co-fund),
+  sebagai informasi dan persen penjualan Shopee. Sudah termasuk dalam laba, jadi **tidak ditambahkan** lagi (anti hitung
+  ganda). "Diskon Produk dari Shopee" dipisah dengan status menunggu kepastian (C.2); perlakuannya di penjualan/laba
+  tidak berubah.
+- **Tindakan** (maks. 5; tindakan untuk produk rugi lebih dulu, lalu produk tipis, masing-masing dari dampak terbesar),
+  semua berlabel **perkiraan** dengan asumsi tertulis:
+  - produk rugi + harga impas tersedia: naikkan ke harga impas; dampak = kerugian produk itu;
+  - produk rugi tanpa harga impas: tinjau atau hentikan penjualan rugi; dampak = kerugian yang tidak terjadi;
+  - produk tipis + harga target tersedia: naikkan ke harga target; dampak = kekurangan dari target.
+  - Asumsi: jumlah terjual dan persen potongan marketplace tetap sama (harga naik bisa menurunkan penjualan).
+- **Akses:** gratis dan tamu melihat total, 3 produk terburuk, dan 3 tindakan; Pro melihat semua, ditambah bagian di
+  PDF (keputusan pemilik 13 Nov 2026). Voucher TikTok (diskon penjual) ditunda sampai ada file TikTok asli.
+
+Penerapan: `assets/engine.js` (`kebocoran`, `shopee.voucherPenjual`, `shopee.diskonShopee`), `assets/app.js`
+(`bocorCard`), `assets/report.js`, `assets/akses.js` (`FITUR.kebocoran`). Tes: `node tests/kebocoran.test.js`.
 
 ## B. Implementasi kode saat ini (`assets/engine.js`, per 14 Okt 2026, commit `a31eddb`)
 

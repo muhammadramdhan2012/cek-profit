@@ -123,9 +123,9 @@ test('A5 boleh(): fitur tidak dikenal ditolak (tidak diam-diam terbuka)', () => 
   eq(A.boleh({ pro: false }, 'pdf'), false);
   eq(A.boleh({ pro: true }, 'excel'), true);
 });
-test('A6 tabel FITUR Langkah 0 hanya berisi fitur yang sudah ada (tanpa kebocoran)', () => {
-  eq(Object.keys(A.FITUR).sort().join(','), 'excel,pdf');
-  eq('kebocoran' in A.FITUR, false);
+test('A6 tabel FITUR: fitur Langkah 0 + kebocoran (ditambahkan di Langkah 3, sengaja)', () => {
+  eq(Object.keys(A.FITUR).sort().join(','), 'excel,kebocoran,pdf');
+  eq(A.FITUR.kebocoran, 'pro');
 });
 
 /* ===== B. Tabel kasus bernama (dashboard) ===== */

@@ -194,6 +194,7 @@ ${r.products.length ? `<section class="rpage">
   ${header('Produk', '4')}
   <h2>Analisis produk</h2>
   <p class="rlead">${r.products.length.toLocaleString('id-ID')} produk terjual. Harga impas = harga jual minimum agar tidak rugi; harga target = harga agar margin ${pc(r.target, 0)}.</p>
+  ${kebocoran(r)}
   ${top.length ? `<h3>10 produk dengan laba terbesar</h3>
   <table class="rtable rsmall"><thead><tr><th>Produk</th><th>Terjual</th><th>Penjualan</th><th>Laba</th><th>Margin</th></tr></thead>
     <tbody>${top.map((x) => `<tr><td><i class="rsw" style="background:${COL[x.platform]}"></i>${esc(x.name.slice(0, 70))}</td><td>${x.qtyKnown ? Math.round(x.qty).toLocaleString('id-ID') : `${x.rows}×`}</td><td>${rp(x.sales)}</td><td>${rp(x.margin)}</td><td class="f">${pc(x.pct)}</td></tr>`).join('')}</tbody></table>` : ''}
@@ -242,6 +243,18 @@ ${r.products.length ? `<section class="rpage">
    * jumlahnya dari metadata engine; nilainya belum diketahui (bukan Rp0), jadi total yang tampil belum lengkap.
    * @returns {{n: number, teks: string}}
    */
+  /** Kebocoran untung (Langkah 3, KAMUS A.22). PDF hanya untuk Pro, jadi semua tindakan ditampilkan. */
+  function kebocoran(r) {
+    const k = r.kebocoran;
+    if (!r.ready || !k || (k.kerugian.total <= 0 && k.potensi.total <= 0)) return '';
+    const T = (t) => (t.jenis === 'naikkan_ke_impas' ? `Naikkan harga ke ${rp(t.ke)} (harga impas; sekarang rata-rata ${rp(t.dari)})`
+      : t.jenis === 'naikkan_ke_target' ? `Naikkan harga ke ${rp(t.ke)} (harga target; sekarang rata-rata ${rp(t.dari)})` : 'Tinjau harga dan modal, atau hentikan penjualan yang rugi');
+    return `<h3>Kebocoran untung</h3>
+  <p class="rlead">Hilang dari ${k.kerugian.produk.length.toLocaleString('id-ID')} produk rugi: <b class="neg">${k.kerugian.total > 0 ? rp(-k.kerugian.total) : rp(0)}</b>. Potensi tambahan bila ${k.potensi.produk.length.toLocaleString('id-ID')} produk tipis mencapai target margin ${pc(k.target, 0)}: <b>${rp(k.potensi.total)}</b> (perkiraan).${k.voucher && k.voucher.penjual > 0 ? ` Voucher dari kantong toko di Shopee ${rp(k.voucher.penjual)}, sudah termasuk dalam laba.` : ''}</p>
+  ${k.tindakan.length ? `<table class="rtable rsmall"><thead><tr><th>Produk</th><th>Tindakan</th><th>Perkiraan dampak</th></tr></thead>
+    <tbody>${k.tindakan.map((t) => `<tr><td><i class="rsw" style="background:${COL[t.platform]}"></i>${esc(t.name.slice(0, 60))}</td><td>${esc(T(t))}</td><td><b>+${rp(t.dampak)}</b></td></tr>`).join('')}</tbody></table>
+  <p class="rnote">Perkiraan: jumlah terjual dan persen potongan marketplace dianggap tetap sama. Hanya dari produk yang modalnya diketahui${k.belumDinilai.produk ? `; ${k.belumDinilai.produk.toLocaleString('id-ID')} produk belum dinilai karena modalnya belum diisi` : ''}.</p>` : ''}`;
+  }
   function ditahan(r) {
     const K = r.kepastian || {}, why = (K.laba && K.laba.alasanTidakFinal) || [];
     if (!why.includes('konflik_antar_laporan')) return { n: 0, teks: '' };
