@@ -2609,7 +2609,12 @@
     toast(`Membaca ${list.length} file…`);
     const results = await Promise.all([...list].map(readFile));
     if (expect) results.forEach((f) => { f.expect = expect; });
-    for (const f of results) if (f.parsed && f.parsed.kind === 'modal_template') { mergeCatalog(f.parsed.entries); f.note = `${num(f.parsed.entries.length)} modal produk dimuat`; toast(f.note); }
+    for (const f of results) if (f.parsed && f.parsed.kind === 'modal_template') {
+      mergeCatalog(f.parsed.entries);
+      f.note = `${num(f.parsed.entries.length)} modal produk dimuat`;
+      f.warn = isianTakTerbaca(f.parsed.tidakTerbaca);
+      toast(f.warn ? `${f.note}. ${f.warn}` : f.note);
+    }
     const hadIncome = !!last;
     files.push(...results);
     track('unggah-file');
@@ -2619,6 +2624,13 @@
     // Bawa seller ke status unggah agar langkah berikutnya terlihat (terutama di HP).
     const box = $('#upload-status'); if (box && box.firstElementChild) box.scrollIntoView({ block: 'center' });
   }
+  /** Pesan untuk isian template modal yang tidak terbaca (tidak dipakai, bukan dianggap Rp0). Teks polos: di-escape saat ditampilkan. */
+  function isianTakTerbaca(list) {
+    if (!list || !list.length) return '';
+    const contoh = list.slice(0, 3).map((x) => `${x.nama || x.kode}${x.variasi ? ` (${x.variasi})` : ''} ("${x.isi.slice(0, 20)}")`).join(', ');
+    const sisa = list.length > 3 ? ` dan ${num(list.length - 3)} lainnya` : '';
+    return `${num(list.length)} isian modal tidak terbaca dan belum dipakai: ${contoh}${sisa}. Tulis angka saja, contoh 45000.`;
+  }
   function fileStatus(f) {
     const beda = f.expect && f.kind !== f.expect
       ? `<br><span class="warn">Dipilih untuk ${esc(KIND[f.expect] ? KIND[f.expect][1] : 'kategori lain')}, tetapi ${f.kind === 'unknown' ? 'isinya tidak sesuai format itu' : `isinya ${esc(KIND[f.kind] ? KIND[f.kind][1] : 'jenis lain')}. Diproses sesuai isinya`}.</span>` : '';
@@ -2626,7 +2638,7 @@
   }
   function fileStatusDasar(f) {
     if (f.error) return `<span class="bad">${esc(f.error)}</span>`;
-    if (f.note) return `<span class="ok">${esc(f.note)}</span>`;
+    if (f.note) return `<span class="ok">${esc(f.note)}</span>${f.warn ? `<br><span class="warn">${esc(f.warn)}</span>` : ''}`;
     const p = f.parsed;
     if (p.kind === 'shopee_income' || p.kind === 'tiktok_income') {
       const ref = p.kind === 'shopee_income' ? p.check.summaryTotal : p.check.reportSettle;
