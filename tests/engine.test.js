@@ -1166,7 +1166,7 @@ test('I7 insight biaya operasional memakai istilah laba (level, skor, dan nilai 
 });
 
 test('angka format Indonesia di CSV', () => {
-  eq(E.num('Rp1.234.567'), 1234567); eq(E.num('-1.250'), -1250); eq(E.num('12,5'), 125); eq(E.num('/'), 0);
+  eq(E.num('Rp1.234.567'), 1234567); eq(E.num('-1.250'), -1250); eq(E.num('12,5'), 12.5); eq(E.num('/'), 0);   // P1: '12,5' dulu 125; lihat tests/angka.test.js
 });
 /* ===== H2-B3b: refund parsial — nominal refund TIDAK menentukan unit/HPP (data SINTETIS) =====
  * Definisi: refund parsial = ada refund dan sisa nilai pesanan > 0. HPP baris itu = modal × unit terjual bersih,

@@ -10,16 +10,30 @@
  */
 const Engine = (() => {
   /* ---------- utilitas ---------- */
-  const num = (v) => {
+  /** Teks angka → number. Kosong/'-' → 0; tidak terbaca → NaN (lihat `num` dan `angkaIsian`).
+   *  - "45.000" / "45.000,50": titik ribuan, koma desimal.
+   *  - "45000,00" / "12,5": koma diikuti 1–2 digit di akhir = desimal (ribuan selalu 3 digit, jadi tidak bentrok).
+   *  - "1,234" / "1,234,567.89": koma ribuan gaya Inggris. */
+  const bacaNum = (v) => {
     if (v === null || v === undefined || v === '') return 0;
-    if (typeof v === 'number') return isFinite(v) ? v : 0;
+    if (typeof v === 'number') return isFinite(v) ? v : NaN;
     let s = String(v).replace(/[\r\n\t]/g, '').trim();
     if (!s || s === '-' || s === '/') return 0;
     s = s.replace(/^(rp|idr)\s*/i, '').replace(/^-\s*(rp|idr)\s*/i, '-').trim();
     if (/^-?\d{1,3}(\.\d{3})+(,\d+)?$/.test(s)) s = s.replace(/\./g, '').replace(',', '.');
+    else if (/^-?\d+,\d{1,2}$/.test(s)) s = s.replace(',', '.');
     else s = s.replace(/,/g, '');
     const n = Number(s);
-    return isFinite(n) ? n : 0;
+    return isFinite(n) ? n : NaN;
+  };
+  const num = (v) => { const n = bacaNum(v); return isFinite(n) ? n : 0; };
+  /** Isian seller (template modal): hanya angka. "45rb", "45.000.00", teks lain → NaN, bukan 0,
+   *  agar modal yang tidak terbaca tidak dianggap nol (prinsip produk 2). */
+  const angkaIsian = (v) => {
+    if (typeof v === 'number') return isFinite(v) ? v : NaN;
+    const s = str(v).replace(/^(rp|idr)\.?\s*/i, '').trim();
+    if (!/^-?\d[\d.,]*$/.test(s)) return NaN;
+    return bacaNum(s);
   };
   const str = (v) => (v === null || v === undefined ? '' : String(v)).replace(/[\r\t]/g, '').trim();
   const pad = (n) => String(n).padStart(2, '0');
@@ -469,17 +483,19 @@ const Engine = (() => {
   function parseModalTemplate(wb) {
     const f = firstSheetHeader(wb, isModalTemplateHeader);
     const map = colMap(f.aoa[f.h]);
-    const entries = [];
+    const entries = [], tidakTerbaca = [];
     for (const row of f.aoa.slice(f.h + 1)) {
       const g = getter(row, map);
       const raw = g('Modal per unit (Rp)'), rawSampul = g('Harga sampul (Rp)');   // kolom sampul opsional (template lama tanpa kolom ini)
       const kode = str(g('Kode')), nama = str(g('Nama produk')), variasi = str(g('Variasi'));
       if (!kode && !nama) continue;
+      const tolak = (isi) => tidakTerbaca.push({ kode, nama, variasi, isi: str(isi) });
       // Modal per unit diisi → harga beli (didahulukan). Bila kosong, harga sampul (Langkah 2b) dipakai.
-      if (str(raw) !== '') { const cost = num(raw); if (cost >= 0) entries.push({ kode, nama, variasi, cost }); continue; }
-      if (str(rawSampul) !== '') { const sampul = num(rawSampul); if (sampul > 0) entries.push({ kode, nama, variasi, sampul }); }
+      // Isian yang tidak terbaca TIDAK dianggap 0 dan tidak diganti harga sampul: produk = modal belum diisi.
+      if (str(raw) !== '') { const cost = angkaIsian(raw); if (cost >= 0) entries.push({ kode, nama, variasi, cost }); else tolak(raw); continue; }
+      if (str(rawSampul) !== '') { const sampul = angkaIsian(rawSampul); if (sampul > 0) entries.push({ kode, nama, variasi, sampul }); else tolak(rawSampul); }
     }
-    return { kind: 'modal_template', entries };
+    return { kind: 'modal_template', entries, tidakTerbaca };
   }
 
   /* ---------- retur ---------- */
@@ -2693,7 +2709,7 @@ const Engine = (() => {
     return sheets;
   }
 
-  return { kebocoran, num, date, norm, detect, sheetsFromSheetJS, monthName, parseWorkbook, compute, simulate, hpp, shopeeRatio, insights, templateRows, buildCatalog, modeOf,
+  return { kebocoran, num, angkaIsian, date, norm, detect, sheetsFromSheetJS, monthName, parseWorkbook, compute, simulate, hpp, shopeeRatio, insights, templateRows, buildCatalog, modeOf,
     matchShopeeOrder, shopeeLineValue,
     CAT_LABEL, TEMPLATE_HEADER };
 })();
