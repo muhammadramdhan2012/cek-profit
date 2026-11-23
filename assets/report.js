@@ -197,10 +197,10 @@ ${r.products.length ? `<section class="rpage">
   ${kebocoran(r)}
   ${top.length ? `<h3>10 produk dengan laba terbesar</h3>
   <table class="rtable rsmall"><thead><tr><th>Produk</th><th>Terjual</th><th>Penjualan</th><th>Laba</th><th>Margin</th></tr></thead>
-    <tbody>${top.map((x) => `<tr><td><i class="rsw" style="background:${COL[x.platform]}"></i>${esc(x.name.slice(0, 70))}</td><td>${x.qtyKnown ? Math.round(x.qty).toLocaleString('id-ID') : `${x.rows}×`}</td><td>${rp(x.sales)}</td><td>${rp(x.margin)}</td><td class="f">${pc(x.pct)}</td></tr>`).join('')}</tbody></table>` : ''}
+    <tbody>${top.map((x) => `<tr><td><i class="rsw" style="background:${COL[x.platform]}"></i>${esc(x.name.slice(0, 70))}${x.modalRiwayat ? ' <span class="rtag">modal per tanggal · perkiraan</span>' : ''}</td><td>${x.qtyKnown ? Math.round(x.qty).toLocaleString('id-ID') : `${x.rows}×`}</td><td>${rp(x.sales)}</td><td>${rp(x.margin)}</td><td class="f">${pc(x.pct)}</td></tr>`).join('')}</tbody></table>` : ''}
   ${attention.length ? `<h3 class="rmt">Perlu perhatian: rugi atau di bawah target</h3>
   <table class="rtable rsmall"><thead><tr><th>Produk</th><th>Harga rata-rata</th><th>Modal/unit</th><th>Margin %</th><th>Harga impas</th><th>Harga target</th></tr></thead>
-    <tbody>${attention.map((x) => `<tr><td><i class="rsw" style="background:${COL[x.platform]}"></i>${esc(x.name.slice(0, 60))} <span class="rtag ${x.health}">${x.health === 'rugi' ? 'Rugi' : 'Tipis'}</span></td>
+    <tbody>${attention.map((x) => `<tr><td><i class="rsw" style="background:${COL[x.platform]}"></i>${esc(x.name.slice(0, 60))}${x.modalRiwayat ? ' <span class="rtag">modal per tanggal</span>' : ''} <span class="rtag ${x.health}">${x.health === 'rugi' ? 'Rugi' : 'Tipis'}</span></td>
       <td>${rp(x.avgPrice)}</td><td>${rp(x.unitCost)}</td><td class="f ${x.pct < 0 ? 'neg' : ''}">${pc(x.pct)}</td><td>${rp(x.breakEven)}</td><td><b>${rp(x.targetPrice)}</b></td></tr>`).join('')}</tbody></table>${weakNoUnit ? `<p class="rnote">${weakNoUnit} produk lain di bawah target belum punya modal per unit, sehingga saran harganya belum bisa dihitung.</p>` : ''}` : weakNoUnit ? `<p class="rnote">${weakNoUnit} produk di bawah target margin, tetapi modal per unitnya belum diisi sehingga saran harga belum bisa dihitung. Isi modal per produk untuk melihat harga impas dan harga target.</p>` : '<p class="rnote">Tidak ada produk yang rugi atau di bawah target margin.</p>'}
   ${foot}
 </section>` : ''}

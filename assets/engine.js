@@ -926,14 +926,19 @@ const Engine = (() => {
     // Modal = sampul × (100 − diskon pemasok) / 100, tanpa pembulatan. Diskon kosong → entri tidak dipakai (bukan diskon 0).
     const diskonPct = isOk(mitra) && mitra >= 0 && mitra < 100 ? mitra : NaN;
     let sampulTanpaDiskon = 0;
+    /** Modal per unit dari satu isian (harga beli `cost` atau harga sampul `sampul`). NaN bila tidak bisa dihitung. */
+    const modalIsian = (x) => (isOk(x.cost) && x.cost >= 0 ? x.cost : isOk(x.sampul) && x.sampul > 0 && isOk(diskonPct) ? x.sampul * (100 - diskonPct) / 100 : NaN);
     for (const raw of entries) {
+      // Riwayat modal (KAMUS A.23): catatan bertanggal; modal entri yang ada = modal awal (sebelum catatan pertama).
+      const riwayat = normRiwayat(raw.riwayat, modalIsian);
       let base = raw.cost, sampul = null;
       if (!isOk(base) && isOk(raw.sampul) && raw.sampul > 0) {
-        if (!isOk(diskonPct)) { sampulTanpaDiskon++; continue; }
-        sampul = raw.sampul; base = raw.sampul * (100 - diskonPct) / 100;
+        if (!isOk(diskonPct)) { sampulTanpaDiskon++; if (!riwayat) continue; }
+        else { sampul = raw.sampul; base = raw.sampul * (100 - diskonPct) / 100; }
       }
-      if (!isOk(base) || base < 0) continue;
-      const e = { ...raw, baseCost: base, cost: base * mult, ...(sampul ? { hargaSampul: sampul } : {}) };   // baseCost = modal per unit menurut isian penjual
+      if (!riwayat && (!isOk(base) || base < 0)) continue;
+      const e = { ...raw, baseCost: isOk(base) && base >= 0 ? base : NaN, cost: isOk(base) && base >= 0 ? base * mult : NaN, ...(sampul ? { hargaSampul: sampul } : {}),
+        ...(riwayat ? { riwayat, mult } : {}) };   // baseCost = modal per unit menurut isian penjual
       if (e.kode) byCode.set(norm(e.kode), e);
       if (e.nama) {
         if (e.variasi) byName.set(norm(`${e.nama} ${e.variasi}`), e);
@@ -949,6 +954,8 @@ const Engine = (() => {
     const manual = { code: byCode, name: byName };
     return {
       size: byCode.size + byName.size,
+      /** Modal entri pada tanggal pesanan (entri ber-riwayat); entri tanpa riwayat dikembalikan apa adanya. */
+      pada: modalPada,
       /** Jumlah entri harga sampul yang tidak dipakai karena diskon pemasok belum diisi. */
       sampulTanpaDiskon,
       priceList: pl ? { dipakai: pl.siap, baris: pl.baris, konflikKode: pl.konflikKode.size, konflikNama: pl.konflikNama.size } : null,
@@ -967,6 +974,43 @@ const Engine = (() => {
         return null;
       },
     };
+  }
+
+  /**
+   * Riwayat modal (Langkah R1, KAMUS A.23). Catatan sah = tanggal YYYY-MM-DD + harga beli atau harga sampul; jumlah
+   * opsional (> 0). Diurutkan menurut tanggal. Catatan harga sampul tanpa diskon pemasok tetap disimpan dengan modal NaN
+   * (bila catatan itu yang berlaku, modal tidak diketahui; tidak memakai catatan lain). null bila tidak ada catatan.
+   */
+  function normRiwayat(list, modalIsian) {
+    if (!Array.isArray(list)) return null;
+    const out = list.filter((x) => x && /^\d{4}-\d{2}-\d{2}$/.test(String(x.mulai)) && ((isOk(x.cost) && x.cost >= 0) || (isOk(x.sampul) && x.sampul > 0)))
+      .map((x) => ({ mulai: x.mulai, modal: modalIsian(x), jumlah: isOk(x.jumlah) && x.jumlah > 0 ? x.jumlah : null, ...(isOk(x.sampul) && !isOk(x.cost) ? { sampul: x.sampul } : {}) }))
+      .sort((a, b) => a.mulai.localeCompare(b.mulai));
+    return out.length ? out : null;
+  }
+  /**
+   * Modal entri pada tanggal pesanan `tgl` (YYYY-MM-DD…).
+   *  - Entri tanpa riwayat → entri itu sendiri.
+   *  - Tanggal tidak ada → null (tidak diketahui).
+   *  - Belum ada catatan sampai tanggal itu → modal awal bila ada, selain itu null.
+   *  - Semua catatan sampai tanggal itu punya jumlah → rata-rata tertimbang kumulatif (Tingkat 2).
+   *  - Selain itu → catatan terakhir sampai tanggal itu (Tingkat 1).
+   * Hasil: salinan entri dengan baseCost/cost tanggal itu + `metodeRiwayat` ('awal' | 'tanggal' | 'rata'), atau null.
+   */
+  function modalPada(e, tgl) {
+    if (!e || !e.riwayat) return e;
+    const d = String(tgl || '').slice(0, 10);
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(d)) return null;
+    const berlaku = e.riwayat.filter((x) => x.mulai <= d);
+    let base, metode;
+    if (!berlaku.length) { base = e.baseCost; metode = 'awal'; }
+    else if (berlaku.every((x) => x.jumlah)) {
+      const n = berlaku.reduce((a, x) => a + x.jumlah, 0);
+      base = berlaku.every((x) => isOk(x.modal)) ? berlaku.reduce((a, x) => a + x.modal * x.jumlah, 0) / n : NaN;
+      metode = 'rata';
+    } else { base = berlaku[berlaku.length - 1].modal; metode = 'tanggal'; }
+    if (!isOk(base)) return null;
+    return { ...e, baseCost: base, cost: base * (e.mult || 1), metodeRiwayat: metode, ...(metode !== 'awal' ? { hargaSampul: undefined } : {}) };
   }
 
   /** Price list → peta kode/nama (lihat buildCatalog). Mengembalikan null bila tidak ada price list. */
@@ -1324,6 +1368,8 @@ const Engine = (() => {
         else if (reasons.length) hppStatus = 'belum';
         else if (group && !(groupCost[r.groupId].sameUnit && r.qtyStatus === 'terverifikasi')) hppStatus = 'terverifikasi_kelompok';
         else hppStatus = 'terverifikasi';
+        // Riwayat modal (A.23): modal per tanggal / rata-rata kulakan selalu PERKIRAAN (stok awal tidak diketahui).
+        if (entry && entry.metodeRiwayat && entry.metodeRiwayat !== 'awal' && hppStatus.startsWith('terverifikasi')) hppStatus = 'estimasi';
 
         countShopeeStatus(r, hppStatus, reasons, group, qtyBasis, it, hppMethod);
         // SKU di bawah hanya untuk tampilan tabel produk (sama seperti cara lama), tidak dipakai mencari modal.
@@ -1441,7 +1487,11 @@ const Engine = (() => {
      * di `bedaManual` agar seller bisa memilih sendiri. Price list hanya untuk jalur Shopee (TikTok menyusul).
      */
     function shopeeCostOf(it, line) {
-      const m = shopeeCostDari(it, line, MANUAL);
+      const m0 = shopeeCostDari(it, line, MANUAL);
+      // Riwayat modal: modal manual pada tanggal pesanan. Bila entri manual ada tetapi modalnya tidak diketahui pada
+      // tanggal itu, hasilnya tidak diketahui (price list TIDAK dipakai sebagai pengganti; modal manual menang, A.21).
+      const m = m0.entry && m0.entry.riwayat ? { ...m0, entry: catalog.pada(m0.entry, it.orderDate) } : m0;
+      if (m0.entry && !m.entry) return { entry: null, key: null };
       if (!catalog.priceListSiap) return m;
       const p = shopeeCostDari(it, line, HANYA_PL);
       if (m.entry) {
@@ -1614,6 +1664,7 @@ const Engine = (() => {
         if (isOk(n.cost)) p.modal += n.cost; else p.modalKnown = false;
         if (isOk(n.unit)) { p.unitCost = n.unit; p.baseCost = n.base; p.hargaSampul = n.entry && n.entry.hargaSampul ? n.entry.hargaSampul : NaN; }
         if (n.entry) { const sb = n.entry.sumber === 'pricelist' ? 'pricelist' : 'manual'; p.modalSumber = !p.modalSumber || p.modalSumber === sb ? sb : 'campuran'; }   // asal modal (penelusuran)
+        if (n.entry && n.entry.metodeRiwayat && n.entry.metodeRiwayat !== 'awal') p.modalRiwayat = n.entry.metodeRiwayat === 'rata' || p.modalRiwayat === 'rata' ? 'rata' : 'tanggal';
         p.packing = (p.packing || 0) + pack * share;
         if (n.qtyStatus) {   // ringkasan status per produk (mode modal per produk saja); informasi tambahan
           const st = p.statusShopee || (p.statusShopee = { baris: 0, kuantitasBelum: 0, variasiAmbigu: 0, hppTerverifikasi: 0, hppBelum: 0 });
@@ -1705,7 +1756,7 @@ const Engine = (() => {
       let modal = 0, ok = true, unresolved = false;
       const totalQty = lines.reduce((a, l) => a + l.qty, 0) || 1;
       const notes = lines.map((l) => {
-        const entry = catalog.find([l.skuId, l.sellerSku], l.name, l.variant);
+        const entry = catalog.pada(catalog.find([l.skuId, l.sellerSku], l.name, l.variant), r.orderDate);   // riwayat modal (A.23)
         // Unit terjual bersih: tanpa refund = qty; refund penuh = 0 (perilaku lama); refund parsial = qty − unit
         // refund yang terbukti, atau tidak diketahui (NaN).
         const qtyNet = !partial ? l.qty * share : refunded ? l.qty - refunded.get(String(l.skuId)) : NaN;
@@ -1816,6 +1867,7 @@ const Engine = (() => {
         if (isOk(l.cost)) p.modal += l.cost; else p.modalKnown = false;
         if (isOk(l.unit)) { p.unitCost = l.unit; p.baseCost = l.base; p.hargaSampul = l.entry && l.entry.hargaSampul ? l.entry.hargaSampul : NaN; }
         if (l.entry) { const sb = l.entry.sumber === 'pricelist' ? 'pricelist' : 'manual'; p.modalSumber = !p.modalSumber || p.modalSumber === sb ? sb : 'campuran'; }   // asal modal (penelusuran)
+        if (l.entry && l.entry.metodeRiwayat && l.entry.metodeRiwayat !== 'awal') p.modalRiwayat = l.entry.metodeRiwayat === 'rata' || p.modalRiwayat === 'rata' ? 'rata' : 'tanggal';
         p.packing = (p.packing || 0) + pack * w;
       }
     }
@@ -1904,6 +1956,7 @@ const Engine = (() => {
     // (pesanan periode lain) tidak mengurangi laba periode ini. Kerugian dan risikonya dicatat terpisah (periodeLain).
     const oidN = (x) => String(x).replace(/^'/, '');
     const ttOrderIds = new Set([...m.tiktok.values()].filter((x) => x.isOrder).map((x) => oidN(x.id)));
+    const ttOrderDate = new Map([...m.tiktok.values()].filter((x) => x.isOrder && x.orderDate).map((x) => [oidN(x.id), x.orderDate]));
     const diLuarLaporan = (c) => (c.platform === 'shopee' ? !shopeeOrderDate.has(c.orderId) : !ttOrderIds.has(oidN(c.orderId)));
     const cases = [...m.cases.values()].filter((c) => want.has(c.platform) && inRange(c.platform === 'shopee' ? (shopeeOrderDate.get(c.orderId) || c.date) : c.date)).map((c) => {
       const { units, unitStatus, unitSource } = returnUnits(c);
@@ -1911,13 +1964,13 @@ const Engine = (() => {
       if (c.platform === 'shopee') {
         // Modal per unit memakai aturan pencarian Shopee yang sama dengan penjualan (E1/E2): modal milik variasi
         // lain tidak dipakai. Mode lain memakai nilai refund × rasio seperti sebelumnya (tidak memakai jumlah unit).
-        const found = mode === 'produk' ? shopeeCostOf({ name: c.product, productId: '' }, { variant: c.variant, skuVariant: '', sku: '' }) : { entry: null };
+        const found = mode === 'produk' ? shopeeCostOf({ name: c.product, productId: '', orderDate: shopeeOrderDate.get(c.orderId) || c.date }, { variant: c.variant, skuVariant: '', sku: '' }) : { entry: null };
         usesUnits = !!found.entry;
         if (found.entry) { modalSource = `modal_per_unit:${found.key}`; modalKeyOk = found.key !== 'produk_legacy'; }
         else modalSource = mode === 'acuan' ? 'harga_acuan' : 'modal_rata_rata';
         estModal = found.entry ? found.entry.cost * units : c.amount * shopeeOrderCostRatio(c.orderId, shopeeOrderDate.get(c.orderId) || c.date);
       } else if (mode === 'produk') {
-        const unit = ttUnitCost.get(c.skuId) ?? (catalog.find([c.skuId], c.product, c.variant) || {}).cost;
+        const unit = ttUnitCost.get(c.skuId) ?? (catalog.pada(catalog.find([c.skuId], c.product, c.variant), ttOrderDate.get(oidN(c.orderId)) || c.date) || {}).cost;
         usesUnits = isOk(unit);
         modalSource = usesUnits ? 'modal_per_unit:sku_tiktok' : 'modal_rata_rata';
         modalKeyOk = usesUnits;
@@ -1974,7 +2027,7 @@ const Engine = (() => {
         const lines = m.shopeeLines.get(o) || [];
         let modal = NaN, sumberModal = null;
         if (lines.length) {
-          const parts = lines.map((l) => { const { entry } = shopeeCostOf({ name: l.name, productId: '' }, l); return entry && isOk(l.qty) && l.qty > 0 ? entry.cost * l.qty : NaN; });
+          const parts = lines.map((l) => { const { entry } = shopeeCostOf({ name: l.name, productId: '', orderDate: l.orderDate }, l); return entry && isOk(l.qty) && l.qty > 0 ? entry.cost * l.qty : NaN; });
           if (parts.every(isOk)) { modal = parts.reduce((x, y) => x + y, 0); sumberModal = 'export_pesanan'; }
         }
         const kasus = cases.filter((c) => c.platform === 'shopee' && oidN(c.orderId) === o && c.cat !== 'batal');

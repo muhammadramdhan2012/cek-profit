@@ -54,6 +54,7 @@
     toast.t = setTimeout(() => { t.classList.remove('show'); toast.c = setTimeout(() => { t.textContent = ''; }, 300); }, 3640);
   };
   const ICON = {
+    riwayat: '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',
     ringkasan: '<path d="M3 13h8V3H3zM13 21h8V11h-8zM3 21h8v-6H3zM13 3v6h8V3z"/>',
     produk: '<path d="M21 8l-9-5-9 5 9 5 9-5z"/><path d="M3 8v8l9 5 9-5V8"/><path d="M12 13v8"/>',
     biaya: '<path d="M6 3h12v18l-3-2-3 2-3-2-3 2z"/><path d="M9 8h6M9 12h6"/>',
@@ -1085,7 +1086,7 @@
     const pro = isPro(), FREE = BATAS_GRATIS.produk;
     const shown = !pro ? list.slice(0, FREE) : view.showAll ? list : list.slice(0, 20);
     const nameCell = (p) => `<button type="button" class="prod-open" data-prod="${esc(p.key)}">${PLAT_DOT(p.platform)}<span class="pn">${esc(p.name)}</span></button>${p.variant && p.variant !== 'Default' ? `<span class="pv">${esc(p.variant)}</span>` : ''}<span class="sr-only">, ${PNAME[p.platform]}</span>`;
-    const row = (p, i) => `<tr data-prod="${esc(p.key)}" style="--i:${Math.min(i, 12)}" class="h-${HEALTH[p.health] ? p.health : 'unknown'} ${p.key === view.prodKey && sheetKind === 'produk' ? 'is-selected' : ''}"><th scope="row">${nameCell(p)}</th><td>${sold(p)}</td><td>${fmt(p.sales)}</td><td>${p.modalKnown ? fmt(p.modal) : '<span class="unk">Belum diketahui</span>'}</td>
+    const row = (p, i) => `<tr data-prod="${esc(p.key)}" style="--i:${Math.min(i, 12)}" class="h-${HEALTH[p.health] ? p.health : 'unknown'} ${p.key === view.prodKey && sheetKind === 'produk' ? 'is-selected' : ''}"><th scope="row">${nameCell(p)}</th><td>${sold(p)}</td><td>${fmt(p.sales)}</td><td>${p.modalKnown ? `${fmt(p.modal)}${p.modalRiwayat ? '<span class="pv">per tanggal · perkiraan</span>' : ''}` : '<span class="unk">Belum diketahui</span>'}</td>
       <td>${money(p.margin)}</td><td>${ok(p.pct) ? `<span class="mcell"><span class="${p.pct < 0 ? 'neg' : ''}">${pct(p.pct)}</span><span class="mbar" aria-hidden="true"><i style="--m:${Math.max(2, Math.min(100, Math.abs(p.pct) * 200)).toFixed(0)}%"></i></span></span>` : '<span class="faint">—</span>'}</td><td>${ok(p.breakEven) ? fmt(p.breakEven) : '<span class="faint">—</span>'}</td><td>${healthChip(p.health)}</td><td class="row-go" aria-hidden="true"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg></td></tr>`;
     const card = (p, i) => `<li style="--i:${Math.min(i, 12)}"><button type="button" class="pcard" data-prod="${esc(p.key)}" aria-label="${esc(p.name)}, ${PNAME[p.platform]}. Laba ${ok(p.margin) ? fmt(p.margin) : 'belum diketahui'}. Status ${HEALTH[p.health] || HEALTH.unknown}. Buka detail.">
       <span class="pc-top"><span class="pc-name">${PLAT_DOT(p.platform)}${esc(p.name)}</span>${healthChip(p.health)}</span>
@@ -1118,7 +1119,7 @@
         ${item('Terjual', p.qtyKnown ? `${num(p.qty)} barang` : `${num(p.rows)} baris pesanan`, p.qtyKnown ? `${num(p.rows)} baris pesanan` : 'jumlah barang tidak tercatat')}
         ${item('Penjualan', fmt(p.sales))}
         ${item('Potongan marketplace', money(p.fees))}
-        ${item('Modal / HPP', p.modalKnown ? fmt(p.modal) : '<span class="unk">Belum diketahui</span>', ok(p.unitCost) ? `${fmt(p.unitCost)} per unit` : 'modal per unit belum diisi')}
+        ${item('Modal / HPP', p.modalKnown ? fmt(p.modal) : '<span class="unk">Belum diketahui</span>', p.modalRiwayat ? `modal per tanggal pesanan${p.modalRiwayat === 'rata' ? ' (rata-rata kulakan)' : ''} · perkiraan` : ok(p.unitCost) ? `${fmt(p.unitCost)} per unit` : 'modal per unit belum diisi')}
         ${ok(p.packing) && p.packing ? item('Packing', fmt(p.packing)) : ''}
       </dl>
       <h3 class="pd-sec">Harga</h3>
@@ -2468,30 +2469,98 @@
     const isian = (p) => {
       const val = sampul ? (manualSampul(p) ? p.hargaSampul : '') : (ok(p.baseCost) ? p.baseCost : '');
       const label = sampul ? `Harga sampul ${esc(p.name)}` : `${word} per unit ${esc(p.name)}`;
-      return `<div class="cost-in"><input type="number" min="0" step="100" inputmode="numeric" class="${ok(p.baseCost) ? '' : 'missing'}" ${sampul ? 'data-sampul' : 'data-cost'}="${esc(p.key)}" value="${val}" placeholder="Rp" aria-label="${label}" ${demo ? 'disabled' : ''}>${ket(p) ? `<span class="tiny faint">${ket(p)}</span>` : ''}</div>`;
+      const n = (entriModal(p) || {}).riwayat ? entriModal(p).riwayat.length : 0;
+      return `<div class="cost-in"><input type="number" min="0" step="100" inputmode="numeric" class="${ok(p.baseCost) || n ? '' : 'missing'}" ${sampul ? 'data-sampul' : 'data-cost'}="${esc(p.key)}" value="${val}" placeholder="Rp" aria-label="${label}" ${demo ? 'disabled' : ''}>${ket(p) ? `<span class="tiny faint">${ket(p)}</span>` : ''}
+        ${demo ? '' : `<button type="button" class="rw-btn ${n ? 'on' : ''}" data-rw="${esc(p.key)}" aria-expanded="${view.rwKey === p.key}">${svg('riwayat', 13)}${n ? `Riwayat · ${num(n)}` : 'Harga berubah?'}</button>`}</div>`;
     };
     box.innerHTML = `<div class="tablewrap"><table class="data cost-table"><thead><tr><th>Produk</th><th>Terjual</th><th>Harga rata-rata</th><th>${sampul ? 'Harga sampul' : `${word} per unit`}</th></tr></thead><tbody>
       ${shown.map((p) => `<tr><td><i class="sw" style="background:var(--${p.platform})"></i> ${esc(p.name)}<br><span class="tiny faint">${esc(catKey(p) || '-')}${p.modalSumber === 'pricelist' ? ' · dari price list' : p.modalSumber === 'campuran' ? ' · sebagian dari price list' : ''}</span></td>
         <td>${p.qtyKnown ? num(p.qty) : `${p.rows}×`}</td><td>${fmt(p.avgPrice)}</td>
         <td>${isian(p)}</td></tr>`).join('') || '<tr><td colspan="4" class="muted">Tidak ada produk yang cocok.</td></tr>'}</tbody></table></div>
+      ${(() => { const rp = view.rwKey && list.find((x) => x.key === view.rwKey); return rp ? riwayatPanel(rp) : ''; })()}
       ${list.length > 25 ? `<button class="btn sm quiet" type="button" id="cost-all">${view.costAll ? 'Tampilkan lebih sedikit' : `Tampilkan semua ${num(list.length)} produk`}</button>` : ''}`;
   }
   /** Simpan modal satu produk. jenis 'beli' = harga beli; 'sampul' = harga sampul (modal mengikuti diskon pemasok).
    *  Satu entri per produk: isian terakhir menggantikan isian sebelumnya, apa pun jenisnya. Kosong = hapus. */
+  /* ---------- riwayat modal (Langkah R1, KAMUS A.23) ---------- */
+  /** Entri modal manual milik produk (aturan kunci sama dengan setProductCost). */
+  function entriModal(p) {
+    const kode = catKey(p), nama = p.name;
+    return settings.catalog.find((e) => (kode ? Engine.norm(e.kode) === Engine.norm(kode) : !e.kode && Engine.norm(e.nama) === Engine.norm(nama))) || null;
+  }
+  const hariIniISO = () => new Date().toLocaleDateString('sv-SE');
+  function riwayatPanel(p) {
+    const e = entriModal(p) || {};
+    const list = (e.riwayat || []).map((x, i) => ({ ...x, i })).sort((a, b) => a.mulai.localeCompare(b.mulai));
+    const sampul = isiModal() === 'sampul';
+    const s = st();
+    // Pratinjau memakai aturan mesin hitung yang sama (Engine.buildCatalog + pada).
+    const cat = Engine.buildCatalog([{ ...e, kode: 'x', nama: 'x', variasi: '' }], 0, null, s.mitra);
+    const ent = cat.find(['x'], '', '');
+    const modalAwal = ent && ok(ent.baseCost) ? fmt(ent.baseCost) : null;
+    const pakai = (d) => { const h = ent ? cat.pada(ent, d) : null; return h ? `${fmt(h.baseCost)}${h.metodeRiwayat === 'rata' ? ' <span class="tiny faint">rata-rata</span>' : ''}` : '<span class="unk">tidak diketahui</span>'; };
+    const harga = (x) => (ok(x.cost) ? `${fmt(x.cost)} <span class="tiny faint">harga beli</span>` : `${fmt(x.sampul)} <span class="tiny faint">sampul</span>`);
+    return `<div class="rw-panel" role="region" aria-label="Riwayat modal ${esc(p.name)}">
+      <div class="rw-head"><b>Riwayat modal${qi('riwayat_modal')}</b><span class="badge">perkiraan</span><button type="button" class="x rw-close" data-rw="${esc(p.key)}" aria-label="Tutup riwayat modal">×</button></div>
+      <p class="small rw-prod"><i class="sw" style="background:var(--${p.platform})" aria-hidden="true"></i>${esc(p.name)} <span class="tiny faint">${esc(catKey(p) || '')}</span></p>
+      <p class="tiny faint">Harga beli berubah? Catat tanggal dan harganya. Setiap pesanan memakai modal sesuai tanggal pesanan dibuat. Isi jumlah barang (opsional) agar modal dihitung rata-rata, cocok bila stok lama dan baru tercampur.</p>
+      <p class="small">Modal awal (pesanan sebelum catatan pertama): <b>${modalAwal || '<span class="unk">belum diisi</span>'}</b>${modalAwal ? '' : ' · pesanan sebelum catatan pertama tidak dihitung'}</p>
+      ${list.length ? `<ol class="rw-list">${list.map((x) => `<li><span class="rw-d">${tgl(x.mulai)}</span><span>${harga(x)}</span><span class="tiny faint">${x.jumlah ? `${num(x.jumlah)} unit` : 'tanpa jumlah'}</span>
+        <span class="rw-use">dipakai: ${pakai(x.mulai)}</span><button type="button" class="x" data-rw-del="${x.i}" aria-label="Hapus catatan ${tgl(x.mulai)}">×</button></li>`).join('')}</ol>` : ''}
+      <div class="rw-add">
+        <div class="field"><label for="rw-tgl">Mulai tanggal</label><input class="plain" id="rw-tgl" type="date" value="${hariIniISO()}"></div>
+        <div class="field"><label for="rw-harga">${sampul ? 'Harga sampul' : 'Harga beli'} per unit</label><div class="input"><span>Rp</span><input id="rw-harga" type="number" min="0" step="100" inputmode="numeric" placeholder="Misalnya 15000"></div></div>
+        <div class="field"><label for="rw-jml">Jumlah dibeli <span class="tiny faint">(opsional)</span></label><input class="plain" id="rw-jml" type="number" min="1" step="1" inputmode="numeric" placeholder="Misalnya 20"></div>
+        <button class="btn sm primary" type="button" id="rw-tambah" data-rw-key="${esc(p.key)}">Tambah catatan</button>
+      </div>
+      ${sampul && !ok(s.mitra) ? '<p class="note-box warn">Isi diskon dari pemasok agar catatan harga sampul bisa dihitung.</p>' : ''}
+    </div>`;
+  }
+  function tambahRiwayat(key) {
+    const p = last && last.all.products.find((x) => x.key === key);
+    if (!p) return;
+    const mulai = ($('#rw-tgl') || {}).value, harga = +(($('#rw-harga') || {}).value), jml = ($('#rw-jml') || {}).value;
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(mulai || '')) { toast('Isi tanggal mulai.'); return; }
+    if (!(harga > 0)) { toast('Isi harga per unit.'); $('#rw-harga')?.focus(); return; }
+    const rec = { mulai, ...(isiModal() === 'sampul' ? { sampul: harga } : { cost: harga }), ...(+jml > 0 ? { jumlah: Math.round(+jml) } : {}) };
+    let e = entriModal(p);
+    if (!e) { e = { kode: catKey(p), nama: p.name, variasi: '' }; settings.catalog.push(e); }
+    // Satu catatan per tanggal: tanggal yang sama menggantikan catatan lama.
+    const idx = settings.catalog.indexOf(e);
+    settings.catalog[idx] = { ...e, riwayat: [...(e.riwayat || []).filter((x) => x.mulai !== mulai), rec].sort((a, b) => a.mulai.localeCompare(b.mulai)) };
+    settings.modalMode = 'produk';
+    save(); render(); track('riwayat-modal-tambah');
+    toast(`Catatan ${tgl(mulai)} tersimpan.`);
+  }
+  function hapusRiwayat(key, i) {
+    const p = last && last.all.products.find((x) => x.key === key);
+    const e = p && entriModal(p);
+    if (!e || !e.riwayat) return;
+    const idx = settings.catalog.indexOf(e);
+    const riwayat = e.riwayat.filter((_, j) => j !== +i);
+    const { riwayat: _lama, ...tanpa } = e;
+    if (riwayat.length) settings.catalog[idx] = { ...e, riwayat };
+    else if (ok(e.cost) || ok(e.sampul)) settings.catalog[idx] = tanpa;
+    else settings.catalog.splice(idx, 1);
+    save(); render();
+  }
   function setProductCost(key, raw, jenis = 'beli') {
     const p = last && last.all.products.find((x) => x.key === key);
     if (!p) return;
     const kode = catKey(p), nama = p.name;
     const same = (e) => (kode ? Engine.norm(e.kode) === Engine.norm(kode) : !e.kode && Engine.norm(e.nama) === Engine.norm(nama));
+    const riwayat = (settings.catalog.find((e) => same(e) && Array.isArray(e.riwayat)) || {}).riwayat;   // riwayat modal tidak ikut terhapus
     settings.catalog = settings.catalog.filter((e) => !same(e));
-    if (jenis === 'sampul') { if (raw !== '' && +raw > 0) settings.catalog.push({ kode, nama, variasi: '', sampul: +raw }); }
-    else if (raw !== '' && +raw >= 0) settings.catalog.push({ kode, nama, variasi: '', cost: +raw });
+    const rw = riwayat && riwayat.length ? { riwayat } : {};
+    if (jenis === 'sampul' && raw !== '' && +raw > 0) settings.catalog.push({ kode, nama, variasi: '', sampul: +raw, ...rw });
+    else if (jenis !== 'sampul' && raw !== '' && +raw >= 0) settings.catalog.push({ kode, nama, variasi: '', cost: +raw, ...rw });
+    else if (rw.riwayat) settings.catalog.push({ kode, nama, variasi: '', ...rw });
     settings.modalMode = 'produk';
     save();
   }
   function mergeCatalog(entries) {
     const map = new Map(settings.catalog.map((e) => [catKeyOf(e), e]));
-    for (const e of entries) map.set(catKeyOf(e), e);
+    for (const e of entries) { const lama = map.get(catKeyOf(e)); map.set(catKeyOf(e), lama && lama.riwayat ? { ...e, riwayat: lama.riwayat } : e); }   // riwayat modal dipertahankan
     settings.catalog = [...map.values()];
     settings.modalMode = 'produk';
     save();
@@ -3194,6 +3263,9 @@
     else if (t.id === 'pf-logo-del') { profile.logo = ''; saveProfile(); render(); }
     else if (t.id === 'tpl-download') downloadTemplate();
     else if (t.id === 'pl-template') downloadTemplatePL();
+    else if (t.dataset.rw !== undefined) { view.rwKey = view.rwKey === t.dataset.rw ? null : t.dataset.rw; renderCostTable(); const pn = $('.rw-panel'); if (pn) { pn.scrollIntoView({ block: 'nearest', behavior: 'smooth' }); $('#rw-harga')?.focus({ preventScroll: true }); } }
+    else if (t.id === 'rw-tambah') tambahRiwayat(t.dataset.rwKey);
+    else if (t.dataset.rwDel !== undefined) hapusRiwayat(view.rwKey, t.dataset.rwDel);
     else if (t.dataset.isi && !demo) { settings.isiModal = t.dataset.isi; save(); render(); $(`[data-isi="${t.dataset.isi}"]`)?.focus(); }
     else if (t.id === 'pl-simpan') simpanPriceList();
     else if (t.id === 'pl-batal') { plDraft = null; renderPL(); }
