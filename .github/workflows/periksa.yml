@@ -26,5 +26,7 @@ jobs:
           node tests/riwayat.test.js
           node tests/angka.test.js
           node tests/parser-kecil.test.js
+          node tests/sesi.test.js
+          node tests/keluar.test.js
           node tests/cloud.test.js
           node tests/duitku.test.mjs

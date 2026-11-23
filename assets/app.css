@@ -2062,3 +2062,11 @@ button.lk-name:hover { text-decoration: underline; text-underline-offset: 3px; }
   .rw-list li { grid-template-columns: auto minmax(0, 1fr) auto; }
   .rw-list .rw-use { grid-column: 1 / 3; }
 }
+
+/* Keluar akun (M3): pilihan hapus data toko di browser ini */
+.keluar-box { display: grid; gap: 10px; }
+.keluar-box > p { margin: 0; line-height: 1.5; }
+.keluar-box .warn { color: var(--warn); font-weight: 600; }
+.keluar-box .row-gap { margin-top: 6px; }
+.cek-baris { display: flex; gap: 10px; align-items: flex-start; font-size: var(--text-sm); font-weight: var(--weight-semibold); color: var(--ink); cursor: pointer; line-height: 1.45; }
+.cek-baris input { width: 18px; height: 18px; margin: 1px 0 0; accent-color: var(--accent); flex: none; }

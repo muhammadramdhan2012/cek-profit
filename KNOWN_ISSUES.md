@@ -289,7 +289,12 @@ Tabel ini angka audit awal; perubahan setelahnya ada di "Pembaruan status (31 Ok
   - Penggantian pengaturan selain modal (packing, target, profil) tidak memunculkan pemberitahuan.
 
 ### M3 · Keluar akun tidak menghapus data toko di browser
-- **Status:** Terbuka · **Kompleksitas:** S (½ hari)
+- **Status:** Selesai di kode (24 Nov 2026), belum diuji pemilik di produksi · **Kompleksitas:** S (½ hari)
+- **Perbaikan 24 Nov 2026:** saat Keluar (dashboard, halaman Akun, termasuk "Keluar dari semua perangkat") muncul pilihan
+  "Hapus juga data toko di browser ini" (modal & pengaturan, nama toko & logo, price list, catatan retur). Tercentang
+  otomatis hanya bila semua sudah tersimpan di akun dan tidak ada catatan retur; perubahan yang belum terkirim dikirim
+  dulu sebelum bertanya. Tema dan kode akses lama tidak dihapus. Bukti: `node tests/keluar.test.js` (K1–K8); uji
+  Playwright dengan server tiruan: data di akun tetap utuh, masuk lagi → modal kembali; 375px terang/gelap.
 - **Catatan 4 Nov 2026:** pilihan "Ingat saya" (tanpa centang) dan keluar otomatis 30 hari hanya mengakhiri **sesi**; modal,
   nama toko, dan logo di localStorage tetap ada. Masalah ini belum tertangani.
 - **Lokasi:** `assets/app.js:1043`
@@ -298,7 +303,11 @@ Tabel ini angka audit awal; perubahan setelahnya ada di "Pembaruan status (31 Ok
   tersinkron).
 
 ### M4 · Gagal jaringan saat token habis membuat pengguna ter-logout
-- **Status:** Terbuka · **Kompleksitas:** S (½ hari)
+- **Status:** Selesai di kode (24 Nov 2026) · **Kompleksitas:** S (½ hari)
+- **Perbaikan 24 Nov 2026:** sesi dihapus hanya bila server menolak refresh token (400/401/403). Gagal jaringan, 429,
+  dan 5xx: sesi dipertahankan, token kedaluwarsa tidak dikirim (permintaan gagal "Tidak bisa terhubung ke server"),
+  dicoba lagi nanti. Token dari URL (login lewat tautan/Google) tetap ketat: tidak bisa diverifikasi → ditolak.
+  Bukti: `node tests/sesi.test.js` (S1–S8; 4 gagal pada kode lama), `node tests/cloud.test.js`.
 - **Lokasi:** `assets/cloud.js:73-75` (`catch (e) { setSession(null); }`)
 - **Dampak:** sesi hilang saat sinyal buruk, padahal website dijanjikan bisa dipakai offline.
 - **Rekomendasi (audit):** hapus sesi hanya bila server menolak token (status 400/401). Bila jaringan gagal,
