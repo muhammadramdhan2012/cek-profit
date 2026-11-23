@@ -462,19 +462,19 @@ const Engine = (() => {
   }
 
   /* ---------- template modal per produk ---------- */
-  const TEMPLATE_HEADER = ['Platform', 'Kode', 'Nama produk', 'Variasi', 'Terjual', 'Harga jual rata-rata (Rp)', 'Modal per unit (Rp)'];
+  const TEMPLATE_HEADER = ['Platform', 'Kode', 'Nama produk', 'Variasi', 'Terjual', 'Harga jual rata-rata (Rp)', 'Modal per unit (Rp)', 'Harga sampul (Rp)'];
   function parseModalTemplate(wb) {
     const f = firstSheetHeader(wb, isModalTemplateHeader);
     const map = colMap(f.aoa[f.h]);
     const entries = [];
     for (const row of f.aoa.slice(f.h + 1)) {
       const g = getter(row, map);
-      const raw = g('Modal per unit (Rp)');
-      if (str(raw) === '') continue;
-      const cost = num(raw);
+      const raw = g('Modal per unit (Rp)'), rawSampul = g('Harga sampul (Rp)');   // kolom sampul opsional (template lama tanpa kolom ini)
       const kode = str(g('Kode')), nama = str(g('Nama produk')), variasi = str(g('Variasi'));
-      if (!(cost >= 0) || (!kode && !nama)) continue;
-      entries.push({ kode, nama, variasi, cost });
+      if (!kode && !nama) continue;
+      // Modal per unit diisi → harga beli (didahulukan). Bila kosong, harga sampul (Langkah 2b) dipakai.
+      if (str(raw) !== '') { const cost = num(raw); if (cost >= 0) entries.push({ kode, nama, variasi, cost }); continue; }
+      if (str(rawSampul) !== '') { const sampul = num(rawSampul); if (sampul > 0) entries.push({ kode, nama, variasi, sampul }); }
     }
     return { kind: 'modal_template', entries };
   }
@@ -919,9 +919,18 @@ const Engine = (() => {
   function buildCatalog(entries = [], extraPct = 0, priceList = null, mitra = null) {
     const byCode = new Map(), byName = new Map();
     const mult = 1 + (isOk(extraPct) && extraPct > 0 ? extraPct / 100 : 0);
+    // Langkah 2b (KAMUS A.21): entri boleh berisi harga sampul (`sampul`) alih-alih harga beli (`cost`).
+    // Modal = sampul × (100 − diskon pemasok) / 100, tanpa pembulatan. Diskon kosong → entri tidak dipakai (bukan diskon 0).
+    const diskonPct = isOk(mitra) && mitra >= 0 && mitra < 100 ? mitra : NaN;
+    let sampulTanpaDiskon = 0;
     for (const raw of entries) {
-      if (!isOk(raw.cost) || raw.cost < 0) continue;
-      const e = { ...raw, baseCost: raw.cost, cost: raw.cost * mult };   // baseCost = angka yang diisi penjual
+      let base = raw.cost, sampul = null;
+      if (!isOk(base) && isOk(raw.sampul) && raw.sampul > 0) {
+        if (!isOk(diskonPct)) { sampulTanpaDiskon++; continue; }
+        sampul = raw.sampul; base = raw.sampul * (100 - diskonPct) / 100;
+      }
+      if (!isOk(base) || base < 0) continue;
+      const e = { ...raw, baseCost: base, cost: base * mult, ...(sampul ? { hargaSampul: sampul } : {}) };   // baseCost = modal per unit menurut isian penjual
       if (e.kode) byCode.set(norm(e.kode), e);
       if (e.nama) {
         if (e.variasi) byName.set(norm(`${e.nama} ${e.variasi}`), e);
@@ -937,6 +946,8 @@ const Engine = (() => {
     const manual = { code: byCode, name: byName };
     return {
       size: byCode.size + byName.size,
+      /** Jumlah entri harga sampul yang tidak dipakai karena diskon pemasok belum diisi. */
+      sampulTanpaDiskon,
       priceList: pl ? { dipakai: pl.siap, baris: pl.baris, konflikKode: pl.konflikKode.size, konflikNama: pl.konflikNama.size } : null,
       /** Price list siap dipakai (ada baris, dan harga sampul punya diskon pemasok). */
       priceListSiap: !!(pl && pl.siap),
@@ -1598,7 +1609,7 @@ const Engine = (() => {
         else if (n.qty === null || (n.hppReasons || []).includes(REFUND_PARSIAL)) p.qtyKnown = false;   // H2-B3b: unit terjual tidak diketahui
         else p.qty += n.qty * clamp01(n.it.harga > 0 ? (n.it.harga + n.it.refund) / n.it.harga : 0);
         if (isOk(n.cost)) p.modal += n.cost; else p.modalKnown = false;
-        if (isOk(n.unit)) { p.unitCost = n.unit; p.baseCost = n.base; }
+        if (isOk(n.unit)) { p.unitCost = n.unit; p.baseCost = n.base; p.hargaSampul = n.entry && n.entry.hargaSampul ? n.entry.hargaSampul : NaN; }
         if (n.entry) { const sb = n.entry.sumber === 'pricelist' ? 'pricelist' : 'manual'; p.modalSumber = !p.modalSumber || p.modalSumber === sb ? sb : 'campuran'; }   // asal modal (penelusuran)
         p.packing = (p.packing || 0) + pack * share;
         if (n.qtyStatus) {   // ringkasan status per produk (mode modal per produk saja); informasi tambahan
@@ -1800,7 +1811,8 @@ const Engine = (() => {
         p.rows += 1; p.sales += r.sales * w; p.received += r.settle * w;
         if (isOk(l.qtyNet)) p.qty += l.qtyNet; else if (l.qtyNet === undefined) p.qty += l.qty * (l.share ?? 1); else p.qtyKnown = false;   // H2-B3b
         if (isOk(l.cost)) p.modal += l.cost; else p.modalKnown = false;
-        if (isOk(l.unit)) { p.unitCost = l.unit; p.baseCost = l.base; }
+        if (isOk(l.unit)) { p.unitCost = l.unit; p.baseCost = l.base; p.hargaSampul = l.entry && l.entry.hargaSampul ? l.entry.hargaSampul : NaN; }
+        if (l.entry) { const sb = l.entry.sumber === 'pricelist' ? 'pricelist' : 'manual'; p.modalSumber = !p.modalSumber || p.modalSumber === sb ? sb : 'campuran'; }   // asal modal (penelusuran)
         p.packing = (p.packing || 0) + pack * w;
       }
     }
@@ -2404,6 +2416,7 @@ const Engine = (() => {
       fixedMonthly, opex, netProfit: ready ? totalMargin - opex : NaN,
       months: monthList, allMonths: [...allMonths].sort(), buckets: buckets.filter((b) => b.orders > 0),
       products, cases, catSummary: Object.values(catSummary), dupes: m.dupes, target,
+      sampulTanpaDiskon: catalog.sampulTanpaDiskon,
       priceList: catalog.priceList ? { ...catalog.priceList, terpakai: catalog.priceListTerpakai(), knownSalesShopee: S.knownSalesPriceList, bedaManual: [...bedaManual.values()] } : null,
       qtyAssumed, shopeeQty, linesWithoutCost, ttNoDetail, ttNoDetailSales, ttKuantitas: { ...ttKuantitas, indikasiRetur: { ...ttKuantitas.indikasiRetur } }, hasOrderExport: { shopee: m.shopeeLines.size > 0, tiktok: m.tiktokLines.size > 0 },
       productsWithoutCost: products.filter((p) => !p.modalKnown).length,
@@ -2550,7 +2563,9 @@ const Engine = (() => {
     const rows = result.products
       .sort((a, b) => a.platform.localeCompare(b.platform) || b.sales - a.sales)
       .map((p) => [p.platform === 'shopee' ? 'Shopee' : 'TikTok Shop', p.platform === 'tiktok' ? (p.code || p.sku) : (p.sku || p.code), p.name, p.variant || '',
-        p.qtyKnown ? Math.round(p.qty) : p.rows, isOk(p.avgPrice) ? Math.round(p.avgPrice) : '', isOk(p.baseCost) ? p.baseCost : '']);
+        p.qtyKnown ? Math.round(p.qty) : p.rows, isOk(p.avgPrice) ? Math.round(p.avgPrice) : '',
+        // Modal dari harga sampul (isian seller) ditulis sebagai harga sampul agar unggah ulang tetap mengikuti diskon.
+        isOk(p.hargaSampul) && p.modalSumber === 'manual' ? '' : isOk(p.baseCost) ? p.baseCost : '', isOk(p.hargaSampul) && p.modalSumber === 'manual' ? p.hargaSampul : '']);
     return [TEMPLATE_HEADER, ...rows];
   }
 

@@ -230,6 +230,12 @@ const CekInfo = (() => {
       h: 'Memakai diskon pemasok, packing, dan potongan marketplace (dari laporan Anda, atau tarif umum bila belum ada laporan).',
       b: 'Gunakan sebagai pagar saat ikut kampanye atau flash sale: jangan pasang harga di bawah batas impas.',
     },
+    harga_sampul: {
+      t: 'Isi dengan harga sampul',
+      a: 'Untuk reseller yang membeli dengan diskon dari harga sampul atau harga katalog. Cukup ketik harga sampul setiap produk; modal dihitung otomatis.',
+      h: 'Modal = harga sampul × (100% − diskon dari pemasok). Contoh: sampul Rp100.000, diskon 30% → modal Rp70.000. Bila diskon diubah, modal semua produk ikut berubah.',
+      b: 'Berbeda dengan "Diskon dari harga acuan" yang menaksir harga sampul dari harga jual, cara ini memakai harga sampul yang Anda ketik, jadi tetap tepat saat flash sale.',
+    },
     price_list: {
       t: 'Price list dari supplier',
       a: 'Daftar harga dari supplier atau penerbit yang Anda unggah. Modal produk Shopee yang cocok terisi otomatis, termasuk produk baru bulan berikutnya.',

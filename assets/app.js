@@ -2118,7 +2118,7 @@
       const mode = s.modalMode === 'acuan' ? 'acuan' : 'produk';
       return `<div class="tabs" role="tablist" aria-label="Cara menghitung modal">
           <button type="button" role="tab" data-mode="acuan" aria-selected="${mode === 'acuan'}" ${dis}>Diskon dari harga acuan</button>
-          <button type="button" role="tab" data-mode="produk" aria-selected="${mode === 'produk'}" ${dis}>Harga beli per produk</button></div>
+          <button type="button" role="tab" data-mode="produk" aria-selected="${mode === 'produk'}" ${dis}>Modal per produk</button></div>
         ${mode === 'acuan' ? acuanPanel(s, dis) : produkPanel(s, r, dis, type)}`;
     }
     return produkPanel(s, r, dis, type);
@@ -2127,7 +2127,7 @@
     const hasData = r && r.products.length;
     const missing = hasData ? r.products.filter((p) => !ok(p.unitCost)).length : 0;
     const word = (TYPES[type] || { cost: 'Modal' }).cost;
-    const intro = { stok: 'Isi harga beli per unit setiap produk. Biaya kulakan ditambahkan otomatis.', produsen: 'Hitung HPP dengan kalkulator di bawah, lalu terapkan ke produk. Atau isi langsung lewat template.', dropship: 'Isi harga yang Anda bayar ke supplier untuk satu unit. Biaya dropship per pesanan diisi di bagian Biaya lain.', reseller: 'Isi harga beli per unit bila diskon pemasok berbeda-beda per produk.' }[type] || '';
+    const intro = { stok: 'Isi harga beli per unit setiap produk. Biaya kulakan ditambahkan otomatis.', produsen: 'Hitung HPP dengan kalkulator di bawah, lalu terapkan ke produk. Atau isi langsung lewat template.', dropship: 'Isi harga yang Anda bayar ke supplier untuk satu unit. Biaya dropship per pesanan diisi di bagian Biaya lain.', reseller: 'Ketik harga sampul setiap produk (modal dihitung dari diskon pemasok), harga beli, atau unggah price list dari supplier.' }[type] || '';
     return `
       ${intro ? `<p class="small">${intro}</p>` : ''}
       <div class="row-actions"><button class="btn sm" type="button" id="tpl-download" ${hasData ? '' : 'disabled'}>Unduh template modal</button>
@@ -2143,10 +2143,33 @@
         <div class="progress" aria-hidden="true"><i style="width:${Math.round(r.coverage * 100)}%"></i></div>
         ${r.ttNoDetail && !r.hasOrderExport.tiktok ? `<p class="tiny faint">${num(r.ttNoDetail)} pesanan TikTok tidak mencantumkan produk. Unggah export pesanan TikTok, atau isi modal rata-rata.</p>` : ''}
         ${r.qtyAssumed && !r.hasOrderExport.shopee ? '<p class="tiny faint">Jumlah barang Shopee dianggap 1 per produk per pesanan. Unggah export pesanan Shopee agar tepat.</p>' : ''}</div>` : ''}
-      ${hasData ? `<details ${(missing && missing <= 40) || view.costQ ? 'open' : ''}><summary class="small" style="cursor:pointer;font-weight:700">Isi ${lower(word)} per unit langsung di sini</summary>
+      ${hasData ? `<details ${(missing && missing <= 40) || view.costQ ? 'open' : ''}><summary class="small" style="cursor:pointer;font-weight:700">Isi ${isiSampulTersedia(type) && isiModal(s) === 'sampul' ? 'harga sampul' : lower(word)} per produk langsung di sini</summary>
+        ${isiSampulTersedia(type) ? isiModalBar(s, r) : ''}
         <div class="searchrow" style="margin-top:10px"><input class="plain" id="cost-q" type="search" placeholder="Cari produk" value="${esc(view.costQ)}" aria-label="Cari produk"></div><div id="cost-table"></div></details>` : ''}`;
   }
   const lower = (w) => (w === 'HPP' ? w : w.toLowerCase());
+
+  /* ---------- isi modal dengan harga sampul (Langkah 2b, KAMUS A.21) ---------- */
+  /** Pilihan "Harga sampul" untuk reseller (atau seller yang sudah punya isian harga sampul). */
+  const isiSampulTersedia = (type) => !demo && (type === 'reseller' || (settings.catalog || []).some((e) => ok(e.sampul)));
+  /** Cara isi tabel modal: 'sampul' atau 'beli'. Bawaan reseller = harga sampul. */
+  const isiModal = (s = st()) => (demo ? 'beli' : s.isiModal === 'sampul' || s.isiModal === 'beli' ? s.isiModal : typeOf(s) === 'reseller' ? 'sampul' : 'beli');
+  function isiModalBar(s, r) {
+    const mode = isiModal(s);
+    const tanpa = r && r.sampulTanpaDiskon;
+    return `<div class="isi-bar">
+      <div class="isi-pilih"><span class="label">Isi dengan${qi('harga_sampul')}</span>
+        <div class="tabs" role="tablist" aria-label="Cara mengisi modal">
+          <button type="button" role="tab" data-isi="sampul" aria-selected="${mode === 'sampul'}">Harga sampul</button>
+          <button type="button" role="tab" data-isi="beli" aria-selected="${mode === 'beli'}">Harga beli</button></div></div>
+      ${mode === 'sampul' ? `<div class="field isi-diskon"><label for="cost-diskon">Diskon dari pemasok${qi('diskon_pemasok')}</label>
+        <div class="input ${ok(s.mitra) ? '' : 'need'}"><input id="cost-diskon" type="number" min="0" max="99" step="0.5" inputmode="decimal" placeholder="Misalnya 30" value="${ok(s.mitra) ? s.mitra : ''}"><span>%</span></div></div>` : ''}
+      <p class="tiny faint isi-rumus">${mode === 'sampul'
+        ? (ok(s.mitra) ? `Ketik harga sampul. Modal dihitung otomatis: harga sampul × ${String(100 - s.mitra).replace('.', ',')}%. Contoh: sampul Rp100.000 → modal ${fmt(100000 * (100 - s.mitra) / 100)}.` : 'Isi diskon dari pemasok dulu, lalu ketik harga sampul setiap produk.')
+        : 'Ketik harga beli satu unit. Isian terakhir menggantikan isian sebelumnya untuk produk yang sama.'}</p>
+      ${tanpa ? `<p class="note-box warn">${num(tanpa)} produk diisi harga sampul, tetapi diskon pemasok belum diisi. Produk ini belum dihitung dalam laba (tidak dianggap diskon 0%).</p>` : ''}
+    </div>`;
+  }
 
   /* ---------- price list (Langkah 2a, Beta; hanya Shopee) ---------- */
   const PL_KOSONG = -1;
@@ -2179,7 +2202,7 @@
       <p class="small"><b>${esc(pl.namaFile || 'Price list')}</b> · ${num(pl.baris.length)} baris · ${sampul ? 'harga sampul' : 'harga modal'} · diunggah ${tglPendek(pl.diubah)}<br><span class="tiny faint">${plStatusTeks()}</span></p>
       ${sampul ? `<div class="field"><label for="pl-diskon">Diskon dari pemasok${qi('diskon_pemasok')}</label><div class="input ${ok(s.mitra) ? '' : 'need'}"><input id="pl-diskon" type="number" min="0" max="99" step="0.5" inputmode="decimal" placeholder="Misalnya 30" value="${ok(s.mitra) ? s.mitra : ''}"><span>%</span></div><span class="hint">Modal = harga sampul − diskon ini. Contoh: sampul Rp100.000, diskon 30% → modal Rp70.000.</span></div>` : ''}
       ${sampul && !ok(s.mitra) ? '<p class="note-box warn">Isi diskon dari pemasok agar price list dipakai. Tanpa diskon, modal tidak dihitung (tidak dianggap diskon 0%).</p>' : ''}
-      ${s.modalMode === 'acuan' ? '<p class="note-box warn">Price list tidak dipakai selama cara modal "Diskon dari harga acuan" dipilih. Pilih "Harga beli per produk".</p>' : ''}
+      ${s.modalMode === 'acuan' ? '<p class="note-box warn">Price list tidak dipakai selama cara modal "Diskon dari harga acuan" dipilih. Pilih "Modal per produk".</p>' : ''}
       ${P && r.totalSales ? `<ul class="pl-hasil small">
         <li><b>${pct(r.coverage, 0)}</b> penjualan sudah punya modal; <b>${pct(P.knownSalesShopee / r.totalSales, 0)}</b> memakai modal dari price list.</li>
         <li>${num(prodPL)} produk Shopee memakai modal dari price list.</li>
@@ -2358,7 +2381,7 @@
     const resellerCustom = (s.coret || 100) !== 100 || s.periods.length > 1 || s.periods.some((q) => q.markup || q.disc || q.start);
     const sell = 100 * (1 + (p.markup || 0) / 100) * (1 - (p.disc || 0) / 100), cost = 100 - (s.mitra || 0);
     return `<p class="small muted">Untuk reseller yang membeli dengan potongan dari harga acuan pemasok, misalnya harga sampul buku atau harga katalog distributor.</p>
-      ${demo ? '' : `<p class="note-box">${plAktif() ? 'Price list Anda tersimpan, tetapi tidak dipakai di cara ini. Pilih "Harga beli per produk" agar modal diambil dari price list.' : 'Punya price list (daftar harga sampul) dari supplier? Pilih "Harga beli per produk" untuk mengunggahnya. Modal dihitung per judul, bukan ditaksir dari harga jual.'}</p>`}
+      ${demo ? '' : `<p class="note-box">${plAktif() ? 'Price list Anda tersimpan, tetapi tidak dipakai di cara ini. Pilih "Modal per produk" agar modal diambil dari price list.' : 'Ingin modal tepat per judul, juga saat flash sale? Pilih "Modal per produk": ketik harga sampul setiap judul, atau unggah price list dari supplier.'}</p>`}
       <div class="fields two align">
         <div class="field"><label for="s-mitra">Diskon dari pemasok${qi('diskon_pemasok')}</label><div class="input ${!ready && files.length ? 'need' : ''}"><input id="s-mitra" type="number" min="0" max="99" step="0.5" inputmode="decimal" placeholder="Misalnya 30" value="${ready ? s.mitra : ''}" ${dis}><span>%</span></div><span class="hint">Harga beli = harga acuan − diskon ini. Contoh: mitra penerbit dapat diskon 30% dari harga sampul.</span></div>
       </div>
@@ -2385,19 +2408,35 @@
     list.sort((a, b) => (ok(a.baseCost) - ok(b.baseCost)) || b.sales - a.sales);
     const shown = view.costAll ? list : list.slice(0, 25);
     const word = (TYPES[demo ? 'stok' : typeOf(st())] || { cost: 'Modal' }).cost;
-    box.innerHTML = `<div class="tablewrap"><table class="data cost-table"><thead><tr><th>Produk</th><th>Terjual</th><th>Harga rata-rata</th><th>${word} per unit</th></tr></thead><tbody>
+    const sampul = isiModal() === 'sampul';
+    const manualSampul = (p) => ok(p.hargaSampul) && p.modalSumber === 'manual';
+    /** Keterangan kecil di bawah isian: dari mana modal berasal, dan berapa modalnya bila diisi harga sampul. */
+    const ket = (p) => {
+      if (!ok(p.baseCost)) return '';
+      if (sampul) return manualSampul(p) ? `modal ${fmt(p.baseCost)}` : p.modalSumber === 'pricelist' ? `modal ${fmt(p.baseCost)} dari price list` : `harga beli ${fmt(p.baseCost)}`;
+      return manualSampul(p) ? `dari harga sampul ${fmt(p.hargaSampul)}` : '';
+    };
+    const isian = (p) => {
+      const val = sampul ? (manualSampul(p) ? p.hargaSampul : '') : (ok(p.baseCost) ? p.baseCost : '');
+      const label = sampul ? `Harga sampul ${esc(p.name)}` : `${word} per unit ${esc(p.name)}`;
+      return `<div class="cost-in"><input type="number" min="0" step="100" inputmode="numeric" class="${ok(p.baseCost) ? '' : 'missing'}" ${sampul ? 'data-sampul' : 'data-cost'}="${esc(p.key)}" value="${val}" placeholder="Rp" aria-label="${label}" ${demo ? 'disabled' : ''}>${ket(p) ? `<span class="tiny faint">${ket(p)}</span>` : ''}</div>`;
+    };
+    box.innerHTML = `<div class="tablewrap"><table class="data cost-table"><thead><tr><th>Produk</th><th>Terjual</th><th>Harga rata-rata</th><th>${sampul ? 'Harga sampul' : `${word} per unit`}</th></tr></thead><tbody>
       ${shown.map((p) => `<tr><td><i class="sw" style="background:var(--${p.platform})"></i> ${esc(p.name)}<br><span class="tiny faint">${esc(catKey(p) || '-')}${p.modalSumber === 'pricelist' ? ' · dari price list' : p.modalSumber === 'campuran' ? ' · sebagian dari price list' : ''}</span></td>
         <td>${p.qtyKnown ? num(p.qty) : `${p.rows}×`}</td><td>${fmt(p.avgPrice)}</td>
-        <td><input type="number" min="0" step="100" inputmode="numeric" class="${ok(p.baseCost) ? '' : 'missing'}" data-cost="${esc(p.key)}" value="${ok(p.baseCost) ? p.baseCost : ''}" placeholder="Rp" aria-label="${word} per unit ${esc(p.name)}" ${demo ? 'disabled' : ''}></td></tr>`).join('') || '<tr><td colspan="4" class="muted">Tidak ada produk yang cocok.</td></tr>'}</tbody></table></div>
+        <td>${isian(p)}</td></tr>`).join('') || '<tr><td colspan="4" class="muted">Tidak ada produk yang cocok.</td></tr>'}</tbody></table></div>
       ${list.length > 25 ? `<button class="btn sm quiet" type="button" id="cost-all">${view.costAll ? 'Tampilkan lebih sedikit' : `Tampilkan semua ${num(list.length)} produk`}</button>` : ''}`;
   }
-  function setProductCost(key, raw) {
+  /** Simpan modal satu produk. jenis 'beli' = harga beli; 'sampul' = harga sampul (modal mengikuti diskon pemasok).
+   *  Satu entri per produk: isian terakhir menggantikan isian sebelumnya, apa pun jenisnya. Kosong = hapus. */
+  function setProductCost(key, raw, jenis = 'beli') {
     const p = last && last.all.products.find((x) => x.key === key);
     if (!p) return;
     const kode = catKey(p), nama = p.name;
     const same = (e) => (kode ? Engine.norm(e.kode) === Engine.norm(kode) : !e.kode && Engine.norm(e.nama) === Engine.norm(nama));
     settings.catalog = settings.catalog.filter((e) => !same(e));
-    if (raw !== '' && +raw >= 0) settings.catalog.push({ kode, nama, variasi: '', cost: +raw });
+    if (jenis === 'sampul') { if (raw !== '' && +raw > 0) settings.catalog.push({ kode, nama, variasi: '', sampul: +raw }); }
+    else if (raw !== '' && +raw >= 0) settings.catalog.push({ kode, nama, variasi: '', cost: +raw });
     settings.modalMode = 'produk';
     save();
   }
@@ -2412,10 +2451,11 @@
     if (!last) return;
     const wb = XLSX.utils.book_new();
     const ws = XLSX.utils.aoa_to_sheet(Engine.templateRows(last.all));
-    ws['!cols'] = [{ wch: 11 }, { wch: 22 }, { wch: 52 }, { wch: 16 }, { wch: 9 }, { wch: 20 }, { wch: 20 }];
+    ws['!cols'] = [{ wch: 11 }, { wch: 22 }, { wch: 52 }, { wch: 16 }, { wch: 9 }, { wch: 20 }, { wch: 20 }, { wch: 18 }];
     XLSX.utils.book_append_sheet(wb, ws, 'Modal');
     XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([['Petunjuk'],
       ['1. Isi kolom "Modal per unit (Rp)": harga beli atau produksi satu unit, tanpa ongkir ke pembeli.'],
+      ['   Atau isi "Harga sampul (Rp)" saja: modal dihitung dari harga sampul dikurangi diskon pemasok yang Anda isi di Cek Untung. Bila keduanya diisi, Modal per unit yang dipakai.'],
       ['2. Jangan ubah kolom "Kode"; kolom ini dipakai untuk mencocokkan dengan laporan marketplace.'],
       ['3. Boleh menambah baris: isi Kode (SKU) atau Nama produk, lalu Modal per unit.'],
       ['4. Simpan, lalu unggah file ini di Cek Untung, halaman Data & modal.']]), 'Petunjuk');
@@ -2905,7 +2945,7 @@
     }
     if (demo) return;
     const n = (x, lo, hi) => (x === '' ? null : Math.min(hi, Math.max(lo, +x)));
-    if (id === 's-mitra' || id === 'pl-diskon') settings.mitra = n(v, 0, 99);
+    if (id === 's-mitra' || id === 'pl-diskon' || id === 'cost-diskon') settings.mitra = n(v, 0, 99);
     else if (id === 's-packing') settings.packing = n(v, 0, 1e9);
     else if (id === 's-coret') settings.coret = Math.max(1, +v || 100);
     else if (id === 's-fallback') settings.fallbackPct = n(v, 0, 99);
@@ -2931,7 +2971,7 @@
   });
   document.addEventListener('change', (e) => {
     const t = e.target;
-    if (t.dataset.cost !== undefined) { setProductCost(t.dataset.cost, t.value); const y = window.scrollY; render(); window.scrollTo({ top: y }); return; }
+    if (t.dataset.cost !== undefined || t.dataset.sampul !== undefined) { const jenis = t.dataset.sampul !== undefined ? 'sampul' : 'beli'; setProductCost(t.dataset[jenis === 'sampul' ? 'sampul' : 'cost'], t.value, jenis); const y = window.scrollY; render(); window.scrollTo({ top: y }); return; }
     if (t.dataset.case) { caseState[t.dataset.case] = t.value; store.set(KEYS.cases, caseState); render(); }
     else if (t.id === 'from' || t.dataset.filter === 'from') { view.from = t.value; render(); }
     else if (t.id === 'to' || t.dataset.filter === 'to') { view.to = t.value; render(); }
@@ -3105,6 +3145,7 @@
     else if (t.id === 'pf-logo-del') { profile.logo = ''; saveProfile(); render(); }
     else if (t.id === 'tpl-download') downloadTemplate();
     else if (t.id === 'pl-template') downloadTemplatePL();
+    else if (t.dataset.isi && !demo) { settings.isiModal = t.dataset.isi; save(); render(); $(`[data-isi="${t.dataset.isi}"]`)?.focus(); }
     else if (t.id === 'pl-simpan') simpanPriceList();
     else if (t.id === 'pl-batal') { plDraft = null; renderPL(); }
     else if (t.id === 'pl-hapus') hapusPriceList();

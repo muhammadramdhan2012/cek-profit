@@ -1996,3 +1996,11 @@ body.fb-open .fb-fab { box-shadow: var(--ring), var(--shadow-lg); }
 #pl-map select.compact { max-width: 100%; width: 100%; min-width: 0; }
 #pl-map .field { min-width: 0; }
 #pl-box .subsec { grid-template-columns: minmax(0, 1fr); }
+
+/* Isi modal dengan harga sampul (Langkah 2b) */
+.isi-bar { display: grid; gap: 10px; margin-top: 12px; padding: 14px; border: 1px solid var(--line); border-radius: 14px; background: var(--surface-2); }
+.isi-pilih { display: flex; align-items: center; justify-content: space-between; gap: 8px 12px; flex-wrap: wrap; }
+.isi-pilih .label { font-weight: 700; font-size: 13.5px; }
+.isi-diskon { max-width: 220px; margin: 0; }
+.isi-rumus { margin: 0; }
+.cost-in { display: grid; gap: 3px; min-width: 110px; }
