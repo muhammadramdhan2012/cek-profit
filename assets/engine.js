@@ -45,10 +45,16 @@ const Engine = (() => {
     }
     if (v instanceof Date && !isNaN(v)) return `${v.getFullYear()}-${pad(v.getMonth() + 1)}-${pad(v.getDate())}`;
     const s = str(v);
-    let m = s.match(/^(\d{4})[-/](\d{1,2})[-/](\d{1,2})/);
-    if (m) return `${m[1]}-${pad(m[2])}-${pad(m[3])}`;
-    m = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
-    if (m) return `${m[3]}-${pad(m[2])}-${pad(m[1])}`;
+    // Tanggal mustahil (bulan 13, tanggal 31 Feb) → kosong, bukan tanggal rusak.
+    const jadi = (y, mo, d) => {
+      const t = new Date(Date.UTC(+y, +mo - 1, +d));
+      return t.getUTCFullYear() === +y && t.getUTCMonth() === +mo - 1 && t.getUTCDate() === +d ? `${y}-${pad(mo)}-${pad(d)}` : '';
+    };
+    let m = s.match(/^(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})(?!\d)/);
+    if (m) return jadi(m[1], m[2], m[3]);
+    // dd/mm/yyyy, dd-mm-yyyy, dd.mm.yyyy: format Seller Centre Indonesia (urutan bulan/tanggal gaya Amerika belum didukung, lihat P2).
+    m = s.match(/^(\d{1,2})([-/.])(\d{1,2})\2(\d{4})(?!\d)/);
+    if (m) return jadi(m[4], m[3], m[1]);
     return '';
   };
   /** Nama produk dinormalisasi untuk pencocokan: huruf kecil, spasi tunggal, tanpa tanda baca. */
@@ -185,8 +191,12 @@ const Engine = (() => {
         for (const row of adj.slice(ah + 1)) {
           const g = getter(row, am);
           const tipe = str(g('Tipe Penyesuaian | Deskripsi'));
-          if (!tipe) break;
-          const d = date(g('Tanggal Penyesuaian Dibuat')), amt = num(g('Biaya Penyesuaian')), oid = str(g('No. Pesanan Terhubung'));
+          // L3: baris kosong di tengah tabel dilewati (dulu: berhenti, penyesuaian sesudahnya hilang).
+          // Baris total/jumlah di bawah tabel = akhir tabel, agar tidak terhitung dobel.
+          if (/^(total|jumlah)\b/i.test(tipe)) break;
+          const amtRaw = g('Biaya Penyesuaian');
+          if (!tipe || str(amtRaw) === '' || !isFinite(bacaNum(amtRaw))) continue;
+          const d = date(g('Tanggal Penyesuaian Dibuat')), amt = num(amtRaw), oid = str(g('No. Pesanan Terhubung'));
           adjustments.push({ key: `${d}|${tipe}|${amt}|${oid}`, date: d, type: tipe, amount: amt, orderId: oid });
         }
       }
