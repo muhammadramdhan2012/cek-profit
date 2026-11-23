@@ -31,6 +31,7 @@ Status persetujuan per 14 Okt 2026 (diperbarui 19 Okt 2026):
     (A.19.1, beserta penerapannya yang diterima pemilik).
   - modal dari price list dan harga sampul (A.21, 13 Nov 2026).
   - kebocoran untung (A.22, 24 Nov 2026).
+  - riwayat modal / modal per tanggal (A.23, 24 Nov 2026).
 - **Belum disetujui:** semua rumus, bobot, ambang batas, aturan pencocokan, dan definisi keuangan rinci lain di bagian A,
   termasuk tabel klasifikasi A.10, rumus A.16, dan detail A.19.2–A.19.4. Statusnya **DIUSULKAN — BELUM DISETUJUI**.
 
@@ -444,6 +445,31 @@ diketahui) yang dinilai; produk tanpa modal disebut terpisah ("belum dinilai"), 
 
 Penerapan: `assets/engine.js` (`kebocoran`, `shopee.voucherPenjual`, `shopee.diskonShopee`), `assets/app.js`
 (`bocorCard`), `assets/report.js`, `assets/akses.js` (`FITUR.kebocoran`). Tes: `node tests/kebocoran.test.js`.
+
+### A.23 Riwayat modal (modal per tanggal)
+Status: **DITETAPKAN pemilik (24 Nov 2026**, desain dua tingkat 19 Nov 2026; rincian: "ikuti saran kamu").
+
+Untuk harga beli yang berubah (permintaan pengguna 16 Nov 2026). Catatan riwayat = tanggal mulai + harga beli atau harga
+sampul + jumlah (opsional). Modal yang sudah diisi sebelumnya untuk produk itu = **modal awal**.
+
+- **Tanggal patokan:** tanggal pesanan dibuat.
+- **Tingkat 1** (ada catatan tanpa jumlah sampai tanggal itu): modal per unit = catatan terakhir dengan tanggal mulai ≤
+  tanggal pesanan.
+- **Tingkat 2** (semua catatan sampai tanggal itu punya jumlah): modal per unit = Σ(modal × jumlah) ÷ Σ jumlah dari
+  semua catatan dengan tanggal mulai ≤ tanggal pesanan (rata-rata tertimbang kumulatif). Cocok untuk stok tercampur.
+- **Sebelum catatan pertama:** modal awal bila ada; bila tidak ada → **tidak diketahui** (tidak dihitung, tidak dianggap
+  nol, tidak memakai catatan pertama). Pesanan tanpa tanggal pada produk ber-riwayat → tidak diketahui.
+- Catatan harga sampul = harga sampul × (100% − diskon pemasok) (A.21); diskon kosong → catatan itu tidak bisa dihitung
+  dan bila catatan itu yang berlaku, modal tidak diketahui.
+- **Status: perkiraan** untuk kedua tingkat (stok awal tidak diketahui). Modal awal tanpa catatan yang berlaku tidak
+  menurunkan status.
+- Riwayat adalah modal manual: menang atas price list (A.21); bila modal manual tidak diketahui pada tanggal itu, price
+  list **tidak** dipakai sebagai pengganti. Berlaku untuk Shopee dan TikTok; retur memakai modal pada tanggal pesanannya.
+- Tanpa pembulatan. Aturan refund parsial (A.19.1) tetap berlaku.
+- Keterbatasan diketahui: rata-rata kumulatif tertinggal bila harga naik terus berbulan-bulan.
+
+Penerapan: `assets/engine.js` (`normRiwayat`, `modalPada`, `catalog.pada`), `assets/app.js` (panel riwayat di tabel
+modal). Tes: `node tests/riwayat.test.js`.
 
 ## B. Implementasi kode saat ini (`assets/engine.js`, per 14 Okt 2026, commit `a31eddb`)
 

@@ -230,6 +230,12 @@ const CekInfo = (() => {
       h: 'Memakai diskon pemasok, packing, dan potongan marketplace (dari laporan Anda, atau tarif umum bila belum ada laporan).',
       b: 'Gunakan sebagai pagar saat ikut kampanye atau flash sale: jangan pasang harga di bawah batas impas.',
     },
+    riwayat_modal: {
+      t: 'Riwayat modal',
+      a: 'Untuk harga beli yang berubah-ubah. Setiap pesanan memakai modal sesuai tanggal pesanan dibuat.',
+      h: 'Tanpa jumlah: dipakai harga dari catatan terakhir sebelum tanggal pesanan. Dengan jumlah di semua catatan: dipakai rata-rata (harga × jumlah) ÷ total jumlah dari kulakan sampai tanggal itu, cocok bila stok lama dan baru tercampur. Pesanan sebelum catatan pertama memakai modal awal; bila modal awal kosong, pesanan itu tidak dihitung.',
+      b: 'Selalu berlabel perkiraan, karena stok yang tersisa sebelum catatan pertama tidak diketahui.',
+    },
     kebocoran: {
       t: 'Kebocoran untung',
       a: 'Di mana untung Anda hilang: produk yang laku tetapi rugi, dan produk yang untungnya di bawah target margin.',

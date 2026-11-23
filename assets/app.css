@@ -2039,3 +2039,26 @@ button.lk-name:hover { text-decoration: underline; text-underline-offset: 3px; }
   .bocor-hero, .bocor-cols { grid-template-columns: minmax(0, 1fr); }
   .lk-name { flex-wrap: wrap; row-gap: 0; }
 }
+
+/* Riwayat modal (Langkah R1) */
+.rw-btn { display: inline-flex; align-items: center; gap: 5px; justify-self: start; border: 0; background: none; padding: 2px 0; font: inherit; font-size: 12px; font-weight: 650; color: var(--ink-3); cursor: pointer; }
+.rw-btn:hover, .rw-btn.on { color: var(--accent); }
+.rw-panel { display: grid; gap: 10px; margin-top: 12px; padding: 14px; border-radius: 14px; border: 1px solid var(--line); background: var(--surface-2); }
+.rw-panel p { margin: 0; }
+.rw-head { display: flex; align-items: center; gap: 8px; }
+.rw-close { margin-left: auto; }
+.rw-prod { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-weight: 650; }
+.rw-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.rw-list li { display: grid; grid-template-columns: auto minmax(0, 1fr) auto auto auto; align-items: center; gap: 4px 12px; padding: 8px 10px; border-radius: 10px; background: var(--surface-1); border: 1px solid var(--line-subtle); font-size: 13.5px; }
+.rw-d { font-weight: 700; white-space: nowrap; }
+.rw-use { font-size: 12.5px; color: var(--ink-2); white-space: nowrap; }
+.rw-add { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)) auto; gap: 10px; align-items: end; }
+.rw-add .field { margin: 0; min-width: 0; }
+.rw-add input.plain { width: 100%; min-width: 0; }
+.rw-add .input input { min-width: 0; }
+@media (max-width: 720px) {
+  .rw-add { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+  .rw-add .btn { grid-column: 1 / -1; }
+  .rw-list li { grid-template-columns: auto minmax(0, 1fr) auto; }
+  .rw-list .rw-use { grid-column: 1 / 3; }
+}
