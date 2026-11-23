@@ -21,5 +21,6 @@ jobs:
           node tests/akses.test.js
           node tests/sinkron.test.js
           node tests/pricelist.test.js
+          node tests/sampul.test.js
           node tests/cloud.test.js
           node tests/duitku.test.mjs
