@@ -66,6 +66,9 @@ const CekCloud = (() => {
   async function http(path, { method = 'GET', body, headers = {}, auth = true } = {}) {
     if (!cfg.url) throw new CloudError(0, { message: 'Akun belum diaktifkan di situs ini.' });
     if (auth) await ensureFresh();
+    // M4: token habis dan belum bisa diperbarui (jaringan/server gangguan) → jangan kirim token kedaluwarsa,
+    // karena jawaban 401-nya akan menghapus sesi. Anggap tidak terhubung; sesi dipertahankan untuk dicoba lagi.
+    if (auth && session && session.refresh_token && session.expires_at <= nowSec()) throw new CloudError(0, {});
     const h = { apikey: cfg.key, 'Content-Type': 'application/json', ...headers };
     if (auth && session) h.Authorization = `Bearer ${session.access_token}`;
     let res;
@@ -89,6 +92,7 @@ const CekCloud = (() => {
     write(session);
     emit();
   }
+  const tokenDitolak = (status) => status === 400 || status === 401 || status === 403;
   async function ensureFresh() {
     if (!session || !session.refresh_token) return;
     if (session.expires_at - nowSec() > 60) return;
@@ -97,7 +101,11 @@ const CekCloud = (() => {
         try {
           const s = await http('/auth/v1/token?grant_type=refresh_token', { method: 'POST', body: { refresh_token: session.refresh_token }, auth: false });
           setSession(s);
-        } catch (e) { setSession(null); }
+        } catch (e) {
+          // M4: sesi dihapus hanya bila server MENOLAK refresh token (dicabut/kedaluwarsa/tidak dikenal).
+          // Gagal jaringan (status 0), terlalu banyak permintaan (429), atau server gangguan (5xx): sesi dipertahankan.
+          if (tokenDitolak(e.status)) setSession(null);
+        }
         finally { refreshing = null; }
       })();
     }

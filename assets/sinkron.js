@@ -149,6 +149,46 @@ const CekSinkron = (() => {
     return { status: 'terkirim', settings: g.settings, profile: p, kalah: g.kalah };
   }
 
-  return { kunciModal, tandai, tandaiProfil, gabung, gabungProfil, sinkronkan, SIMPAN_HAPUS_MS };
+  /* ---------- keluar akun (M3): data toko di browser ini ---------- */
+  /** Status sinkron terakhir yang dicatat dashboard ('1' = semua tersimpan di akun, '0' = ada yang belum).
+   *  Dibaca halaman Akun, yang tidak menjalankan sinkron sendiri. */
+  const STATUS_KEY = 'cekprofit.sinkron';
+  /** Data toko yang dihapus saat keluar bila seller memilihnya: modal & pengaturan, nama toko & logo, price list,
+   *  catatan retur. Sengaja TIDAK dihapus: tema (bukan data toko) dan kode akses lama (bukan data toko; bila hilang,
+   *  seller harus menempelkannya lagi). */
+  const DATA_TOKO = ['cekprofit.v3', 'cekprofit.profile', 'cekprofit.pricelist', 'cekprofit.cases', STATUS_KEY];
+  const baca = (st, k) => { try { return st.getItem(k); } catch (e) { return null; } };
+  const jumlahCatatan = (raw) => { try { const o = JSON.parse(raw || '{}'); return o && typeof o === 'object' ? Object.values(o).filter((v) => v !== '' && v != null).length : 0; } catch (e) { return 0; } };
+  /**
+   * Isi pertanyaan "Hapus juga data toko di browser ini?" saat keluar.
+   * @param {object} st  localStorage (atau tiruan)
+   * @param {boolean|null} tersimpan  dashboard: status sinkron saat ini; null = baca STATUS_KEY (halaman Akun)
+   * @returns {{tanya:boolean, centang:boolean, belumTersimpan:boolean, catatanRetur:number}}
+   *   tanya=false bila tidak ada data toko di browser (langsung keluar). Dicentang otomatis hanya bila semua sudah
+   *   tersimpan di akun DAN tidak ada catatan retur (catatan retur hanya ada di browser ini).
+   */
+  function pilihanKeluar(st, tersimpan = null) {
+    const ada = DATA_TOKO.some((k) => k !== STATUS_KEY && baca(st, k) != null);
+    const ok = tersimpan === null ? baca(st, STATUS_KEY) === '1' : !!tersimpan;
+    const catatanRetur = jumlahCatatan(baca(st, 'cekprofit.cases'));
+    return { tanya: ada, centang: ada && ok && !catatanRetur, belumTersimpan: ada && !ok, catatanRetur };
+  }
+  /** Teks pertanyaan keluar (teks polos; halaman yang menampilkan tetap meng-escape). Sama di dashboard dan halaman Akun. */
+  function teksKeluar(pil) {
+    const catatan = [];
+    if (pil.belumTersimpan) catatan.push({ jenis: 'warn', teks: 'Ada perubahan yang belum tersimpan ke akun. Bila dihapus, perubahan itu hilang.' });
+    else catatan.push({ jenis: 'info', teks: 'Data Anda tetap aman di akun dan muncul lagi saat Anda masuk.' });
+    if (pil.catatanRetur) catatan.push({ jenis: 'warn', teks: `${pil.catatanRetur} catatan retur hanya tersimpan di browser ini dan ikut terhapus.` });
+    return { label: 'Hapus juga data toko di browser ini (modal, nama toko, logo, price list)', catatan,
+      saran: 'Disarankan bila perangkat ini dipakai orang lain.' };
+  }
+  /** Hapus data toko dari browser ini. Mengembalikan jumlah kunci yang dihapus. */
+  function hapusDataToko(st) {
+    let n = 0;
+    for (const k of DATA_TOKO) { try { if (st.getItem(k) != null) { st.removeItem(k); n++; } } catch (e) { /* abaikan */ } }
+    return n;
+  }
+
+  return { kunciModal, tandai, tandaiProfil, gabung, gabungProfil, sinkronkan, SIMPAN_HAPUS_MS, STATUS_KEY, DATA_TOKO, pilihanKeluar, teksKeluar, hapusDataToko };
 })();
 if (typeof module !== 'undefined') module.exports = CekSinkron;

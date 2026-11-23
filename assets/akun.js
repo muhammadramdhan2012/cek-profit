@@ -19,6 +19,18 @@
   const OFFLINE = 'Tidak ada koneksi internet. Periksa koneksi Anda, lalu coba lagi.';
   let view = params.get('mode') === 'daftar' ? 'daftar' : 'masuk';
   let message = null;   // { ok?: boolean, text }
+  // M3: pertanyaan "hapus data toko" sebelum keluar. null = tidak sedang bertanya; 'logout' | 'logout-semua'.
+  let tanyaKeluar = null;
+  const lokal = () => { try { return localStorage; } catch (e) { return { getItem: () => null, setItem() {}, removeItem() {} }; } };
+  /** Panel pertanyaan keluar (menggantikan tombol Keluar). Halaman ini tidak menyinkronkan sendiri: status sinkron
+   *  dibaca dari catatan dashboard (CekSinkron.STATUS_KEY). */
+  function panelKeluar() {
+    const pil = CekSinkron.pilihanKeluar(lokal()), tx = CekSinkron.teksKeluar(pil);
+    return `<div class="keluar-box" role="group" aria-labelledby="keluar-judul"><b id="keluar-judul">${tanyaKeluar === 'logout-semua' ? 'Keluar dari semua perangkat?' : 'Keluar dari akun?'}</b>
+      <label class="cek-baris"><input type="checkbox" id="hapus-data" ${pil.centang ? 'checked' : ''}><span>${esc(tx.label)}</span></label>
+      ${tx.catatan.map((c) => `<p class="${c.jenis === 'warn' ? 'warn' : ''}">${esc(c.teks)}</p>`).join('')}<p>${esc(tx.saran)}</p>
+      <div class="row-gap"><button class="btn primary" type="button" id="keluar-ya">Keluar</button><button class="btn quiet" type="button" id="keluar-batal">Batal</button></div></div>`;
+  }
   let draft = {};       // isian (selain kata sandi) tetap terisi setelah pesan error
   const DRAFT_IDS = ['em', 'nm', 'hp'];
 
@@ -111,7 +123,7 @@
         <div class="field"><label for="pf-wa">Nomor HP/WhatsApp</label><input class="plain" id="pf-wa" type="tel" value="${esc(waIsi)}" data-awal="${esc(wa)}" inputmode="tel" autocomplete="tel" maxlength="20" placeholder="Contoh: 081234567890" aria-describedby="pf-wa-h pf-wa-err"><span class="hint" id="pf-wa-h">Untuk bantuan dan konfirmasi pembayaran. Tidak dipakai untuk iklan dan tidak diverifikasi otomatis.</span>${errSpan('pf-wa')}</div>
         <button class="btn" type="submit">Simpan profil</button>
       </form>
-      <div class="row-gap"><a class="btn primary" href="${esc(next)}" style="flex:1">Buka dashboard</a><button class="btn quiet" type="button" id="logout">Keluar</button></div>
+      ${tanyaKeluar ? panelKeluar() : `<div class="row-gap"><a class="btn primary" href="${esc(next)}" style="flex:1">Buka dashboard</a><button class="btn quiet" type="button" id="logout">Keluar</button></div>`}
       <button class="btn link" type="button" data-view="sandi-baru" style="justify-self:center">Ganti kata sandi</button>
       <div class="sesi-note"><p class="tiny faint">${cloud.auth.ingat() ? `Perangkat ini diingat. Anda tetap masuk sampai menekan Keluar, atau otomatis keluar bila website tidak dibuka ${cloud.auth.IDLE_HARI} hari.` : 'Perangkat ini tidak diingat: Anda keluar otomatis saat browser ditutup.'}</p>
         <button class="btn link" type="button" id="logout-semua">Keluar dari semua perangkat</button></div>`;
@@ -272,15 +284,27 @@
         if (next !== 'dashboard.html') ss.set(NEXT_KEY, next);
         location.assign(await cloud.auth.oauthStart('google', here(), { ingat: ingatDipilih() }));
       } catch (err) { busy(t, false); showErr('Masuk dengan Google gagal dimulai. Silakan coba lagi.'); }
-    } else if (t.id === 'logout-semua') {
-      busy(t, true, 'Memproses…');
-      const ok = await cloud.auth.signOut({ semua: true }); track('keluar-semua');
-      view = 'masuk';
-      message = ok ? { ok: true, text: 'Anda sudah keluar dari semua perangkat. Perangkat lain akan keluar paling lambat dalam 1 jam.' }
-        : { ok: false, text: 'Anda sudah keluar dari perangkat ini, tetapi server tidak terjangkau sehingga perangkat lain belum dikeluarkan. Masuk lagi saat online, lalu ulangi.' };
-      render();
-    } else if (t.id === 'logout') { await cloud.auth.signOut(); view = 'masuk'; message = { ok: true, text: 'Anda sudah keluar.' }; render(); }
+    } else if (t.id === 'logout' || t.id === 'logout-semua') {
+      // Tidak ada data toko di browser ini → langsung keluar tanpa pertanyaan.
+      tanyaKeluar = t.id;
+      if (CekSinkron.pilihanKeluar(lokal()).tanya) { render(); const c = document.getElementById('hapus-data'); if (c) c.focus(); }
+      else await keluar(false);
+    } else if (t.id === 'keluar-batal') { tanyaKeluar = null; render(); }
+    else if (t.id === 'keluar-ya') { busy(t, true, 'Memproses…'); const c = document.getElementById('hapus-data'); await keluar(!!(c && c.checked)); }
   });
+  async function keluar(hapus) {
+    const semua = tanyaKeluar === 'logout-semua';
+    tanyaKeluar = null;
+    const ok = await cloud.auth.signOut(semua ? { semua: true } : undefined);
+    if (semua) track('keluar-semua');
+    if (hapus) CekSinkron.hapusDataToko(lokal());
+    const tambah = hapus ? ' Data toko di browser ini sudah dihapus.' : '';
+    view = 'masuk';
+    message = !semua ? { ok: true, text: `Anda sudah keluar.${tambah}` }
+      : ok ? { ok: true, text: `Anda sudah keluar dari semua perangkat. Perangkat lain akan keluar paling lambat dalam 1 jam.${tambah}` }
+        : { ok: false, text: `Anda sudah keluar dari perangkat ini, tetapi server tidak terjangkau sehingga perangkat lain belum dikeluarkan. Masuk lagi saat online, lalu ulangi.${tambah}` };
+    render();
+  }
   // Saat mengetik: daftar syarat sandi diperbarui; pesan salah dihapus begitu isian sudah benar (tidak menyalahkan lebih awal).
   document.addEventListener('input', (e) => {
     const i = e.target;

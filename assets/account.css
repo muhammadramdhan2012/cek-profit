@@ -153,3 +153,11 @@ body.acct .acct-note { max-width: 46ch; line-height: 1.55; }
 .fb-item { display: grid; gap: 10px; padding: 14px 16px; border: 1px solid var(--border); border-radius: var(--r); background: var(--surface); }
 .fb-meta { display: flex; flex-wrap: wrap; gap: 6px 12px; align-items: center; }
 .fb-pesan { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; font-size: var(--text-base); color: var(--ink); }
+
+/* Keluar akun (M3): pilihan hapus data toko di browser ini */
+.keluar-box { display: grid; gap: 10px; padding: 14px; border: 1px solid var(--border-subtle); border-radius: var(--r); background: var(--surface-2); }
+.keluar-box > b { font-size: var(--text-base); }
+.keluar-box > p { margin: 0; font-size: var(--text-xs); line-height: 1.5; color: var(--ink-3); }
+.keluar-box > p.warn { color: var(--warn); font-weight: 600; }
+.cek-baris { display: flex; gap: 10px; align-items: flex-start; font-size: var(--text-sm); font-weight: var(--weight-semibold); color: var(--ink); cursor: pointer; line-height: 1.45; }
+.cek-baris input { width: 18px; height: 18px; margin: 1px 0 0; accent-color: var(--accent); flex: none; }

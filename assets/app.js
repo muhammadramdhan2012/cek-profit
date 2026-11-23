@@ -229,6 +229,42 @@
     if (sinkronLagi) { sinkronLagi = false; queueSync(); }
   }
   window.addEventListener('online', () => { if (account.user && /dicoba lagi/.test(account.sync)) queueSync(0); });
+  /* ---------- keluar akun (M3) ---------- */
+  const lokal = () => { try { return localStorage; } catch (e) { return { getItem: () => null, setItem() {}, removeItem() {} }; } };
+  const tunggu = (ms) => new Promise((r) => setTimeout(r, ms));
+  /** Semua data toko sudah tersimpan di akun: pengaturan/modal/profil, dan price list bila dipakai. */
+  const tersimpanSemua = () => account.sync === 'Tersimpan di akun' && !(plAktif() && plSync.status !== 'akun');
+  /** Kirim perubahan yang masih menunggu sebelum bertanya, agar pilihan "hapus data" tidak menghilangkan isian terbaru. */
+  async function simpanSebelumKeluar() {
+    if (!account.user || demo) return;
+    clearTimeout(syncTimer);
+    await Promise.race([sinkronAkun(), tunggu(8000)]);
+    for (let i = 0; i < 40 && (sedangSinkron || plSync.sedang); i++) await tunggu(200);
+  }
+  async function tanyaKeluar() {
+    await simpanSebelumKeluar();
+    const pil = CekSinkron.pilihanKeluar(lokal(), demo ? true : tersimpanSemua());
+    if (demo || !pil.tanya) return keluar(false);
+    const tx = CekSinkron.teksKeluar(pil), d = dlg();
+    d.innerHTML = `${dHead('Keluar dari akun?', esc(tx.saran))}
+      <div class="d-body keluar-box"><label class="cek-baris"><input type="checkbox" id="hapus-data" ${pil.centang ? 'checked' : ''}><span>${esc(tx.label)}</span></label>
+        ${tx.catatan.map((c) => `<p class="small ${c.jenis === 'warn' ? 'warn' : 'muted'}">${esc(c.teks)}</p>`).join('')}
+        <div class="row-gap"><button class="btn primary" type="button" id="keluar-ya">Keluar</button><button class="btn quiet" type="button" data-close>Batal</button></div></div>`;
+    if (!d.open) d.showModal();
+  }
+  async function keluar(hapus) {
+    if (dlg().open) dlg().close();
+    account.user = null;   // lebih dulu: render yang terpicu saat keluar tidak menulis catatan status sinkron lagi
+    await cloud.auth.signOut();
+    if (hapus) {
+      CekSinkron.hapusDataToko(lokal());
+      try { sessionStorage.setItem('cekprofit.keluar', 'hapus'); } catch (e) { /* abaikan */ }
+      location.replace(location.pathname);   // muat ulang: file laporan di memori halaman ikut hilang
+      return;
+    }
+    account.profile = null; account.reports = null;
+    toast('Anda sudah keluar.'); render(); loadStatus();
+  }
   /** Simpan price list di browser ini. Gagal (kuota penuh) diberitahukan, bukan diam-diam. */
   function simpanPLLokal() {
     if (priceList === null) { store.del(KEYS.pricelist); return true; }
@@ -357,6 +393,8 @@
   const initials = (s) => (s || '?').trim().split(/\s+/).slice(0, 2).map((w) => w[0]).join('').toUpperCase();
   function renderAccount() {
     const p = account.profile, u = account.user;
+    // Catatan untuk halaman Akun (pertanyaan saat keluar): '1' = semua data toko sudah tersimpan di akun.
+    if (u && !demo) { try { localStorage.setItem(CekSinkron.STATUS_KEY, tersimpanSemua() ? '1' : '0'); } catch (e) { /* abaikan */ } }
     const pro = isPro();
     const planText = demo ? 'Mode contoh' : proAkun(p) ? `Pro sampai ${tgl(p.pro_until)}` : license.ok ? `Pro (kode)${license.exp ? ` sampai ${tgl(license.exp)}` : ''}` : betaGratis() ? `Beta gratis sampai ${tgl(betaGratis())}` : 'Paket gratis';
     const beta = !demo && !proSendiri() && betaGratis();
@@ -3198,7 +3236,8 @@
     if (t.dataset.close !== undefined) { dlg().close(); return; }
     if (t.dataset.videoModal) { openVideoModal(t.dataset.videoModal); return; }
     if (t.id === 'acct-toggle') { account.menu = !account.menu; renderAccount(); return; }
-    if (t.id === 'logout') { await cloud.auth.signOut(); account.user = null; account.profile = null; account.reports = null; account.menu = false; toast('Anda sudah keluar.'); render(); loadStatus(); return; }
+    if (t.id === 'logout') { account.menu = false; renderAccount(); await tanyaKeluar(); return; }
+    if (t.id === 'keluar-ya') { await keluar(!!($('#hapus-data') && $('#hapus-data').checked)); return; }
     if (t.id === 'code-apply') {
       busy(t, true);
       const res = await checkLicense($('#code-input').value, false);
@@ -3330,6 +3369,7 @@
   render();
   const savedCode = store.get(KEYS.license, '');
   if (savedCode) checkLicense(savedCode, true).then(render);
+  try { if (sessionStorage.getItem('cekprofit.keluar') === 'hapus') { sessionStorage.removeItem('cekprofit.keluar'); toast('Anda sudah keluar. Data toko di browser ini sudah dihapus.'); } } catch (e) { /* abaikan */ }
   if (account.user) loadAccount(); else loadStatus();
   if (params.has('bayar')) cekPembayaran(String(params.get('bayar')));
   else if (hash === 'upgrade' || params.has('pro')) openUpgrade();
