@@ -856,7 +856,7 @@ test('Batch 4: Pajak Seller hanya staging/localhost, isian tidak disimpan/dikiri
 test('Masa beta gratis: config, isPro, label beta terpisah dari Pro sendiri, pembayaran tetap tertutup, pengumuman', () => {
   const cfg = src('config.js'), appJs = src('app.js'), idx = fs.readFileSync(path.join(__dirname, '..', 'index.html'), 'utf8');
   const priv = fs.readFileSync(path.join(__dirname, '..', 'privasi.html'), 'utf8');
-  truthy(/betaGratisSampai: '2026-12-13',/.test(cfg) && /hargaPenggunaAwal: 'Rp99\.000',/.test(cfg), 'tanggal beta & harga pengguna awal di config');
+  truthy(/betaGratisSampai: '2027-01-31',/.test(cfg) && /hargaPenggunaAwal: 'Rp99\.000',/.test(cfg), 'tanggal beta & harga pengguna awal di config');
   truthy(/whatsapp: '',/.test(cfg) && !/proPembayaranAktif: true/.test(cfg), 'beta tidak membuka pembayaran');
   truthy(/const isPro = \(\) => demo \|\| proSendiri\(\) \|\| !!betaGratis\(\);/.test(appJs), 'isPro memakai masa beta');
   // Langkah 0 (13 Nov 2026): aturan tanggal, beta, dan Pro pindah ke assets/akses.js. Perilakunya diuji langsung di
@@ -869,7 +869,7 @@ test('Masa beta gratis: config, isPro, label beta terpisah dari Pro sendiri, pem
   truthy(/if \(account\.user\) loadAccount\(\); else loadStatus\(\);/.test(appJs) && /render\(\);\n    loadStatus\(\);\n  \}/.test(appJs), 'status dimuat saat buka dashboard & setelah akun dimuat');
   truthy(/dHead\('Masa beta gratis'/.test(appJs) && /harga khusus \$\{harga\}/.test(appJs), 'dialog beta + janji harga khusus');
   truthy((idx.match(/data-beta hidden/g) || []).length >= 2, 'pengumuman beta di halaman depan, tersembunyi bawaan');
-  truthy(/Masa beta\.<\/b> Sampai 13 Desember 2026/.test(priv), 'ketentuan masa beta');
+  truthy(/Masa beta\.<\/b> Sampai 31 Januari 2027/.test(priv), 'ketentuan masa beta');
 });
 test('GoatCounter: aktif dengan kode cekuntung; hanya nama halaman yang dikirim (tanpa ?query/#hash berisi token)', () => {
   const vm = require('vm');

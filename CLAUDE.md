@@ -238,7 +238,7 @@ node tests/cloud.test.js          # memakai server tiruan tests/mock-supabase.js
 - ⏳ Tarif umum di `assets/tarif.js` dicek 14 Okt 2026 dari sumber sekunder; perlu dicocokkan ulang saat marketplace mengumumkan perubahan tarif.
 - ✅ Bantuan WhatsApp aktif sejak 3 Nov 2026 (`waSupport`, nomor dari pemilik); nomor pembayaran `whatsapp` tetap kosong.
 - ⏳ Harga Pro ditetapkan pemilik (21 Okt 2026): Rp149.000; diubah pemilik 1 Nov 2026 menjadi **Rp149.000 per tahun**, berlaku 1 tahun, tanpa perpanjangan otomatis (harga peluncuran; reguler yang direncanakan Rp299.000), tampil di halaman depan sejak rilis UI. Harga reguler tidak ditampilkan dan Jasa laporan tidak ditawarkan di halaman publik (keputusan pemilik 22 Okt 2026; nilai `jasa` di config dipertahankan). Pembelian untuk umum belum dibuka. Pembayaran online Duitku (Sandbox, khusus akun penguji) dibangun 5 Nov 2026 untuk syarat verifikasi Duitku; kebijakan refund dan ketentuan pembelian di `privasi.html#pembelian` (keputusan pemilik 5 Nov 2026).
-- ⏳ Masa beta gratis (keputusan pemilik 1 Nov 2026): semua fitur Pro terbuka sampai 13 Des 2026 (`betaGratisSampai` di
+- ⏳ Masa beta gratis (keputusan pemilik 1 Nov 2026): semua fitur Pro terbuka sampai **31 Jan 2027** (diperpanjang pemilik 24 Nov 2026 dari 13 Des 2026, karena pembelian belum dibuka; `betaGratisSampai` di
   `assets/config.js`), lalu kunci Pro kembali otomatis. Pengguna yang membuat akun selama beta dijanjikan harga khusus
   Rp99.000 **untuk tahun pertama**, bila membeli dalam 30 hari sejak pembelian dibuka, perpanjangan harga normal (`hargaPenggunaAwal`).
 - ✅ Tahap 2 (keputusan pemilik 1 Nov 2026), `supabase/schema.sql` sudah dijalankan pemilik: tanggal server, masa beta

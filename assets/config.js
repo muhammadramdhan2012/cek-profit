@@ -39,7 +39,7 @@ window.CEK_CONFIG = {
   // Pengguna yang membuat akun selama beta dijanjikan harga khusus Rp99.000 untuk TAHUN PERTAMA Pro (perpanjangan
   // berikutnya harga normal), bila membeli dalam 30 hari sejak pembelian dibuka. Keputusan pemilik 1 Nov 2026.
   // Tidak membuka pembayaran (pembayaran tetap mengikuti `whatsapp`).
-  betaGratisSampai: '2026-12-13',
+  betaGratisSampai: '2027-01-31',
   hargaPenggunaAwal: 'Rp99.000',
 
   // Analytics ramah privasi (GoatCounter, gratis, tanpa cookie).
