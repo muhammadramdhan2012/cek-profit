@@ -96,5 +96,39 @@ test('R12 sinkron M2: riwayat bagian dari entri modal (menambah catatan = peruba
   eq(S.gabung(b, awal, 80, K).settings.catalog[0].riwayat.length, 1);
 });
 
+/* ---------- jumlah pesanan per periode harga (tampilan riwayat, 24 Nov 2026) ----------
+ * Definisi: pesanan masuk ke catatan terakhir yang mulai pada/sebelum tanggal pesanannya (sama dengan A.23); pesanan
+ * sebelum catatan pertama = "sebelum"; tanpa tanggal dihitung terpisah. Satu pesanan dihitung sekali per produk. */
+test('P1 tglPesanan per produk dari laporan: 2 pesanan, 2 tanggal', () => {
+  const p = hitung(A([{ mulai: '2026-11-25', cost: 15000 }], { cost: 10000 })).products.find((x) => x.name === 'Buku A');
+  eq(p.tglPesanan, { '2026-11-20': 1, '2026-11-27': 1 });
+});
+test('P2 pesanan dengan dua baris produk yang sama dihitung sekali', () => {
+  const ord = [{ id: 'O1', orderDate: '2026-11-20 10:00', items: [{ name: 'Buku A', harga: 30000 }, { name: 'Buku A', harga: 30000 }] }];
+  const p = hitung(A([], { cost: 10000 }), {}, ord, [{ order: 'O1', name: 'Buku A', qty: 2, price: 30000, skuVariant: 'A' }]).products.find((x) => x.name === 'Buku A');
+  eq(p.tglPesanan, { '2026-11-20': 1 });
+});
+test('P3 pesananPerPeriode: batas tanggal inklusif, sebelum catatan pertama, tanpa tanggal, urutan bebas', () => {
+  const t = { '2026-11-01': 2, '2026-11-08': 3, '2026-11-14': 1, '2026-11-15': 4, '2026-11-30': 1, '': 2 };
+  eq(E.pesananPerPeriode(t, ['2026-11-15', '2026-11-08']), { sebelum: 2, periode: [4, 5], tanpaTanggal: 2 });
+});
+test('P4 pesananPerPeriode: tanpa catatan / tanpa pesanan / tanggal catatan rusak diabaikan', () => {
+  eq(E.pesananPerPeriode({ '2026-11-01': 2 }, []), { sebelum: 2, periode: [], tanpaTanggal: 0 });
+  eq(E.pesananPerPeriode({}, ['2026-11-01']), { sebelum: 0, periode: [0], tanpaTanggal: 0 });
+  eq(E.pesananPerPeriode(null, ['rusak', '2026-11-01']), { sebelum: 0, periode: [0], tanpaTanggal: 0 });
+});
+test('P5 pesananAntara: [dari, sampai) dan tanpa batas akhir; tanpa tanggal tidak dihitung', () => {
+  const t = { '2026-11-01': 2, '2026-11-08': 3, '2026-11-15': 4, '': 9 };
+  eq(E.pesananAntara(t, '2026-11-08', '2026-11-15'), 3);
+  eq(E.pesananAntara(t, '2026-11-08'), 7);
+  eq(E.pesananAntara(t, ''), 9);
+});
+test('P6 konsisten dengan modal per tanggal: jumlah per periode = pesanan yang memakai harga itu', () => {
+  const r = hitung(A([{ mulai: '2026-11-25', cost: 15000 }], { cost: 10000 }));
+  const p = r.products.find((x) => x.name === 'Buku A');
+  eq(E.pesananPerPeriode(p.tglPesanan, ['2026-11-25']), { sebelum: 1, periode: [1], tanpaTanggal: 0 });
+  eq(p.modal, 25000, 'modal 20 Nov = 10.000 (awal), 27 Nov = 15.000');
+});
+
 console.log(failed ? `${failed} uji GAGAL` : 'Semua uji lulus');
 process.exit(failed ? 1 : 0);

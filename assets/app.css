@@ -2070,3 +2070,101 @@ button.lk-name:hover { text-decoration: underline; text-underline-offset: 3px; }
 .keluar-box .row-gap { margin-top: 6px; }
 .cek-baris { display: flex; gap: 10px; align-items: flex-start; font-size: var(--text-sm); font-weight: var(--weight-semibold); color: var(--ink); cursor: pointer; line-height: 1.45; }
 .cek-baris input { width: 18px; height: 18px; margin: 1px 0 0; accent-color: var(--accent); flex: none; }
+
+/* Riwayat harga versi mudah (desain disetujui pemilik 24 Nov 2026): ajakan, filter, kolom riwayat, garis waktu, catat banyak produk */
+.rw-ajak { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; padding: 12px 14px; border-radius: 14px; background: var(--accent-soft); border: 1px solid color-mix(in srgb, var(--accent) 28%, transparent); }
+.rw-ajak p { margin: 0; flex: 1 1 260px; line-height: 1.5; color: var(--ink); }
+.rw-ajak-ic { color: var(--accent); display: inline-flex; flex: none; }
+.rw-ajak .btn { display: inline-flex; align-items: center; gap: 6px; }
+.cf-row { display: flex; gap: 6px; flex-wrap: wrap; margin: 12px 0 10px; }
+.cf-chip { min-height: 36px; padding: 0 12px; border-radius: var(--r-pill); border: 1px solid transparent; background: var(--surface-2); color: var(--ink-2); font: inherit; font-size: 12.5px; font-weight: 650; cursor: pointer; }
+.cf-chip:hover { color: var(--ink); }
+.cf-chip.on { background: var(--accent); color: var(--accent-ink); }
+.cf-chip.cf-belum:not(.on) { background: var(--warn-soft); color: var(--warn); }
+.cost-now { display: grid; gap: 2px; min-width: 110px; }
+.cost-now b { font-variant-numeric: tabular-nums; }
+.rw-chip { min-height: 36px; padding: 0 12px; border-radius: 10px; border: 1px dashed var(--line-strong); background: var(--surface-1); color: var(--accent); font: inherit; font-size: 12.5px; font-weight: 650; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
+.rw-chip.on { border: 1px solid color-mix(in srgb, var(--accent) 35%, transparent); background: var(--accent-soft); font-weight: 750; }
+.rw-chip.open { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+.cost-table tr.rw-open > td { background: color-mix(in srgb, var(--accent) 4%, var(--surface-1)); border-bottom-color: transparent; }
+.cost-table tr.rw-row > td { background: color-mix(in srgb, var(--accent) 4%, var(--surface-1)); padding-top: 0; }
+.rw-tl { display: grid; gap: 14px; padding: 4px 0 8px; }
+.rw-tl p { margin: 0; }
+.rw-line { list-style: none; margin: 0; padding: 0; display: grid; grid-auto-flow: column; grid-auto-columns: minmax(150px, 1fr); position: relative; overflow-x: auto; padding-bottom: 4px; }
+.rw-pt { position: relative; display: grid; justify-items: center; align-content: start; gap: 3px; text-align: center; padding: 0 8px; }
+.rw-pt::before { content: ""; position: absolute; top: 9px; left: 0; right: 0; height: 2px; background: var(--line-strong); }
+.rw-pt:first-child::before { left: 50%; } .rw-pt:last-child::before { right: 50%; } .rw-pt:only-child::before { display: none; }
+.rw-dot { position: relative; width: 14px; height: 14px; margin: 3px 0 6px; border-radius: 50%; border: 3px solid var(--ink-3); background: var(--surface-1); }
+.rw-pt.now .rw-dot { width: 18px; height: 18px; margin: 1px 0 4px; border-color: var(--accent); background: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+.rw-harga { font-size: 15px; font-variant-numeric: tabular-nums; }
+.rw-pt.now .rw-harga { color: var(--accent); }
+.rw-ket { font-size: 12px; color: var(--ink-2); line-height: 1.4; }
+.rw-naik { color: var(--cost); font-weight: 700; font-size: 12px; } .rw-turun { color: var(--good); font-weight: 700; font-size: 12px; } .rw-sama { color: var(--ink-3); font-size: 12px; }
+.rw-del { border: 0; background: none; padding: 6px 8px; min-height: 32px; font: inherit; font-size: 12px; color: var(--ink-3); cursor: pointer; text-decoration: underline; }
+.rw-del:hover { color: var(--cost); }
+.rw-tl .rw-add { padding: 12px; border-radius: 14px; background: var(--surface-1); border: 1px solid var(--line); }
+.rw-awal { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.rw-awal input { width: 140px; min-height: 40px; border-radius: 10px; border: 1px solid var(--border-strong); background: var(--surface-1); color: var(--ink); padding: 6px 10px; font: inherit; font-variant-numeric: tabular-nums; }
+/* panel catat banyak produk */
+.ct-body { display: grid; gap: 16px; }
+.ct-body > p { margin: 0; }
+.ct-body .field { margin: 0; }
+.ct-label { font-size: var(--text-sm); font-weight: var(--weight-semibold); }
+.ct-cepat { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-top: 6px; }
+.ct-tgl { flex: 1 1 150px; min-width: 0; }
+.ct-hasil { display: grid; gap: 4px; margin-top: 6px; }
+.ct-hasil:empty { display: none; }
+.ct-hasil-i { display: flex; justify-content: space-between; align-items: center; gap: 10px; min-height: 48px; padding: 8px 12px; border-radius: 12px; border: 1px solid var(--line); background: var(--surface-1); color: var(--ink); font: inherit; text-align: left; cursor: pointer; }
+.ct-hasil-i:hover { border-color: var(--accent); }
+.ct-hasil-i > span:first-child { display: grid; gap: 2px; min-width: 0; }
+.ct-plus { font-size: 20px; font-weight: 700; color: var(--accent); }
+.ct-kosong { margin: 0; }
+.ct-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.ct-item { display: grid; grid-template-columns: minmax(0, 1fr) 130px auto; gap: 8px 10px; align-items: center; padding: 10px 12px; border-radius: 12px; background: var(--surface-2); }
+.ct-item:has(.ct-jml) { grid-template-columns: minmax(0, 1fr) 130px 84px auto; }
+.ct-nama { display: grid; gap: 2px; min-width: 0; } .ct-nama b { font-size: 13.5px; overflow-wrap: anywhere; } .ct-nama .tiny { color: var(--ink-3); }
+.ct-harga input { min-width: 0; font-weight: 700; text-align: right; }
+.ct-jml { min-width: 0; width: 100%; }
+.ct-kaki { display: grid; gap: 10px; padding-top: 14px; border-top: 1px solid var(--border-subtle); }
+.ct-kaki p { margin: 0; }
+.ct-simpan { min-height: 48px; width: 100%; justify-content: center; }
+@media (max-width: 640px) {
+  /* Tabel modal menjadi kartu di HP: baris riwayat tidak terpotong dan tanpa scroll ke samping. */
+  .cost-wrap { overflow: visible; }
+  .cost-table thead { display: none; }
+  .cost-table, .cost-table tbody { display: block; }
+  .cost-table tr { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 6px 12px; padding: 12px 4px; border-bottom: 1px solid var(--border-subtle); }
+  .cost-table tr > td { display: block; padding: 0; border: 0; }
+  .cost-table tr > td:first-child { grid-column: 1 / -1; }
+  .cost-table tr > td[data-k="Terjual"], .cost-table tr > td[data-k="Harga rata-rata"] { font-size: 12.5px; color: var(--ink-2); }
+  .cost-table tr > td[data-k="Terjual"]::before { content: "Terjual "; } .cost-table tr > td[data-k="Harga rata-rata"]::before { content: "Rata-rata "; }
+  .cost-table tr.rw-open { border-bottom: 0; }
+  .cost-table tr.rw-row { display: block; padding: 0 0 12px; }
+  .cost-table tr.rw-row > td { padding: 12px; border-radius: 14px; }
+  .rw-line { grid-auto-flow: row; grid-auto-columns: auto; gap: 12px; overflow: visible; }
+  .rw-pt { grid-template-columns: 20px minmax(0, 1fr) auto; justify-items: start; text-align: left; gap: 2px 10px; padding: 0; }
+  .rw-pt::before { display: none; }
+  .rw-pt .rw-dot { grid-row: 1 / span 3; margin: 3px 0 0; }
+  .rw-pt > :not(.rw-dot):not(.rw-del) { grid-column: 2; }
+  .rw-pt .rw-del { grid-column: 3; grid-row: 1; }
+  .ct-item, .ct-item:has(.ct-jml) { grid-template-columns: minmax(0, 1fr) auto; }
+  .ct-item .ct-harga { grid-column: 1; } .ct-item .ct-jml { grid-column: 1; } .ct-item .ct-del { grid-column: 2; grid-row: 1; }
+}
+/* Garis waktu ada di dalam tabel modal: kembalikan isian formulirnya ke gaya standar (bukan gaya isian sel tabel). */
+.cost-table .rw-tl .input input { width: 100%; border: 0; border-radius: 0; background: transparent; padding: 10px 12px; text-align: left; }
+.cost-table .rw-tl input.plain { width: 100%; text-align: left; border-radius: 12px; padding: 10px 12px; }
+.cost-table .rw-tl .rw-awal input { width: 140px; }
+@media (max-width: 640px) {
+  .rw-tl .rw-add { grid-template-columns: minmax(0, 1fr); }
+  .rw-tl .rw-add .btn { grid-column: auto; }
+  .rw-awal input, .cost-table .rw-tl .rw-awal input { width: 100%; }
+}
+@media (max-width: 640px) {
+  .cost-table tr > td, .cost-table tr.rw-open > td { text-align: left; background: transparent; }
+  .cost-table tr.rw-open { background: color-mix(in srgb, var(--accent) 5%, var(--surface-1)); border-radius: 14px 14px 0 0; padding-inline: 10px; }
+  .cost-table tr.rw-row > td { border-radius: 0 0 14px 14px; }
+  .cost-table tr > td[data-k="Riwayat harga"] { justify-self: end; align-self: center; }
+  .cost-now, .cost-in { justify-items: start; }
+}
+@media (max-width: 640px) and (hover: hover) { body.app table.data.cost-table tbody tr:hover td { background: transparent; } }
+@media (max-width: 640px) { body.app table.data.cost-table tr > td { border: 0; padding: 0; } body.app table.data.cost-table tr.rw-row > td { padding: 12px; } }

@@ -11,6 +11,8 @@ const E = require('../assets/engine.js');
 const D = require('../assets/demo.js');
 
 let failed = 0;
+// Data tampilan (tglPesanan, 24 Nov 2026) tidak dipakai dalam rumus; diabaikan saat membandingkan angka.
+const tanpaTampilan = (k, v) => (k === 'tglPesanan' ? undefined : v);
 const test = (name, fn) => { try { fn(); console.log('ok  ', name); } catch (e) { failed++; console.log('GAGAL', name, '\n     ', e.message); } };
 const eq = (a, b, msg = '') => { if (JSON.stringify(a) !== JSON.stringify(b)) throw new Error(`${msg} ${JSON.stringify(a)} !== ${JSON.stringify(b)}`); };
 const truthy = (v, msg) => { if (!v) throw new Error(msg || 'harus benar'); };
@@ -75,7 +77,7 @@ test('D1 hasil hitung data contoh sama persis dengan sebelum perubahan', () => {
   const r = E.compute(D.make().map((w) => E.parseWorkbook(w)), D.settings(), {});
   const acuan = '/tmp/sebelum-demo.json';
   if (!fs.existsSync(acuan)) { console.log('      (lewati: snapshot sebelum perubahan tidak ada di mesin ini)'); return; }
-  truthy(JSON.stringify(r) === fs.readFileSync(acuan, 'utf8'), 'hasil data contoh berubah');
+  truthy(JSON.stringify(r, tanpaTampilan) === JSON.stringify(JSON.parse(fs.readFileSync(acuan, 'utf8')), tanpaTampilan), 'hasil data contoh berubah');
 });
 
 console.log(failed ? `\n${failed} tes GAGAL` : '\nSemua tes angka lulus');

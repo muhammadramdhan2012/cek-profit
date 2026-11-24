@@ -14,6 +14,8 @@ const D = require('../assets/demo.js');
 const Sint = require('./fixtures/shopee-sintetis.js');
 
 let failed = 0;
+// Data tampilan (tglPesanan, 24 Nov 2026) tidak dipakai dalam rumus; diabaikan saat membandingkan angka.
+const tanpaTampilan = (k, v) => (k === 'tglPesanan' ? undefined : v);
 const test = (name, fn) => { try { fn(); console.log('ok  ', name); } catch (e) { failed++; console.log('GAGAL', name, '\n     ', e.message); } };
 const eq = (a, b, msg = '') => { if (JSON.stringify(a) !== JSON.stringify(b)) throw new Error(`${msg} ${JSON.stringify(a)} !== ${JSON.stringify(b)}`); };
 
@@ -67,8 +69,8 @@ test('T4 regresi: angka seri Excel dan objek Date tetap', () => { eq(E.date(4600
 test('D1 hasil hitung data contoh sama persis dengan sebelum perubahan', () => {
   const acuan = '/tmp/sebelum-demo.json';
   if (!fs.existsSync(acuan)) { console.log('      (lewati: snapshot sebelum perubahan tidak ada di mesin ini)'); return; }
-  const hasil = JSON.stringify(E.compute(D.make().map((w) => E.parseWorkbook(w)), D.settings(), {}));
-  if (hasil !== fs.readFileSync(acuan, 'utf8')) throw new Error('hasil data contoh berubah');
+  const hasil = JSON.stringify(E.compute(D.make().map((w) => E.parseWorkbook(w)), D.settings(), {}), tanpaTampilan);
+  if (hasil !== JSON.stringify(JSON.parse(fs.readFileSync(acuan, 'utf8')), tanpaTampilan)) throw new Error('hasil data contoh berubah');
 });
 
 console.log(failed ? `\n${failed} uji GAGAL` : '\nSemua uji parser kecil lulus');

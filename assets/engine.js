@@ -1118,7 +1118,11 @@ const Engine = (() => {
 
     /* produk (gabungan item Shopee + baris SKU TikTok) */
     const prod = new Map();
-    const touchProduct = (key, init) => { if (!prod.has(key)) prod.set(key, { key, rows: 0, qty: 0, qtyKnown: true, sales: 0, received: 0, modal: 0, modalKnown: true, unitCost: NaN, baseCost: NaN, ...init }); return prod.get(key); };
+    const touchProduct = (key, init) => { if (!prod.has(key)) prod.set(key, { key, rows: 0, qty: 0, qtyKnown: true, sales: 0, received: 0, modal: 0, modalKnown: true, unitCost: NaN, baseCost: NaN, tglPesanan: {}, ...init }); return prod.get(key); };
+    // Jumlah pesanan per tanggal pesanan untuk setiap produk (tampilan riwayat modal; tidak dipakai dalam rumus).
+    // Satu pesanan dihitung sekali per produk walau produknya muncul di beberapa baris. Tanpa tanggal → kunci ''.
+    const sudahDicatat = new Set();
+    const catatPesanan = (p, id, tgl) => { const k = `${p.key}|${id}`; if (sudahDicatat.has(k)) return; sudahDicatat.add(k); const d = tgl || ''; p.tglPesanan[d] = (p.tglPesanan[d] || 0) + 1; };
     let qtyAssumed = 0, linesWithoutCost = 0, ttNoDetail = 0, ttNoDetailSales = 0;
     // Batch 3C: perbedaan rincian produk laporan penghasilan vs export (metadata; lihat pilihBarisTiktok).
     const ttKuantitas = { terbuktiSubtotal: 0, belumPasti: 0, tanpaDampak: 0, indikasiRetur: { jumlahPesanan: 0, penjualan: 0 } };
@@ -1682,6 +1686,7 @@ const Engine = (() => {
         const share = gross ? (n.it.harga + n.it.refund) / gross : 0;
         const p = touchProduct(`shopee|${n.it.productId || norm(n.it.name)}`, { platform: 'shopee', code: n.it.productId, sku: n.sku || '', name: n.it.name, variant: '' });
         p.name = n.it.name || p.name; if (n.sku && !p.sku) p.sku = n.sku;
+        catatPesanan(p, o.id, o.orderDate);
         p.rows += 1; p.sales += n.it.harga + n.it.refund; p.received += o.total * share;
         // H2-B1: baris dengan buku unit memakai unit terjual bersih (bilangan bulat); baris lain tetap cara lama.
         if (n.ledger && n.ledger.unitLedgerComplete) p.qty += n.ledger.qtySold;
@@ -1888,6 +1893,7 @@ const Engine = (() => {
         const w = subTotal > 0 ? (l.subtotal || 0) / subTotal : l.qty / (qtyTotal || 1);
         const p = touchProduct(`tiktok|${l.skuId || norm(l.name)}`, { platform: 'tiktok', code: l.skuId || '', sku: l.sellerSku || '', name: '', variant: l.variant || '' });
         if (l.name) p.name = l.name; else if (!p.name && l.entry && l.entry.nama) p.name = l.entry.nama;
+        catatPesanan(p, r.id, r.orderDate);
         p.rows += 1; p.sales += r.sales * w; p.received += r.settle * w;
         if (isOk(l.qtyNet)) p.qty += l.qtyNet; else if (l.qtyNet === undefined) p.qty += l.qty * (l.share ?? 1); else p.qtyKnown = false;   // H2-B3b
         if (isOk(l.cost)) p.modal += l.cost; else p.modalKnown = false;
@@ -2719,7 +2725,33 @@ const Engine = (() => {
     return sheets;
   }
 
-  return { kebocoran, num, angkaIsian, date, norm, detect, sheetsFromSheetJS, monthName, parseWorkbook, compute, simulate, hpp, shopeeRatio, insights, templateRows, buildCatalog, modeOf,
+  /**
+   * Jumlah pesanan per periode harga riwayat modal (tampilan saja; aturan tanggal sama dengan A.23: pesanan memakai
+   * catatan terakhir yang mulai pada atau sebelum tanggal pesanannya).
+   * @param {Object<string, number>} tglPesanan  {'YYYY-MM-DD': jumlah}; kunci '' = pesanan tanpa tanggal
+   * @param {string[]} mulai  tanggal mulai catatan (urutan bebas)
+   * @returns {{sebelum:number, periode:number[], tanpaTanggal:number}} periode mengikuti urutan `mulai` yang diurutkan naik
+   */
+  function pesananPerPeriode(tglPesanan, mulai) {
+    const m = [...(mulai || [])].filter((d) => /^\d{4}-\d{2}-\d{2}$/.test(d)).sort();
+    const out = { sebelum: 0, periode: m.map(() => 0), tanpaTanggal: 0 };
+    for (const [d, n] of Object.entries(tglPesanan || {})) {
+      const jml = Number(n) || 0;
+      if (!d) { out.tanpaTanggal += jml; continue; }
+      let i = -1;
+      for (let j = 0; j < m.length && m[j] <= d; j++) i = j;
+      if (i < 0) out.sebelum += jml; else out.periode[i] += jml;
+    }
+    return out;
+  }
+  /** Jumlah pesanan bertanggal pada rentang [dari, sampai) ('' = tanpa batas). Pesanan tanpa tanggal tidak dihitung. */
+  function pesananAntara(tglPesanan, dari, sampai = '') {
+    let n = 0;
+    for (const [d, jml] of Object.entries(tglPesanan || {})) if (d && (!dari || d >= dari) && (!sampai || d < sampai)) n += Number(jml) || 0;
+    return n;
+  }
+
+  return { pesananPerPeriode, pesananAntara, kebocoran, num, angkaIsian, date, norm, detect, sheetsFromSheetJS, monthName, parseWorkbook, compute, simulate, hpp, shopeeRatio, insights, templateRows, buildCatalog, modeOf,
     matchShopeeOrder, shopeeLineValue,
     CAT_LABEL, TEMPLATE_HEADER };
 })();
