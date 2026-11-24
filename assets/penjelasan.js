@@ -232,7 +232,7 @@ const CekInfo = (() => {
     },
     riwayat_modal: {
       t: 'Riwayat modal',
-      a: 'Untuk harga beli yang berubah-ubah. Setiap pesanan memakai modal sesuai tanggal pesanan dibuat.',
+      a: 'Untuk harga beli yang berubah-ubah. Setiap pesanan memakai modal sesuai tanggal pesanan dibuat. Caranya: klik "Catat harga beli baru", pilih tanggal berlaku, pilih produknya, lalu isi harga baru. Riwayat tiap produk terlihat di kolom "Riwayat harga".',
       h: 'Tanpa jumlah: dipakai harga dari catatan terakhir sebelum tanggal pesanan. Dengan jumlah di semua catatan: dipakai rata-rata (harga × jumlah) ÷ total jumlah dari kulakan sampai tanggal itu, cocok bila stok lama dan baru tercampur. Pesanan sebelum catatan pertama memakai modal awal; bila modal awal kosong, pesanan itu tidak dihitung.',
       b: 'Selalu berlabel perkiraan, karena stok yang tersisa sebelum catatan pertama tidak diketahui.',
     },

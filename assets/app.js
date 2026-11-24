@@ -55,6 +55,7 @@
   };
   const ICON = {
     riwayat: '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',
+    plus: '<path d="M12 5v14M5 12h14"/>',
     ringkasan: '<path d="M3 13h8V3H3zM13 21h8V11h-8zM3 21h8v-6H3zM13 3v6h8V3z"/>',
     produk: '<path d="M21 8l-9-5-9 5 9 5 9-5z"/><path d="M3 8v8l9 5 9-5V8"/><path d="M12 13v8"/>',
     biaya: '<path d="M6 3h12v18l-3-2-3 2-3-2-3 2z"/><path d="M9 8h6M9 12h6"/>',
@@ -116,7 +117,7 @@
   let demo = false;
   let license = { ok: false };
   let viewName = 'ringkasan';
-  const view = { openSec: {}, section: 'unggah', platform: 'all', from: '', to: '', metric: 'margin', q: '', sort: 'margin', showAll: false, onlyCheck: true, costQ: '', costAll: false, compare: null, typeOpen: false, prodFilter: 'all', prodKey: null, platCol: 'total', mp: '' };
+  const view = { openSec: {}, section: 'unggah', platform: 'all', from: '', to: '', metric: 'margin', q: '', sort: 'margin', showAll: false, onlyCheck: true, costQ: '', costAll: false, compare: null, typeOpen: false, prodFilter: 'all', prodKey: null, platCol: 'total', mp: '', costFilter: 'all' };
   const sim = { listPrice: null, disc: null, cost: null, feePct: null, feeFixed: null, src: null, plat: null, status: 'nonmall', kat: null, opsi: [], afiliasi: 0 };
   let last = null;
   const cloud = CekCloud.init({ url: C.supabaseUrl, key: C.supabaseAnonKey });
@@ -483,6 +484,7 @@
       return;
     }
     if (sheetKind === 'produk') { d.innerHTML = productSheet(r); return; }
+    if (sheetKind === 'catat') { d.innerHTML = catatSheet(); return; }
     if (sheetKind === 'filter') {
       d.innerHTML = `${head('Filter & unduh')}<div class="d-body">${topControls(r, true) || '<p class="small muted">Belum ada data untuk difilter.</p>'}</div>`;
     } else {
@@ -498,7 +500,7 @@
   function openSheet(kind) {
     sheetKind = kind;
     const d = $('#sheet');
-    d.classList.toggle('drawer', kind === 'kepastian' || kind === 'produk');   // desktop: laci kanan; HP: lembar bawah
+    d.classList.toggle('drawer', kind === 'kepastian' || kind === 'produk' || kind === 'catat');   // desktop: laci kanan; HP: lembar bawah
     renderSheet();
     if (!d.open) d.showModal();
   }
@@ -2231,6 +2233,9 @@
         <div class="progress" aria-hidden="true"><i style="width:${Math.round(r.coverage * 100)}%"></i></div>
         ${r.ttNoDetail && !r.hasOrderExport.tiktok ? `<p class="tiny faint">${num(r.ttNoDetail)} pesanan TikTok tidak mencantumkan produk. Unggah export pesanan TikTok, atau isi modal rata-rata.</p>` : ''}
         ${r.qtyAssumed && !r.hasOrderExport.shopee ? '<p class="tiny faint">Jumlah barang Shopee dianggap 1 per produk per pesanan. Unggah export pesanan Shopee agar tepat.</p>' : ''}</div>` : ''}
+      ${hasData ? `<div class="rw-ajak"><span class="rw-ajak-ic" aria-hidden="true">${svg('riwayat', 18)}</span>
+        <p class="small"><b>Harga beli sering naik-turun?</b> Catat harga baru beserta tanggalnya. Pesanan lama tetap memakai harga lama.${qi('riwayat_modal', 'riwayat harga')}</p>
+        <button class="btn sm primary" type="button" id="rw-catat">${svg('plus', 16)}Catat harga beli baru</button></div>` : ''}
       ${hasData ? `<details ${(missing && missing <= 40) || view.costQ ? 'open' : ''}><summary class="small" style="cursor:pointer;font-weight:700">Isi ${isiSampulTersedia(type) && isiModal(s) === 'sampul' ? 'harga sampul' : lower(word)} per produk langsung di sini</summary>
         ${isiSampulTersedia(type) ? isiModalBar(s, r) : ''}
         <div class="searchrow" style="margin-top:10px"><input class="plain" id="cost-q" type="search" placeholder="Cari produk" value="${esc(view.costQ)}" aria-label="Cari produk"></div><div id="cost-table"></div></details>` : ''}`;
@@ -2469,7 +2474,9 @@
     const resellerCustom = (s.coret || 100) !== 100 || s.periods.length > 1 || s.periods.some((q) => q.markup || q.disc || q.start);
     const sell = 100 * (1 + (p.markup || 0) / 100) * (1 - (p.disc || 0) / 100), cost = 100 - (s.mitra || 0);
     return `<p class="small muted">Untuk reseller yang membeli dengan potongan dari harga acuan pemasok, misalnya harga sampul buku atau harga katalog distributor.</p>
-      ${demo ? '' : `<p class="note-box">${plAktif() ? 'Price list Anda tersimpan, tetapi tidak dipakai di cara ini. Pilih "Modal per produk" agar modal diambil dari price list.' : 'Ingin modal tepat per judul, juga saat flash sale? Pilih "Modal per produk": ketik harga sampul setiap judul, atau unggah price list dari supplier.'}</p>`}
+      ${demo ? '' : `<p class="note-box">${plAktif() ? 'Price list Anda tersimpan, tetapi tidak dipakai di cara ini. Pilih "Modal per produk" agar modal diambil dari price list.' : 'Ingin modal tepat per judul, juga saat flash sale? Pilih "Modal per produk": ketik harga sampul setiap judul, atau unggah price list dari supplier.'}</p>
+        <div class="rw-ajak"><span class="rw-ajak-ic" aria-hidden="true">${svg('riwayat', 18)}</span><p class="small"><b>Harga beli sering berubah setiap minggu?</b> Cara ini memakai satu persen diskon untuk semua pesanan. Untuk mencatat harga per tanggal, pakai "Modal per produk".</p>
+          <button class="btn sm" type="button" data-mode="produk">Pakai Modal per produk</button></div>`}
       <div class="fields two align">
         <div class="field"><label for="s-mitra">Diskon dari pemasok${qi('diskon_pemasok')}</label><div class="input ${!ready && files.length ? 'need' : ''}"><input id="s-mitra" type="number" min="0" max="99" step="0.5" inputmode="decimal" placeholder="Misalnya 30" value="${ready ? s.mitra : ''}" ${dis}><span>%</span></div><span class="hint">Harga beli = harga acuan − diskon ini. Contoh: mitra penerbit dapat diskon 30% dari harga sampul.</span></div>
       </div>
@@ -2492,7 +2499,13 @@
     const box = $('#cost-table');
     if (!box || !last) return;
     const q = Engine.norm(view.costQ);
-    const list = last.all.products.filter((p) => !q || Engine.norm(`${p.name} ${p.sku} ${p.code}`).includes(q));
+    const cocok = last.all.products.filter((p) => !q || Engine.norm(`${p.name} ${p.sku} ${p.code}`).includes(q));
+    const nRiwayat = (p) => ((entriModal(p) || {}).riwayat || []).length;
+    // Filter cepat (24 Nov 2026): semua / harga berubah (punya riwayat) / belum diisi (modal tidak diketahui, tanpa riwayat).
+    const belum = (p) => !ok(p.baseCost) && !nRiwayat(p);
+    const hitungF = { all: cocok.length, berubah: cocok.filter((p) => nRiwayat(p)).length, belum: cocok.filter(belum).length };
+    const f = view.costFilter && hitungF[view.costFilter] !== undefined ? view.costFilter : 'all';
+    const list = f === 'berubah' ? cocok.filter((p) => nRiwayat(p)) : f === 'belum' ? cocok.filter(belum) : cocok;
     list.sort((a, b) => (ok(a.baseCost) - ok(b.baseCost)) || b.sales - a.sales);
     const shown = view.costAll ? list : list.slice(0, 25);
     const word = (TYPES[demo ? 'stok' : typeOf(st())] || { cost: 'Modal' }).cost;
@@ -2507,15 +2520,27 @@
     const isian = (p) => {
       const val = sampul ? (manualSampul(p) ? p.hargaSampul : '') : (ok(p.baseCost) ? p.baseCost : '');
       const label = sampul ? `Harga sampul ${esc(p.name)}` : `${word} per unit ${esc(p.name)}`;
-      const n = (entriModal(p) || {}).riwayat ? entriModal(p).riwayat.length : 0;
-      return `<div class="cost-in"><input type="number" min="0" step="100" inputmode="numeric" class="${ok(p.baseCost) || n ? '' : 'missing'}" ${sampul ? 'data-sampul' : 'data-cost'}="${esc(p.key)}" value="${val}" placeholder="Rp" aria-label="${label}" ${demo ? 'disabled' : ''}>${ket(p) ? `<span class="tiny faint">${ket(p)}</span>` : ''}
-        ${demo ? '' : `<button type="button" class="rw-btn ${n ? 'on' : ''}" data-rw="${esc(p.key)}" aria-expanded="${view.rwKey === p.key}">${svg('riwayat', 13)}${n ? `Riwayat · ${num(n)}` : 'Harga berubah?'}</button>`}</div>`;
+      return `<div class="cost-in"><input type="number" min="0" step="100" inputmode="numeric" class="${ok(p.baseCost) ? '' : 'missing'}" ${sampul ? 'data-sampul' : 'data-cost'}="${esc(p.key)}" value="${val}" placeholder="${ok(p.baseCost) ? 'Rp' : 'Isi modal (Rp)'}" aria-label="${label}" ${demo ? 'disabled' : ''}>${ket(p) ? `<span class="tiny faint">${ket(p)}</span>` : ''}</div>`;
     };
-    box.innerHTML = `<div class="tablewrap"><table class="data cost-table"><thead><tr><th>Produk</th><th>Terjual</th><th>Harga rata-rata</th><th>${sampul ? 'Harga sampul' : `${word} per unit`}</th></tr></thead><tbody>
-      ${shown.map((p) => `<tr><td><i class="sw" style="background:var(--${p.platform})"></i> ${esc(p.name)}<br><span class="tiny faint">${esc(catKey(p) || '-')}${p.modalSumber === 'pricelist' ? ' · dari price list' : p.modalSumber === 'campuran' ? ' · sebagian dari price list' : ''}</span></td>
-        <td>${p.qtyKnown ? num(p.qty) : `${p.rows}×`}</td><td>${fmt(p.avgPrice)}</td>
-        <td>${isian(p)}</td></tr>`).join('') || '<tr><td colspan="4" class="muted">Tidak ada produk yang cocok.</td></tr>'}</tbody></table></div>
-      ${(() => { const rp = view.rwKey && list.find((x) => x.key === view.rwKey); return rp ? riwayatPanel(rp) : ''; })()}
+    /** Kolom modal: produk ber-riwayat menampilkan modal yang berlaku hari ini (diubah lewat garis waktu). */
+    const kolomModal = (p) => {
+      if (!nRiwayat(p)) return isian(p);
+      const w = infoRiwayat(p);
+      return `<div class="cost-now"><b>${w.sekarang ? fmt(w.sekarang.baseCost) : '<span class="unk">tidak diketahui</span>'}</b><span class="tiny faint">${w.sekarangRec ? `sejak ${tgl(w.sekarangRec.mulai)}` : 'modal awal'}${w.sekarang && w.sekarang.metodeRiwayat === 'rata' ? ' · rata-rata' : ''} · perkiraan</span></div>`;
+    };
+    const kolomRiwayat = (p) => {
+      const n = nRiwayat(p), buka = view.rwKey === p.key;
+      if (n) return `<button type="button" class="rw-chip on ${buka ? 'open' : ''}" data-rw="${esc(p.key)}" aria-expanded="${buka}">${num(n)} harga<span aria-hidden="true">${buka ? '▴' : '▾'}</span></button>`;
+      if (!ok(p.baseCost)) return '<span class="faint" aria-label="Belum ada modal">—</span>';
+      return `<button type="button" class="rw-chip ${buka ? 'open' : ''}" data-rw="${esc(p.key)}" aria-expanded="${buka}">+ Harga berubah</button>`;
+    };
+    const chip = (k, label) => `<button type="button" class="cf-chip cf-${k} ${f === k ? 'on' : ''}" data-cf="${k}" aria-pressed="${f === k}">${label} ${num(hitungF[k])}</button>`;
+    box.innerHTML = `<div class="cf-row" role="group" aria-label="Saring produk">${chip('all', 'Semua')}${chip('berubah', 'Harga berubah')}${chip('belum', 'Belum diisi')}</div>
+      <div class="tablewrap cost-wrap"><table class="data cost-table"><thead><tr><th>Produk</th><th>Terjual</th><th>Harga rata-rata</th><th>${sampul ? 'Harga sampul' : `${word} per unit`}</th><th>Riwayat harga</th></tr></thead><tbody>
+      ${shown.map((p) => `<tr class="${view.rwKey === p.key ? 'rw-open' : ''}"><td data-k="Produk"><i class="sw" style="background:var(--${p.platform})"></i> ${esc(p.name)}<br><span class="tiny faint">${esc(catKey(p) || '-')}${p.modalSumber === 'pricelist' ? ' · dari price list' : p.modalSumber === 'campuran' ? ' · sebagian dari price list' : ''}</span></td>
+        <td data-k="Terjual">${p.qtyKnown ? num(p.qty) : `${p.rows}×`}</td><td data-k="Harga rata-rata">${fmt(p.avgPrice)}</td>
+        <td data-k="${sampul ? 'Harga sampul' : `${word} per unit`}">${kolomModal(p)}</td><td data-k="Riwayat harga">${kolomRiwayat(p)}</td></tr>
+        ${view.rwKey === p.key ? `<tr class="rw-row"><td colspan="5">${garisWaktu(p)}</td></tr>` : ''}`).join('') || `<tr><td colspan="5" class="muted">${f === 'all' ? 'Tidak ada produk yang cocok.' : 'Tidak ada produk di saringan ini.'}</td></tr>`}</tbody></table></div>
       ${list.length > 25 ? `<button class="btn sm quiet" type="button" id="cost-all">${view.costAll ? 'Tampilkan lebih sedikit' : `Tampilkan semua ${num(list.length)} produk`}</button>` : ''}`;
   }
   /** Simpan modal satu produk. jenis 'beli' = harga beli; 'sampul' = harga sampul (modal mengikuti diskon pemasok).
@@ -2527,50 +2552,166 @@
     return settings.catalog.find((e) => (kode ? Engine.norm(e.kode) === Engine.norm(kode) : !e.kode && Engine.norm(e.nama) === Engine.norm(nama))) || null;
   }
   const hariIniISO = () => new Date().toLocaleDateString('sv-SE');
-  function riwayatPanel(p) {
+  /** Ringkasan riwayat modal satu produk. Aturan hitung sama dengan laba: Engine.buildCatalog + pada (A.23). */
+  function infoRiwayat(p) {
     const e = entriModal(p) || {};
     const list = (e.riwayat || []).map((x, i) => ({ ...x, i })).sort((a, b) => a.mulai.localeCompare(b.mulai));
-    const sampul = isiModal() === 'sampul';
-    const s = st();
-    // Pratinjau memakai aturan mesin hitung yang sama (Engine.buildCatalog + pada).
-    const cat = Engine.buildCatalog([{ ...e, kode: 'x', nama: 'x', variasi: '' }], 0, null, s.mitra);
+    const cat = Engine.buildCatalog([{ ...e, kode: 'x', nama: 'x', variasi: '' }], 0, null, st().mitra);
     const ent = cat.find(['x'], '', '');
-    const modalAwal = ent && ok(ent.baseCost) ? fmt(ent.baseCost) : null;
-    const pakai = (d) => { const h = ent ? cat.pada(ent, d) : null; return h ? `${fmt(h.baseCost)}${h.metodeRiwayat === 'rata' ? ' <span class="tiny faint">rata-rata</span>' : ''}` : '<span class="unk">tidak diketahui</span>'; };
-    const harga = (x) => (ok(x.cost) ? `${fmt(x.cost)} <span class="tiny faint">harga beli</span>` : `${fmt(x.sampul)} <span class="tiny faint">sampul</span>`);
-    return `<div class="rw-panel" role="region" aria-label="Riwayat modal ${esc(p.name)}">
-      <div class="rw-head"><b>Riwayat modal${qi('riwayat_modal')}</b><span class="badge">perkiraan</span><button type="button" class="x rw-close" data-rw="${esc(p.key)}" aria-label="Tutup riwayat modal">×</button></div>
-      <p class="small rw-prod"><i class="sw" style="background:var(--${p.platform})" aria-hidden="true"></i>${esc(p.name)} <span class="tiny faint">${esc(catKey(p) || '')}</span></p>
-      <p class="tiny faint">Harga beli berubah? Catat tanggal dan harganya. Setiap pesanan memakai modal sesuai tanggal pesanan dibuat. Isi jumlah barang (opsional) agar modal dihitung rata-rata, cocok bila stok lama dan baru tercampur.</p>
-      <p class="small">Modal awal (pesanan sebelum catatan pertama): <b>${modalAwal || '<span class="unk">belum diisi</span>'}</b>${modalAwal ? '' : ' · pesanan sebelum catatan pertama tidak dihitung'}</p>
-      ${list.length ? `<ol class="rw-list">${list.map((x) => `<li><span class="rw-d">${tgl(x.mulai)}</span><span>${harga(x)}</span><span class="tiny faint">${x.jumlah ? `${num(x.jumlah)} unit` : 'tanpa jumlah'}</span>
-        <span class="rw-use">dipakai: ${pakai(x.mulai)}</span><button type="button" class="x" data-rw-del="${x.i}" aria-label="Hapus catatan ${tgl(x.mulai)}">×</button></li>`).join('')}</ol>` : ''}
+    const modalPada = (d) => { const h = ent ? cat.pada(ent, d) : null; return h && ok(h.baseCost) ? h : null; };
+    const hari = hariIniISO();
+    return { e, list, ent, modalPada, awal: ent && ok(ent.baseCost) ? ent.baseCost : NaN,
+      sekarangRec: [...list].reverse().find((x) => x.mulai <= hari) || null, sekarang: modalPada(hari),
+      jml: Engine.pesananPerPeriode(p.tglPesanan, list.map((x) => x.mulai)) };
+  }
+  /** Naik/turun dibanding titik sebelumnya (modal yang dipakai, bukan angka yang diketik). */
+  const ubahHarga = (baru, lama) => {
+    if (!ok(baru) || !ok(lama) || lama <= 0) return '';
+    const d = baru - lama;
+    if (Math.abs(d) < 0.5) return '<span class="rw-sama">sama</span>';
+    return `<span class="${d > 0 ? 'rw-naik' : 'rw-turun'}">${d > 0 ? 'naik' : 'turun'} ${pct(Math.abs(d) / lama, 1)}</span>`;
+  };
+  /** Garis waktu harga satu produk (desain disetujui pemilik 24 Nov 2026), dibuka di bawah barisnya. */
+  function garisWaktu(p) {
+    const w = infoRiwayat(p), sampul = isiModal() === 'sampul', s = st();
+    const titik = [];
+    if (ok(w.awal) || w.jml.sebelum || !w.list.length) {
+      titik.push({ awal: true, modal: w.awal, judul: 'Modal awal', ket: w.list.length ? `sebelum ${tgl(w.list[0].mulai)}` : 'semua pesanan', n: w.jml.sebelum });
+    }
+    w.list.forEach((x, j) => {
+      const h = w.modalPada(x.mulai);
+      titik.push({ rec: x, modal: h ? h.baseCost : NaN, rata: h && h.metodeRiwayat === 'rata', judul: `sejak ${tgl(x.mulai)}`, n: w.jml.periode[j],
+        isi: ok(x.sampul) ? `harga sampul ${fmt(x.sampul)}` : '', jumlah: x.jumlah });
+    });
+    const html = titik.map((t, k) => {
+      const kini = t.rec ? w.sekarangRec && t.rec.i === w.sekarangRec.i : !w.sekarangRec;
+      const harga = ok(t.modal) ? fmt(t.modal) : '<span class="unk">belum diisi</span>';
+      return `<li class="rw-pt ${kini ? 'now' : ''}"><span class="rw-dot" aria-hidden="true"></span>
+        <b class="rw-harga">${harga}${t.rata ? ' <span class="tiny faint">rata-rata</span>' : ''}</b>
+        <span class="rw-ket">${t.awal ? `Modal awal · ${t.ket}` : t.judul} · ${num(t.n || 0)} pesanan${kini ? ' · berlaku sekarang' : ''}</span>
+        ${t.isi || t.jumlah ? `<span class="tiny faint">${[t.isi, t.jumlah ? `${num(t.jumlah)} unit` : ''].filter(Boolean).join(' · ')}</span>` : ''}
+        ${k > 0 ? ubahHarga(t.modal, titik[k - 1].modal) : ''}
+        ${t.rec ? `<button type="button" class="rw-del" data-rw-del="${t.rec.i}" aria-label="Hapus harga ${tgl(t.rec.mulai)}">Hapus</button>` : ''}</li>`;
+    }).join('');
+    const label = sampul ? 'Harga sampul' : 'Harga beli';
+    return `<div class="rw-tl" role="region" aria-label="Riwayat harga ${esc(p.name)}">
+      <ol class="rw-line">${html}</ol>
+      ${w.jml.tanpaTanggal ? `<p class="tiny faint">${num(w.jml.tanpaTanggal)} pesanan tanpa tanggal tidak bisa dipasangkan ke harga mana pun.</p>` : ''}
       <div class="rw-add">
         <div class="field"><label for="rw-tgl">Mulai tanggal</label><input class="plain" id="rw-tgl" type="date" value="${hariIniISO()}"></div>
-        <div class="field"><label for="rw-harga">${sampul ? 'Harga sampul' : 'Harga beli'} per unit</label><div class="input"><span>Rp</span><input id="rw-harga" type="number" min="0" step="100" inputmode="numeric" placeholder="Misalnya 15000"></div></div>
+        <div class="field"><label for="rw-harga">${label} baru per unit</label><div class="input"><span>Rp</span><input id="rw-harga" type="number" min="0" step="100" inputmode="numeric" placeholder="72000"></div></div>
         <div class="field"><label for="rw-jml">Jumlah dibeli <span class="tiny faint">(opsional)</span></label><input class="plain" id="rw-jml" type="number" min="1" step="1" inputmode="numeric" placeholder="Misalnya 20"></div>
-        <button class="btn sm primary" type="button" id="rw-tambah" data-rw-key="${esc(p.key)}">Tambah catatan</button>
+        <button class="btn sm primary" type="button" id="rw-tambah" data-rw-key="${esc(p.key)}">Tambah harga</button>
       </div>
-      ${sampul && !ok(s.mitra) ? '<p class="note-box warn">Isi diskon dari pemasok agar catatan harga sampul bisa dihitung.</p>' : ''}
+      ${w.list.length ? `<div class="rw-awal"><label for="rw-awal-in" class="small">Modal awal (pesanan sebelum ${tgl(w.list[0].mulai)})</label>
+        <input id="rw-awal-in" type="number" min="0" step="100" inputmode="numeric" placeholder="Rp" ${sampul ? 'data-sampul' : 'data-cost'}="${esc(p.key)}" value="${sampul ? (ok(w.e.sampul) ? w.e.sampul : '') : (ok(w.e.cost) ? w.e.cost : '')}" ${demo ? 'disabled' : ''}>
+        ${ok(w.awal) ? '' : '<span class="tiny faint">Kosong: pesanan sebelum harga pertama tidak dihitung dalam laba.</span>'}</div>` : ''}
+      <p class="tiny faint">Setiap pesanan memakai harga yang berlaku pada tanggal pesanannya. Tanggal yang sama menggantikan harga lama. Angkanya berlabel <b>perkiraan</b>.${qi('riwayat_modal')}</p>
+      ${sampul && !ok(s.mitra) ? '<p class="note-box warn">Isi diskon dari pemasok agar harga sampul bisa dihitung menjadi modal.</p>' : ''}
     </div>`;
   }
+  /** Simpan satu catatan harga untuk produk p. Satu catatan per tanggal: tanggal sama menggantikan yang lama. */
+  function simpanCatatan(p, rec) {
+    let e = entriModal(p);
+    if (!e) { e = { kode: catKey(p), nama: p.name, variasi: '' }; settings.catalog.push(e); }
+    const idx = settings.catalog.indexOf(e);
+    settings.catalog[idx] = { ...e, riwayat: [...(e.riwayat || []).filter((x) => x.mulai !== rec.mulai), rec].sort((a, b) => a.mulai.localeCompare(b.mulai)) };
+  }
+  const catatanBaru = (mulai, harga, jml) => ({ mulai, ...(isiModal() === 'sampul' ? { sampul: harga } : { cost: harga }), ...(+jml > 0 ? { jumlah: Math.round(+jml) } : {}) });
   function tambahRiwayat(key) {
     const p = last && last.all.products.find((x) => x.key === key);
     if (!p) return;
+    if (demo) { toast('Data contoh tidak disimpan. Unggah laporan Anda untuk mencatat harga.'); return; }
     const mulai = ($('#rw-tgl') || {}).value, harga = +(($('#rw-harga') || {}).value), jml = ($('#rw-jml') || {}).value;
     if (!/^\d{4}-\d{2}-\d{2}$/.test(mulai || '')) { toast('Isi tanggal mulai.'); return; }
     if (!(harga > 0)) { toast('Isi harga per unit.'); $('#rw-harga')?.focus(); return; }
-    const rec = { mulai, ...(isiModal() === 'sampul' ? { sampul: harga } : { cost: harga }), ...(+jml > 0 ? { jumlah: Math.round(+jml) } : {}) };
-    let e = entriModal(p);
-    if (!e) { e = { kode: catKey(p), nama: p.name, variasi: '' }; settings.catalog.push(e); }
-    // Satu catatan per tanggal: tanggal yang sama menggantikan catatan lama.
-    const idx = settings.catalog.indexOf(e);
-    settings.catalog[idx] = { ...e, riwayat: [...(e.riwayat || []).filter((x) => x.mulai !== mulai), rec].sort((a, b) => a.mulai.localeCompare(b.mulai)) };
+    simpanCatatan(p, catatanBaru(mulai, harga, jml));
     settings.modalMode = 'produk';
     save(); render(); track('riwayat-modal-tambah');
-    toast(`Catatan ${tgl(mulai)} tersimpan.`);
+    toast(`Harga sejak ${tgl(mulai)} tersimpan.`);
+  }
+  /* ---------- "Catat harga beli baru": banyak produk sekaligus (desain disetujui pemilik 24 Nov 2026) ---------- */
+  const catat = { tgl: '', pilih: [], harga: {}, jml: {}, q: '', denganJumlah: false };
+  const isoLokal = (d) => d.toLocaleDateString('sv-SE');
+  /** Senin terakhir sebelum hari ini (hari Senin → seminggu lalu). */
+  const seninLalu = () => { const d = new Date(); const mundur = ((d.getDay() + 6) % 7) || 7; d.setDate(d.getDate() - mundur); return isoLokal(d); };
+  function bukaCatat(key) {
+    Object.assign(catat, { tgl: hariIniISO(), pilih: key ? [key] : [], harga: {}, jml: {}, q: '', denganJumlah: false });
+    openSheet('catat');
+    setTimeout(() => (key ? $(`[data-ct-harga="${CSS.escape(key)}"]`) : $('#ct-q'))?.focus(), 60);
+  }
+  const produkDari = (key) => last && last.all.products.find((x) => x.key === key);
+  /** Modal lama (yang berlaku pada tanggal catatan, sebelum disimpan) dan modal baru dari isian. */
+  function bandingCatat(p) {
+    const w = infoRiwayat(p), lama = w.modalPada(catat.tgl);
+    const v = +catat.harga[p.key], sampul = isiModal() === 'sampul', mitra = st().mitra;
+    const baru = !(v > 0) ? NaN : sampul ? (ok(mitra) ? (v * (100 - mitra)) / 100 : NaN) : v;
+    return { w, lama: lama ? lama.baseCost : NaN, baru };
+  }
+  function teksBanding(p) {
+    const { lama, baru } = bandingCatat(p);
+    const awal = ok(lama) ? `lama ${fmt(lama)}` : 'belum ada harga sebelumnya';
+    if (!ok(baru) || !ok(lama)) return awal;
+    const d = baru - lama;
+    return `${awal} · ${Math.abs(d) < 0.5 ? '<span class="rw-sama">sama</span>' : `<span class="${d > 0 ? 'rw-naik' : 'rw-turun'}">${d > 0 ? 'naik' : 'turun'} ${fmt(Math.abs(d))}</span>`}`;
+  }
+  /** Pesanan yang memakai harga baru: dari tanggal catatan sampai catatan berikutnya yang sudah ada. */
+  function dampakCatat() {
+    return catat.pilih.reduce((a, key) => {
+      const p = produkDari(key); if (!p || !(+catat.harga[key] > 0)) return a;
+      const next = infoRiwayat(p).list.find((x) => x.mulai > catat.tgl);
+      return a + Engine.pesananAntara(p.tglPesanan, catat.tgl, next ? next.mulai : '');
+    }, 0);
+  }
+  const terisiCatat = () => catat.pilih.filter((k) => +catat.harga[k] > 0).length;
+  function catatHasil() {
+    const q = Engine.norm(catat.q);
+    if (!q || !last) return '';
+    const hasil = last.all.products.filter((p) => !catat.pilih.includes(p.key) && Engine.norm(`${p.name} ${p.sku} ${p.code}`).includes(q)).slice(0, 6);
+    if (!hasil.length) return '<p class="tiny faint ct-kosong">Produk tidak ditemukan.</p>';
+    return hasil.map((p) => { const w = infoRiwayat(p); return `<button type="button" class="ct-hasil-i" data-ct-add="${esc(p.key)}"><span><b>${esc(p.name)}</b><span class="tiny faint">${MP_NAMA[p.platform] || ''}${catKey(p) ? ` · ${esc(catKey(p))}` : ''}${w.sekarang ? ` · sekarang ${fmt(w.sekarang.baseCost)}` : ''}</span></span><span class="ct-plus" aria-hidden="true">+</span></button>`; }).join('');
+  }
+  function catatKaki() {
+    const n = terisiCatat(), dampak = dampakCatat();
+    return `<p class="small muted" id="ct-dampak">${n ? `Berdampak ke <b>${num(dampak)} pesanan</b> sejak ${tgl(catat.tgl)} · ditandai <b>perkiraan</b>` : 'Pilih produk dan isi harga barunya.'}</p>
+      <button class="btn primary ct-simpan" type="button" id="ct-simpan" ${n ? '' : 'disabled'}>${n ? `Simpan ${num(n)} harga baru` : 'Simpan harga baru'}</button>`;
+  }
+  function catatSheet() {
+    const sampul = isiModal() === 'sampul', s = st(), hari = hariIniISO(), senin = seninLalu();
+    const cepat = [[hari, 'Hari ini'], [senin, 'Senin lalu']];
+    const baris = catat.pilih.map((key) => {
+      const p = produkDari(key); if (!p) return '';
+      return `<li class="ct-item"><div class="ct-nama"><b><i class="sw" style="background:var(--${p.platform})" aria-hidden="true"></i> ${esc(p.name)} <span class="tiny faint">${MP_NAMA[p.platform] || ''}</span></b><span class="tiny" id="ct-b-${esc(key)}">${teksBanding(p)}</span></div>
+        <div class="input ct-harga"><span>Rp</span><input type="number" min="0" step="100" inputmode="numeric" data-ct-harga="${esc(key)}" value="${catat.harga[key] ?? ''}" placeholder="${sampul ? 'Harga sampul' : 'Harga baru'}" aria-label="${sampul ? 'Harga sampul' : 'Harga beli'} baru ${esc(p.name)}"></div>
+        ${catat.denganJumlah ? `<input class="plain ct-jml" type="number" min="1" step="1" inputmode="numeric" data-ct-jml="${esc(key)}" value="${catat.jml[key] ?? ''}" placeholder="Jumlah" aria-label="Jumlah dibeli ${esc(p.name)}">` : ''}
+        <button type="button" class="x ct-del" data-ct-del="${esc(key)}" aria-label="Hapus ${esc(p.name)} dari daftar">×</button></li>`;
+    }).join('');
+    return `<div class="d-head"><h2 id="sheet-t">Catat harga beli baru</h2><button class="x" type="button" data-sheet-close aria-label="Tutup">×</button></div>
+      <div class="d-body ct-body">
+        <p class="small muted">Pesanan mulai tanggal ini memakai harga baru. Pesanan sebelumnya tetap memakai harga lama.</p>
+        <div class="field"><span class="ct-label" id="ct-tgl-l">Berlaku mulai</span>
+          <div class="ct-cepat" role="group" aria-labelledby="ct-tgl-l">${cepat.map(([d, l]) => `<button type="button" class="cf-chip ${catat.tgl === d ? 'on' : ''}" data-ct-tgl="${d}" aria-pressed="${catat.tgl === d}">${l}</button>`).join('')}
+            <input class="plain ct-tgl" id="ct-tgl" type="date" value="${esc(catat.tgl)}" aria-label="Tanggal berlaku"></div></div>
+        <div class="field"><label for="ct-q">Produk yang harganya berubah</label><input class="plain" id="ct-q" type="search" placeholder="Cari judul atau kode, lalu pilih…" value="${esc(catat.q)}" autocomplete="off">
+          <div class="ct-hasil" id="ct-hasil">${catatHasil()}</div></div>
+        ${baris ? `<ul class="ct-list">${baris}</ul>` : ''}
+        ${catat.pilih.length ? `<label class="cek-baris"><input type="checkbox" id="ct-jumlah" ${catat.denganJumlah ? 'checked' : ''}><span>Saya tahu jumlah yang dibeli<small class="tiny faint" style="display:block;font-weight:400">Modal dihitung rata-rata bila stok lama dan baru tercampur.</small></span></label>` : ''}
+        ${sampul && !ok(s.mitra) ? '<p class="note-box warn">Isi diskon dari pemasok dulu agar harga sampul bisa dihitung menjadi modal.</p>' : ''}
+        <div class="ct-kaki" id="ct-kaki">${catatKaki()}</div>
+      </div>`;
+  }
+  function simpanCatat() {
+    if (demo) { toast('Data contoh tidak disimpan. Unggah laporan Anda untuk mencatat harga.'); return; }
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(catat.tgl)) { toast('Isi tanggal berlaku.'); return; }
+    const isi = catat.pilih.filter((k) => +catat.harga[k] > 0);
+    if (!isi.length) { toast('Isi harga baru minimal satu produk.'); return; }
+    for (const key of isi) { const p = produkDari(key); if (p) simpanCatatan(p, catatanBaru(catat.tgl, +catat.harga[key], catat.denganJumlah ? catat.jml[key] : '')); }
+    settings.modalMode = 'produk';
+    save(); closeSheet(); view.costFilter = 'berubah'; render(); track('riwayat-modal-catat-banyak');
+    toast(`${num(isi.length)} harga baru tersimpan, berlaku sejak ${tgl(catat.tgl)}.`);
   }
   function hapusRiwayat(key, i) {
+    if (demo) { toast('Data contoh tidak disimpan.'); return; }
     const p = last && last.all.products.find((x) => x.key === key);
     const e = p && entriModal(p);
     if (!e || !e.riwayat) return;
@@ -3098,6 +3239,13 @@
     const t = e.target, id = t.id || '', v = t.value;
     if (id === 'q') { view.q = v; renderProducts(); return; }
     if (id === 'cost-q') { view.costQ = v; renderCostTable(); return; }
+    if (id === 'ct-q') { catat.q = v; const h = $('#ct-hasil'); if (h) h.innerHTML = catatHasil(); return; }
+    if (t.dataset.ctHarga !== undefined) {
+      catat.harga[t.dataset.ctHarga] = v; const p = produkDari(t.dataset.ctHarga);
+      const b = $(`#ct-b-${CSS.escape(t.dataset.ctHarga)}`); if (b && p) b.innerHTML = teksBanding(p);
+      const k = $('#ct-kaki'); if (k) k.innerHTML = catatKaki(); return;
+    }
+    if (t.dataset.ctJml !== undefined) { catat.jml[t.dataset.ctJml] = v; return; }
     if (id.startsWith('sim-')) { sim[id.slice(4)] = v === '' ? null : +v; renderSimOut(); return; }
     if (id.startsWith('pj-mp-') || id.startsWith('pj-ln-')) {
       const i = +id.slice(6); pajak.bulan[i][id.startsWith('pj-mp-') ? 'marketplace' : 'lain'] = v === '' ? null : +v;
@@ -3138,6 +3286,8 @@
     render.t = setTimeout(() => { const a = document.activeElement && document.activeElement.id; const y = window.scrollY; render(); window.scrollTo({ top: y }); if (a && $(`#${a}`)) $(`#${a}`).focus(); }, 300);
   });
   document.addEventListener('change', (e) => {
+    if (e.target.id === 'ct-tgl') { if (/^\d{4}-\d{2}-\d{2}$/.test(e.target.value)) { catat.tgl = e.target.value; renderSheet(); } return; }
+    if (e.target.id === 'ct-jumlah') { catat.denganJumlah = e.target.checked; renderSheet(); return; }
     const t = e.target;
     if (t.dataset.cost !== undefined || t.dataset.sampul !== undefined) { const jenis = t.dataset.sampul !== undefined ? 'sampul' : 'beli'; setProductCost(t.dataset[jenis === 'sampul' ? 'sampul' : 'cost'], t.value, jenis); const y = window.scrollY; render(); window.scrollTo({ top: y }); return; }
     if (t.dataset.case) { caseState[t.dataset.case] = t.value; store.set(KEYS.cases, caseState); render(); }
@@ -3314,7 +3464,13 @@
     else if (t.id === 'pf-logo-del') { profile.logo = ''; saveProfile(); render(); }
     else if (t.id === 'tpl-download') downloadTemplate();
     else if (t.id === 'pl-template') downloadTemplatePL();
-    else if (t.dataset.rw !== undefined) { view.rwKey = view.rwKey === t.dataset.rw ? null : t.dataset.rw; renderCostTable(); const pn = $('.rw-panel'); if (pn) { pn.scrollIntoView({ block: 'nearest', behavior: 'smooth' }); $('#rw-harga')?.focus({ preventScroll: true }); } }
+    else if (t.dataset.rw !== undefined) { view.rwKey = view.rwKey === t.dataset.rw ? null : t.dataset.rw; renderCostTable(); const pn = $('.rw-row'); if (pn) { pn.scrollIntoView({ block: 'nearest', behavior: reducedMotion() ? 'auto' : 'smooth' }); $('#rw-harga')?.focus({ preventScroll: true }); } }
+    else if (t.dataset.cf) { view.costFilter = t.dataset.cf; view.costAll = false; renderCostTable(); }
+    else if (t.id === 'rw-catat') bukaCatat();
+    else if (t.dataset.ctTgl) { catat.tgl = t.dataset.ctTgl; renderSheet(); }
+    else if (t.dataset.ctAdd) { catat.pilih.push(t.dataset.ctAdd); catat.q = ''; renderSheet(); $(`[data-ct-harga="${CSS.escape(t.dataset.ctAdd)}"]`)?.focus(); }
+    else if (t.dataset.ctDel) { catat.pilih = catat.pilih.filter((k) => k !== t.dataset.ctDel); delete catat.harga[t.dataset.ctDel]; renderSheet(); }
+    else if (t.id === 'ct-simpan') simpanCatat();
     else if (t.id === 'rw-tambah') tambahRiwayat(t.dataset.rwKey);
     else if (t.dataset.rwDel !== undefined) hapusRiwayat(view.rwKey, t.dataset.rwDel);
     else if (t.dataset.isi && !demo) { settings.isiModal = t.dataset.isi; save(); render(); $(`[data-isi="${t.dataset.isi}"]`)?.focus(); }
