@@ -2830,7 +2830,9 @@
         ? (per.status === 'resmi' ? `, periode ${tgl(per.from)} sampai ${tgl(per.to)}${per.diLuar ? ` <span class="warn">(${num(per.diLuar)} transaksi di luar periode)</span>` : ''}`
           : `${p.check.from ? `, transaksi teramati ${tgl(p.check.from)} sampai ${tgl(p.check.to)}` : ''}${per.status === 'rusak' ? ' <span class="warn">(periode resmi tidak terbaca)</span>' : ''}`)
         : p.check.from ? `, ${tgl(p.check.from)} sampai ${tgl(p.check.to)}` : '';
-      return `${n}${range}<br>${chk}`;
+      // Format lama Shopee (sheet "Income", 25 Nov 2026): tanpa nama produk. Label Beta + arahan modal rata-rata.
+      const lama = p.check.formatLama ? `<br><span class="badge">Format lama · Beta</span> <span class="tiny">Laporan ini tidak berisi nama produk, jadi modal per produk belum bisa dipakai. Isi modal rata-rata (%) di Modal &amp; HPP untuk melihat laba.</span>${p.check.kompensasiLama && p.check.kompensasiLama.baris ? `<br><span class="warn">${num(p.check.kompensasiLama.baris)} pesanan punya kolom Kompensasi (${fmt(p.check.kompensasiLama.nilai)}). Perlu dicek di Seller Centre.</span>` : ''}` : '';
+      return `${n}${range}<br>${chk}${lama}`;
     }
     if (p.kind === 'shopee_orders' || p.kind === 'tiktok_orders') return `${num(p.lines.length)} baris produk`;
     if (p.kind === 'shopee_return' || p.kind === 'tiktok_return') return `${p.cases.length} pengajuan retur atau refund`;
