@@ -2222,7 +2222,7 @@
       ${intro ? `<p class="small">${intro}</p>` : ''}
       <div class="row-actions"><button class="btn sm" type="button" id="tpl-download" ${hasData ? '' : 'disabled'}>Unduh template modal</button>
         <label class="btn sm" for="tpl-input" ${demo ? 'hidden' : ''}>Unggah template terisi</label><input id="tpl-input" type="file" accept=".xlsx,.xls,.csv" hidden></div>
-      <p class="tiny faint" style="margin-top:-8px">${hasData ? `Template berisi ${num(r.products.length)} produk dari laporan Anda. Isi kolom Modal per unit (${lower(word)}), simpan, lalu unggah.` : 'Unggah laporan penghasilan dulu agar template berisi produk Anda.'}${s.catalog.length ? ` Tersimpan: ${num(s.catalog.length)} modal produk.` : ''}</p>
+      <p class="tiny faint" style="margin-top:-8px">${hasData ? `Template berisi ${num(r.products.length)} produk dari laporan Anda. Isi kolom Modal per unit (${lower(word)}), simpan, lalu unggah.` : (r && r.shopeeFormatLama && !r.shopeeFormatLama.dariExport ? 'Laporan Shopee format lama tidak berisi nama produk. Unggah Export Pesanan periode yang sama agar template berisi produk Anda.' : 'Unggah laporan penghasilan dulu agar template berisi produk Anda.')}${s.catalog.length ? ` Tersimpan: ${num(s.catalog.length)} modal produk.` : ''}</p>
       ${type === 'stok' ? `<div class="field"><label for="s-extra">Biaya kulakan${qi('biaya_kulakan')}</label><div class="input"><input id="s-extra" type="number" min="0" max="100" step="0.5" inputmode="decimal" placeholder="Misalnya 3" value="${ok(s.extraCostPct) && s.extraCostPct > 0 ? s.extraCostPct : ''}" ${dis}><span>% dari harga beli</span></div><span class="hint">Ongkir dari supplier dan biaya angkut, ditambahkan ke modal setiap produk.</span></div>` : ''}
       ${type === 'produsen' ? hppPanel(s, r, dis) : ''}
       ${type !== 'produsen' && !demo ? `<div id="pl-box">${plPanel(s, r)}</div>` : ''}
@@ -2815,6 +2815,14 @@
       ? `<br><span class="warn">Dipilih untuk ${esc(KIND[f.expect] ? KIND[f.expect][1] : 'kategori lain')}, tetapi ${f.kind === 'unknown' ? 'isinya tidak sesuai format itu' : `isinya ${esc(KIND[f.kind] ? KIND[f.kind][1] : 'jenis lain')}. Diproses sesuai isinya`}.</span>` : '';
     return fileStatusDasar(f) + beda;
   }
+  /** Keterangan laporan Shopee format lama: produk diambil dari Export Pesanan (Tahap 2, 25 Nov 2026). Teks polos tanpa input pengguna. */
+  function teksFormatLama() {
+    const fl = last && last.all && last.all.shopeeFormatLama;
+    if (!fl || !fl.dariExport) return 'Laporan ini tidak berisi nama produk. Unggah Export Pesanan Shopee untuk periode yang sama agar laba per produk bisa dihitung, atau isi modal rata-rata (%) di Modal &amp; HPP.';
+    const bulan = Object.entries(fl.bulanTanpaExport).filter(([m]) => m !== '—').sort().map(([m, n]) => `${monthLong(m)}: ${num(n)}`).join(', ');
+    return `Nama produk diambil dari Export Pesanan: ${num(fl.dariExport)} pesanan cocok${fl.perkiraan ? `, ${num(fl.perkiraan)} di antaranya dibagi per produk sebagai perkiraan` : ''}.`
+      + (fl.tanpaExport ? `<br><span class="warn">${num(fl.tanpaExport)} pesanan belum ada di Export Pesanan${bulan ? ` (bulan pesanan ${bulan})` : ''}. Unggah Export Pesanan bulan tersebut agar produknya ikut terhitung.</span>` : '');
+  }
   function fileStatusDasar(f) {
     if (f.error) return `<span class="bad">${esc(f.error)}</span>`;
     if (f.note) return `<span class="ok">${esc(f.note)}</span>${f.warn ? `<br><span class="warn">${esc(f.warn)}</span>` : ''}`;
@@ -2831,7 +2839,7 @@
           : `${p.check.from ? `, transaksi teramati ${tgl(p.check.from)} sampai ${tgl(p.check.to)}` : ''}${per.status === 'rusak' ? ' <span class="warn">(periode resmi tidak terbaca)</span>' : ''}`)
         : p.check.from ? `, ${tgl(p.check.from)} sampai ${tgl(p.check.to)}` : '';
       // Format lama Shopee (sheet "Income", 25 Nov 2026): tanpa nama produk. Label Beta + arahan modal rata-rata.
-      const lama = p.check.formatLama ? `<br><span class="badge">Format lama · Beta</span> <span class="tiny">Laporan ini tidak berisi nama produk, jadi modal per produk belum bisa dipakai. Isi modal rata-rata (%) di Modal &amp; HPP untuk melihat laba.</span>${p.check.kompensasiLama && p.check.kompensasiLama.baris ? `<br><span class="warn">${num(p.check.kompensasiLama.baris)} pesanan punya kolom Kompensasi (${fmt(p.check.kompensasiLama.nilai)}). Perlu dicek di Seller Centre.</span>` : ''}` : '';
+      const lama = p.check.formatLama ? `<br><span class="badge">Format lama · Beta</span> <span class="tiny">${teksFormatLama()}</span>${p.check.kompensasiLama && p.check.kompensasiLama.baris ? `<br><span class="warn">${num(p.check.kompensasiLama.baris)} pesanan punya kolom Kompensasi (${fmt(p.check.kompensasiLama.nilai)}). Perlu dicek di Seller Centre.</span>` : ''}` : '';
       return `${n}${range}<br>${chk}${lama}`;
     }
     if (p.kind === 'shopee_orders' || p.kind === 'tiktok_orders') return `${num(p.lines.length)} baris produk`;

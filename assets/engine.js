@@ -189,7 +189,7 @@ const Engine = (() => {
       const ams = SH_AMS.reduce((a, c) => a + num(g(c)), 0);
       // Kolom biaya lain/baru apa pun tertangkap sebagai selisih terhadap Total Penghasilan.
       const lain = total - (harga + refund + ship + voucher + admin + proses + xtra + ams);
-      orders.push({ id, orderDate, payDate, harga, refund, voucher, voucherPenjual, diskonShopee, ship, admin, proses, xtra, ams, lain, total });
+      orders.push({ id, orderDate, payDate, harga, refund, voucher, voucherPenjual, diskonShopee, ship, admin, proses, xtra, ams, lain, total, ...(formatLama ? { tanpaProduk: true } : {}) });
     }
     let summaryTotal = null, from = '', to = '';
     for (const row of wb.sheets['Summary'] || []) {
@@ -779,8 +779,45 @@ const Engine = (() => {
     }
     mergeIncome(parsed, out);
     finalizeShopeeLines(shopeeVersions, out);
+    produkDariExport(out);
     finalizeCases(caseVersions, out);
     return out;
+  }
+
+  /**
+   * Tahap 2 format lama (disetujui pemilik 25 Nov 2026): Laporan Penghasilan Shopee format lama tidak punya baris produk,
+   * jadi produk setiap pesanan diambil dari Export Pesanan lewat nomor pesanan. Uang pesanan dibagi ke baris produk:
+   *  - jumlah nilai baris export (harga setelah diskon × jumlah) = harga produk di laporan → nilai baris apa adanya ('tepat');
+   *  - berbeda / nilai tidak ada → dibagi sebanding nilai (atau jumlah barang) dan berlabel 'perkiraan';
+   *  - refund penuh → semua baris direfund penuh; refund sebagian → dibagi sebanding (uang saja). Jumlah barang HPP tetap
+   *    mengikuti aturan refund parsial yang ada (A.19.1): nominal refund tidak menentukan unit.
+   * Baris berstatus "Batal" tidak dipakai. Pesanan tanpa baris export tetap dihitung di total toko (tanpa produk).
+   */
+  function produkDariExport(out) {
+    const st = { pesanan: 0, dariExport: 0, tepat: 0, perkiraan: 0, tanpaExport: 0, bulanTanpaExport: {} };
+    const adaItem = new Set(out.shopeeItems.map((it) => it.orderId));
+    for (const o of out.shopeeOrders.values()) {
+      if (!o.tanpaProduk || adaItem.has(o.id)) continue;
+      st.pesanan++;
+      const ls = (out.shopeeLines.get(o.id) || []).filter((l) => str(l.status) !== 'Batal');
+      if (!ls.length) { st.tanpaExport++; const b = monthOf(o.orderDate) || '—'; st.bulanTanpaExport[b] = (st.bulanTanpaExport[b] || 0) + 1; continue; }
+      st.dariExport++;
+      const nilai = ls.map(shopeeLineValue), semuaAda = nilai.every(isOk);
+      const jumlahNilai = semuaAda ? nilai.reduce((a, v) => a + v, 0) : NaN;
+      const tepat = semuaAda && Math.round(jumlahNilai) === Math.round(o.harga);
+      if (tepat) st.tepat++; else st.perkiraan++;
+      const bobot = semuaAda && jumlahNilai > 0 ? nilai : ls.map((l) => l.qty);
+      const totalBobot = bobot.reduce((a, v) => a + v, 0) || ls.length;
+      const refundPenuh = o.refund < 0 && Math.abs(o.harga + o.refund) < 1;
+      ls.forEach((l, i) => {
+        const porsi = totalBobot ? (bobot[i] || 0) / totalBobot : 1 / ls.length;
+        const harga = tepat ? nilai[i] : o.harga * porsi;
+        const refund = o.refund === 0 ? 0 : refundPenuh ? -harga : o.refund * porsi;
+        out.shopeeItems.push({ orderId: o.id, productId: '', name: l.name, harga, refund, total: o.total * porsi, orderDate: o.orderDate,
+          dariExport: true, alokasi: tepat ? 'tepat' : 'perkiraan' });
+      });
+    }
+    out.shopeeFormatLama = st.pesanan ? st : null;
   }
 
   /** Isi kasus retur yang relevan untuk angka/status (dipakai membandingkan versi antar file). */
@@ -2520,7 +2557,7 @@ const Engine = (() => {
       perMonth: ready && monthsSpan > 0 ? totalMargin / monthsSpan : NaN, perOrder: ready && orders ? totalMargin / orders : NaN,
       fixedMonthly, opex, netProfit: ready ? totalMargin - opex : NaN,
       months: monthList, allMonths: [...allMonths].sort(), buckets: buckets.filter((b) => b.orders > 0),
-      products, cases, catSummary: Object.values(catSummary), dupes: m.dupes, target,
+      products, cases, catSummary: Object.values(catSummary), dupes: m.dupes, target, shopeeFormatLama: m.shopeeFormatLama || null,
       sampulTanpaDiskon: catalog.sampulTanpaDiskon,
       priceList: catalog.priceList ? { ...catalog.priceList, terpakai: catalog.priceListTerpakai(), knownSalesShopee: S.knownSalesPriceList, bedaManual: [...bedaManual.values()] } : null,
       qtyAssumed, shopeeQty, linesWithoutCost, ttNoDetail, ttNoDetailSales, ttKuantitas: { ...ttKuantitas, indikasiRetur: { ...ttKuantitas.indikasiRetur } }, hasOrderExport: { shopee: m.shopeeLines.size > 0, tiktok: m.tiktokLines.size > 0 },

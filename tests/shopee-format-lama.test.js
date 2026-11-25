@@ -13,9 +13,10 @@
 const fs = require('fs');
 const E = require('../assets/engine.js');
 const D = require('../assets/demo.js');
+const Sint = require('./fixtures/shopee-sintetis.js');
 
 let failed = 0;
-const tanpaTampilan = (k, v) => (k === 'tglPesanan' ? undefined : v);
+const tanpaTampilan = (k, v) => (k === 'tglPesanan' || (k === 'shopeeFormatLama' && v === null) ? undefined : v);
 const test = (name, fn) => { try { fn(); console.log('ok  ', name); } catch (e) { failed++; console.log('GAGAL', name, '\n     ', e.message); } };
 const eq = (a, b, msg = '') => { if (JSON.stringify(a) !== JSON.stringify(b)) throw new Error(`${msg} ${JSON.stringify(a)} !== ${JSON.stringify(b)}`); };
 const truthy = (v, msg) => { if (!v) throw new Error(msg || 'harus benar'); };
@@ -123,6 +124,64 @@ test('L12 format baru tetap dikenali seperti biasa; data contoh identik dengan s
   if (!fs.existsSync(acuan)) { console.log('      (lewati perbandingan snapshot: tidak ada di mesin ini)'); return; }
   const hasil = JSON.stringify(E.compute(D.make().map((w) => E.parseWorkbook(w)), D.settings(), {}), tanpaTampilan);
   if (hasil !== JSON.stringify(JSON.parse(fs.readFileSync(acuan, 'utf8')), tanpaTampilan)) throw new Error('hasil data contoh berubah');
+});
+
+/* ---------- Tahap 2: produk dari Export Pesanan (aturan disetujui pemilik 25 Nov 2026) ----------
+ * Uang pesanan dibagi ke baris export (bukan Batal): jumlah nilai = harga laporan → nilai baris apa adanya ('tepat');
+ * berbeda → sebanding ('perkiraan'). Refund penuh → semua baris penuh; refund sebagian → dibagi sebanding (uang),
+ * HPP mengikuti aturan refund parsial (A.19.1). Pesanan tanpa baris export: tetap di total toko, dicatat per bulan. */
+const EXP = (lines) => E.parseWorkbook(Sint.exportPesanan(lines, 'lama'));
+const prod = (r, nama) => r.products.find((p) => p.name === nama);
+const ORD2 = [P('A1', { asli: 80000, tgl: '2025-01-05' }), P('B2', { asli: 150000, tgl: '2025-01-06' }), P('C3', { asli: 50000, tgl: '2024-12-20' })];
+const LINES2 = [{ order: 'A1', name: 'Buku Python', qty: 1, price: 80000 },
+  { order: 'B2', name: 'Buku Python', qty: 1, price: 80000 }, { order: 'B2', name: 'Kamus Saku', qty: 2, price: 35000 },
+  { order: 'Z9', name: 'Buku Batal', qty: 1, price: 40000, status: 'Batal' }];
+test('E1 laporan lama + export: produk muncul dengan nama dan jumlah dari export; pembagian tepat', () => {
+  const r = E.compute([E.parseWorkbook(lama(ORD2)), EXP(LINES2)], ST(), {});
+  eq(r.products.map((p) => p.name).sort(), ['Buku Python', 'Kamus Saku']);
+  eq(prod(r, 'Buku Python').sales, 160000); eq(prod(r, 'Buku Python').qty, 2); eq(prod(r, 'Kamus Saku').sales, 70000); eq(prod(r, 'Kamus Saku').qty, 2);
+  eq(r.shopeeFormatLama, { pesanan: 3, dariExport: 2, tepat: 2, perkiraan: 0, tanpaExport: 1, bulanTanpaExport: { '2024-12': 1 } });
+});
+test('E2 nilai export ≠ laporan → dibagi sebanding, berlabel perkiraan; jumlah per produk = harga pesanan', () => {
+  const r = E.compute([E.parseWorkbook(lama([P('B2', { asli: 140000 })])), EXP(LINES2)], ST(), {});
+  eq(r.shopeeFormatLama.perkiraan, 1);
+  const a = prod(r, 'Buku Python').sales, b = prod(r, 'Kamus Saku').sales;
+  truthy(Math.abs(a + b - 140000) < 1e-6, `${a} + ${b}`); truthy(Math.abs(a - 140000 * 80 / 150) < 1e-6);
+});
+test('E3 total toko tidak berubah dengan/tanpa export (penjualan, dana, laba modal rata-rata)', () => {
+  const st = ST({ fallbackPct: 70 });
+  const a = E.compute([E.parseWorkbook(lama(ORD2))], st, {}), b = E.compute([E.parseWorkbook(lama(ORD2)), EXP(LINES2)], st, {});
+  eq([b.totalSales, b.totalFees, b.totalReceived], [a.totalSales, a.totalFees, a.totalReceived]);
+  truthy(Math.abs(a.totalMargin - b.totalMargin) < 1e-6, `${a.totalMargin} vs ${b.totalMargin}`);
+});
+test('E4 tanpa export sama sekali: tanpa produk, semua pesanan tercatat "belum ada di export" per bulan', () => {
+  const r = E.compute([E.parseWorkbook(lama(ORD2))], ST(), {});
+  eq(r.products.length, 0); eq(r.shopeeFormatLama.tanpaExport, 3); eq(r.shopeeFormatLama.bulanTanpaExport, { '2025-01': 2, '2024-12': 1 });
+});
+test('E5 baris export berstatus Batal tidak dipakai', () => {
+  const r = E.compute([E.parseWorkbook(lama([P('Z9', { asli: 40000 })])), EXP(LINES2)], ST(), {});
+  eq(r.products.length, 0); eq(r.shopeeFormatLama.tanpaExport, 1);
+});
+test('E6 modal per produk dari isian seller: modal = harga beli × jumlah export', () => {
+  const cat = [{ kode: '', nama: 'Buku Python', variasi: '', cost: 50000 }, { kode: '', nama: 'Kamus Saku', variasi: '', cost: 20000 }];
+  const r = E.compute([E.parseWorkbook(lama(ORD2.slice(0, 2))), EXP(LINES2)], ST({ catalog: cat }), {});
+  eq(prod(r, 'Buku Python').modal, 100000); eq(prod(r, 'Kamus Saku').modal, 40000); eq(r.coverage, 1);
+});
+test('E7 refund penuh → penjualan produk 0, modal tidak dihitung dobel; refund sebagian pesanan banyak produk → HPP tidak diketahui', () => {
+  const cat = [{ kode: '', nama: 'Buku Python', variasi: '', cost: 50000 }, { kode: '', nama: 'Kamus Saku', variasi: '', cost: 20000 }];
+  const penuh = E.compute([E.parseWorkbook(lama([P('A1', { asli: 80000, refund: -80000, admin: 0, layanan: 0, ongkirPembeli: 0, gratisOngkir: 0, diteruskan: 0 })])), EXP(LINES2)], ST({ catalog: cat }), {});
+  eq(prod(penuh, 'Buku Python').sales, 0);
+  const sebagian = E.compute([E.parseWorkbook(lama([P('B2', { asli: 150000, refund: -35000 })])), EXP(LINES2)], ST({ catalog: cat }), {});
+  truthy(!prod(sebagian, 'Buku Python').modalKnown || !prod(sebagian, 'Kamus Saku').modalKnown, 'refund sebagian: HPP tidak boleh dihitung dari nominal refund');
+  truthy(sebagian.coverage < 1, 'pesanan refund sebagian keluar dari laba');
+});
+test('E8 export diunggah dua kali tidak membuat produk dobel', () => {
+  const a = E.compute([E.parseWorkbook(lama(ORD2)), EXP(LINES2)], ST(), {}), b = E.compute([E.parseWorkbook(lama(ORD2)), EXP(LINES2), EXP(LINES2)], ST(), {});
+  eq(b.products.map((p) => [p.name, p.sales, p.qty]), a.products.map((p) => [p.name, p.sales, p.qty]));
+});
+test('E9 format baru + export: tidak ada data format lama, perilaku lama tetap', () => {
+  const r = E.compute([E.parseWorkbook(Sint.penghasilan([{ id: 'N1', items: [{ name: 'Buku Python', harga: 80000 }] }])), EXP([{ order: 'N1', name: 'Buku Python', qty: 1, price: 80000 }])], ST(), {});
+  eq(r.shopeeFormatLama, null); eq(r.products.length, 1);
 });
 
 console.log(failed ? `\n${failed} uji GAGAL` : '\nSemua uji Shopee format lama lulus');
