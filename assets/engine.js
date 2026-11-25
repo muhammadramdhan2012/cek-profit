@@ -127,6 +127,8 @@ const Engine = (() => {
   function detect(wb) {
     const names = Object.keys(wb.sheets);
     if (names.includes('Penghasilan') && names.includes('Summary')) return 'shopee_income';
+    // Format lama Laporan Penghasilan Shopee (terlihat pada laporan Jan–Feb 2025): sheet "Income", satu baris per pesanan.
+    if (names.includes('Income') && names.includes('Summary') && findHeader(wb.sheets['Income'], ['No. Pesanan', 'Total Penghasilan']) >= 0) return 'shopee_income';
     if (names.includes('Detail pesanan')) return 'tiktok_income';
     if (names.includes('Transaction Report')) return 'shopee_balance';
     if (firstSheetHeader(wb, isModalTemplateHeader)) return 'modal_template';
@@ -138,26 +140,40 @@ const Engine = (() => {
   }
 
   /* ---------- Shopee: laporan penghasilan ---------- */
+  // Nama kolom format lama (sheet "Income") ikut didaftarkan; tiap file hanya memuat salah satu nama, jadi tidak dobel.
   const SH_SHIP = ['Ongkir Dibayar Pembeli', 'Ongkos Kirim yang Dibayarkan ke Jasa Kirim', 'Potongan Ongkos Kirim dari Jasa Kirim',
-    'Gratis Ongkir dari Shopee', 'Ongkos Kirim Pengembalian Barang', 'Return to Seller Fee', 'Pengembalian Biaya Kirim'];
+    'Gratis Ongkir dari Shopee', 'Ongkos Kirim Pengembalian Barang', 'Return to Seller Fee', 'Pengembalian Biaya Kirim',
+    'Diskon Ongkir Ditanggung Jasa Kirim', 'Ongkir yang Diteruskan oleh Shopee ke Jasa Kirim'];
   const SH_VOUCHER = ['Voucher disponsor oleh Penjual', 'Cashback Koin disponsori Penjual', 'Diskon Produk dari Shopee',
-    'Voucher co-fund disponsor oleh Penjual', 'Cashback Koin Co-fund disponsori Penjual'];
+    'Voucher co-fund disponsor oleh Penjual', 'Cashback Koin Co-fund disponsori Penjual',
+    'Diskon Voucher Ditanggung Penjual', 'Cashback Koin yang Ditanggung Penjual'];
   const SH_XTRA = ['Biaya Layanan Gratis Ongkir XTRA (Kategori D)', 'Biaya Layanan Gratis Ongkir XTRA (Kategori E)',
-    'Biaya Gratis Ongkir XTRA - Ukuran Biasa (Kategori D)', 'Biaya Gratis Ongkir XTRA - Ukuran Biasa (Kategori E)', 'Biaya Layanan Gratis Ongkir XTRA'];
+    'Biaya Gratis Ongkir XTRA - Ukuran Biasa (Kategori D)', 'Biaya Gratis Ongkir XTRA - Ukuran Biasa (Kategori E)', 'Biaya Layanan Gratis Ongkir XTRA',
+    'Biaya Layanan (termasuk PPN 11%)'];
   const SH_AMS = ['Biaya Komisi AMS'];
 
   function parseShopeeIncome(wb) {
-    const aoa = wb.sheets['Penghasilan'];
-    const h = findHeader(aoa, ['No. Pesanan', 'Lihat berdasarkan']);
-    if (h < 0) throw new Error('Kolom "No. Pesanan" tidak ditemukan di sheet Penghasilan.');
+    // Format lama (sheet "Income"): satu baris per pesanan, tanpa kolom "Lihat berdasarkan" dan tanpa baris produk (Sku),
+    // "Harga Produk" belum ada (= Harga Asli Produk + Total Diskon Produk).
+    const formatLama = !wb.sheets['Penghasilan'] && !!wb.sheets['Income'];
+    const aoa = formatLama ? wb.sheets['Income'] : wb.sheets['Penghasilan'];
+    const h = findHeader(aoa || [], formatLama ? ['No. Pesanan', 'Total Penghasilan'] : ['No. Pesanan', 'Lihat berdasarkan']);
+    if (h < 0) throw new Error(`Kolom "No. Pesanan" tidak ditemukan di sheet ${formatLama ? 'Income' : 'Penghasilan'}.`);
     const map = colMap(aoa[h]);
+    if (formatLama && !('Harga Produk' in map) && !('Harga Asli Produk' in map)) throw new Error('Kolom harga produk tidak ditemukan di sheet Income.');
     const orders = [], items = [];
+    const kompensasiLama = { baris: 0, nilai: 0 };
     for (const row of aoa.slice(h + 1)) {
       const g = getter(row, map);
-      const type = str(g('Lihat berdasarkan'));
+      const type = formatLama ? 'Order' : str(g('Lihat berdasarkan'));
       const id = str(g('No. Pesanan'));
       if (!id || (type !== 'Order' && type !== 'Sku')) continue;
-      const harga = num(g('Harga Produk')), refund = num(g('Jumlah Pengembalian Dana ke Pembeli')), total = num(g('Total Penghasilan'));
+      if (formatLama && /^(total|jumlah)\b/i.test(id)) continue;
+      const harga = formatLama && !('Harga Produk' in map) ? num(g('Harga Asli Produk')) + num(g('Total Diskon Produk')) : num(g('Harga Produk'));
+      // Kolom "Kompensasi" format lama: belum diketahui apakah sudah termasuk Total Penghasilan. Dicatat agar ditandai
+      // perlu dicek; nilainya tetap ikut selisih `lain` seperti kolom lain yang belum dikenal.
+      if (formatLama && num(g('Kompensasi')) !== 0) { kompensasiLama.baris++; kompensasiLama.nilai += num(g('Kompensasi')); }
+      const refund = num(g('Jumlah Pengembalian Dana ke Pembeli')), total = num(g('Total Penghasilan'));
       const orderDate = date(g('Waktu Pesanan Dibuat')), payDate = date(g('Tanggal Dana Dilepaskan'));
       if (type === 'Sku') {
         items.push({ orderId: id, productId: str(g('ID Produk')), name: str(g('Nama Produk')), harga, refund, total, orderDate });
@@ -212,7 +228,8 @@ const Engine = (() => {
       penyesuaian: adjustments.reduce((a, x) => a + x.amount, 0) };
     return { kind: 'shopee_income', orders, items, adjustments,
       check: { summaryTotal, sum: orders.reduce((a, o) => a + o.total, 0), from, to,
-        ringkasan, jumlah, kolomRefund: 'Jumlah Pengembalian Dana ke Pembeli' in map, sheetPenyesuaian: !!adj } };
+        ringkasan, jumlah, kolomRefund: 'Jumlah Pengembalian Dana ke Pembeli' in map, sheetPenyesuaian: !!adj,
+        ...(formatLama ? { formatLama: true, tanpaProduk: true, kompensasiLama } : {}) } };
   }
 
   /* ---------- TikTok: laporan penghasilan ---------- */
