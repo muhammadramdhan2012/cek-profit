@@ -84,6 +84,9 @@ Bila dokumen rujukan bertentangan dengan file ini, file ini yang berlaku. Lapork
        berlabel perkiraan (A.22, 24 Nov 2026).
      - riwayat modal: modal per tanggal pesanan (tanpa jumlah) atau rata-rata tertimbang kulakan (dengan jumlah), berlabel
        perkiraan; sebelum catatan pertama memakai modal awal atau tidak diketahui (A.23, 24 Nov 2026).
+     - iklan marketplace: biaya dari laporan iklan resmi, ROAS impas = 1 ÷ margin kontribusi, laba setelah iklan, anti
+       hitung ganda (laporan iklan menang atas isian manual; top up saldo iklan bukan biaya), ambang status 1,3× dan 70%
+       ROAS impas, menu "Iklan", Gratis vs Pro (A.24, 25 Nov 2026; batas minimum klik/pesanan belum ditetapkan).
      Semua rumus, bobot, ambang batas, dan definisi keuangan rinci lainnya tetap **DIUSULKAN — BELUM DISETUJUI**.
    - **Nominal refund tidak boleh digunakan untuk menentukan jumlah unit HPP.** Bila jumlah unit pada refund parsial tidak dapat diverifikasi, HPP dan laba terkait tidak boleh dihitung menggunakan proporsi nominal refund. Penerapannya (disetujui 19 Okt 2026):
      - berlaku untuk ketiga mode modal (per produk, harga acuan, modal rata-rata);

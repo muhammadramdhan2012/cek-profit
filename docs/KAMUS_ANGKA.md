@@ -471,6 +471,60 @@ sampul + jumlah (opsional). Modal yang sudah diisi sebelumnya untuk produk itu =
 Penerapan: `assets/engine.js` (`normRiwayat`, `modalPada`, `catalog.pada`), `assets/app.js` (panel riwayat di tabel
 modal). Tes: `node tests/riwayat.test.js`.
 
+### A.24 Iklan marketplace: biaya, ROAS impas, laba setelah iklan
+Status: **DITETAPKAN pemilik (25 Nov 2026**, rancangan "Fitur Iklan & Efisiensi Iklan": "saya setuju dengan semua saran
+kamu"). **Belum ada kode.** Batas minimum klik/pesanan untuk status "data belum cukup" **belum ditetapkan**; ditetapkan
+setelah ada file laporan iklan asli yang berisi data.
+
+**Sumber biaya iklan.** Laporan iklan resmi dari Seller Centre (Shopee dulu, lalu TikTok). Untuk Shopee: Iklan Shopee →
+Iklan Produk → Download Data → "Data Keseluruhan Iklan" (utama) dan "Rincian Data Iklan Produk Otomatis" (biaya per
+produk untuk iklan otomatis). Nama dan format kolom baru ditetapkan setelah file berisi data dilihat; sampai itu parser
+berlabel Beta. File dikenali dari judul kolom, bukan judul file (contoh file Grup tertulis "Shopee {Country}").
+
+**Definisi**
+
+| Angka | Rumus | Label |
+|---|---|---|
+| Biaya iklan | jumlah biaya pada periode, dari laporan iklan | fakta |
+| Penjualan dari iklan | penjualan yang diatribusikan marketplace ke iklan; "langsung" dan total dipisah bila file memisahkannya | menurut marketplace |
+| ROAS / ACOS / biaya per pesanan | penjualan dari iklan ÷ biaya; biaya ÷ penjualan dari iklan; biaya ÷ pesanan dari iklan | menurut marketplace |
+| TACoS | biaya iklan ÷ total penjualan toko (Laporan Penghasilan) | fakta |
+| Margin kontribusi sebelum iklan | penjualan − potongan marketplace − modal − packing (mesin hitung yang ada) | mengikuti status HPP |
+| ROAS impas | 1 ÷ margin kontribusi (%) | perkiraan |
+| Laba setelah iklan (produk) | margin kontribusi produk − biaya iklan produk | perkiraan bila ada komponen perkiraan |
+| Laba toko setelah iklan | laba yang sudah ada − total biaya iklan periode itu | mengikuti laba |
+
+- Produk tanpa modal: tidak ada ROAS impas; status "data belum cukup" dan ajakan isi modal (tidak dihitung dengan
+  modal nol). Penjualan iklan nol → ROAS tidak dihitung (bukan tak terhingga).
+- Biaya yang hanya tersedia per kampanye **tidak dibagi** ke produk; tampil per kampanye dan di total toko.
+- Produk tanpa data iklan = "tidak diiklankan atau tidak diketahui", bukan biaya iklan Rp0.
+
+**Anti hitung ganda**
+1. Laporan iklan adalah sumber biaya iklan marketplace. Bila laporan iklan untuk periode dan marketplace yang sama ada,
+   biaya iklan yang diisi manual sebagai biaya operasional (ditandai iklan marketplace) **tidak dipakai**; website memberi
+   peringatan.
+2. **Top up saldo iklan bukan biaya** (arus kas); hanya untuk pencocokan Money Trace.
+3. Komisi afiliasi (AMS, afiliasi TikTok) tetap di potongan marketplace, tidak dihitung lagi sebagai iklan.
+4. Laporan iklan yang diunggah dua kali atau tumpang tindih: baris yang sama (periode, iklan, produk) dihitung sekali.
+5. Biaya iklan mengikuti filter periode laba. Laporan tanpa rincian harian tidak dipecah per bulan; bila periodenya
+   berbeda dengan filter, ditandai "periode iklan berbeda".
+6. Penjualan dari iklan **tidak ditambahkan** ke penjualan toko; penjualan toko tetap dari Laporan Penghasilan.
+
+**Status per produk/iklan** (semua saran berlabel perkiraan, maks. 5 tindakan diurutkan dari dampak rupiah terbesar)
+
+| Status | Syarat | Tindakan utama |
+|---|---|---|
+| Iklan rugi | ROAS < ROAS impas | turunkan anggaran/bid; **hentikan bila ROAS < 70% ROAS impas**; alternatif naikkan harga |
+| Iklan tipis | ROAS impas ≤ ROAS < 1,3 × ROAS impas | pertahankan, perbaiki konversi dulu |
+| Iklan sehat | ROAS ≥ 1,3 × ROAS impas | tambah anggaran bertahap (mis. +20%), pantau |
+| Klik tanpa pesanan | klik tinggi, pesanan rendah (ambang menyusul) | periksa halaman produk |
+| Data belum cukup | klik/pesanan di bawah batas minimum (menyusul) atau modal belum diisi | tanpa saran tegas |
+
+**Tampilan dan akses.** Menu baru "Iklan" di kelompok Utama setelah Produk. Gratis: biaya iklan masuk laba toko, kartu
+laba setelah iklan dan TACoS, status 3 produk, 1 tindakan. Pro: semua status, semua tindakan, halaman iklan di PDF.
+
+Penerapan: belum ada. Tes wajib per tahap: lihat rancangan fitur iklan dan `docs/QUALITY_GATES.md`.
+
 ## B. Implementasi kode saat ini (`assets/engine.js`, per 14 Okt 2026, commit `a31eddb`)
 
 Bagian ini menggambarkan apa yang **dihitung**, bukan apa yang **benar**. Selama definisi A belum disetujui, kolom
