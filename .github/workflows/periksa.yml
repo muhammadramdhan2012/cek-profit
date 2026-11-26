@@ -31,5 +31,6 @@ jobs:
           node tests/shopee-format-lama.test.js
           node tests/laporan-pdf.test.js
           node tests/modal-rata.test.js
+          node tests/retur-teks.test.js
           node tests/cloud.test.js
           node tests/duitku.test.mjs

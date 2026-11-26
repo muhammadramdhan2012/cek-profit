@@ -1509,6 +1509,11 @@
   /* ---------- retur ---------- */
   /* Status barang retur: kunci engine (c.state) → kelas, label. */
   const CASE_ST = { belum: ['pending', 'Belum dicek'], kembali: ['verified', 'Sudah kembali'], hilang: ['danger', 'Tidak kembali'] };
+  /* Kasus yang tidak perlu ditandai: label singkat + artinya bagi laba + apa yang perlu dilakukan seller. */
+  const CASE_INFO = {
+    tidak_dikirim: { lbl: 'Tidak perlu ditandai', arti: 'Pembeli melaporkan barang kurang atau tidak dikirim, jadi tidak ada barang yang perlu kembali. Modalnya tidak dikurangkan dari laba.', aksi: 'Bila barang sebenarnya sudah Anda kirim lengkap, cek pesanan ini di Seller Centre marketplace.' },
+    batal: { lbl: 'Dibatalkan', arti: 'Pengajuan pengembalian dibatalkan atau ditolak. Tidak ada refund dan laba tidak terpengaruh.', aksi: 'Tidak perlu tindakan.' },
+  };
   function viewRetur() {
     const { r } = last;
     if (!r.cases.length) return `<div class="panel empty"><span class="ic">${svg('retur', 24)}</span><h2>Belum ada file retur</h2><p>Unggah file pengembalian Shopee atau retur TikTok untuk menandai barang yang tidak kembali. Tanpa data retur, kondisi barang setelah refund mungkin belum dapat dipastikan.</p><button class="btn primary" type="button" data-go="data">Unggah file retur</button></div>`;
@@ -1522,13 +1527,14 @@
     const riskV = r.unknownRisk > 0 ? fmt(r.unknownRisk) : rb.risikoTanpaNilai ? 'Belum diketahui' : fmt(0);
     const list = r.cases.filter((c) => !view.onlyCheck || c.needsCheck).sort((a, b) => (b.needsCheck - a.needsCheck) || ((b.estModal || 0) - (a.estModal || 0))).slice(0, 300);
     const row = (c) => {
-      const [cls, lbl] = c.needsCheck ? CASE_ST[c.state] || CASE_ST.belum : ['none', c.cat === 'tidak_dikirim' ? 'Belum bisa ditandai' : 'Pengajuan batal'];
+      const info = c.needsCheck ? null : CASE_INFO[c.cat] || CASE_INFO.batal;
+      const [cls, lbl] = c.needsCheck ? CASE_ST[c.state] || CASE_ST.belum : ['none', info.lbl];
       return `<li class="rt-case st-${cls}">
         <div class="rt-main"><span class="rt-plat"><i class="sw" style="background:var(--${c.platform})"></i>${PNAME[c.platform]}</span>
           <b>${esc(c.product || '-')}${c.variant && !/^(Default|Not Specified)$/.test(c.variant) ? ` <span class="faint">${esc(c.variant)}</span>` : ''}</b>
-          <span class="rt-why">${esc(catLabel(c.cat))}${c.note ? `: “${esc(c.note.slice(0, 70))}”` : ''}</span>${c.diLuarLaporan ? '<span class="rt-luar">Pesanan di luar laporan: tidak dihitung dalam laba periode ini</span>' : ''}</div>
+          <span class="rt-why">${esc(catLabel(c.cat))}${c.note ? `: “${esc(c.note.slice(0, 70))}”` : ''}</span>${c.diLuarLaporan ? '<span class="rt-luar">Pesanan di luar laporan: tidak dihitung dalam laba periode ini</span>' : ''}${info ? `<span class="rt-info"><b>Artinya:</b> ${esc(info.arti)} ${esc(info.aksi)}</span>` : ''}</div>
         <div class="rt-meta"><span class="rt-k">Resi retur</span><span>${esc(c.resi || '–')}</span></div>
-        <div class="rt-meta"><span class="rt-k">Perkiraan modal${qi('perkiraan_modal')}</span>${ok(c.estModal) ? `<b class="num">${fmt(c.estModal)}</b>` : '<span class="unk-v">Nilai belum diketahui</span>'}</div>
+        <div class="rt-meta"><span class="rt-k">Perkiraan modal${qi('perkiraan_modal')}</span>${info ? (c.cat === 'batal' || !ok(c.estModal) ? '<span class="faint">Tidak dipakai</span>' : `<span class="num faint">${fmt(c.estModal)}</span><span class="tiny faint">tidak dikurangkan dari laba</span>`) : ok(c.estModal) ? `<b class="num">${fmt(c.estModal)}</b>` : '<span class="unk-v">Nilai belum diketahui</span>'}</div>
         <div class="rt-state"><span class="status ${cls}" aria-hidden="true"></span>${c.needsCheck ? `<select class="compact" data-case="${esc(c.key)}" aria-label="Status barang ${esc(c.product || '')}" ${demo ? 'disabled' : ''}>${[['belum', 'Belum dicek'], ['kembali', 'Sudah kembali'], ['hilang', 'Tidak kembali']].map(([v, l]) => `<option value="${v}" ${c.state === v ? 'selected' : ''}>${l}</option>`).join('')}</select>` : `<span class="faint small">${lbl}</span>`}</div></li>`;
     };
     return `<section class="rt-sum" aria-label="Ringkasan retur dan refund">
@@ -1549,7 +1555,7 @@
         <div class="rt-head"><div class="rt-dist" aria-label="Status kasus">${['belum', 'kembali', 'hilang'].map((k) => `<span class="rt-pill st-${CASE_ST[k][0]}"><span class="status ${CASE_ST[k][0]}" aria-hidden="true"></span>${CASE_ST[k][1]} <b>${num(by(k))}</b></span>`).join('')}${noVal ? `<span class="rt-pill st-unknown"><span class="status unknown" aria-hidden="true"></span>Nilai belum diketahui <b>${num(noVal)}</b></span>` : ''}</div>
           ${r.cases.some((c) => !c.needsCheck) ? `<button class="btn sm quiet" type="button" id="only-check">${view.onlyCheck ? 'Tampilkan semua kasus' : 'Hanya yang perlu dicek'}</button>` : ''}</div>
         <div class="chips rt-cats">${r.catSummary.sort((a, b) => b.count - a.count).map((c) => `<span class="chip"><i class="sw" style="background:var(--${c.platform})"></i>${esc(catLabel(c.cat))}: ${c.count}</span>`).join('')}</div>
-        <p class="note-box rt-note">Pilih <b>Tidak kembali</b> bila barangnya tidak Anda terima lagi; modalnya akan dikurangkan dari laba. Beberapa refund terindikasi tidak dikirim menurut alasan di marketplace. Kondisi barangnya tetap perlu dipastikan.${r.unknownRisk > 0 ? ` Kasus yang belum dicek berisiko ${fmt(r.unknownRisk)} (belum dihitung sebagai kerugian)${rb.risikoTanpaNilai ? `, ditambah ${num(rb.risikoTanpaNilai)} kasus yang nilainya belum diketahui` : ''}.` : rb.risikoTanpaNilai ? ` ${num(rb.risikoTanpaNilai)} kasus yang belum dicek nilainya belum diketahui.` : ''}</p>
+        <p class="note-box rt-note"><b>Yang perlu Anda lakukan:</b> untuk kasus berstatus <b>Belum dicek</b>, pilih <b>Sudah kembali</b> bila barangnya sudah Anda terima lagi, atau <b>Tidak kembali</b> bila hilang atau rusak (modalnya akan dikurangkan dari laba). Kasus berstatus <b>Tidak perlu ditandai</b> atau <b>Dibatalkan</b> hanya informasi.${r.unknownRisk > 0 ? ` Kasus yang belum dicek berisiko ${fmt(r.unknownRisk)} (belum dihitung sebagai kerugian)${rb.risikoTanpaNilai ? `, ditambah ${num(rb.risikoTanpaNilai)} kasus yang nilainya belum diketahui` : ''}.` : rb.risikoTanpaNilai ? ` ${num(rb.risikoTanpaNilai)} kasus yang belum dicek nilainya belum diketahui.` : ''}</p>
         <ul class="rt-list">${list.map(row).join('') || '<li class="muted small">Tidak ada kasus yang perlu dicek.</li>'}</ul>
       </section>`;
   }
