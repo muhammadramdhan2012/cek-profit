@@ -183,6 +183,17 @@ Status: **DIUSULKAN — BELUM DISETUJUI**
 Margin kontribusi − biaya operasional tetap pada periode yang sama: gaji, sewa, internet, dan iklan yang tidak
 dipotong dari Laporan Penghasilan.
 
+**Jumlah bulan untuk biaya operasional dan rata-rata per bulan — DITETAPKAN pemilik (26 Nov 2026,** "setuju perbaiki
+semuanya", dari laporan pengguna):
+- Ada filter bulan pesanan → biaya operasional = biaya per bulan × **jumlah bulan kalender yang dipilih** (Januari = 1;
+  Januari–Maret = 3, termasuk bulan tanpa pesanan). Filter satu sisi: batas lainnya = bulan pesanan pertama/terakhir di
+  data. Rata-rata laba per bulan dibagi jumlah yang sama.
+- Tanpa filter → cara lama: lama data menurut tanggal dana dilepas ÷ 30,4 hari.
+- Alasan: filter memakai bulan pesanan dibuat, sedangkan dana pesanan akhir bulan cair di bulan berikutnya; memakai
+  lama dana cair membuat biaya operasional bulan itu terhitung lebih besar (contoh pengguna: 34 hari → 1,12 bulan).
+- PDF dengan filter: judul "Pesanan <bulan>", tanggal dana cair sebagai keterangan.
+Penerapan: `assets/engine.js` (`monthsSpan`, `dasarBulan`, `jumlahBulan`). Tes: `node tests/periode-bulan.test.js`.
+
 ### A.14 Laba bersih
 Status: **DIUSULKAN — BELUM DISETUJUI**
 
@@ -542,7 +553,7 @@ penilaian hanya memakai:
 | Modal barang | `totalModal` | Per produk: `modal per unit × qty × (harga+refund)/harga`; qty = 1 bila export pesanan tidak ada; bila export ada, baris variasi bernama sama terhitung ganda (KNOWN_ISSUES H1/H3). Reseller: `(harga+refund) × rasio acuan`. | `assets/engine.js:445`, `assets/engine.js:455-458`, `assets/engine.js:509-512` | **Tidak sejalan dengan usulan A.6** pada kasus qty diasumsikan (H1) dan variasi (H3); sisanya perlu verifikasi. |
 | Retur yang tidak kembali | `lostCertain` | Perkiraan modal kasus yang ditandai "Tidak kembali" | `assets/engine.js:601-607`, `assets/engine.js:613` | **Perlu verifikasi** terhadap A.7 dan A.9. Lihat B.1. |
 | Margin (UI: "Margin kotor" / "Margin setelah modal") | `totalMargin` | `Dana diterima (pesanan bermodal) − modal − packing − retur tidak kembali` | `assets/engine.js:476`, `assets/engine.js:535`, `assets/engine.js:630` | Strukturnya mendekati **margin kontribusi** (usulan A.11), bukan laba kotor (A.12). **Perlu verifikasi**; nama di UI perlu keputusan (B.2). |
-| Biaya operasional | `opex` | `biaya tetap per bulan × (hari periode ÷ 30,4)`; hari dari tanggal dana dilepas | `assets/engine.js:634-637` | **Perlu verifikasi.** Basis waktu campuran (KNOWN_ISSUES M1). |
+| Biaya operasional | `opex` | `biaya tetap per bulan × monthsSpan`; dengan filter: jumlah bulan pesanan yang dipilih, tanpa filter: hari dana dilepas ÷ 30,4 | `assets/engine.js` (`monthsSpan`, `dasarBulan`) | Jumlah bulan ditetapkan pemilik 26 Nov 2026 (A.13). |
 | Laba bersih | `netProfit` | `totalMargin − opex` | `assets/engine.js:652` | Strukturnya mendekati **laba operasional** (usulan A.13). Nama "laba bersih" tidak sejalan dengan usulan A.14 karena pajak/bunga tidak dihitung. |
 | Modal diketahui | `coverage` | Penjualan pesanan bermodal ÷ seluruh penjualan | `assets/engine.js:627` | **Sejalan dengan usulan A.1, belum disetujui**, tetapi tidak mencerminkan asumsi qty (H1). |
 | Tarif efektif | `feeModel` | Tetap = `−biaya proses ÷ pesanan`; persen = `−(potongan − biaya proses) ÷ penjualan` | `assets/engine.js:573` | **Sejalan dengan usulan A.18, belum disetujui**; biaya logistik TikTok ikut masuk persen (L7). |

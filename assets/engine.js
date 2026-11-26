@@ -1127,6 +1127,20 @@ const Engine = (() => {
    * Tanpa bukti unit, HPP baris/pesanan itu TIDAK DIKETAHUI (keluar dari laba), bukan pro-rata, bukan 1 unit, bukan 0.
    * Refund PENUH tidak termasuk di sini (perilaku lama tetap: HPP penjualan 0, kondisi fisik dicatat terpisah).
    */
+  /** Alasan pesanan dikeluarkan dari laba (kepastian.cakupan.dikeluarkanDaftar) dalam bahasa seller, untuk tampilan. */
+  const ALASAN_KELUAR = {
+    refund_parsial_unit_tidak_diketahui: 'refund sebagian, jumlah barang yang direfund tidak diketahui',
+    unit_retur_bertentangan_dengan_refund_parsial: 'jumlah barang berbeda antara file retur dan Laporan Penghasilan',
+    modal_belum_diisi: 'modal produk belum diisi',
+    kuantitas_tidak_diketahui: 'jumlah barang tidak diketahui',
+    kuantitas_belum_pasti: 'jumlah barang belum pasti',
+    identitas_variasi_berbeda: 'variasi produk berbeda dengan daftar modal',
+    diskon_pemasok_belum_diisi: 'diskon dari pemasok belum diisi',
+    tanpa_rincian_produk: 'laporan tidak mencantumkan produk',
+    refund_susulan_tanpa_pesanan_asal: 'refund susulan tanpa pesanan asal di laporan',
+  };
+  /** Jumlah bulan kalender dari 'YYYY-MM' a sampai b, termasuk keduanya. */
+  const jumlahBulan = (a, b) => { const [ya, ma] = a.split('-').map(Number), [yb, mb] = b.split('-').map(Number); return (yb - ya) * 12 + (mb - ma) + 1; };
   const REFUND_PARSIAL = 'refund_parsial_unit_tidak_diketahui';
   // H2-B3b: bukti unit menyebut SELURUH unit direfund, padahal laporan penghasilan masih menyisakan nilai (refund
   // parsial). Kedua sumber bertentangan, jadi HPP tidak boleh dianggap terverifikasi; selalu bersama REFUND_PARSIAL.
@@ -1217,6 +1231,10 @@ const Engine = (() => {
     // Daftar pesanan berstatus "belum" beserta alasannya, untuk ditampilkan ke seller (metadata; tidak mengubah angka).
     // Terpisah dari CK karena sumParts hanya menjumlahkan angka.
     const BELUM_MAKS = 300;
+    const keluarDaftar = [];   // pesanan yang dikeluarkan dari laba (modal tidak diketahui), maks. BELUM_MAKS
+    const catatKeluar = (platform, orderId, produk, penjualan, dana, alasan) => {
+      if (keluarDaftar.length < BELUM_MAKS) keluarDaftar.push({ platform, orderId: String(orderId || ''), produk: [...new Set(produk.filter(Boolean))], penjualan, dana, alasan: [...new Set(alasan)] });
+    };
     const belumDaftar = [], belumAlasan = {};   // belumAlasan: hitungan lengkap per alasan (tidak terpotong)
     const catatBelum = (platform, orderId, produk, penjualan, alasan) => {
       const al = [...new Set(alasan)];
@@ -1659,6 +1677,7 @@ const Engine = (() => {
                 : n.entry && (n.hppReasons || []).includes('identitas_berbeda') ? 'identitas_variasi_berbeda' : 'modal_belum_diisi']))
           : ['tanpa_rincian_produk'];
         ckAdd('shopee', 'tidak_diketahui', net, o.total, reasons, false, found);
+        catatKeluar('shopee', o.id, notes.map((n) => n.it.name), net, o.total, reasons);
       } else if (!notes.length) {
         // Tanpa baris produk: modal rata-rata dari nilai pesanan. Refund di sini belum punya dasar unit.
         ckAdd('shopee', o.refund !== 0 ? 'belum' : 'estimasi', net, o.total, [], found, found);
@@ -1711,6 +1730,7 @@ const Engine = (() => {
     function tiktokCakupan(r, modal, lines, refundParsial, row = r) {
       const { status, reasons, partial } = tiktokCakupanStatus(r, modal, lines, refundParsial);
       ckAdd('tiktok', status, row.sales, row.settle, reasons, false, partial);
+      if (status === 'tidak_diketahui') catatKeluar('tiktok', r.id || r.orderId, lines.map((l) => l.name), row.sales, row.settle, reasons);
       if (status === 'belum') catatBelum('tiktok', r.id || r.orderId, lines.map((l) => l.name), row.sales, [partial ? 'refund' : 'tiktok_jumlah_belum_terbukti']);
       if (r.preGross > 0 && !(r.pre > 0)) {
         // Refund penuh. "Detail produk terjual" tetap mencantumkan unit yang direfund (audit H2-B3), jadi untuk refund
@@ -2179,7 +2199,14 @@ const Engine = (() => {
     const first = [has.shopee && S.first, has.tiktok && T.first].filter(Boolean).sort()[0] || '';
     const last = [has.shopee && S.last, has.tiktok && T.last].filter(Boolean).sort().slice(-1)[0] || '';
     const days = daysBetween(first, last);
-    const monthsSpan = days / 30.4;
+    /* Jumlah bulan untuk biaya operasional dan rata-rata per bulan (DITETAPKAN pemilik 26 Nov 2026, A.13):
+     * - ada filter bulan pesanan → jumlah bulan kalender yang dipilih (filter memakai bulan pesanan, bukan tanggal dana);
+     * - tanpa filter → lama data menurut tanggal dana dilepas ÷ 30,4 hari (cara lama). */
+    const bulanPesanan = [...months.keys()].filter((k) => k !== '—').sort();
+    const bulanDari = filter.from || bulanPesanan[0], bulanSampai = filter.to || bulanPesanan[bulanPesanan.length - 1];
+    const pakaiBulanFilter = !!(filter.from || filter.to) && !!bulanDari && !!bulanSampai && bulanDari <= bulanSampai;
+    const monthsSpan = pakaiBulanFilter ? jumlahBulan(bulanDari, bulanSampai) : days / 30.4;
+    const dasarBulan = pakaiBulanFilter ? { jenis: 'bulan_pesanan', dari: bulanDari, sampai: bulanSampai } : { jenis: 'tanggal_dana' };
     const orders = pick((p) => p.orders);
     const fixedMonthly = fixedPerMonth(settings);
     const opex = fixedMonthly * monthsSpan;
@@ -2334,6 +2361,8 @@ const Engine = (() => {
         perMarketplace: per,
         // Pesanan berstatus "belum" (maks. BELUM_MAKS) dan alasannya; belumDaftarPenuh = daftar terpotong.
         belumDaftar, belumDaftarPenuh: belumDaftar.length >= BELUM_MAKS, belumAlasan,
+        // Pesanan yang tidak dihitung dalam laba (status tidak_diketahui), untuk ditampilkan; maks. BELUM_MAKS.
+        dikeluarkanDaftar: keluarDaftar, dikeluarkanDaftarPenuh: keluarDaftar.length >= BELUM_MAKS,
       };
     }
 
@@ -2570,7 +2599,7 @@ const Engine = (() => {
       mode, ready, coverage, knownSales, statusHpp, has, available, shopee: S, tiktok: T, lostCertain, unknownRisk, totalMargin, penyesuaian,
       totalSales, totalFees: pick((p) => p.feeTotal), totalReceived: pick((p) => p.received),
       totalModal: pick((p) => p.modal), totalPacking: pick((p) => p.packing), knownReceived: pick((p) => p.knownReceived), knownPacking: pick((p) => p.knownPacking), adjustments: pick((p) => p.adj),
-      orders, first, last, days, monthsSpan, feeModel: feeModels,
+      orders, first, last, days, monthsSpan, dasarBulan, feeModel: feeModels,
       perMonth: ready && monthsSpan > 0 ? totalMargin / monthsSpan : NaN, perOrder: ready && orders ? totalMargin / orders : NaN,
       fixedMonthly, opex, netProfit: ready ? totalMargin - opex : NaN,
       months: monthList, allMonths: [...allMonths].sort(), buckets: buckets.filter((b) => b.orders > 0),
@@ -2837,7 +2866,7 @@ const Engine = (() => {
     return n;
   }
 
-  return { periksaModalRata, pesananPerPeriode, pesananAntara, kebocoran, num, angkaIsian, date, norm, detect, sheetsFromSheetJS, monthName, parseWorkbook, compute, simulate, hpp, shopeeRatio, insights, templateRows, buildCatalog, modeOf,
+  return { ALASAN_KELUAR, periksaModalRata, pesananPerPeriode, pesananAntara, kebocoran, num, angkaIsian, date, norm, detect, sheetsFromSheetJS, monthName, parseWorkbook, compute, simulate, hpp, shopeeRatio, insights, templateRows, buildCatalog, modeOf,
     matchShopeeOrder, shopeeLineValue,
     CAT_LABEL, TEMPLATE_HEADER };
 })();
