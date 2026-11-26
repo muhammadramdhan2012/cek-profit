@@ -12,7 +12,7 @@ const D = require('../assets/demo.js');
 
 let failed = 0;
 // Data tampilan (tglPesanan, 24 Nov 2026) tidak dipakai dalam rumus; diabaikan saat membandingkan angka.
-const tanpaTampilan = (k, v) => (k === 'tglPesanan' || (k === 'shopeeFormatLama' && v === null) ? undefined : v);
+const tanpaTampilan = (k, v) => (k === 'tglPesanan' || k === 'belumDaftar' || k === 'belumDaftarPenuh' || k === 'belumAlasan' || (k === 'shopeeFormatLama' && v === null) ? undefined : v);
 const test = (name, fn) => { try { fn(); console.log('ok  ', name); } catch (e) { failed++; console.log('GAGAL', name, '\n     ', e.message); } };
 const eq = (a, b, msg = '') => { if (JSON.stringify(a) !== JSON.stringify(b)) throw new Error(`${msg} ${JSON.stringify(a)} !== ${JSON.stringify(b)}`); };
 const truthy = (v, msg) => { if (!v) throw new Error(msg || 'harus benar'); };

@@ -32,5 +32,6 @@ jobs:
           node tests/laporan-pdf.test.js
           node tests/modal-rata.test.js
           node tests/retur-teks.test.js
+          node tests/hpp-belum.test.js
           node tests/cloud.test.js
           node tests/duitku.test.mjs

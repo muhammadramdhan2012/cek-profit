@@ -1214,6 +1214,15 @@ const Engine = (() => {
       // angka > 0 berarti ada jalur yang lolos dari aturan dan harus diperiksa.
       refundParsialTanpaUnit: { jumlahPesanan: 0, penjualan: 0 } });
     const CK = { shopee: blankCakupan(), tiktok: blankCakupan() };
+    // Daftar pesanan berstatus "belum" beserta alasannya, untuk ditampilkan ke seller (metadata; tidak mengubah angka).
+    // Terpisah dari CK karena sumParts hanya menjumlahkan angka.
+    const BELUM_MAKS = 300;
+    const belumDaftar = [], belumAlasan = {};   // belumAlasan: hitungan lengkap per alasan (tidak terpotong)
+    const catatBelum = (platform, orderId, produk, penjualan, alasan) => {
+      const al = [...new Set(alasan)];
+      for (const a of al) { const x = belumAlasan[a] || (belumAlasan[a] = { pesanan: 0, penjualan: 0 }); x.pesanan++; x.penjualan += penjualan; }
+      if (belumDaftar.length < BELUM_MAKS) belumDaftar.push({ platform, orderId: String(orderId || ''), produk: [...new Set(produk.filter(Boolean))], penjualan, alasan: al });
+    };
     const weakest = (list) => list.reduce((a, s) => (CAKUPAN_URUT.indexOf(s) > CAKUPAN_URUT.indexOf(a) ? s : a), 'terverifikasi');
     /**
      * Catat satu pesanan ke cakupan.
@@ -1653,6 +1662,7 @@ const Engine = (() => {
       } else if (!notes.length) {
         // Tanpa baris produk: modal rata-rata dari nilai pesanan. Refund di sini belum punya dasar unit.
         ckAdd('shopee', o.refund !== 0 ? 'belum' : 'estimasi', net, o.total, [], found, found);
+        if (o.refund !== 0) catatBelum('shopee', o.id, [], net, ['refund_tanpa_rincian_produk']);
       } else {
         const st = notes.map((n) => {
           const s = n.hppStatus === 'terverifikasi_kelompok' ? 'terverifikasi' : (n.hppStatus || 'belum');
@@ -1663,6 +1673,10 @@ const Engine = (() => {
         // (anomali) bukan refund parsial dan tidak dihitung di sini.
         const partial = notes.some((n) => isPartialRefund(n.it.harga + n.it.refund, n.it.harga, n.it.refund) && n.qtyBasis !== 'buku_unit');
         ckAdd('shopee', weakest(st), net, o.total, [], partial, found);
+        if (weakest(st) === 'belum') {
+          const lemah = notes.filter((n, i) => st[i] === 'belum');
+          catatBelum('shopee', o.id, lemah.map((n) => n.it.name), net, lemah.flatMap((n) => n.hppReasons || []).filter((x) => x !== 'modal_rata_rata'));
+        }
       }
       for (const n of notes) {
         if (!(n.it.refund < 0 && !(n.it.harga + n.it.refund > 0))) continue;   // hanya item yang direfund penuh
@@ -1697,6 +1711,7 @@ const Engine = (() => {
     function tiktokCakupan(r, modal, lines, refundParsial, row = r) {
       const { status, reasons, partial } = tiktokCakupanStatus(r, modal, lines, refundParsial);
       ckAdd('tiktok', status, row.sales, row.settle, reasons, false, partial);
+      if (status === 'belum') catatBelum('tiktok', r.id || r.orderId, lines.map((l) => l.name), row.sales, [partial ? 'refund' : 'tiktok_jumlah_belum_terbukti']);
       if (r.preGross > 0 && !(r.pre > 0)) {
         // Refund penuh. "Detail produk terjual" tetap mencantumkan unit yang direfund (audit H2-B3), jadi untuk refund
         // penuh jumlah unitnya = jumlah di detail. Sumbernya dicatat agar bisa ditinjau.
@@ -2317,6 +2332,8 @@ const Engine = (() => {
         labaTerhitung: { nilai: r.totalMargin, dasarPenjualan: r.knownSales },
         refundTanpaCatatanFisik: refundTanpaCatatanFisik(),
         perMarketplace: per,
+        // Pesanan berstatus "belum" (maks. BELUM_MAKS) dan alasannya; belumDaftarPenuh = daftar terpotong.
+        belumDaftar, belumDaftarPenuh: belumDaftar.length >= BELUM_MAKS, belumAlasan,
       };
     }
 

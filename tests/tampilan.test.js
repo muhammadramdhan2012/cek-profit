@@ -475,7 +475,7 @@ test('B3b UI: label Beta export pesanan + alasan refund parsial tampil (bukan Rp
   truthy(/export pesanan \(Beta\)/.test(src('../index.html')), 'FAQ halaman depan menyebut Beta');
   truthy(/'Refund parsial: jumlah unit belum diketahui'/.test(appJs), 'item kepastian refund parsial');
   truthy(appJs.includes('Sebagian penjualan tidak masuk dalam perhitungan laba karena jumlah unit pada refund parsial belum dapat diverifikasi.'), 'teks refund parsial sesuai keputusan pemilik');
-  truthy(/'Data refund perlu dicek'/.test(appJs) && /rpx\.konflik/.test(appJs), 'item terpisah untuk bukti unit yang bertentangan');
+  truthy(/'Data refund berbeda antar laporan'/.test(appJs) && /rpx\.konflik/.test(appJs), 'item terpisah untuk bukti unit yang bertentangan');
   truthy(!/laba (akan )?naik|menaikkan laba/i.test(appJs + src('penjelasan.js')), 'tidak ada klaim "laba naik"');
   truthy(!/Laporan Penghasilan[^'`]*Beta/.test(appJs), 'Laporan Penghasilan tidak diberi label Beta');
 });
