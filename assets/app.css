@@ -1870,6 +1870,9 @@ body.app .empty-arah > p:not(.tiny) { font-size: 15px; max-width: 46ch; }
 
 /* B3: kasus retur dari pesanan di luar laporan (tidak masuk laba periode ini). */
 .rt-luar { display: inline-block; margin-top: 4px; font-size: 12px; font-weight: 650; color: var(--info); }
+.rt-info b { font-size: inherit; font-weight: 700; color: var(--ink); }
+.rt-info { display: block; margin-top: 6px; font-size: 12.5px; line-height: 1.45; color: var(--ink-2); }
+.rt-meta .tiny { display: block; }
 .rt-luar-note { margin: 0; }
 
 /* Masa beta gratis: kartu di sidebar bisa diketuk untuk melihat keterangan. */
