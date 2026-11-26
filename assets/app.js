@@ -720,9 +720,16 @@
       add('pending', 'Sebagian HPP perlu dicek', `${pct(b.share)} penjualan memakai angka yang belum pasti, misalnya karena refund atau data yang belum cocok.${rp ? ` ${num(rp)} pesanan direfund sebagian tanpa jumlah barang yang jelas.` : ''}`,
         rp ? RETUR : UNGGAH, 60, `${num(b.n)} pesanan`);
     }
+    // Ditampilkan setiap kali isian tidak wajar, juga bila penjualannya berstatus "belum" (mis. refund), bukan hanya "estimasi".
+    const wModal = cekModalRata(settings, r);
+    if (wModal) add('danger', wModal.judul, wModal.teks, { label: 'Periksa modal', go: 'data', section: 'modal' }, 92);
     if (c.penjualan.estimasi > 0) {
       const e = sh('estimasi');
-      add('estimate', 'Sebagian modal masih perkiraan', `${pct(e.share)} penjualan memakai modal rata-rata atau harga acuan, bukan modal per produk.`, { label: 'Isi modal per produk', go: 'data', section: 'modal' }, 40, `${num(e.n)} pesanan`);
+      // Bila sebagian besar modal masih perkiraan, ajakan isi modal per produk dinaikkan ke atas daftar.
+      const besar = e.share >= 0.5;
+      add('estimate', besar ? 'Laba ini masih perkiraan' : 'Sebagian modal masih perkiraan',
+        `${pct(e.share)} penjualan memakai modal rata-rata atau harga acuan, bukan modal per produk.${besar ? ' Isi modal per produk lewat template agar laba dihitung dari harga beli yang sebenarnya.' : ''}`,
+        { label: 'Isi modal per produk', go: 'data', section: 'modal' }, besar ? 80 : 40, `${num(e.n)} pesanan`);
     }
     if (ftp.jumlahPesanan > 0) {
       const ind = ftp.indikasi && ftp.indikasi.tidak_dikirim;
@@ -2213,6 +2220,16 @@
     }
     return produkPanel(s, r, dis, type);
   }
+  /** Peringatan isian modal rata-rata yang tidak wajar (engine.periksaModalRata). Hanya teks; angka laba tidak berubah. */
+  function cekModalRata(s, r) {
+    if (!r || !r.totalSales) return null;
+    const c = Engine.periksaModalRata(s.fallbackPct, -r.totalFees / r.totalSales);
+    if (!c) return null;
+    const m = String(c.modalPct).replace('.', ',');
+    return c.jenis === 'pasti_rugi'
+      ? { judul: `Modal rata-rata ${m}% membuat penjualan yang memakainya pasti rugi`, teks: `Potongan marketplace di laporan Anda ${pct(c.potonganPct / 100)} dari penjualan. Ditambah modal ${m}%, totalnya sudah ${pct((c.modalPct + c.potonganPct) / 100)} dari harga jual, jadi setiap penjualan yang memakai angka ini pasti rugi. Pastikan angkanya benar: modal rata-rata = harga beli ÷ harga jual. Lebih tepat lagi, isi modal per produk.` }
+      : { judul: `Modal rata-rata ${m}% tampak sangat rendah`, teks: `Artinya barang seharga Rp100.000 dibeli hanya ${fmt(c.modalPct * 1000)}. Bila tidak sesuai, laba akan terlihat jauh lebih besar dari kenyataan. Pastikan angkanya benar: modal rata-rata = harga beli ÷ harga jual.` };
+  }
   function produkPanel(s, r, dis, type) {
     const hasData = r && r.products.length;
     const missing = hasData ? r.products.filter((p) => !ok(p.unitCost)).length : 0;
@@ -2228,7 +2245,8 @@
       ${type !== 'produsen' && !demo ? `<div id="pl-box">${plPanel(s, r)}</div>` : ''}
       <div class="field"><label for="s-fallback">Modal rata-rata untuk produk yang belum diisi${qi('modal_rata')}</label>
         <div class="input"><input id="s-fallback" type="number" min="0" max="99" step="1" inputmode="decimal" placeholder="Misalnya 60" value="${ok(s.fallbackPct) ? s.fallbackPct : ''}" ${dis}><span>% dari harga jual</span></div>
-        <span class="hint">Perkiraan cepat. Kosongkan bila hanya ingin memakai modal per produk yang Anda isi.</span></div>
+        <span class="hint">Perkiraan cepat. Kosongkan bila hanya ingin memakai modal per produk yang Anda isi.</span>
+        ${(() => { const w = cekModalRata(s, r); return w ? `<p class="note-box warn" role="status"><b>${esc(w.judul)}.</b> ${esc(w.teks)}</p>` : ''; })()}</div>
       ${r && r.totalSales ? `<div class="cover-meter"><div class="small"><b>${pct(r.coverage, 0)}</b> penjualan sudah punya modal${missing ? `, ${num(missing)} produk belum diisi` : ''}.${r.priceList && r.priceList.knownSalesShopee > 0 ? ` ${pct(r.priceList.knownSalesShopee / r.totalSales, 0)} penjualan memakai modal dari price list.` : ''}</div>
         <div class="progress" aria-hidden="true"><i style="width:${Math.round(r.coverage * 100)}%"></i></div>
         ${r.ttNoDetail && !r.hasOrderExport.tiktok ? `<p class="tiny faint">${num(r.ttNoDetail)} pesanan TikTok tidak mencantumkan produk. Unggah export pesanan TikTok, atau isi modal rata-rata.</p>` : ''}
