@@ -29,5 +29,6 @@ jobs:
           node tests/sesi.test.js
           node tests/keluar.test.js
           node tests/shopee-format-lama.test.js
+          node tests/laporan-pdf.test.js
           node tests/cloud.test.js
           node tests/duitku.test.mjs

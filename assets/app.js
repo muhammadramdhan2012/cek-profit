@@ -3204,6 +3204,7 @@
       ['Pesanan terjual', ...plats.map((k) => r[k].orders), r.orders], ['Penjualan', ...plats.map((k) => R(r[k].sales)), R(r.totalSales)],
       ['Potongan marketplace', ...plats.map((k) => R(r[k].feeTotal)), R(r.totalFees)], ['Dana diterima', ...plats.map((k) => R(r[k].received)), R(r.totalReceived)],
       ['Modal', ...plats.map((k) => RH(k, -r[k].modal)), RH('total', -r.totalModal)], ['Packing', ...plats.map((k) => RH(k, -r[k].knownPacking)), RH('total', -r.knownPacking)],
+      ...(r.ready && Math.abs(r.kepastian.cakupan.dikeluarkan.danaDiterima) >= 1 ? [['Dana dari pesanan tanpa modal (tidak dihitung)', ...plats.map((k) => R(-r.kepastian.cakupan.perMarketplace[k].dikeluarkan.danaDiterima)), R(-r.kepastian.cakupan.dikeluarkan.danaDiterima)]] : []),
       ['Retur tidak kembali', ...plats.map(() => ''), R(-r.lostCertain)],
       ...(r.kepastian.risikoBarang.kerugianTanpaNilai ? [['Kasus retur tidak kembali tanpa nilai (belum dikurangkan)', ...plats.map(() => ''), r.kepastian.risikoBarang.kerugianTanpaNilai]] : []),
       ['Laba setelah modal', ...plats.map((k) => RH(k, r[k].margin)), RH('total', r.totalMargin)],
