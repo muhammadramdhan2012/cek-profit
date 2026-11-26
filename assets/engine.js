@@ -2723,6 +2723,21 @@ const Engine = (() => {
     return out.sort((a, b) => b.score - a.score);
   }
 
+  /**
+   * Pemeriksaan kewajaran isian modal rata-rata (% dari harga jual). Hanya peringatan; tidak mengubah angka laba.
+   * - 'pasti_rugi': modal% + potongan marketplace% ≥ 100% → setiap penjualan yang memakai angka ini pasti tercatat rugi.
+   * - 'terlalu_rendah': modal < 20% dari harga jual (ambang usulan, belum ditetapkan pemilik) → mungkin salah isi.
+   * @param fallbackPct isian seller (0–99) atau null
+   * @param feeShare    potongan marketplace sebagai pecahan penjualan (mis. 0.119), dari laporan; NaN bila tidak ada
+   * @returns {{jenis, modalPct, potonganPct}|null}
+   */
+  function periksaModalRata(fallbackPct, feeShare) {
+    if (!isOk(fallbackPct) || fallbackPct <= 0) return null;
+    const potongan = isOk(feeShare) && feeShare > 0 ? feeShare * 100 : NaN;
+    if (isOk(potongan) && fallbackPct + potongan >= 100) return { jenis: 'pasti_rugi', modalPct: fallbackPct, potonganPct: potongan };
+    if (fallbackPct < 20) return { jenis: 'terlalu_rendah', modalPct: fallbackPct, potonganPct: potongan };
+    return null;
+  }
   /** Simulasi satu produk. Semua persen dalam angka 0–100. */
   function simulate({ listPrice, disc = 0, cost, feePct, feeFixed = 0, packing = 0, target = 15 }) {
     const price = listPrice * (1 - disc / 100);
@@ -2805,7 +2820,7 @@ const Engine = (() => {
     return n;
   }
 
-  return { pesananPerPeriode, pesananAntara, kebocoran, num, angkaIsian, date, norm, detect, sheetsFromSheetJS, monthName, parseWorkbook, compute, simulate, hpp, shopeeRatio, insights, templateRows, buildCatalog, modeOf,
+  return { periksaModalRata, pesananPerPeriode, pesananAntara, kebocoran, num, angkaIsian, date, norm, detect, sheetsFromSheetJS, monthName, parseWorkbook, compute, simulate, hpp, shopeeRatio, insights, templateRows, buildCatalog, modeOf,
     matchShopeeOrder, shopeeLineValue,
     CAT_LABEL, TEMPLATE_HEADER };
 })();
