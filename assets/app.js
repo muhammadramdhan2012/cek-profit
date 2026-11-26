@@ -2275,8 +2275,8 @@
     if (!c) return null;
     const m = String(c.modalPct).replace('.', ',');
     return c.jenis === 'pasti_rugi'
-      ? { judul: `Modal rata-rata ${m}% membuat penjualan yang memakainya pasti rugi`, teks: `Potongan marketplace di laporan Anda ${pct(c.potonganPct / 100)} dari penjualan. Ditambah modal ${m}%, totalnya sudah ${pct((c.modalPct + c.potonganPct) / 100)} dari harga jual, jadi setiap penjualan yang memakai angka ini pasti rugi. Pastikan angkanya benar: modal rata-rata = harga beli ÷ harga jual. Lebih tepat lagi, isi modal per produk.` }
-      : { judul: `Modal rata-rata ${m}% tampak sangat rendah`, teks: `Artinya barang seharga Rp100.000 dibeli hanya ${fmt(c.modalPct * 1000)}. Bila tidak sesuai, laba akan terlihat jauh lebih besar dari kenyataan. Pastikan angkanya benar: modal rata-rata = harga beli ÷ harga jual.` };
+      ? { judul: `Modal rata-rata ${m}% tersimpan, tetapi membuat penjualan yang memakainya rugi`, teks: `Angka ini tetap dipakai dalam perhitungan. Potongan marketplace di laporan Anda ${pct(c.potonganPct / 100)} dari penjualan; ditambah modal ${m}%, totalnya ${pct((c.modalPct + c.potonganPct) / 100)} dari harga jual, jadi setiap penjualan yang memakai angka ini tercatat rugi. Bila memang begitu kenyataannya, tidak perlu diubah. Bila tidak, periksa lagi: modal rata-rata = harga beli ÷ harga jual, atau isi modal per produk.` }
+      : { judul: `Modal rata-rata ${m}% tersimpan, tetapi tampak sangat rendah`, teks: `Angka ini tetap dipakai dalam perhitungan. Artinya barang seharga Rp100.000 dibeli hanya ${fmt(c.modalPct * 1000)}. Bila memang begitu, tidak perlu diubah. Bila tidak, laba akan terlihat jauh lebih besar dari kenyataan; periksa lagi: modal rata-rata = harga beli ÷ harga jual.` };
   }
   function produkPanel(s, r, dis, type) {
     const hasData = r && r.products.length;

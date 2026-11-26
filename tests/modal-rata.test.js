@@ -39,7 +39,8 @@ test('M6 potongan tidak diketahui / nol → hanya cek terlalu rendah', () => {
 test('M8 dashboard: peringatan di isian modal rata-rata dan daftar perhatian; ajakan modal per produk naik bila ≥ 50% perkiraan', () => {
   const app = fs.readFileSync(require.resolve('../assets/app.js'), 'utf8');
   truthy(/Engine\.periksaModalRata\(s\.fallbackPct, -r\.totalFees \/ r\.totalSales\)/.test(app), 'memakai engine');
-  truthy(/membuat penjualan yang memakainya pasti rugi/.test(app) && /tampak sangat rendah/.test(app), 'teks dua jenis');
+  truthy(/tersimpan, tetapi membuat penjualan yang memakainya rugi/.test(app) && /tersimpan, tetapi tampak sangat rendah/.test(app), 'teks dua jenis');
+  truthy((app.match(/Angka ini tetap dipakai dalam perhitungan\./g) || []).length === 2, 'menegaskan angka tetap dipakai');
   truthy(/note-box warn" role="status"><b>\$\{esc\(w\.judul\)\}/.test(app), 'peringatan di bawah isian, di-escape');
   truthy(/add\('danger', wModal\.judul/.test(app), 'masuk daftar perhatian');
   truthy(/besar \? 'Laba ini masih perkiraan'/.test(app) && /besar \? 80 : 40/.test(app), 'ajakan naik prioritas');
