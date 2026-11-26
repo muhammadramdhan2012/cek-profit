@@ -88,6 +88,17 @@ const CekReport = (() => {
     const cak = r.kepastian && r.kepastian.cakupan;
     const excludedOf = (k) => (cak ? cak.perMarketplace[k].dikeluarkan.danaDiterima : r[k].received - r[k].knownReceived);
     const excludedAll = cak ? cak.dikeluarkan.danaDiterima : r.totalReceived - r.knownReceived;
+    // Ada dana yang tidak masuk laba (berapa pun porsinya) → baris dan catatannya selalu tampil, agar tabel bisa dijumlahkan.
+    const adaDikeluarkan = r.ready && Math.abs(excludedAll) >= 1;
+    const nDikeluarkan = cak ? cak.dikeluarkan.jumlahPesanan : 0;
+    const karenaRefundParsial = cak && cak.dikeluarkan.refundParsial && cak.dikeluarkan.refundParsial.jumlahPesanan === nDikeluarkan && nDikeluarkan > 0;
+    // Persen cakupan dibulatkan ke bawah: 99,8% tidak boleh tampil sebagai 100%.
+    const pcCakupan = (v) => (v >= 1 ? '100%' : `${(Math.floor(v * 1000) / 10).toLocaleString('id-ID', { minimumFractionDigits: 1, maximumFractionDigits: 1 })}%`);
+    // Porsi penjualan bermodal yang modalnya perkiraan (modal rata-rata, riwayat modal, dianggap 1 unit), dari engine.
+    const cp = cak && cak.penjualan;
+    const porsiPerkiraan = cp && cp.total > 0 ? (cp.estimasi + cp.estimasiMinimum) / cp.total : 0;
+    const porsiTerverifikasi = cp && cp.total > 0 ? cp.terverifikasi / cp.total : 0;
+    const semuaPerkiraan = porsiPerkiraan > 0 && porsiTerverifikasi === 0;
 
     // ringkasan naratif
     const held = peringatanTotal(r);
@@ -96,7 +107,8 @@ const CekReport = (() => {
       `Selama periode ${tgl(r.first)} sampai ${tgl(r.last)}, ${esc(store)} mencatat <b>${r.orders.toLocaleString('id-ID')} pesanan</b> dengan penjualan <b>${rp(r.totalSales)}</b> di ${plats.map((k) => PN[k]).join(' dan ')}.`,
       `Marketplace memotong <b>${rp(-r.totalFees)}</b> (${pc(-r.totalFees / r.totalSales)} dari penjualan), sehingga dana yang diterima ${rp(r.totalReceived)}.`,
       r.ready ? `Setelah modal barang${r.totalPacking ? ', packing' : ''}${r.lostCertain ? ' dan barang retur yang hilang' : ''}, laba setelah modal <b>${rp(r.totalMargin)}</b> (${pc(marginPct)} dari penjualan yang modalnya diketahui)${hasOpex ? `; setelah biaya operasional yang tercatat ${rp(r.opex)}, laba dari data tersedia <b>${rp(r.netProfit)}</b>` : ''}.` : 'Modal barang belum diisi, sehingga laba belum dapat dihitung.',
-      r.ready && r.coverage < 0.98 ? `Catatan: modal baru diketahui untuk ${pc(r.coverage, 0)} penjualan; laba di laporan ini hanya mencakup bagian tersebut.` : '',
+      adaDikeluarkan ? `Catatan: ${nDikeluarkan ? `${nDikeluarkan.toLocaleString('id-ID')} pesanan dengan dana ${rp(excludedAll)}` : `dana ${rp(excludedAll)}`} belum dihitung dalam laba karena modalnya belum diketahui${karenaRefundParsial ? ' (refund sebagian: jumlah barang yang dikembalikan tidak diketahui)' : ''}. Modal diketahui untuk ${pcCakupan(r.coverage)} penjualan.` : '',
+      r.ready && porsiPerkiraan > 0 ? `Laba ini <b>perkiraan</b>: modal untuk ${pcCakupan(porsiPerkiraan)} penjualan berasal dari perkiraan${ok(s.fallbackPct) ? ` (termasuk modal rata-rata ${String(s.fallbackPct).replace('.', ',')}% dari harga jual)` : ''}, bukan modal per produk yang tercatat.` : '',
       // B1: rentang laba (angka dari engine) bila ada barang refund/retur yang nasibnya belum diketahui.
       r.ready && r.kepastian && r.kepastian.rentangLaba && r.kepastian.rentangLaba.eksposur > 0 ? (() => { const R = r.kepastian.rentangLaba, v = hasOpex && R.setelahOperasional ? R.setelahOperasional : R;
         return `Rentang laba: ${rp(v.bawah)} bila barang refund yang nasibnya belum jelas tidak kembali, sampai ${rp(v.atas)} bila kembali${R.kelompokTanpaNilai ? `; ${R.kelompokTanpaNilai} pesanan refund nilainya belum diketahui, jadi bisa lebih rendah` : ''}.`; })() : '',
@@ -125,7 +137,7 @@ const CekReport = (() => {
       ['Dana diterima', (k) => rp(r[k].received), rp(r.totalReceived), pc(r.totalReceived / r.totalSales), 'b'],
       ['Modal barang', (k) => rh(k, -r[k].modal), rh('total', -r.totalModal), r.ready ? pc(r.totalModal / r.totalSales) : '—', 'neg'],
       ...(r.totalPacking ? [['Packing', (k) => rh(k, -r[k].knownPacking), rh('total', -r.knownPacking), r.ready ? pc(r.knownPacking / r.totalSales) : '—', 'neg']] : []),
-      ...(r.coverage < 0.98 && r.ready ? [['Dana dari pesanan tanpa modal (tidak dihitung)', (k) => rp(-excludedOf(k)), rp(-excludedAll), '', 'neg f']] : []),
+      ...(adaDikeluarkan ? [['Dana dari pesanan tanpa modal (tidak dihitung)', (k) => rp(-excludedOf(k)), rp(-excludedAll), '', 'neg f']] : []),
       ...(r.lostCertain || lostNoValue ? [[`Barang retur hilang${lostNoValue ? ` (${lostNoValue} kasus tanpa nilai belum dikurangkan)` : ''}`, () => '', r.lostCertain ? rp(-r.lostCertain) : '—', r.lostCertain ? pc(r.lostCertain / r.totalSales) : '', 'neg']] : []),
       ['Laba setelah modal', (k) => rh(k, r[k].margin), rh('total', r.totalMargin), pc(marginPct), 'total'],
       ...(hasOpex ? [['Biaya operasional', () => '', rp(-r.opex), pc(r.opex / r.totalSales), 'neg'], ['Laba dari data tersedia (setelah biaya operasional)', () => '', rp(r.netProfit), pc(r.netProfit / r.totalSales), 'total']] : []),
@@ -145,7 +157,7 @@ ${ctx.demo ? '<div class="rwatermark">CONTOH</div>' : ''}
   <div class="rkpis">
     ${kpi('Penjualan', rp(r.totalSales), `${r.orders.toLocaleString('id-ID')} pesanan${held.ada ? ` · ${held.singkat}` : ''}`)}
     ${kpi('Potongan platform', pc(-r.totalFees / r.totalSales), rp(-r.totalFees))}
-    ${kpi('Laba setelah modal', rp(r.totalMargin), r.ready ? `margin ${pc(marginPct)} dari penjualan bermodal` : 'modal belum diisi')}
+    ${kpi('Laba setelah modal', rp(r.totalMargin), r.ready ? `${porsiPerkiraan > 0 ? 'perkiraan · ' : ''}margin ${pc(marginPct)} dari penjualan bermodal` : 'modal belum diisi')}
     ${hasOpex ? kpi('Laba dari data tersedia', rp(r.netProfit), `setelah biaya operasional yang tercatat ${short(r.opex)}`, 'hero')
     : perMonthOk ? kpi('Laba per bulan', rp(r.perMonth), `rata-rata ${(Math.round(r.monthsSpan * 10) / 10).toLocaleString('id-ID')} bulan data`, 'hero')
       : kpi('Laba periode data', rp(r.totalMargin), r.ready ? `dari ${r.days.toLocaleString('id-ID')} hari data, belum sebulan penuh` : 'modal belum diisi', 'hero')}
@@ -195,7 +207,7 @@ ${r.products.length ? `<section class="rpage">
   <h2>Analisis produk</h2>
   <p class="rlead">${r.products.length.toLocaleString('id-ID')} produk terjual. Harga impas = harga jual minimum agar tidak rugi; harga target = harga agar margin ${pc(r.target, 0)}.</p>
   ${kebocoran(r)}
-  ${top.length ? `<h3>10 produk dengan laba terbesar</h3>
+  ${top.length ? `<h3>${top.every((x) => x.margin < 0) ? `${top.length} produk dengan rugi terkecil` : `${top.length} produk dengan laba terbesar`}</h3>
   <table class="rtable rsmall"><thead><tr><th>Produk</th><th>Terjual</th><th>Penjualan</th><th>Laba</th><th>Margin</th></tr></thead>
     <tbody>${top.map((x) => `<tr><td><i class="rsw" style="background:${COL[x.platform]}"></i>${esc(x.name.slice(0, 70))}${x.modalRiwayat ? ' <span class="rtag">modal per tanggal · perkiraan</span>' : ''}</td><td>${x.qtyKnown ? Math.round(x.qty).toLocaleString('id-ID') : `${x.rows}×`}</td><td>${rp(x.sales)}</td><td>${rp(x.margin)}</td><td class="f">${pc(x.pct)}</td></tr>`).join('')}</tbody></table>` : ''}
   ${attention.length ? `<h3 class="rmt">Perlu perhatian: rugi atau di bawah target</h3>
@@ -220,12 +232,12 @@ ${r.products.length ? `<section class="rpage">
   <h2 class="rmt">Metode dan batasan</h2>
   <p class="rlead">Cara angka di laporan ini dihitung, agar pembaca bisa menilai tingkat keyakinannya.</p>
   <ul class="rmethod">
-    <li>Periode: ${tgl(r.first)} – ${tgl(r.last)} (tanggal dana diterima). ${esc(periodNote)}. Modal diketahui untuk ${pc(r.coverage, 0)} penjualan.</li>
+    <li>Periode: ${tgl(r.first)} – ${tgl(r.last)} (tanggal dana diterima). ${esc(periodNote)}. Modal diketahui untuk ${pcCakupan(r.coverage)} penjualan${cp && porsiPerkiraan > 0 ? ` (${semuaPerkiraan ? 'semuanya perkiraan' : `${pcCakupan(porsiTerverifikasi)} dari modal tercatat, ${pcCakupan(porsiPerkiraan)} perkiraan`})` : ''}.</li>
     <li>Sumber: laporan penghasilan resmi ${plats.map((k) => PN[k]).join(' dan ')}${r.hasOrderExport.shopee || r.hasOrderExport.tiktok ? ', export pesanan' : ''}${r.cases.length ? ', dan file retur' : ''}. Total tiap file dicocokkan dengan ringkasan resmi platform.</li>
     <li>${r.mode === 'acuan' ? 'Modal dihitung dari harga acuan pemasok dikurangi diskon pemasok, mengikuti pola harga jual yang diisi penjual.' : `Modal = modal per unit yang diisi penjual${ok(s.extraCostPct) && s.extraCostPct > 0 ? ` ditambah biaya kulakan ${String(s.extraCostPct).replace('.', ',')}%` : ''} × jumlah terjual${ok(s.fallbackPct) ? `; produk tanpa data modal memakai estimasi ${s.fallbackPct}% dari harga jual` : ''}.`} Pesanan tanpa modal tidak dihitung dalam margin.</li>
     ${r.qtyAssumed ? `<li>${r.qtyAssumed.toLocaleString('id-ID')} item Shopee memakai jumlah = 1 karena export pesanan tidak disertakan.</li>` : ''}
     <li>Laba setelah modal = dana diterima − modal${r.totalPacking ? ' − packing' : ''} − barang retur yang hilang. Margin = laba setelah modal ÷ penjualan yang modalnya diketahui. ${hasOpex ? `Laba dari data tersedia = laba setelah modal − biaya operasional yang tercatat ${rp(r.fixedMonthly)}/bulan × ${(Math.round(r.monthsSpan * 10) / 10).toLocaleString('id-ID')} bulan.` : 'Biaya operasional (gaji, sewa, iklan di luar platform) belum dimasukkan.'}</li>
-    <li>Kompensasi dari platform${r.adjustments ? ` (${rp(r.adjustments)})` : ''} tidak ditambahkan ke laba. Pajak penghasilan belum diperhitungkan.</li>
+    <li>${r.penyesuaian && r.penyesuaian.kompensasi.masukLaba.length ? `Kompensasi barang hilang dihitung bersih (ganti rugi dikurangi modal barang yang hilang): ${rp(r.penyesuaian.kompensasi.bersih)}. Penyesuaian lain dari platform tidak ditambahkan ke laba.` : `Kompensasi dari platform${r.adjustments ? ` (${rp(r.adjustments)})` : ''} tidak ditambahkan ke laba.`} Pajak penghasilan belum diperhitungkan.</li>
     <li>Laporan ini adalah estimasi untuk pengambilan keputusan usaha, bukan laporan keuangan yang diaudit.</li>
   </ul>
   ${foot}
