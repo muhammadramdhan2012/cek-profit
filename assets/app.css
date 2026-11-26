@@ -668,6 +668,12 @@ body.app .empty p { font-size: var(--fs-body-sm); }
 .attn-body b { font-size: var(--fs-body-sm); }
 .attn-body p { font-size: 13px; color: var(--ink-2); line-height: 1.45; }
 .attn-impact { font-size: 12px; color: var(--ink-3); font-variant-numeric: tabular-nums; }
+.attn-more { margin-top: 6px; font-size: 12.5px; }
+.attn-more summary { cursor: pointer; color: var(--accent); font-weight: 650; }
+.attn-more ul { list-style: none; margin: 6px 0 0; padding: 0; display: grid; gap: 6px; max-height: 260px; overflow: auto; }
+.attn-more li { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 0 8px; padding-bottom: 6px; border-bottom: 1px solid var(--line); }
+.attn-more li > span:first-child { overflow-wrap: anywhere; color: var(--ink); }
+.attn-more li > span:last-child { grid-column: 1 / -1; }
 .attn-cta { grid-column: 2; }
 .mini-empty { display: grid; gap: var(--sp-2); justify-items: start; padding: var(--sp-3) 0; }
 

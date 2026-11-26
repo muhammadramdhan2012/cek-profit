@@ -707,8 +707,8 @@
         UNGGAH, 84, `${fmt(rsx.nilai)} refund`);
     }
     if (rpKonflik > 0) {
-      add('pending', 'Data refund perlu dicek', `${num(rpKonflik)} pesanan: file retur menyebut semua barang direfund, tetapi laporan penghasilan menunjukkan refund sebagian. Pesanan ini tidak masuk dalam perhitungan laba sampai datanya dicek di Seller Centre.`,
-        RETUR, 86, `${fmt(rpx.penjualanKonflik || 0)} penjualan tidak dihitung`);
+      add('pending', 'Data refund berbeda antar laporan', `${num(rpKonflik)} pesanan: file retur menyebut semua barang direfund, tetapi Laporan Penghasilan menunjukkan refund sebagian. Karena jumlah barangnya tidak pasti, pesanan ini tidak dihitung dalam laba (bukan dianggap nol). Saat ini belum bisa diselesaikan dari website; laba pesanan lain tidak terpengaruh. Bila ingin memastikan, lihat jumlah barang yang direfund di Seller Centre.`,
+        null, 86, `${fmt(rpx.penjualanKonflik || 0)} penjualan tidak dihitung`);
     }
     if (c.penjualan.estimasiMinimum > 0) {
       const m = sh('estimasiMinimum');
@@ -717,8 +717,10 @@
     }
     if (c.penjualan.belum > 0) {
       const b = sh('belum'), rp = c.refundParsialTanpaUnit.jumlahPesanan;
-      add('pending', 'Sebagian HPP perlu dicek', `${pct(b.share)} penjualan memakai angka yang belum pasti, misalnya karena refund atau data yang belum cocok.${rp ? ` ${num(rp)} pesanan direfund sebagian tanpa jumlah barang yang jelas.` : ''}`,
-        rp ? RETUR : UNGGAH, 60, `${num(b.n)} pesanan`);
+      const dB = c.belumDaftar || [], utama = alasanUtama(c.belumAlasan);
+      out.push({ cls: 'pending', title: 'Sebagian HPP perlu dicek', prio: 60, impact: `${num(b.n)} pesanan`,
+        desc: `${pct(b.share)} penjualan tetap dihitung dalam laba, tetapi modalnya belum pasti.${utama ? ` Penyebab terbanyak: ${utama.teks}.` : ''}${rp ? ` ${num(rp)} pesanan direfund sebagian tanpa jumlah barang yang jelas.` : ''}`,
+        cta: utama ? utama.cta : rp ? RETUR : UNGGAH, detail: dB.length ? daftarBelum(dB, b.n) : '' });
     }
     // Ditampilkan setiap kali isian tidak wajar, juga bila penjualannya berstatus "belum" (mis. refund), bukan hanya "estimasi".
     const wModal = cekModalRata(settings, r);
@@ -758,8 +760,34 @@
     return list.filter((i) => (i.level === 'bad' || i.level === 'warn') && !/^Modal baru diketahui|belum bisa dihitung|^Retur & refund/.test(i.title))
       .map((i) => ({ cls: i.level === 'bad' ? 'danger' : 'pending', title: i.title, desc: i.detail, cta: dest(i.title), prio: Math.round(i.score * 0.6), insight: true }));
   }
+  /* Alasan HPP "belum pasti" (engine: kepastian.cakupan.belumDaftar) dalam bahasa seller + tempat memperbaikinya. */
+  const ALASAN_BELUM = {
+    refund: ['ada refund atau retur pada pesanan', { label: 'Periksa retur', go: 'retur' }],
+    refund_tanpa_rincian_produk: ['ada refund pada pesanan tanpa rincian produk', { label: 'Unggah export pesanan', go: 'data', section: 'unggah' }],
+    modal_tingkat_produk: ['modal diisi per produk, belum per variasi', { label: 'Isi modal per variasi', go: 'data', section: 'modal' }],
+    kuantitas: ['jumlah barang belum terbukti dari export pesanan', { label: 'Unggah export pesanan', go: 'data', section: 'unggah' }],
+    status_pesanan: ['status pesanan di export belum selesai', { label: 'Unggah export terbaru', go: 'data', section: 'unggah' }],
+    info_retur_tidak_tersedia: ['export pesanan tidak memuat info retur', { label: 'Unggah file retur', go: 'data', section: 'unggah' }],
+    export_berbeda: ['export pesanan berbeda dengan Laporan Penghasilan', { label: 'Unggah export periode sama', go: 'data', section: 'unggah' }],
+    status_export_berbeda: ['status pesanan berbeda antar file export', { label: 'Unggah export terbaru', go: 'data', section: 'unggah' }],
+    identitas_berbeda: ['nama atau variasi produk berbeda antar file', { label: 'Periksa modal', go: 'data', section: 'modal' }],
+    identitas_sebagian: ['kode produk hanya ada di sebagian file', { label: 'Periksa modal', go: 'data', section: 'modal' }],
+    tiktok_jumlah_belum_terbukti: ['jumlah barang TikTok belum dicocokkan', { label: 'Unggah export TikTok', go: 'data', section: 'unggah' }],
+  };
+  const teksAlasan = (k) => (ALASAN_BELUM[k] ? ALASAN_BELUM[k][0] : 'data pesanan belum cocok');
+  /** Alasan dengan penjualan terbesar (hitungan lengkap engine) → teks + tombol tindakannya. null bila kosong. */
+  function alasanUtama(hitung) {
+    const top = Object.entries(hitung || {}).sort((a, b) => b[1].penjualan - a[1].penjualan)[0];
+    return top ? { teks: teksAlasan(top[0]), cta: (ALASAN_BELUM[top[0]] || [])[1] || null } : null;
+  }
+  /** Daftar pesanan "belum pasti" yang bisa dibuka; semua teks dari file di-escape. */
+  function daftarBelum(daftar, total) {
+    const urut = [...daftar].sort((a, b) => b.penjualan - a.penjualan).slice(0, 30);
+    return `<details class="attn-more"><summary>Lihat pesanan dan penyebabnya</summary><ul>${urut.map((d) =>
+      `<li><span>${esc(d.produk[0] || `Pesanan ${d.orderId}`)}${d.produk.length > 1 ? ` <span class="faint">+${num(d.produk.length - 1)} produk</span>` : ''}</span><span class="num">${fmt(d.penjualan)}</span><span class="faint">${esc(d.alasan.map(teksAlasan).join('; ') || teksAlasan(''))}</span></li>`).join('')}</ul>${total > urut.length ? `<p class="tiny faint">Menampilkan ${num(urut.length)} dari ${num(total)} pesanan, penjualan terbesar dulu.</p>` : ''}</details>`;
+  }
   const attnItem = (i) => `<li class="attn-item ${i.cls}"><span class="status ${i.cls}" aria-hidden="true"></span>
-    <div class="attn-body"><b>${esc(i.title)}</b><p>${esc(i.desc)}</p>${i.impact ? `<span class="attn-impact">${esc(i.impact)}</span>` : ''}</div>
+    <div class="attn-body"><b>${esc(i.title)}</b><p>${esc(i.desc)}</p>${i.impact ? `<span class="attn-impact">${esc(i.impact)}</span>` : ''}${i.detail || ''}</div>
     <div class="attn-cta">${ctaBtn(i.cta)}</div></li>`;
 
   function viewRingkasan() {
