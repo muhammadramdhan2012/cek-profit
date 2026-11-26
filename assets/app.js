@@ -760,6 +760,19 @@
     return list.filter((i) => (i.level === 'bad' || i.level === 'warn') && !/^Modal baru diketahui|belum bisa dihitung|^Retur & refund/.test(i.title))
       .map((i) => ({ cls: i.level === 'bad' ? 'danger' : 'pending', title: i.title, desc: i.detail, cta: dest(i.title), prio: Math.round(i.score * 0.6), insight: true }));
   }
+  /** "× 1 bulan pesanan yang dipilih" atau "× 1,1 bulan data" (engine: r.dasarBulan, A.13). */
+  const teksBulan = (r) => {
+    const n = (Math.round(r.monthsSpan * 10) / 10).toLocaleString('id-ID');
+    return r.dasarBulan && r.dasarBulan.jenis === 'bulan_pesanan' ? `${n} bulan pesanan yang dipilih` : `${n} bulan data`;
+  };
+  const ALASAN_KELUAR = Engine.ALASAN_KELUAR;
+  /** Daftar pesanan yang tidak dihitung dalam laba, bisa dibuka; semua teks dari file di-escape. */
+  function daftarKeluar(daftar, total) {
+    if (!daftar || !daftar.length) return '';
+    const urut = [...daftar].sort((a, b) => Math.abs(b.dana) - Math.abs(a.dana)).slice(0, 30);
+    return `<details class="attn-more ln-more"><summary>Lihat pesanannya</summary><ul>${urut.map((d) =>
+      `<li><span>${esc(d.produk[0] || 'Pesanan tanpa rincian produk')}${d.produk.length > 1 ? ` <span class="faint">+${num(d.produk.length - 1)} produk</span>` : ''} <span class="faint">· ${esc(PNAME[d.platform] || d.platform)} ${esc(d.orderId)}</span></span><span class="num">${fmt(d.dana)}</span><span class="faint">${esc(d.alasan.map((a) => ALASAN_KELUAR[a] || 'data belum cukup').join('; '))}</span></li>`).join('')}</ul>${total > urut.length ? `<p class="tiny faint">Menampilkan ${num(urut.length)} dari ${num(total)} pesanan, dana terbesar dulu.</p>` : ''}</details>`;
+  }
   /* Alasan HPP "belum pasti" (engine: kepastian.cakupan.belumDaftar) dalam bahasa seller + tempat memperbaikinya. */
   const ALASAN_BELUM = {
     refund: ['ada refund atau retur pada pesanan', { label: 'Periksa retur', go: 'retur' }],
@@ -954,7 +967,7 @@
       ...(r.ready ? [{ label: 'Modal / HPP', v: r.totalModal, cls: 'cost', note: 'dari penjualan yang modalnya diketahui' }] : [{ label: 'Modal / HPP', v: NaN, cls: 'unknown', note: 'modal belum diisi' }]),
       ...(r.knownPacking ? [{ label: typeOf(st()) === 'dropship' ? 'Biaya dropship' : 'Packing', v: r.knownPacking, cls: 'cost', note: 'biaya per pesanan yang Anda isi' }] : []),
       ...(r.lostCertain || rb.kerugianTanpaNilai ? [{ label: 'Kerugian barang retur', v: r.lostCertain || NaN, cls: 'cost', note: rb.kerugianTanpaNilai ? `${num(rb.kerugianTanpaNilai)} kasus tanpa nilai belum dikurangkan` : 'barang yang Anda tandai tidak kembali' }] : []),
-      ...(opex ? [{ label: 'Biaya operasional', v: r.opex, cls: 'cost', note: `${fmt(r.fixedMonthly)} per bulan yang Anda isi` }] : []),
+      ...(opex ? [{ label: 'Biaya operasional', v: r.opex, cls: 'cost', note: `${fmt(r.fixedMonthly)} per bulan yang Anda isi × ${teksBulan(r)}` }] : []),
       ...(Math.abs(c.dikeluarkan.danaDiterima) >= 1 ? [{ label: 'Tidak dihitung', v: c.dikeluarkan.danaDiterima, cls: 'unknown', note: `dana dari ${num(c.dikeluarkan.jumlahPesanan)} pesanan yang HPP-nya belum dapat dihitung` }] : []),
       ...(r.ready ? [{ label: 'Laba dari data tersedia', v: opex ? r.netProfit : r.totalMargin, cls: 'profit', note: opex ? 'setelah biaya operasional yang tercatat' : 'setelah modal dan biaya yang tercatat' }] : []),
     ];
@@ -1047,14 +1060,15 @@
     if (r.ready) {
       // Dana dari pesanan yang dikeluarkan dari laba (modal tidak diketahui), langsung dari engine. Bisa negatif.
       const unknown = r.kepastian.cakupan.dikeluarkan.danaDiterima;
-      if (Math.abs(unknown) >= 1) L('−', 'Dana dari pesanan yang HPP-nya belum diketahui', -unknown, 'muted', 'tidak dihitung sampai modal atau jumlah unitnya diketahui', 'tanpa_modal');
+      const ck = r.kepastian.cakupan;
+      if (Math.abs(unknown) >= 1) L('−', 'Dana dari pesanan yang HPP-nya belum diketahui', -unknown, 'muted', `${num(ck.dikeluarkan.jumlahPesanan)} pesanan, tidak dihitung sampai modal atau jumlah unitnya diketahui${daftarKeluar(ck.dikeluarkanDaftar, ck.dikeluarkan.jumlahPesanan)}`, 'tanpa_modal');
       L('−', 'Modal / HPP', -r.totalModal, 'minus', '', 'modal');
       if (r.knownPacking) L('−', isDrop ? 'Biaya dropship' : 'Packing', -r.knownPacking, 'minus', '', isDrop ? 'dropship_fee' : 'packing');
       // Kasus "tidak kembali" tanpa nilai tidak dikurangkan dan tidak ditampilkan sebagai Rp0.
       if (r.lostCertain || rb.kerugianTanpaNilai) L('−', 'Kerugian retur', r.lostCertain ? -r.lostCertain : NaN, 'minus', rb.kerugianTanpaNilai ? `+ ${num(rb.kerugianTanpaNilai)} kasus nilainya belum diketahui.` : 'barang yang Anda tandai tidak kembali', 'retur_hilang');
       // B2: kompensasi barang hilang yang modalnya diketahui (kompensasi − modal barang hilang).
       if (r.penyesuaian && r.penyesuaian.kompensasi.masukLaba.length) L(r.penyesuaian.kompensasi.bersih < 0 ? '−' : '+', 'Kompensasi barang hilang (bersih)', r.penyesuaian.kompensasi.bersih, r.penyesuaian.kompensasi.bersih < 0 ? 'minus' : '', 'ganti rugi marketplace dikurangi modal barang yang hilang');
-      if (opex) { L('=', 'Laba setelah modal', r.totalMargin, 'sub', '', 'margin_kotor'); L('−', 'Biaya operasional', -r.opex, 'minus', `${fmt(r.fixedMonthly)} per bulan yang Anda isi`, 'opex'); }
+      if (opex) { L('=', 'Laba setelah modal', r.totalMargin, 'sub', '', 'margin_kotor'); L('−', 'Biaya operasional', -r.opex, 'minus', `${fmt(r.fixedMonthly)} per bulan yang Anda isi × ${teksBulan(r)}`, 'opex'); }
     } else L('−', 'Modal / HPP', NaN, 'minus', 'modal produk belum diisi', 'modal');
     const total = opex ? r.netProfit : r.totalMargin;
     const label = 'Laba dari data tersedia';
@@ -1097,7 +1111,7 @@
     // Sama dengan sampul PDF: rata-rata hanya untuk data ≥ 1 bulan; di bawah itu laba periode data (bukan ekstrapolasi).
     const lb = CekReport.labaBulanan(r), lbDasar = lb.dasar === 'laba_dari_data_tersedia' ? 'laba dari data tersedia' : 'laba setelah modal';
     const lbSeb = r.statusHpp && r.statusHpp.total === 'sebagian' ? ', dari penjualan yang modalnya diketahui' : '';
-    const lbNote = lb.jenis === 'rata' ? `${lbDasar} dibagi ${(Math.round(r.monthsSpan * 10) / 10).toLocaleString('id-ID')} bulan data (dinormalisasi per 30,4 hari)${lbSeb}`
+    const lbNote = lb.jenis === 'rata' ? `${lbDasar} dibagi ${teksBulan(r)}${r.dasarBulan && r.dasarBulan.jenis === 'bulan_pesanan' ? '' : ' (dinormalisasi per 30,4 hari)'}${lbSeb}`
       : lb.jenis === 'periode' ? `${lbDasar} selama ${num(r.days)} hari data, belum sebulan penuh${lbSeb}` : 'modal belum diisi';
     return `<div class="facts">
       <div class="fact"><span>${lb.label}${qi('rata_bulan')}</span><b class="${lb.nilai < 0 ? 'neg' : ''}">${lb.jenis === 'belum' ? '<span class="unk">Belum diketahui</span>' : fmt(lb.nilai)}</b><small>${lbNote}</small></div>
@@ -1440,7 +1454,7 @@
     if (r.fixedMonthly > 0) {
       const fc = (st().fixedCosts || []).filter((x) => ok(x.amount) && x.amount > 0);
       groups.push(costGroup('Biaya operasional', r.ready ? -r.opex : NaN, fc.map((x) => `<li class="cb-row"><div class="cb-l"><b>${esc(x.label || 'Tanpa nama')}</b><span class="cb-src">Sumber: isian Anda</span></div><div class="cb-v"><b>${fmt(x.amount)}</b><span class="faint">per bulan</span></div></li>`), false,
-        `${fmt(r.fixedMonthly)} per bulan × ${(Math.round(r.monthsSpan * 10) / 10).toLocaleString('id-ID')} bulan data, dihitung mesin hitung.`));
+        `${fmt(r.fixedMonthly)} per bulan × ${teksBulan(r)}, dihitung mesin hitung.`));
     }
     // Komposisi biaya: lebar batang = besar tiap kelompok dari engine (gambar saja, tanpa persen buatan UI).
     const comp = [['Potongan Shopee', r.has.shopee ? S.feeTotal : 0, 'c-sh'], ['Potongan TikTok Shop', r.has.tiktok ? T.feeTotal : 0, 'c-tt'],
@@ -2261,8 +2275,8 @@
     if (!c) return null;
     const m = String(c.modalPct).replace('.', ',');
     return c.jenis === 'pasti_rugi'
-      ? { judul: `Modal rata-rata ${m}% membuat penjualan yang memakainya pasti rugi`, teks: `Potongan marketplace di laporan Anda ${pct(c.potonganPct / 100)} dari penjualan. Ditambah modal ${m}%, totalnya sudah ${pct((c.modalPct + c.potonganPct) / 100)} dari harga jual, jadi setiap penjualan yang memakai angka ini pasti rugi. Pastikan angkanya benar: modal rata-rata = harga beli ÷ harga jual. Lebih tepat lagi, isi modal per produk.` }
-      : { judul: `Modal rata-rata ${m}% tampak sangat rendah`, teks: `Artinya barang seharga Rp100.000 dibeli hanya ${fmt(c.modalPct * 1000)}. Bila tidak sesuai, laba akan terlihat jauh lebih besar dari kenyataan. Pastikan angkanya benar: modal rata-rata = harga beli ÷ harga jual.` };
+      ? { judul: `Modal rata-rata ${m}% tersimpan, tetapi membuat penjualan yang memakainya rugi`, teks: `Angka ini tetap dipakai dalam perhitungan. Potongan marketplace di laporan Anda ${pct(c.potonganPct / 100)} dari penjualan; ditambah modal ${m}%, totalnya ${pct((c.modalPct + c.potonganPct) / 100)} dari harga jual, jadi setiap penjualan yang memakai angka ini tercatat rugi. Bila memang begitu kenyataannya, tidak perlu diubah. Bila tidak, periksa lagi: modal rata-rata = harga beli ÷ harga jual, atau isi modal per produk.` }
+      : { judul: `Modal rata-rata ${m}% tersimpan, tetapi tampak sangat rendah`, teks: `Angka ini tetap dipakai dalam perhitungan. Artinya barang seharga Rp100.000 dibeli hanya ${fmt(c.modalPct * 1000)}. Bila memang begitu, tidak perlu diubah. Bila tidak, laba akan terlihat jauh lebih besar dari kenyataan; periksa lagi: modal rata-rata = harga beli ÷ harga jual.` };
   }
   function produkPanel(s, r, dis, type) {
     const hasData = r && r.products.length;
@@ -3287,7 +3301,8 @@
     if (!boleh('pdf')) { openUpgrade(); return; }
     buildReport();
     const old = document.title;
-    document.title = `Laporan Profit ${prof().store || 'Toko'} ${last.r.first} sd ${last.r.last}`;
+    const db = last.r.dasarBulan || {};
+    document.title = `Laporan Profit ${prof().store || 'Toko'} ${db.jenis === 'bulan_pesanan' ? `Pesanan ${db.dari === db.sampai ? db.dari : `${db.dari} sd ${db.sampai}`}` : `${last.r.first} sd ${last.r.last}`}`;
     const restore = () => { document.title = old; window.removeEventListener('afterprint', restore); };
     window.addEventListener('afterprint', restore);
     track(demo ? 'pdf-contoh' : 'unduh-pdf');

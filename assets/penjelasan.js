@@ -59,7 +59,7 @@ const CekInfo = (() => {
     opex: {
       t: 'Biaya operasional',
       a: 'Biaya tetap toko yang tidak tergantung jumlah pesanan: gaji admin, sewa, internet, iklan di luar marketplace.',
-      h: 'Biaya per bulan yang Anda isi × lama periode data (dalam bulan).',
+      h: 'Biaya per bulan yang Anda isi × jumlah bulan. Bila Anda memilih bulan pesanan (misalnya Januari), dihitung sebanyak bulan yang dipilih. Tanpa pilihan bulan, dihitung dari lama data menurut tanggal dana cair.',
     },
     laba_bersih: {
       t: 'Laba dari data tersedia',
