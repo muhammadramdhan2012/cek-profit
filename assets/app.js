@@ -114,6 +114,11 @@
   let caseState = store.get(KEYS.cases, {});
   let done = store.get(KEYS.done, {});              // {pdf: true, saved: true}
   let files = [];
+  /* Data laporan tersimpan di perangkat ini (CekSimpanLokal; keputusan pemilik 27 Nov 2026). Hanya untuk akun;
+   * tamu tidak disimpan. versiMesin = hash engine.js: mesin berubah → data lama tidak dipakai (unggah ulang). */
+  let dataLokal = null;   // { waktu, n } bila file yang tampil berasal dari / tersimpan di perangkat ini
+  const versiMesin = (() => { const el = document.querySelector('script[src*="assets/engine.js"]'); const m = el && /[?&]v=(\w+)/.exec(el.getAttribute('src') || ''); return m ? m[1] : 'dev'; })();
+  let gagalSimpanLokal = false, timerLokal = null;
   let demo = false;
   let license = { ok: false };
   let viewName = 'ringkasan';
@@ -256,6 +261,7 @@
   async function keluar(hapus) {
     if (dlg().open) dlg().close();
     account.user = null;   // lebih dulu: render yang terpicu saat keluar tidak menulis catatan status sinkron lagi
+    await hapusLokal();    // data laporan di perangkat ini selalu dihapus saat keluar (apa pun pilihan "hapus data toko")
     await cloud.auth.signOut();
     if (hapus) {
       CekSinkron.hapusDataToko(lokal());
@@ -266,6 +272,45 @@
     account.profile = null; account.reports = null;
     toast('Anda sudah keluar.'); render(); loadStatus();
   }
+  /** Simpan file laporan yang sedang dipakai ke perangkat ini (hanya akun). Gagal → diberi tahu sekali, tidak diam-diam. */
+  async function simpanLokal() {
+    if (typeof CekSimpanLokal === 'undefined' || demo || !account.user) return;
+    const rec = CekSimpanLokal.bungkus(files, { userId: account.user.id, versiMesin });
+    if (!rec) { await CekSimpanLokal.hapus(); dataLokal = null; return; }
+    if (await CekSimpanLokal.simpan(rec)) { dataLokal = { waktu: rec.waktu, n: rec.files.length }; gagalSimpanLokal = false; }
+    else { dataLokal = null; if (!gagalSimpanLokal) toast('Data laporan tidak bisa disimpan di perangkat ini (penyimpanan penuh atau diblokir browser). Data tetap dipakai sampai halaman ditutup.'); gagalSimpanLokal = true; }
+    renderInfoLokal();
+  }
+  const simpanLokalNanti = () => { clearTimeout(timerLokal); timerLokal = setTimeout(simpanLokal, 400); };
+  /** Saat dashboard dibuka / setelah masuk: muat data tersimpan milik akun ini; tanpa akun → hapus. */
+  async function muatLokal() {
+    if (typeof CekSimpanLokal === 'undefined' || demo) return;
+    if (!account.user) { await CekSimpanLokal.hapus(); dataLokal = null; return; }
+    if (files.length) { simpanLokalNanti(); return; }   // file baru saja diunggah (mis. sebelum masuk): itu yang disimpan
+    const rec = await CekSimpanLokal.muat();
+    const b = CekSimpanLokal.buka(rec, { userId: account.user.id, versiMesin });
+    if (b.files) {
+      files = b.files; dataLokal = { waktu: b.waktu, n: b.files.length };
+      render();
+      toast('Data laporan terakhir dimuat dari perangkat ini.');
+      return;
+    }
+    if (rec) await CekSimpanLokal.hapus();
+    if (b.tolak === 'versi_mesin' || b.tolak === 'format') toast('Website sudah diperbarui. Silakan unggah ulang laporan Anda agar dihitung dengan cara terbaru.');
+  }
+  async function hapusLokal() {
+    if (typeof CekSimpanLokal !== 'undefined') await CekSimpanLokal.hapus();
+    dataLokal = null;
+  }
+  /** Keterangan "tersimpan di perangkat ini" + tombol hapus di halaman Unggah data. */
+  function teksInfoLokal() {
+    if (!dataLokal || demo) return '';
+    const w = new Date(dataLokal.waktu);
+    const tgl = isNaN(w) ? '' : `${w.toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })} pukul ${w.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })}`;
+    return `<div class="lokal-info" role="status"><p class="small">Data laporan (${num(dataLokal.n)} file) tersimpan di perangkat ini${tgl ? ` sejak ${esc(tgl)}` : ''}, tidak di server. Data terhapus saat Anda keluar.</p>
+      <button class="btn sm quiet" type="button" id="hapus-lokal">Hapus dari perangkat ini</button></div>`;
+  }
+  function renderInfoLokal() { const el = $('#lokal-box'); if (el) el.innerHTML = teksInfoLokal(); }
   /** Simpan price list di browser ini. Gagal (kuota penuh) diberitahukan, bukan diam-diam. */
   function simpanPLLokal() {
     if (priceList === null) { store.del(KEYS.pricelist); return true; }
@@ -295,6 +340,7 @@
   }
   async function loadAccount() {
     account.user = cloud.auth.user();
+    muatLokal();
     if (!account.user) { account.profile = null; renderAccount(); return; }
     account.loading = true; renderAccount();
     try {
@@ -2190,6 +2236,7 @@
       <div id="upload-status" aria-live="polite"></div>
       <details class="files-wrap" id="file-wrap" hidden><summary id="file-rekap"></summary><ul class="files" id="file-list"></ul></details>
       ${files.length ? '<div><button class="btn sm quiet danger" type="button" id="clear-btn">Hapus semua file</button></div>' : ''}
+      <div id="lokal-box">${teksInfoLokal()}</div>
       ${pend.length ? `<section class="pd-extra" aria-labelledby="pd-ex"><h4 id="pd-ex">Laporan tambahan <span class="pd-tag">Opsional</span></h4><p class="small muted">Tidak wajib. Membuat hasil lebih rinci.</p>
         <ul class="pd-cards">${pend.map((c) => barisLaporan(mp, c)).join('')}</ul></section>` : ''}
       ${belum.length ? `<details class="pd-lain" ${mp === 'lazada' ? 'open' : ''}><summary>Belum tersedia untuk ${MP_NAMA[mp]} (${num(belum.length)})</summary><ul>${belum.map(([c, nama]) => { const sup = S[c]; return `<li><b>${nama}</b><span>${esc(sup.note || (sup.st === 'na' ? 'Belum berlaku.' : 'Memerlukan sampel file ekspor asli. Belum ada angka yang dihitung.'))}</span></li>`; }).join('')}</ul></details>` : ''}
@@ -2862,6 +2909,7 @@
     }
     const hadIncome = !!last;
     files.push(...results);
+    simpanLokalNanti();
     track('unggah-file');
     render();
     if (!hadIncome && last) toast(last.all.ready ? 'Laporan terbaca. Tekan "Lihat hasil analisis" untuk membuka hasilnya.' : 'Laporan terbaca. Langkah berikutnya: isi modal barang.');
@@ -3559,8 +3607,9 @@
     else if (t.id === 'cost-all') { view.costAll = !view.costAll; renderCostTable(); }
     else if (t.hasAttribute('data-demo')) { demo = true; files = []; resetView(); track('klik-demo'); go('ringkasan'); }
     else if (t.id === 'exit-demo') { demo = false; resetView(); render(); }
-    else if (t.id === 'clear-btn') { files = []; demo = false; resetView(); render(); }
-    else if (t.dataset.rm !== undefined) { files.splice(+t.dataset.rm, 1); render(); }
+    else if (t.id === 'clear-btn') { files = []; demo = false; resetView(); simpanLokalNanti(); render(); }
+    else if (t.dataset.rm !== undefined) { files.splice(+t.dataset.rm, 1); simpanLokalNanti(); render(); }
+    else if (t.id === 'hapus-lokal') { files = []; resetView(); await hapusLokal(); render(); toast('Data laporan sudah dihapus dari perangkat ini.'); }
     else if (t.dataset.platform) { view.platform = t.dataset.platform; render(); }
     else if (t.dataset.metric) { view.metric = t.dataset.metric; render(); }
     else if (t.id === 'show-all') { view.showAll = !view.showAll; renderProducts(); }
@@ -3569,8 +3618,9 @@
     else if (t.id === 'pdf') openReport();
     else if (t.id === 'save-hist') saveHistory();
     else if (t.id === 'wipe-btn') {
-      if (!confirm('Hapus modal produk, pengaturan, profil laporan, status retur, dan kode akses yang tersimpan di browser ini? Data di akun tidak ikut terhapus.')) return;
+      if (!confirm('Hapus data laporan, modal produk, pengaturan, profil laporan, status retur, dan kode akses yang tersimpan di browser ini? Data di akun tidak ikut terhapus.')) return;
       Object.values(KEYS).forEach((k) => store.del(k)); store.del('cekprofit.v2');
+      await hapusLokal(); files = []; resetView();
       settings = structuredClone(DEFAULTS); profile = { store: '', owner: '', logo: '' }; caseState = {}; license = { ok: false }; done = {}; priceList = null; plDraft = null;
       dasarSettings = salin(settings); dasarProfil = salin(profile);   // bukan penghapusan modal: data di akun tidak ikut terhapus
       render(); toast('Data di browser ini sudah dihapus.');
@@ -3594,7 +3644,7 @@
   window.addEventListener('scroll', () => { const pop = $('#info-pop'); if (pop && !pop.hidden && !pop.classList.contains('sheet')) hideInfo(); }, { passive: true });
   window.addEventListener('resize', hideInfo);
   window.addEventListener('popstate', () => go(location.hash.slice(1) || 'ringkasan', false));
-  cloud.auth.onChange((s) => { if (!s && account.user) { account.user = null; account.profile = null; renderAccount(); loadStatus(); } });
+  cloud.auth.onChange((s) => { if (!s && account.user) { account.user = null; account.profile = null; hapusLokal(); renderAccount(); loadStatus(); } });
 
   const params = new URLSearchParams(location.search);
   if (params.has('demo')) demo = true;
@@ -3604,7 +3654,7 @@
   const savedCode = store.get(KEYS.license, '');
   if (savedCode) checkLicense(savedCode, true).then(render);
   try { if (sessionStorage.getItem('cekprofit.keluar') === 'hapus') { sessionStorage.removeItem('cekprofit.keluar'); toast('Anda sudah keluar. Data toko di browser ini sudah dihapus.'); } } catch (e) { /* abaikan */ }
-  if (account.user) loadAccount(); else loadStatus();
+  if (account.user) loadAccount(); else { loadStatus(); muatLokal(); }
   if (params.has('bayar')) cekPembayaran(String(params.get('bayar')));
   else if (hash === 'upgrade' || params.has('pro')) openUpgrade();
   if (params.has('demo') && params.has('print')) { buildReport(); document.documentElement.classList.add('print-preview'); }
