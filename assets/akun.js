@@ -295,6 +295,8 @@
   async function keluar(hapus) {
     const semua = tanyaKeluar === 'logout-semua';
     tanyaKeluar = null;
+    // Data laporan yang tersimpan di perangkat ini selalu dihapus saat keluar (keputusan pemilik 27 Nov 2026).
+    if (typeof CekSimpanLokal !== 'undefined') await CekSimpanLokal.hapus();
     const ok = await cloud.auth.signOut(semua ? { semua: true } : undefined);
     if (semua) track('keluar-semua');
     if (hapus) CekSinkron.hapusDataToko(lokal());
