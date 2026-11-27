@@ -2207,6 +2207,16 @@ const Engine = (() => {
     const pakaiBulanFilter = !!(filter.from || filter.to) && !!bulanDari && !!bulanSampai && bulanDari <= bulanSampai;
     const monthsSpan = pakaiBulanFilter ? jumlahBulan(bulanDari, bulanSampai) : days / 30.4;
     const dasarBulan = pakaiBulanFilter ? { jenis: 'bulan_pesanan', dari: bulanDari, sampai: bulanSampai } : { jenis: 'tanggal_dana' };
+    /* A.25 (DITETAPKAN pemilik 27 Nov 2026): pemasukan di luar marketplace yang diisi seller per bulan (mis. penggantian
+     * komisi AMS dari perusahaan). TIDAK mengubah laba utama; hanya membentuk "laba setelah isian Anda" terpisah.
+     * Masuk bila bulannya di antara bulan pesanan yang dipilih (tanpa filter: bulan pesanan pertama–terakhir di data).
+     * Nominal harus > 0; isian tanpa bulan/nominal tidak dihitung (bukan dianggap 0). */
+    const pemasukanLain = (() => {
+      const dari = bulanDari, sampai = bulanSampai;
+      const rincian = (settings.pemasukanLain || []).filter((x) => x && /^\d{4}-\d{2}$/.test(String(x.bulan || '')) && isOk(x.amount) && x.amount > 0
+        && dari && sampai && x.bulan >= dari && x.bulan <= sampai).map((x) => ({ bulan: x.bulan, label: String(x.label || ''), amount: x.amount }));
+      return { total: rincian.reduce((a, x) => a + x.amount, 0), rincian };
+    })();
     const orders = pick((p) => p.orders);
     const fixedMonthly = fixedPerMonth(settings);
     const opex = fixedMonthly * monthsSpan;
@@ -2602,6 +2612,7 @@ const Engine = (() => {
       orders, first, last, days, monthsSpan, dasarBulan, feeModel: feeModels,
       perMonth: ready && monthsSpan > 0 ? totalMargin / monthsSpan : NaN, perOrder: ready && orders ? totalMargin / orders : NaN,
       fixedMonthly, opex, netProfit: ready ? totalMargin - opex : NaN,
+      pemasukanLain, labaSetelahIsian: ready && pemasukanLain.total > 0 ? totalMargin - opex + pemasukanLain.total : NaN,
       months: monthList, allMonths: [...allMonths].sort(), buckets: buckets.filter((b) => b.orders > 0),
       products, cases, catSummary: Object.values(catSummary), dupes: m.dupes, target, shopeeFormatLama: m.shopeeFormatLama || null,
       sampulTanpaDiskon: catalog.sampulTanpaDiskon,

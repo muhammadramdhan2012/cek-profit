@@ -536,6 +536,22 @@ laba setelah iklan dan TACoS, status 3 produk, 1 tindakan. Pro: semua status, se
 
 Penerapan: belum ada. Tes wajib per tahap: lihat rancangan fitur iklan dan `docs/QUALITY_GATES.md`.
 
+### A.25 Pemasukan di luar marketplace (isian seller)
+Status: **DITETAPKAN pemilik (27 Nov 2026,** "setuju jalan tengah", dari laporan pengguna: penggantian komisi AMS oleh
+perusahaan/supplier di luar Shopee).
+
+- Isian per bulan pesanan: bulan + keterangan + nominal (> 0). Contoh: penggantian AMS dari perusahaan, subsidi supplier.
+- **Laba utama tidak berubah** (laba setelah modal, laba dari data tersedia, laba per produk, potongan %, kebocoran),
+  karena angka ini tidak bisa diperiksa dari laporan marketplace.
+- Ditampilkan terpisah: "+ Pemasukan di luar marketplace (isian Anda)" dan "= **Laba setelah isian Anda**" =
+  laba dari data tersedia + total pemasukan yang bulannya termasuk pilihan bulan pesanan (tanpa filter: bulan pesanan
+  pertama–terakhir di data). Tanpa pemasukan → tidak ditampilkan.
+- Nol, negatif, kosong, tak terbaca, atau bulan tidak sah → tidak dihitung (bukan dianggap 0).
+- Versi pertama hanya pemasukan; biaya tetap memakai biaya operasional (A.13). Pembagian hak perusahaan/penjual di luar
+  cakupan.
+Penerapan: `assets/engine.js` (`pemasukanLain`, `labaSetelahIsian`), `assets/app.js` (`pemasukanPanel`, `isianLuar`),
+`assets/report.js`. Tes: `node tests/pemasukan-lain.test.js`.
+
 ## B. Implementasi kode saat ini (`assets/engine.js`, per 14 Okt 2026, commit `a31eddb`)
 
 Bagian ini menggambarkan apa yang **dihitung**, bukan apa yang **benar**. Selama definisi A belum disetujui, kolom

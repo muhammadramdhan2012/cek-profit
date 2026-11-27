@@ -88,7 +88,7 @@
   };
   const KEYS = { settings: 'cekprofit.v3', profile: 'cekprofit.profile', license: 'cekprofit.license', cases: 'cekprofit.cases', done: 'cekprofit.done', pricelist: 'cekprofit.pricelist' };
   const DEFAULTS = { modalMode: 'produk', catalog: [], fallbackPct: null, mitra: null, coret: 100, periods: [{ start: '', markup: 0, disc: 0 }],
-    packing: null, targetMargin: 15, targetProfit: null, fixedCosts: [],
+    packing: null, targetMargin: 15, targetProfit: null, fixedCosts: [], pemasukanLain: [],
     sellerType: null, extraCostPct: null, hppList: [], acuanContoh: 100000 };
   function loadSettings() {
     const s = store.get(KEYS.settings, null);
@@ -1129,7 +1129,16 @@
         ${r.ready ? `<span class="big ${total < 0 ? 'neg' : ''}">${fmt(total)}</span><span class="note">${notes}</span>`
           : `<span class="big faint">Belum dihitung</span><span class="note">${CekReport.peringatanTotal(r).teks} Isi modal produk agar laba bisa dihitung.</span>`
           + '<button class="btn sm primary" type="button" data-go="data" data-section="modal" style="justify-self:start;margin-top:6px">Isi modal</button>'}
-      </div></section>`;
+      </div>${isianLuar(r)}</section>`;
+  }
+  /** A.25: pemasukan di luar marketplace (isian seller) dan laba setelahnya, terpisah dari laba utama. */
+  function isianLuar(r) {
+    const pl = r.pemasukanLain;
+    if (!r.ready || !pl || !(pl.total > 0)) return '';
+    return `<div class="nota-isian"><dl>
+      <div class="ln"><dt><span class="op" aria-hidden="true">+</span><span class="lbl-t">Pemasukan di luar marketplace${qi('pemasukan_lain', 'Pemasukan di luar marketplace')}</span><small>isian Anda: ${esc(pl.rincian.map((x) => `${x.label || 'tanpa keterangan'} (${monthLong(x.bulan)})`).join(', '))}</small></dt><dd>${fmt(pl.total)}</dd></div>
+      <div class="ln sub"><dt><span class="op" aria-hidden="true">=</span><span class="lbl-t">Laba setelah isian Anda</span><small>laba di atas + pemasukan yang Anda isi; tidak diperiksa dari laporan marketplace</small></dt><dd><b class="${r.labaSetelahIsian < 0 ? 'neg' : ''}">${fmt(r.labaSetelahIsian)}</b></dd></div>
+    </dl></div>`;
   }
   /** B1 (keputusan pemilik 31 Okt 2026): laba dalam rentang bila ada barang refund/retur yang nasibnya belum diketahui.
    *  Angka dari engine (kepastian.rentangLaba); tidak dihitung ulang di sini. */
@@ -2244,6 +2253,20 @@
         <input id="file-input" type="file" multiple accept=".xlsx,.xls,.csv" class="sr-only pick" aria-label="Pilih banyak file laporan sekaligus"></div>
     </div>`;
   }
+  /** A.25: isian pemasukan di luar marketplace per bulan. Tidak mengubah laba utama (lihat engine pemasukanLain). */
+  function pemasukanPanel(s, r, dis) {
+    const list = s.pemasukanLain || [];
+    const bulanData = (r && r.allMonths) || [];
+    const opsi = (pilih) => [...new Set([...bulanData, ...(pilih ? [pilih] : [])])].sort().reverse()
+      .map((m) => `<option value="${esc(m)}" ${m === pilih ? 'selected' : ''}>${esc(monthLong(m))}</option>`).join('');
+    return `<div class="field"><span class="label">Pemasukan di luar marketplace${qi('pemasukan_lain')}</span>
+      <span class="hint" style="margin:0 0 6px">Uang yang Anda terima di luar Shopee/TikTok untuk penjualan ini, misalnya penggantian komisi AMS dari perusahaan atau subsidi supplier. Laba utama tidak berubah; hasilnya tampil terpisah sebagai "Laba setelah isian Anda".</span>
+      <div class="costs-list">${list.map((x, i) => `<div class="cost-row pm-row"><select class="plain" id="pm-bulan-${i}" aria-label="Bulan pemasukan ${i + 1}" ${dis}><option value="">Pilih bulan</option>${opsi(x.bulan)}</select>
+        <input class="plain" id="pm-label-${i}" value="${esc(x.label || '')}" placeholder="Misalnya penggantian AMS" aria-label="Keterangan pemasukan ${i + 1}" ${dis}>
+        <div class="input"><span>Rp</span><input id="pm-amount-${i}" type="number" min="0" step="1000" value="${ok(x.amount) ? x.amount : ''}" aria-label="Jumlah pemasukan ${i + 1}" ${dis}></div>
+        ${demo ? '<span></span>' : `<button class="x" type="button" data-pm-del="${i}" aria-label="Hapus pemasukan ${i + 1}">×</button>`}</div>`).join('')}</div>
+      ${demo ? '' : bulanData.length ? '<div><button class="btn sm quiet" type="button" id="pm-add">+ Tambah pemasukan</button></div>' : '<p class="tiny faint">Unggah laporan dulu agar bulan pesanan bisa dipilih.</p>'}</div>`;
+  }
   function viewData() {
     const s = st();
     const r = last && last.all;
@@ -2274,11 +2297,12 @@
             <div class="field"><label for="s-packing">${isDrop ? 'Biaya dropship per pesanan' : 'Packing per pesanan'}${qi(isDrop ? 'dropship_fee' : 'packing_in')}</label><div class="input"><span>Rp</span><input id="s-packing" type="number" min="0" step="100" inputmode="numeric" placeholder="Misalnya 2000" value="${ok(s.packing) && s.packing > 0 ? s.packing : ''}" ${dis}></div><span class="hint">${isDrop ? 'Packing atau jasa yang ditagih supplier per pesanan. Contoh: Rp3.000 per paket.' : 'Plastik, bubble wrap, dan lakban per paket. Contoh: Rp1.500. Dikurangkan dari laba setiap pesanan.'}</span></div>
           </div>
           <div class="field"><span class="label">Biaya operasional per bulan${qi('opex_in')}</span>
-            <span class="hint" style="margin:0 0 6px">Biaya tetap toko yang tidak ada di laporan marketplace. Contoh: gaji admin Rp2.000.000, sewa gudang Rp1.000.000. Dikurangkan dari laba sesuai lama periode data.</span>
+            <span class="hint" style="margin:0 0 6px">Biaya tetap toko yang tidak ada di laporan marketplace. Contoh: gaji admin Rp2.000.000, sewa gudang Rp1.000.000. Dikalikan jumlah bulan yang dipilih (tanpa pilihan bulan: lama data).</span>
             <div class="costs-list">${(s.fixedCosts || []).map((c, i) => `<div class="cost-row"><input class="plain" id="fc-label-${i}" value="${esc(c.label)}" placeholder="Misalnya gaji admin" aria-label="Nama biaya ${i + 1}" ${dis}>
               <div class="input"><span>Rp</span><input id="fc-amount-${i}" type="number" min="0" step="10000" value="${ok(c.amount) ? c.amount : ''}" aria-label="Jumlah biaya ${i + 1}" ${dis}></div>
               ${demo ? '<span></span>' : `<button class="x" type="button" data-fc-del="${i}" aria-label="Hapus biaya ${i + 1}">×</button>`}</div>`).join('')}</div>
-            ${demo ? '' : `<div><button class="btn sm quiet" type="button" id="fc-add">+ Tambah biaya: gaji, sewa, iklan${type === 'produsen' ? ', sewa dapur/alat' : ''}</button></div>`}</div>`)}
+            ${demo ? '' : `<div><button class="btn sm quiet" type="button" id="fc-add">+ Tambah biaya: gaji, sewa, iklan${type === 'produsen' ? ', sewa dapur/alat' : ''}</button></div>`}</div>
+          ${pemasukanPanel(s, r, dis)}`)}
         ${optSec('target', '5', 'Target bisnis', 'Patokan untuk menilai produk dan bulan. Tidak mengubah angka laba.',
           `Margin ${ok(s.targetMargin) ? s.targetMargin : 15}%${!ok(s.targetMargin) || s.targetMargin === 15 ? ' (nilai bawaan)' : ''}${ok(s.targetProfit) && s.targetProfit > 0 ? ` · laba ${fmt(s.targetProfit)}/bulan` : ''}`, `
           <div class="fields align">
@@ -3404,6 +3428,12 @@
       return;
     }
     else if (id.startsWith('p-')) { const [, f, i] = id.split('-'); const p = settings.periods[+i]; if (f === 'start') p.start = v; else p[f] = +v || 0; }
+    else if (id.startsWith('pm-')) {
+      const [, f, i] = id.split('-'); const x = (settings.pemasukanLain || [])[+i]; if (!x) return;
+      if (f === 'label') { x.label = v; save(); return; }
+      if (f === 'bulan') x.bulan = /^\d{4}-\d{2}$/.test(v) ? v : '';
+      else x.amount = n(v, 0, 1e12);
+    }
     else if (id.startsWith('fc-')) { const [, f, i] = id.split('-'); const c = settings.fixedCosts[+i]; if (f === 'label') { c.label = v; save(); return; } c.amount = n(v, 0, 1e12); }
     else if (id === 'pf-store' || id === 'pf-owner') { profile[id === 'pf-store' ? 'store' : 'owner'] = v; saveProfile(); return; }
     else return;
@@ -3586,6 +3616,8 @@
     if (t.dataset.del !== undefined) { settings.periods.splice(+t.dataset.del, 1); save(); render(); }
     else if (t.id === 'add-period') { const p = settings.periods[settings.periods.length - 1]; settings.periods.push({ start: '', markup: p.markup, disc: p.disc }); save(); render(); }
     else if (t.dataset.fcDel !== undefined) { settings.fixedCosts.splice(+t.dataset.fcDel, 1); save(); render(); }
+    else if (t.dataset.pmDel !== undefined) { settings.pemasukanLain.splice(+t.dataset.pmDel, 1); save(); render(); }
+    else if (t.id === 'pm-add') { if (!settings.pemasukanLain) settings.pemasukanLain = []; const bl = (last && last.all && last.all.allMonths) || []; settings.pemasukanLain.push({ bulan: view.to || bl[bl.length - 1] || '', label: '', amount: null }); save(); render(); const i = settings.pemasukanLain.length - 1; const el = $(`#pm-label-${i}`); if (el) el.focus(); }
     else if (t.id === 'fc-add') { settings.fixedCosts.push({ label: '', amount: null }); save(); render(); const i = settings.fixedCosts.length - 1; $(`#fc-label-${i}`).focus(); }
     else if (t.id === 'pf-logo-del') { profile.logo = ''; saveProfile(); render(); }
     else if (t.id === 'tpl-download') downloadTemplate();

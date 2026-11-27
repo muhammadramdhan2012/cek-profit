@@ -2178,6 +2178,10 @@ button.lk-name:hover { text-decoration: underline; text-underline-offset: 3px; }
 @media (max-width: 640px) and (hover: hover) { body.app table.data.cost-table tbody tr:hover td { background: transparent; } }
 @media (max-width: 640px) { body.app table.data.cost-table tr > td { border: 0; padding: 0; } body.app table.data.cost-table tr.rw-row > td { padding: 12px; } }
 
+/* A.25: pemasukan di luar marketplace di bawah nota laba (terpisah dari laba utama). */
+.nota-isian { margin-top: 10px; padding-top: 8px; border-top: 1px dashed var(--line-strong); }
+.pm-row { grid-template-columns: minmax(11.5rem, auto) minmax(0, 1fr) minmax(0, 10rem) auto; max-width: 720px; }
+@media (max-width: 640px) { .pm-row { grid-template-columns: minmax(0, 1fr) auto; } .pm-row select, .pm-row .input { grid-column: 1 / -1; } }
 /* Data laporan tersimpan di perangkat ini (simpan-lokal.js). */
 .lokal-info { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 12px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); }
 .lokal-info p { margin: 0; color: var(--ink-2); flex: 1 1 240px; }

@@ -190,6 +190,7 @@ const CekInfo = (() => {
 
     /* ---------- retur ---------- */
     perkiraan_modal: { t: 'Perkiraan modal', a: 'Perkiraan harga beli barang di kasus retur ini.', h: 'Dari modal per unit produk tersebut, atau dari nilai refund × rasio modal bila produknya tidak dikenali.' },
+    pemasukan_lain: { t: 'Pemasukan di luar marketplace', a: 'Uang yang Anda terima di luar Shopee/TikTok untuk penjualan ini, misalnya penggantian komisi AMS dari perusahaan atau subsidi supplier.', h: 'Diisi sendiri per bulan pesanan. Laba utama tidak berubah karena angka ini tidak bisa diperiksa dari laporan marketplace; hasilnya tampil terpisah sebagai "Laba setelah isian Anda". Hanya bulan yang termasuk pilihan bulan yang dijumlahkan.' },
     status_barang: { t: 'Status barang', a: 'Apakah barang retur sudah kembali ke gudang Anda.', h: 'Pilih Tidak kembali bila barang hilang atau rusak; modalnya akan dikurangkan dari laba. Kasus yang terindikasi tidak dikirim (menurut alasan di marketplace) tidak perlu ditandai karena tidak ada barang yang kembali; bila barang sebenarnya sudah dikirim lengkap, cek pesanannya di Seller Centre marketplace. Pengajuan yang dibatalkan tidak memengaruhi laba.' },
 
     /* ---------- simulator ---------- */
