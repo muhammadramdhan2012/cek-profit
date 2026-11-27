@@ -2177,3 +2177,7 @@ button.lk-name:hover { text-decoration: underline; text-underline-offset: 3px; }
 }
 @media (max-width: 640px) and (hover: hover) { body.app table.data.cost-table tbody tr:hover td { background: transparent; } }
 @media (max-width: 640px) { body.app table.data.cost-table tr > td { border: 0; padding: 0; } body.app table.data.cost-table tr.rw-row > td { padding: 12px; } }
+
+/* Data laporan tersimpan di perangkat ini (simpan-lokal.js). */
+.lokal-info { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 12px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); }
+.lokal-info p { margin: 0; color: var(--ink-2); flex: 1 1 240px; }
