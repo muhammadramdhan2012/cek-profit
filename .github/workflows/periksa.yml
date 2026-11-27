@@ -34,5 +34,6 @@ jobs:
           node tests/retur-teks.test.js
           node tests/hpp-belum.test.js
           node tests/periode-bulan.test.js
+          node tests/pemasukan-lain.test.js
           node tests/cloud.test.js
           node tests/duitku.test.mjs

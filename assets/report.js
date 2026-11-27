@@ -149,6 +149,8 @@ const CekReport = (() => {
       ...(r.lostCertain || lostNoValue ? [[`Barang retur hilang${lostNoValue ? ` (${lostNoValue} kasus tanpa nilai belum dikurangkan)` : ''}`, () => '', r.lostCertain ? rp(-r.lostCertain) : '—', r.lostCertain ? pc(r.lostCertain / r.totalSales) : '', 'neg']] : []),
       ['Laba setelah modal', (k) => rh(k, r[k].margin), rh('total', r.totalMargin), pc(marginPct), 'total'],
       ...(hasOpex ? [['Biaya operasional', () => '', rp(-r.opex), pc(r.opex / r.totalSales), 'neg'], ['Laba dari data tersedia (setelah biaya operasional)', () => '', rp(r.netProfit), pc(r.netProfit / r.totalSales), 'total']] : []),
+      // A.25: isian seller, terpisah dari laba utama.
+      ...(r.ready && r.pemasukanLain && r.pemasukanLain.total > 0 ? [['Pemasukan di luar marketplace (isian Anda)', () => '', rp(r.pemasukanLain.total), '', 'f'], ['Laba setelah isian Anda', () => '', rp(r.labaSetelahIsian), pc(r.labaSetelahIsian / r.totalSales), 'b']] : []),
     ];
 
     return `
@@ -247,6 +249,7 @@ ${r.products.length ? `<section class="rpage">
     ${r.qtyAssumed ? `<li>${r.qtyAssumed.toLocaleString('id-ID')} item Shopee memakai jumlah = 1 karena export pesanan tidak disertakan.</li>` : ''}
     <li>Laba setelah modal = dana diterima − modal${r.totalPacking ? ' − packing' : ''} − barang retur yang hilang. Margin = laba setelah modal ÷ penjualan yang modalnya diketahui. ${hasOpex ? `Laba dari data tersedia = laba setelah modal − biaya operasional yang tercatat ${rp(r.fixedMonthly)}/bulan × ${(Math.round(r.monthsSpan * 10) / 10).toLocaleString('id-ID')} ${perBulan ? 'bulan pesanan yang dipilih' : 'bulan (lama data menurut tanggal dana cair)'}.` : 'Biaya operasional (gaji, sewa, iklan di luar platform) belum dimasukkan.'}</li>
     <li>${r.penyesuaian && r.penyesuaian.kompensasi.masukLaba.length ? `Kompensasi barang hilang dihitung bersih (ganti rugi dikurangi modal barang yang hilang): ${rp(r.penyesuaian.kompensasi.bersih)}. Penyesuaian lain dari platform tidak ditambahkan ke laba.` : `Kompensasi dari platform${r.adjustments ? ` (${rp(r.adjustments)})` : ''} tidak ditambahkan ke laba.`} Pajak penghasilan belum diperhitungkan.</li>
+    ${r.ready && r.pemasukanLain && r.pemasukanLain.total > 0 ? `<li>Pemasukan di luar marketplace ${rp(r.pemasukanLain.total)} diisi sendiri oleh penjual (${esc(r.pemasukanLain.rincian.map((x) => x.label || 'tanpa keterangan').join(', '))}) dan tidak diperiksa dari laporan marketplace; angka ini hanya membentuk "Laba setelah isian Anda", tidak mengubah laba utama.</li>` : ''}
     <li>Laporan ini adalah estimasi untuk pengambilan keputusan usaha, bukan laporan keuangan yang diaudit.</li>
   </ul>
   ${foot}

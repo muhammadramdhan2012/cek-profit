@@ -89,6 +89,8 @@ Bila dokumen rujukan bertentangan dengan file ini, file ini yang berlaku. Lapork
        ROAS impas, menu "Iklan", Gratis vs Pro (A.24, 25 Nov 2026; batas minimum klik/pesanan belum ditetapkan).
      - jumlah bulan untuk biaya operasional dan rata-rata per bulan: dengan filter = bulan pesanan yang dipilih, tanpa
        filter = lama data tanggal dana ÷ 30,4 hari (A.13, 26 Nov 2026).
+     - pemasukan di luar marketplace: isian seller per bulan, laba utama tidak berubah, ditampilkan terpisah sebagai
+       "Laba setelah isian Anda" (A.25, 27 Nov 2026).
      Semua rumus, bobot, ambang batas, dan definisi keuangan rinci lainnya tetap **DIUSULKAN — BELUM DISETUJUI**.
    - **Nominal refund tidak boleh digunakan untuk menentukan jumlah unit HPP.** Bila jumlah unit pada refund parsial tidak dapat diverifikasi, HPP dan laba terkait tidak boleh dihitung menggunakan proporsi nominal refund. Penerapannya (disetujui 19 Okt 2026):
      - berlaku untuk ketiga mode modal (per produk, harga acuan, modal rata-rata);
