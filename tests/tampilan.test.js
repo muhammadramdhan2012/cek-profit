@@ -866,7 +866,7 @@ test('Masa beta gratis: config, isPro, label beta terpisah dari Pro sendiri, pem
   // Tahap 2: tanggal & masa beta dari server bila tersedia; tanggal perangkat hanya cadangan (offline/belum dimigrasi).
   truthy(/const hariIni = \(\) => CekAkses\.hariIni\(serverStatus\)/.test(appJs) && /const server = serverStatus \? betaDariServer\(serverStatus\) : null/.test(akses), 'server lebih dulu, perangkat cadangan');
   truthy(/const proAkun = \(p = account\.profile\) => CekAkses\.proAkun\(p, hariIni\(\)\)/.test(appJs) && !/CekCloud\.isPro\(/.test(appJs), 'status Pro akun memakai tanggal server');
-  truthy(/if \(account\.user\) loadAccount\(\); else loadStatus\(\);/.test(appJs) && /render\(\);\n    loadStatus\(\);\n  \}/.test(appJs), 'status dimuat saat buka dashboard & setelah akun dimuat');
+  truthy(/if \(account\.user\) loadAccount\(\); else \{ loadStatus\(\); muatLokal\(\); \}/.test(appJs) && /render\(\);\n    loadStatus\(\);\n  \}/.test(appJs), 'status dimuat saat buka dashboard & setelah akun dimuat');
   truthy(/dHead\('Masa beta gratis'/.test(appJs) && /harga khusus \$\{harga\}/.test(appJs), 'dialog beta + janji harga khusus');
   truthy((idx.match(/data-beta hidden/g) || []).length >= 2, 'pengumuman beta di halaman depan, tersembunyi bawaan');
   truthy(/Masa beta\.<\/b> Sampai 31 Januari 2027/.test(priv), 'ketentuan masa beta');
